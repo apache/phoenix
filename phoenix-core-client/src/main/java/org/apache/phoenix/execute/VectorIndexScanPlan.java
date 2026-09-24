@@ -111,6 +111,18 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 public class VectorIndexScanPlan extends ScanPlan {
   private static final Logger LOGGER = LoggerFactory.getLogger(VectorIndexScanPlan.class);
 
+  /**
+   * Policy governing vector query execution when an index rebuild is concurrently in progress.
+   */
+  public enum RebuildProbePolicy {
+    /** Expand probe count to improve recall across mixed-generation index data. */
+    EXPAND,
+    /** Scan all indexed rows without centroid key range restrictions. */
+    EXACT,
+    /** Execute queries with default probe count without adjustments for concurrent rebuilds. */
+    NONE
+  }
+
   private final CachedCentroids cachedCentroids;
   private final int probeCount;
   private final List<Integer> probeCentroids;
@@ -122,6 +134,9 @@ public class VectorIndexScanPlan extends ScanPlan {
   private final Integer coarseLimit;
   private final int maxProbeLimit;
   private final SkipScanFilter centroidSkipScanFilter;
+  private final boolean rebuildInProgress;
+  private final RebuildProbePolicy rebuildProbePolicy;
+  private final int baseProbeCount;
   private boolean filterTimeUncoveredLookup;
   private boolean projectionTimeUncoveredLookup;
   private QueryPlan overrideDataPlan;
@@ -165,13 +180,24 @@ public class VectorIndexScanPlan extends ScanPlan {
     HintNode hintNode = statement != null ? statement.getHint() : null;
     PhoenixConnection connection = context != null ? context.getConnection() : null;
 
+    this.rebuildInProgress =
+      this.cachedCentroids != null && this.cachedCentroids.isRebuildInProgress();
+    this.rebuildProbePolicy = resolveRebuildProbePolicy(connection);
+
     if (this.queryVector == null) {
+      this.baseProbeCount = 0;
       this.probeCount = 0;
       this.probeCentroids = Collections.emptyList();
       this.keyRanges = Collections.emptyList();
       this.probing = false;
     } else {
-      this.probeCount = resolveProbeCount(explicitProbeCount, hintNode, connection, centroidCount);
+      this.baseProbeCount =
+        resolveProbeCount(explicitProbeCount, hintNode, connection, centroidCount);
+      this.probeCount =
+        this.rebuildInProgress && this.rebuildProbePolicy == RebuildProbePolicy.EXPAND
+          ? expandProbeCount(this.baseProbeCount, resolveRebuildProbeFactor(connection),
+            centroidCount)
+          : this.baseProbeCount;
       this.probeCentroids =
         selectProbes(this.cachedCentroids, this.queryVector, this.distanceMetric, this.probeCount);
 
@@ -191,7 +217,12 @@ public class VectorIndexScanPlan extends ScanPlan {
         table != null && table.getTable() != null && table.getTable().isMultiTenant();
       boolean canScopeCentroidRanges = !tenantScopingRequired || tenantIdBytes != null;
 
-      this.keyRanges = canScopeCentroidRanges
+      // When rebuild policy is EXACT, bypass centroid key ranges to scan all indexed rows.
+
+      boolean exactDuringRebuild =
+        this.rebuildInProgress && this.rebuildProbePolicy == RebuildProbePolicy.EXACT;
+
+      this.keyRanges = (canScopeCentroidRanges && !exactDuringRebuild)
         ? buildCentroidKeyRanges(this.probeCentroids, saltBuckets, tenantIdBytes)
         : Collections.emptyList();
 
@@ -523,8 +554,99 @@ public class VectorIndexScanPlan extends ScanPlan {
   }
 
   /**
-   * Resolves the oversample factor for two-phase vector search based on explicit parameter,
-   * OVERSAMPLE query hint, connection property, query services configuration, or system default.
+   * Scales the base probe count by the configured expansion factor, bounded between the base probe
+   * count and the total number of centroids.
+   */
+  static int expandProbeCount(int baseProbeCount, double factor, int centroidCount) {
+    if (baseProbeCount <= 0 || centroidCount <= 0) {
+      return baseProbeCount;
+    }
+    if (!(factor > 1.0)) {
+      return Math.min(baseProbeCount, centroidCount);
+    }
+    long widened = (long) Math.ceil(baseProbeCount * factor);
+    return (int) Math.max(baseProbeCount, Math.min(widened, centroidCount));
+  }
+
+  /**
+   * Resolves the {@link RebuildProbePolicy} from connection client info or query services
+   * configuration, defaulting to {@link RebuildProbePolicy#EXPAND}.
+   */
+  static RebuildProbePolicy resolveRebuildProbePolicy(PhoenixConnection connection) {
+    String value =
+      readVectorProperty(connection, QueryServices.VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB,
+        QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_POLICY);
+    try {
+      return RebuildProbePolicy.valueOf(value.trim().toUpperCase());
+    } catch (IllegalArgumentException e) {
+      LOGGER.warn("Unrecognized {} value '{}'; using {}",
+        QueryServices.VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB, value,
+        QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_POLICY);
+      return RebuildProbePolicy
+        .valueOf(QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_POLICY);
+    }
+  }
+
+  /** Resolves the probe count multiplier applied under {@link RebuildProbePolicy#EXPAND}. */
+  static double resolveRebuildProbeFactor(PhoenixConnection connection) {
+    String value =
+      readVectorProperty(connection, QueryServices.VECTOR_INDEX_REBUILD_PROBE_FACTOR_ATTRIB, null);
+    if (value != null && !value.trim().isEmpty()) {
+      try {
+        return Double.parseDouble(value.trim());
+      } catch (NumberFormatException e) {
+        LOGGER.warn("Invalid {} value: {}", QueryServices.VECTOR_INDEX_REBUILD_PROBE_FACTOR_ATTRIB,
+          value);
+      }
+    }
+    return QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_FACTOR;
+  }
+
+  /** Resolves a configuration property from connection client info or query services. */
+  private static String readVectorProperty(PhoenixConnection connection, String key,
+    String defaultValue) {
+    if (connection == null) {
+      return defaultValue;
+    }
+    try {
+      String clientInfo = connection.getClientInfo(key);
+      if (clientInfo != null && !clientInfo.trim().isEmpty()) {
+        return clientInfo;
+      }
+    } catch (Exception e) {
+      // fall through to query services props
+    }
+    if (connection.getQueryServices() != null) {
+      ReadOnlyProps props = connection.getQueryServices().getProps();
+      if (props != null) {
+        String propValue = props.get(key);
+        if (propValue != null && !propValue.trim().isEmpty()) {
+          return propValue;
+        }
+      }
+    }
+    return defaultValue;
+  }
+
+  /** Returns whether an index rebuild was in progress when centroids were loaded. */
+  public boolean isRebuildInProgress() {
+    return rebuildInProgress;
+  }
+
+  /** Returns the rebuild probe policy configured for this plan. */
+  public RebuildProbePolicy getRebuildProbePolicy() {
+    return rebuildProbePolicy;
+  }
+
+  /** Returns the unexpanded probe count before rebuild policy adjustments. */
+  public int getBaseProbeCount() {
+    return baseProbeCount;
+  }
+
+  /**
+   * Resolves the oversample factor for two-phase vector search with precedence: 1. Explicit
+   * parameter (>= 1.0) 2. Query hint OVERSAMPLE (>= 1.0) 3. Connection client info property / query
+   * services configuration 4. Default: QueryServicesOptions.DEFAULT_VECTOR_OVERSAMPLE_FACTOR (3.0)
    */
   public static double resolveOversampleFactor(Double explicitOversampleFactor, HintNode hintNode,
     PhoenixConnection connection) {
@@ -880,8 +1002,16 @@ public class VectorIndexScanPlan extends ScanPlan {
     if (probing) {
       String probeLine = "CLIENT PROBING " + probeCount + " OF " + lists + " CENTROIDS"
         + (metric != null && !metric.isEmpty() ? " (" + metric + ")" : "");
+      if (rebuildInProgress && rebuildProbePolicy == RebuildProbePolicy.EXPAND) {
+        probeLine += " (REBUILD IN PROGRESS: EXPANDED FROM " + baseProbeCount + ")";
+      }
       steps.add(0, probeLine);
       builder.setVectorProbeCount(probeCount);
+      builder.setVectorCentroidCount(lists);
+      builder.setVectorDistanceMetric(metric);
+    } else if (rebuildInProgress && rebuildProbePolicy == RebuildProbePolicy.EXACT) {
+      steps.add(0,
+        "CLIENT EXACT VECTOR EVALUATION OVER " + lists + " CENTROIDS" + " (REBUILD IN PROGRESS)");
       builder.setVectorCentroidCount(lists);
       builder.setVectorDistanceMetric(metric);
     }

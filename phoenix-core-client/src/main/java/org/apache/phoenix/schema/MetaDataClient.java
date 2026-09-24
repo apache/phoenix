@@ -106,6 +106,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRIGGER_REASON_CREATE_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
@@ -157,6 +158,7 @@ import static org.apache.phoenix.util.MetaDataUtil.getCompatibleTTLExpression;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -234,6 +236,7 @@ import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.KMeansConfig;
 import org.apache.phoenix.index.vector.KMeansResult;
 import org.apache.phoenix.index.vector.KMeansTrainer;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -1547,6 +1550,12 @@ public class MetaDataClient {
             dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
       alterIndex(indexStatement);
 
+      if (index.isVectorIndex()) {
+        long gen =
+          index.getVectorCentroidGeneration() != null ? index.getVectorCentroidGeneration() : 1L;
+        VectorIndexScorecard.reconcile(connection, index.getName().getString(), gen);
+      }
+
       return state;
     } finally {
       connection.setAutoCommit(wasAutoCommit);
@@ -2173,14 +2182,20 @@ public class MetaDataClient {
       kmeansResult = KMeansTrainer.train(sampled, lists, config);
     }
 
-    // Persist initial centroid generation metadata to the catalog and local caches, then
-    // populate the index table rows and transition index state to ACTIVE.
-    CentroidManager.persistCentroids(connection, fullIndexName, 1L, kmeansResult);
+    // Persist centroids to SYSTEM.VECTOR_CENTROID with generation 1
+    CentroidManager.persistCentroids(connection, fullIndexName, 1L, kmeansResult,
+      TRIGGER_REASON_CREATE_INDEX);
+
+    // Update SYSTEM.CATALOG with active generation 1 and effective lists
     CentroidManager.setGenerationAndLists(connection, fullIndexName, 1L,
       kmeansResult.getEffectiveK());
     VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
       .putCentroidsFromFloatList(fullIndexName, 1L, kmeansResult.getCentroids());
 
+    // Enqueue periodic scorecard reconciliation task for this vector index
+    addVectorScorecardReconcileTask(fullIndexName);
+
+    // Invalidate and reload table metadata
     connection.removeTable(connection.getTenantId(), fullIndexName, null,
       HConstants.LATEST_TIMESTAMP);
     PTable updatedIndex = connection.getTableNoCache(fullIndexName);
@@ -4844,6 +4859,29 @@ public class MetaDataClient {
     }
   }
 
+  /**
+   * Adds a {@code SYSTEM.TASK} entry to drive periodic scorecard reconciliation for a vector index.
+   */
+  private void addVectorScorecardReconcileTask(String fullIndexName) {
+    try {
+      List<Mutation> sysTaskUpsertMutations =
+        Task.getMutationsForAddTask(new SystemTaskParams.SystemTaskParamsBuilder()
+          .setConn(connection).setTaskType(PTable.TaskType.VECTOR_SCORECARD_RECONCILE)
+          .setSchemaName(SchemaUtil.getSchemaNameFromFullName(fullIndexName))
+          .setTableName(SchemaUtil.getTableNameFromFullName(fullIndexName)).build());
+      byte[] rowKey = sysTaskUpsertMutations.get(0).getRow();
+      MetaDataProtocol.MetaDataMutationResult result = Task.taskMetaDataCoprocessorExec(connection,
+        rowKey, new TaskMetaDataServiceCallBack(sysTaskUpsertMutations));
+      if (MetaDataProtocol.MutationCode.UNABLE_TO_UPSERT_TASK.equals(result.getMutationCode())) {
+        LOGGER.warn("Could not enqueue scorecard reconciliation for vector index {}; its drift "
+          + "scorecard will need reconciling manually.", fullIndexName);
+      }
+    } catch (Exception e) {
+      LOGGER.warn("Could not enqueue scorecard reconciliation for vector index: " + fullIndexName,
+        e);
+    }
+  }
+
   private void deleteVectorCentroids(String fullIndexName) {
     try {
       boolean wasAutoCommit = connection.getAutoCommit();
@@ -6397,6 +6435,48 @@ public class MetaDataClient {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.ASYNC_NOT_ALLOWED)
           .setMessage(" ASYNC building of index is allowed only with REBUILD index state")
           .setSchemaName(schemaName).setTableName(indexName).build().buildException();
+      }
+
+      if (
+        (table.isVectorIndex() || table.getIndexType() == IndexType.VECTOR_GLOBAL)
+          && newIndexState == PIndexState.REBUILD
+      ) {
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        if (isAsync) {
+          CentroidManager.scheduleRebuildTask(connection, fullIndexName, true);
+          return new MutationState(1, 1000, connection);
+        } else {
+          try {
+            Class<?> taskClass =
+              Class.forName("org.apache.phoenix.coprocessor.tasks.VectorIndexRebuildTask");
+            Method rebuildMethod = taskClass.getMethod("rebuild", PhoenixConnection.class,
+              Configuration.class, String.class, boolean.class, String.class);
+            Object taskResult = rebuildMethod.invoke(null, connection,
+              connection.getQueryServices().getConfiguration(), fullIndexName, true, "MANUAL");
+            if (taskResult != null) {
+              Method getResultCode = taskResult.getClass().getMethod("getResultCode");
+              Object resultCode = getResultCode.invoke(taskResult);
+              if (resultCode != null && "FAIL".equals(resultCode.toString())) {
+                Method getDetails = taskResult.getClass().getMethod("getDetails");
+                String details = (String) getDetails.invoke(taskResult);
+                throw new SQLException("Vector index rebuild failed: " + details);
+              }
+            }
+            return new MutationState(1, 1000, connection);
+          } catch (ClassNotFoundException | NoSuchMethodException e) {
+            throw new SQLException(
+              "VectorIndexRebuildTask is not available on classpath: " + e.getMessage(), e);
+          } catch (InvocationTargetException e) {
+            Throwable target = e.getTargetException();
+            if (target instanceof SQLException) {
+              throw (SQLException) target;
+            }
+            throw new SQLException("Vector index rebuild failed: " + target.getMessage(), target);
+          } catch (IllegalAccessException e) {
+            throw new SQLException("Failed to execute VectorIndexRebuildTask: " + e.getMessage(),
+              e);
+          }
+        }
       }
 
       if (newIndexState == PIndexState.REBUILD) {

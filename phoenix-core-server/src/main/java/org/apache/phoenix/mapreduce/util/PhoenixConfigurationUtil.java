@@ -43,6 +43,7 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -228,8 +229,10 @@ public final class PhoenixConfigurationUtil {
   public static final String KMEANS_MAX_RETRIES = "phoenix.vector.kmeans.max.retries";
   public static final int DEFAULT_KMEANS_MAX_RETRIES = 3;
   public static final String KMEANS_HDFS_WORK_DIR = "phoenix.vector.kmeans.hdfs.work.dir";
-  public static final String KMEANS_LOCAL = "phoenix.vector.kmeans.local";
-  public static final boolean DEFAULT_KMEANS_LOCAL = false;
+  /** Key for vector kmeans local execution. */
+  public static final String KMEANS_LOCAL = QueryServices.VECTOR_KMEANS_LOCAL_ATTRIB;
+  public static final boolean DEFAULT_KMEANS_LOCAL =
+    QueryServicesOptions.DEFAULT_VECTOR_KMEANS_LOCAL;
 
   /**
    * Determines type of Phoenix Map Reduce job. 1. QUERY allows running arbitrary queries without

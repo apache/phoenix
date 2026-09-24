@@ -18,13 +18,17 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,34 +39,190 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.coprocessor.tasks.VectorIndexRebuildTask;
+import org.apache.phoenix.coprocessor.tasks.VectorScorecardReconcileTask;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.ScorecardRow;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
+import org.apache.phoenix.index.vector.VectorIndexScorecard.DriftEvaluationResult;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 /** Lifecycle integration tests for vector indexes. */
 @Category(ParallelStatsDisabledTest.class)
 public class VectorIvfLifecycleIT extends ParallelStatsDisabledIT {
+
+  // Reset shared vector state after each test.
+  @After
+  public void resetVectorState() {
+    VectorIndexTestUtil.resetSharedVectorState();
+  }
+
+  @Test
+  public void testVectorIndexCreationEnqueuesReconcileTask() throws Exception {
+    String tableName = "T_VEC_TASK_" + generateUniqueName();
+    String indexName = "IDX_VEC_TASK_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createVectorTableWithRows(conn, tableName, indexName, 40);
+
+      String sql = "SELECT " + PhoenixDatabaseMetaData.TASK_TYPE + ", "
+        + PhoenixDatabaseMetaData.TASK_STATUS + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
+        + " WHERE " + PhoenixDatabaseMetaData.TABLE_NAME + " = ?";
+      try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        ps.setString(1, indexName);
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue("Creating a vector index must enqueue its scorecard reconcile task",
+            rs.next());
+          assertEquals(PTable.TaskType.VECTOR_SCORECARD_RECONCILE.getSerializedValue(),
+            rs.getByte(1));
+          assertEquals(PTable.TaskStatus.CREATED.toString(), rs.getString(2));
+          assertFalse("exactly one reconcile task per index", rs.next());
+        }
+      }
+    }
+  }
+
+  /** Verifies that the reconciliation task repairs a diverged scorecard. */
+  @Test
+  public void testReconcileTaskRepairsDivergedScorecard() throws Exception {
+    String tableName = "T_VEC_RECON_" + generateUniqueName();
+    String indexName = "IDX_VEC_RECON_" + generateUniqueName();
+    int rowCount = 40;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createVectorTableWithRows(conn, tableName, indexName, rowCount);
+
+      // Artificially diverge centroid 0 count to simulate divergence
+      CentroidManager.persistScorecardRow(conn, indexName, 1L, 0, 999999L, 7L, null);
+
+      Task.TaskRecord taskRecord = null;
+      for (Task.TaskRecord candidate : Task.queryTaskTable(conn.unwrap(PhoenixConnection.class),
+        new String[] {})) {
+        if (
+          candidate.getTaskType() == PTable.TaskType.VECTOR_SCORECARD_RECONCILE
+            && indexName.equals(candidate.getTableName())
+        ) {
+          taskRecord = candidate;
+        }
+      }
+      assertNotNull("reconcile task row must exist for " + indexName, taskRecord);
+
+      RegionCoprocessorEnvironment taskEnv = getUtility()
+        .getRSForFirstRegionInTable(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME).get(0)
+        .getCoprocessorHost().findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+      VectorScorecardReconcileTask task = new VectorScorecardReconcileTask();
+      task.init(taskEnv, 0L);
+
+      // Reconcile task should skip execution before interval has elapsed
+      assertNotNull("index build stamps the generation",
+        CentroidManager.loadGenerationSummary(conn, indexName, 1L).getLastScorecardUpdate());
+      assertEquals(TaskRegionObserver.TaskResultCode.SKIPPED, task.run(taskRecord).getResultCode());
+      assertEquals("a sweep inside the interval must leave the diverged count alone",
+        Long.valueOf(999999L), clusterSizeOf(conn, indexName, 0));
+
+      // Backdate the last update timestamp past the interval
+      long intervalMs = taskEnv.getConfiguration().getLong(
+        QueryServices.VECTOR_INDEX_SCORECARD_RECONCILE_INTERVAL_MS_ATTRIB,
+        QueryServicesOptions.DEFAULT_VECTOR_INDEX_SCORECARD_RECONCILE_INTERVAL_MS);
+      long backdated = System.currentTimeMillis() - intervalMs - 1000L;
+      CentroidManager.persistGenerationSummary(conn, indexName, 1L, null, null, null, null,
+        backdated);
+
+      TaskRegionObserver.TaskResult result = task.run(taskRecord);
+
+      // Task remains queued in SKIPPED state for subsequent sweeps
+      assertEquals(TaskRegionObserver.TaskResultCode.SKIPPED, result.getResultCode());
+
+      List<ScorecardRow> scorecard = CentroidManager.loadScorecard(conn, indexName, 1L);
+      assertFalse("reconciliation must write a scorecard", scorecard.isEmpty());
+      long total = 0L;
+      for (ScorecardRow row : scorecard) {
+        assertNotNull("every centroid gets a count, including empty ones", row.getClusterSize());
+        assertEquals("interval-scoped counters reset", Long.valueOf(0L), row.getReassignCount());
+        total += row.getClusterSize();
+        if (row.getCentroidId() == 0) {
+          assertNotEquals("the diverged count must be corrected", Long.valueOf(999999L),
+            row.getClusterSize());
+        }
+      }
+      assertEquals("recounted posting lists must sum to the row count", rowCount, total);
+      assertTrue("reconciliation advances the generation's timestamp",
+        CentroidManager.loadGenerationSummary(conn, indexName, 1L).getLastScorecardUpdate()
+            > backdated);
+    }
+  }
+
+  private static Long clusterSizeOf(Connection conn, String indexName, int centroidId)
+    throws Exception {
+    for (ScorecardRow row : CentroidManager.loadScorecard(conn, indexName, 1L)) {
+      if (row.getCentroidId() == centroidId) {
+        return row.getClusterSize();
+      }
+    }
+    return null;
+  }
+
+  private static void createVectorTableWithRows(Connection conn, String tableName, String indexName,
+    int rowCount) throws Exception {
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+    }
+    float[][] inputs = new float[][] { { 0.0f, 1.0f, 2.0f, 3.0f }, { 1.0f, 2.0f, 3.0f, 0.0f },
+      { 2.0f, 3.0f, 0.0f, 1.0f }, { 3.0f, 0.0f, 1.0f, 2.0f } };
+    try (PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < rowCount; i++) {
+        float[] v = inputs[i % 4];
+        ps.setString(1, String.format("id_%03d", i));
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+        ps.setString(3, "label_" + i);
+        ps.executeUpdate();
+      }
+    }
+    conn.commit();
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+        + "INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+    }
+  }
 
   @Test
   public void testSynchronousVectorIndexPopulationAndActivation() throws Exception {
@@ -276,7 +436,10 @@ public class VectorIvfLifecycleIT extends ParallelStatsDisabledIT {
             closestCluster = k;
           }
         }
-        assertTrue("Trained centroid must be within 2.0 of a cluster center; dist=" + minD,
+        assertTrue("Trained centroid " + Arrays.toString(tc) + " must be within 2.0 of a cluster "
+          + "center; nearest=" + Arrays.toString(clusterCenters[closestCluster]) + " dist=" + minD
+          + "; all trained centroids=" + trainedCentroids.stream().map(Arrays::toString)
+            .collect(java.util.stream.Collectors.joining(", ")),
           minD < 2.0);
         matchedClusters.add(closestCluster);
       }
@@ -722,6 +885,203 @@ public class VectorIvfLifecycleIT extends ParallelStatsDisabledIT {
         }
       }
       assertTrue("Row C1 must exist in index table", foundC1);
+    }
+  }
+
+  @Test
+  public void testReconcileEvaluateReachesReassignRateExceeded() throws Exception {
+    String tableName = "T_VEC_REASSIGN_" + generateUniqueName();
+    String indexName = "IDX_VEC_REASSIGN_" + generateUniqueName();
+    int rowCount = 400;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createVectorTableWithRows(conn, tableName, indexName, rowCount);
+      String normalizedIndex = SchemaUtil.normalizeFullTableName(indexName);
+
+      // Inject reassignment counts to exceed the configured reassignment rate threshold.
+      List<ScorecardRow> existingScorecard =
+        CentroidManager.loadScorecard(conn, normalizedIndex, 1L);
+      assertFalse("scorecard must exist after index creation", existingScorecard.isEmpty());
+      for (ScorecardRow row : existingScorecard) {
+        CentroidManager.persistScorecardRow(conn, normalizedIndex, 1L, row.getCentroidId(),
+          row.getClusterSize(), 100L, null);
+      }
+
+      // Lower minimum cluster size threshold to permit evaluation on sample dataset
+      Configuration conf = HBaseConfiguration
+        .create(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+      conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 10L);
+
+      List<ScorecardRow> preResetRows = VectorIndexScorecard.reconcile(conn, normalizedIndex, 1L);
+      DriftEvaluationResult result = VectorIndexScorecard.evaluateRows(preResetRows, conf);
+
+      assertTrue("drift evaluation must trigger rebuild", result.shouldRebuild());
+      assertNotNull("trigger reason must not be null", result.getTriggerReason());
+      assertTrue("trigger must include REASSIGN_RATE_EXCEEDED: " + result.getTriggerReason(),
+        result.getTriggerReason().contains("REASSIGN_RATE_EXCEEDED"));
+      assertTrue("reassignment rate must exceed 0.20", result.getReassignmentRate() > 0.20);
+
+      // After reconcile, the persisted scorecard must have reassign counts reset to 0
+      List<ScorecardRow> postReconcile = CentroidManager.loadScorecard(conn, normalizedIndex, 1L);
+      for (ScorecardRow row : postReconcile) {
+        assertEquals("reassign count must be reset after reconcile", Long.valueOf(0L),
+          row.getReassignCount());
+      }
+    }
+  }
+
+  @Test
+  public void testRebuildAbortsOnMigrationFailureGenerationUnchanged() throws Exception {
+    String tableName = "T_VEC_ABORT_" + generateUniqueName();
+    String indexName = "IDX_VEC_ABORT_" + generateUniqueName();
+    int rowCount = 40;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createVectorTableWithRows(conn, tableName, indexName, rowCount);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      String normalizedIndex = SchemaUtil.normalizeFullTableName(indexName);
+
+      long genBefore = CentroidManager.getGeneration(conn, normalizedIndex);
+      assertEquals("initial generation must be 1", 1L, genBefore);
+
+      // Simulate migration failure during rebuild execution via RebuildHook.
+      VectorIndexRebuildTask.setTestHook((idx, buildingGen) -> {
+        throw new RuntimeException("Injected migration failure for test");
+      });
+
+      try {
+        Configuration conf = HBaseConfiguration.create(pconn.getQueryServices().getConfiguration());
+        conf.setBoolean(QueryServices.VECTOR_KMEANS_LOCAL_ATTRIB, true);
+        try {
+          VectorIndexRebuildTask.rebuild(pconn, conf, normalizedIndex, true, "TEST_ABORT");
+          fail("rebuild must throw on injected failure");
+        } catch (RuntimeException e) {
+          assertTrue("exception must be the injected one: " + e.getMessage(),
+            e.getMessage().contains("Injected migration failure"));
+        }
+      } finally {
+        VectorIndexRebuildTask.clearTestHook();
+      }
+
+      // Generation must remain at 1 following aborted rebuild.
+      long genAfter = CentroidManager.getGeneration(conn, normalizedIndex);
+      assertEquals("generation must not advance after failed rebuild", genBefore, genAfter);
+
+      // The index remains queryable using original centroid generation.
+      Float[] queryVec = new Float[] { 0.0f, 1.0f, 2.0f, 3.0f };
+      String query = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", queryVec));
+        try (ResultSet rs = ps.executeQuery()) {
+          int count = 0;
+          while (rs.next()) {
+            count++;
+          }
+          assertTrue("query must still return results after aborted rebuild", count > 0);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testQueryDuringRebuildMigrationReturnsEachRowOnce() throws Exception {
+    String tableName = "T_VEC_MIG_Q_" + generateUniqueName();
+    String indexName = "IDX_VEC_MIG_Q_" + generateUniqueName();
+    int rowCount = 100;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createVectorTableWithRows(conn, tableName, indexName, rowCount);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      String normalizedIndex = SchemaUtil.normalizeFullTableName(indexName);
+
+      CountDownLatch hookReached = new CountDownLatch(1);
+      CountDownLatch queryDone = new CountDownLatch(1);
+
+      // Intercept rebuild execution prior to generation switch during index migration.
+      VectorIndexRebuildTask.setTestHook((idx, buildingGen) -> {
+        hookReached.countDown();
+        // Wait for the concurrent query to finish before allowing the rebuild to complete
+        if (!queryDone.await(30, TimeUnit.SECONDS)) {
+          throw new RuntimeException("Timed out waiting for query to complete during rebuild");
+        }
+      });
+
+      ExecutorService executor = Executors.newSingleThreadExecutor();
+      try {
+        Configuration conf = HBaseConfiguration.create(pconn.getQueryServices().getConfiguration());
+        conf.setBoolean(QueryServices.VECTOR_KMEANS_LOCAL_ATTRIB, true);
+
+        // Launch rebuild in a background thread
+        Future<TaskRegionObserver.TaskResult> rebuildFuture = executor.submit(() -> {
+          try (PhoenixConnection rebuildConn =
+            QueryUtil.getConnectionOnServer(conf).unwrap(PhoenixConnection.class)) {
+            return VectorIndexRebuildTask.rebuild(rebuildConn, conf, normalizedIndex, true,
+              "TEST_MIGRATION_QUERY");
+          }
+        });
+
+        // Wait for the hook to fire (rebuild is mid-migration)
+        assertTrue("rebuild hook must fire within 30s", hookReached.await(30, TimeUnit.SECONDS));
+
+        // Query with probe=4 (all centroids) while rebuild is in progress
+        Float[] queryVec = new Float[] { 0.0f, 1.0f, 2.0f, 3.0f };
+        String query = "SELECT /*+ VECTOR_PROBE_COUNT(4) */ ID FROM " + tableName
+          + " ORDER BY L2_DISTANCE(V, ?) LIMIT " + rowCount;
+        Set<String> resultIds = new HashSet<>();
+        int totalRows = 0;
+        try (Connection queryConn = DriverManager.getConnection(getUrl())) {
+          try (PreparedStatement ps = queryConn.prepareStatement(query)) {
+            ps.setArray(1, queryConn.createArrayOf("FLOAT", queryVec));
+            try (ResultSet rs = ps.executeQuery()) {
+              while (rs.next()) {
+                String id = rs.getString(1);
+                resultIds.add(id);
+                totalRows++;
+              }
+            }
+          }
+        }
+
+        // Signal rebuild to continue
+        queryDone.countDown();
+
+        // Verify deduplication across coexisting index generations.
+        assertEquals("query must not return duplicate rows", totalRows, resultIds.size());
+        assertTrue("query must return results", totalRows > 0);
+
+        TaskRegionObserver.TaskResult rebuildResult = rebuildFuture.get(60, TimeUnit.SECONDS);
+        assertEquals("rebuild must succeed", TaskRegionObserver.TaskResultCode.SUCCESS,
+          rebuildResult.getResultCode());
+      } finally {
+        VectorIndexRebuildTask.clearTestHook();
+        executor.shutdownNow();
+      }
+    }
+  }
+
+  @Test
+  public void testVectorIndexOnViewRejected() throws Exception {
+    String tableName = "T_VEC_VIEW_" + generateUniqueName();
+    String viewName = "V_VEC_VIEW_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+        stmt.execute(
+          "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " WHERE LABEL = 'a'");
+      }
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE VECTOR INDEX IDX_VIEW_VEC ON " + viewName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+        fail("Expected SQL exception for vector index on a view");
+      } catch (SQLException e) {
+        assertEquals("error code must be INVALID_VECTOR_INDEX_PARAMS",
+          SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS.getErrorCode(), e.getErrorCode());
+        assertTrue("message must mention views: " + e.getMessage(),
+          e.getMessage().contains("view"));
+      }
     }
   }
 }

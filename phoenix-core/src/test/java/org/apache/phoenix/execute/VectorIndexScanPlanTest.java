@@ -67,6 +67,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
@@ -196,6 +197,57 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
 
       // Invalid connection property falls back to default heuristic
       assertEquals(10, VectorIndexScanPlan.resolveProbeCount(null, null, pConnNeg2, 100));
+    }
+  }
+
+  @Test
+  public void testExpandProbeCountWidensWithoutExceedingTheCentroidCount() {
+    // Probe count scaling by expansion factor
+    assertEquals(8, VectorIndexScanPlan.expandProbeCount(4, 2.0, 100));
+    // Clamping to total centroid count
+    assertEquals(10, VectorIndexScanPlan.expandProbeCount(8, 2.0, 10));
+    assertEquals(10, VectorIndexScanPlan.expandProbeCount(10, 2.0, 10));
+    // Ceiling rounding for fractional probe expansion
+    assertEquals(4, VectorIndexScanPlan.expandProbeCount(3, 1.25, 100));
+    // Non-expansion for factor <= 1.0
+    assertEquals(4, VectorIndexScanPlan.expandProbeCount(4, 1.0, 100));
+    assertEquals(4, VectorIndexScanPlan.expandProbeCount(4, 0.5, 100));
+    // Unexpanded boundary conditions for unprobed scans
+    assertEquals(0, VectorIndexScanPlan.expandProbeCount(0, 2.0, 100));
+    assertEquals(4, VectorIndexScanPlan.expandProbeCount(4, 2.0, 0));
+    // Upper-bound overflow protection
+    assertEquals(100, VectorIndexScanPlan.expandProbeCount(4, Double.MAX_VALUE, 100));
+  }
+
+  @Test
+  public void testResolveRebuildProbePolicy() throws SQLException {
+    assertEquals("expansion is the default so an in-flight rebuild never silently loses recall",
+      VectorIndexScanPlan.RebuildProbePolicy.EXPAND,
+      VectorIndexScanPlan.resolveRebuildProbePolicy(null));
+    assertEquals(QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_FACTOR,
+      VectorIndexScanPlan.resolveRebuildProbeFactor(null), 1e-6);
+
+    Properties exact = new Properties();
+    exact.setProperty(QueryServices.VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB, "exact");
+    exact.setProperty(QueryServices.VECTOR_INDEX_REBUILD_PROBE_FACTOR_ATTRIB, "3.5");
+    try (Connection conn = DriverManager.getConnection(getUrl(), exact)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals("the policy name is case-insensitive",
+        VectorIndexScanPlan.RebuildProbePolicy.EXACT,
+        VectorIndexScanPlan.resolveRebuildProbePolicy(pConn));
+      assertEquals(3.5, VectorIndexScanPlan.resolveRebuildProbeFactor(pConn), 1e-6);
+    }
+
+    Properties nonsense = new Properties();
+    nonsense.setProperty(QueryServices.VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB, "SOMETIMES");
+    nonsense.setProperty(QueryServices.VECTOR_INDEX_REBUILD_PROBE_FACTOR_ATTRIB, "not-a-number");
+    try (Connection conn = DriverManager.getConnection(getUrl(), nonsense)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals("an unusable policy must fall back rather than fail the query",
+        VectorIndexScanPlan.RebuildProbePolicy.EXPAND,
+        VectorIndexScanPlan.resolveRebuildProbePolicy(pConn));
+      assertEquals(QueryServicesOptions.DEFAULT_VECTOR_INDEX_REBUILD_PROBE_FACTOR,
+        VectorIndexScanPlan.resolveRebuildProbeFactor(pConn), 1e-6);
     }
   }
 

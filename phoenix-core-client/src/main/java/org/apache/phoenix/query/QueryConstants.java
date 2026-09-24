@@ -32,6 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_E
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLIENT_IP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
@@ -78,6 +79,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_REBUILD_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_SCORECARD_UPDATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
@@ -111,6 +114,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REASSIGN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REBUILD_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
@@ -124,6 +129,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SKEW_METRICS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SOURCE_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATA_TYPE;
@@ -171,6 +177,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_START_TS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRIGGER_REASON;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
@@ -629,10 +636,14 @@ public interface QueryConstants {
   String CREATE_VECTOR_CENTROID_METADATA =
     "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_VECTOR_CENTROID_TABLE + "\"(\n" +
     // PK columns
-      INDEX_NAME + " VARCHAR NOT NULL," + CENTROID_ID + " INTEGER NOT NULL,\n" +
+      INDEX_NAME + " VARCHAR NOT NULL," + GENERATION_ID + " BIGINT NOT NULL," + CENTROID_ID
+      + " INTEGER NOT NULL,\n" +
       // Non-PK columns
-      CENTROID_VECTOR + " VARBINARY," + GENERATION_ID + " BIGINT,\n" + "CONSTRAINT "
-      + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + INDEX_NAME + "," + CENTROID_ID + "))\n"
-      + HConstants.VERSIONS + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
-      + TRANSACTIONAL + "=" + Boolean.FALSE;
+      CENTROID_VECTOR + " VARBINARY," + CLUSTER_SIZE + " BIGINT," + REASSIGN_COUNT + " BIGINT,"
+      + SKEW_METRICS + " VARBINARY," + REBUILD_STATE + " CHAR(1)," + TRIGGER_REASON + " VARCHAR,"
+      + LAST_REBUILD_TIME + " BIGINT," + LAST_SCORECARD_UPDATE + " BIGINT,\n" + "CONSTRAINT "
+      + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + INDEX_NAME + "," + GENERATION_ID + ","
+      + CENTROID_ID + "))\n" + HConstants.VERSIONS + "=%s,\n"
+      + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + TRANSACTIONAL + "="
+      + Boolean.FALSE;
 }

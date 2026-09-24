@@ -68,10 +68,11 @@ public class VectorCentroidCache {
     QueryServices.VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB;
   public static final int DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT =
     QueryServicesOptions.DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT;
-  public static final String VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB =
-    QueryServices.VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB;
-  public static final int DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS =
-    QueryServicesOptions.DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS;
+  /**
+   * Fan-out of the hierarchical centroid lookup used above
+   * {@link #DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT}.
+   */
+  public static final int DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS = 3;
 
   private static volatile VectorCentroidCache defaultInstance;
 
@@ -170,6 +171,7 @@ public class VectorCentroidCache {
     private final int bruteforceLimit;
     private final int probeBuckets;
     private final HierarchicalIndex hierarchicalIndex;
+    private final boolean rebuildInProgress;
     private final Cache<ImmutableBytesPtr, Integer> centroidAssignmentCache =
       CacheBuilder.newBuilder().maximumSize(10000).build();
     private volatile int lastDistanceEvaluationCount;
@@ -178,11 +180,23 @@ public class VectorCentroidCache {
       return lastDistanceEvaluationCount;
     }
 
+    /** Returns whether an index rebuild was in progress when these centroids were loaded. */
+
+    public boolean isRebuildInProgress() {
+      return rebuildInProgress;
+    }
+
     public CachedCentroids(String indexName, long generation, List<byte[]> byteCentroids,
       int bruteforceLimit, int probeBuckets) {
+      this(indexName, generation, byteCentroids, bruteforceLimit, probeBuckets, false);
+    }
+
+    public CachedCentroids(String indexName, long generation, List<byte[]> byteCentroids,
+      int bruteforceLimit, int probeBuckets, boolean rebuildInProgress) {
       this.indexName = SchemaUtil
         .normalizeFullTableName(Objects.requireNonNull(indexName, "indexName must not be null"));
       this.generation = generation;
+      this.rebuildInProgress = rebuildInProgress;
       this.loadedTimestamp = System.currentTimeMillis();
       this.bruteforceLimit = bruteforceLimit;
       this.probeBuckets = probeBuckets > 0 ? probeBuckets : DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS;
@@ -268,6 +282,9 @@ public class VectorCentroidCache {
       this.indexName = SchemaUtil
         .normalizeFullTableName(Objects.requireNonNull(indexName, "indexName must not be null"));
       this.generation = generation;
+      // Directly provided centroids do not track rebuild lifecycle state.
+
+      this.rebuildInProgress = false;
       this.loadedTimestamp = System.currentTimeMillis();
       this.bruteforceLimit = bruteforceLimit;
       this.probeBuckets = probeBuckets > 0 ? probeBuckets : DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS;
@@ -935,8 +952,7 @@ public class VectorCentroidCache {
       DEFAULT_VECTOR_CENTROID_CACHE_MAX_SIZE);
     this.bruteforceLimit = this.conf.getInt(VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB,
       DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT);
-    this.probeBuckets =
-      this.conf.getInt(VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB, DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS);
+    this.probeBuckets = DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS;
 
     this.cache = CacheBuilder.newBuilder().maximumSize(maxSize).recordStats()
       .removalListener((RemovalListener<CacheKey, CachedCentroids>) notification -> {
@@ -1076,8 +1092,8 @@ public class VectorCentroidCache {
         + "SYSTEM.VECTOR_CENTROID for index: " + normalized);
     }
     List<byte[]> centroids = CentroidManager.loadCentroids(conn, normalized, generation);
-    CachedCentroids cached =
-      new CachedCentroids(normalized, generation, centroids, bruteforceLimit, probeBuckets);
+    CachedCentroids cached = new CachedCentroids(normalized, generation, centroids, bruteforceLimit,
+      probeBuckets, readRebuildInProgress(conn, normalized));
     cache.put(new CacheKey(normalized, generation), cached);
     activeGenerations.put(normalized, generation);
     if (defaultIndexName == null) {
@@ -1132,6 +1148,20 @@ public class VectorCentroidCache {
       }
     } finally {
       writeLoadLocks.remove(key, lock);
+    }
+  }
+
+  /**
+   * Reads the rebuild lifecycle state during centroid loading, defaulting to false if the state
+   * cannot be resolved to preserve query availability.
+   */
+  private static boolean readRebuildInProgress(Connection conn, String normalizedIndexName) {
+    try {
+      return CentroidManager.isRebuildInProgress(conn, normalizedIndexName);
+    } catch (Exception e) {
+      LOG.debug("Could not read rebuild state for index {}: {}", normalizedIndexName,
+        e.getMessage());
+      return false;
     }
   }
 

@@ -38,11 +38,18 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class VectorColumnIT extends ParallelStatsDisabledIT {
+
+  /** Reset shared vector state after each test. */
+  @After
+  public void resetVectorState() {
+    VectorIndexTestUtil.resetSharedVectorState();
+  }
 
   @Test
   public void testVectorDimensionPersistenceRoundTrip() throws Exception {

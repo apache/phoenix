@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRIGGER_REASON_INDEX_TOOL;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 
 import java.io.IOException;
@@ -76,6 +77,7 @@ import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.KMeansConfig;
 import org.apache.phoenix.index.vector.KMeansResult;
 import org.apache.phoenix.index.vector.KMeansTrainer;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -806,7 +808,8 @@ public class IndexTool extends Configured implements Tool {
             KMeansConfig kMeansConfig =
               KMeansConfig.builder().distanceMetric(distanceMetric).maxIterations(20).build();
             KMeansResult trainResult = KMeansTrainer.train(samples, actualK, kMeansConfig);
-            CentroidManager.persistCentroids(pConnection, qIndexTable, gen, trainResult);
+            CentroidManager.persistCentroids(pConnection, qIndexTable, gen, trainResult,
+              TRIGGER_REASON_INDEX_TOOL);
             CentroidManager.setGenerationAndLists(pConnection, qIndexTable, gen, actualK);
           }
         }
@@ -1042,6 +1045,14 @@ public class IndexTool extends Configured implements Tool {
       boolean result = submitIndexToolJob(conn, configuration);
 
       if (result) {
+        // Synchronously reconcile the scorecard upon completion for foreground builds;
+        // asynchronous rebuilds are reconciled during the periodic task's initial sweep.
+        if (isForeground && pIndexTable != null && pIndexTable.isVectorIndex()) {
+          long gen = pIndexTable.getVectorCentroidGeneration() != null
+            ? pIndexTable.getVectorCentroidGeneration()
+            : 1L;
+          VectorIndexScorecard.reconcile(conn, qIndexTable, gen);
+        }
         return 0;
       } else {
         LOGGER.error("IndexTool job failed! Check logs for errors..");

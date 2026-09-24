@@ -19,17 +19,30 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_VECTOR;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GENERATION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_REBUILD_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_SCORECARD_UPDATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REASSIGN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REBUILD_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REBUILD_STATE_ACTIVE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REBUILD_STATE_BUILDING;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REBUILD_STATE_RETIRED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SKEW_METRICS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRIGGER_REASON;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRIGGER_REASON_CREATE_INDEX;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -40,21 +53,48 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.ClusterSkewMetrics;
+import org.apache.phoenix.index.vector.GenerationSummary;
+import org.apache.phoenix.index.vector.KMeansConfig;
+import org.apache.phoenix.index.vector.KMeansResult;
+import org.apache.phoenix.index.vector.KMeansTrainer;
+import org.apache.phoenix.index.vector.ScorecardRow;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
+
+  private final List<String> createdIndexNames = new ArrayList<>();
+
+  private String uniqueIndex(String prefix) {
+    String name = prefix + generateUniqueName();
+    createdIndexNames.add(name);
+    return name;
+  }
+
+  @After
+  public void cleanUpVectorState() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      VectorIndexTestUtil.deleteCentroidRows(conn, createdIndexNames);
+    } finally {
+      createdIndexNames.clear();
+      VectorIndexTestUtil.resetSharedVectorState();
+    }
+  }
 
   @Test
   public void testTableExistenceAndSchema() throws Exception {
@@ -62,54 +102,99 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
       try (Statement stmt = conn.createStatement(); ResultSet rs =
         stmt.executeQuery("SELECT * FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE 1=0")) {
         ResultSetMetaData rsmd = rs.getMetaData();
-        assertEquals(4, rsmd.getColumnCount());
+        assertEquals(11, rsmd.getColumnCount());
 
         assertEquals(INDEX_NAME, rsmd.getColumnName(1));
         assertEquals(Types.VARCHAR, rsmd.getColumnType(1));
         assertEquals(ResultSetMetaData.columnNoNulls, rsmd.isNullable(1));
 
-        assertEquals(CENTROID_ID, rsmd.getColumnName(2));
-        assertEquals(Types.INTEGER, rsmd.getColumnType(2));
+        assertEquals(GENERATION_ID, rsmd.getColumnName(2));
+        assertEquals(Types.BIGINT, rsmd.getColumnType(2));
         assertEquals(ResultSetMetaData.columnNoNulls, rsmd.isNullable(2));
 
-        assertEquals(CENTROID_VECTOR, rsmd.getColumnName(3));
-        assertEquals(Types.VARBINARY, rsmd.getColumnType(3));
-        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(3));
+        assertEquals(CENTROID_ID, rsmd.getColumnName(3));
+        assertEquals(Types.INTEGER, rsmd.getColumnType(3));
+        assertEquals(ResultSetMetaData.columnNoNulls, rsmd.isNullable(3));
 
-        assertEquals(GENERATION_ID, rsmd.getColumnName(4));
-        assertEquals(Types.BIGINT, rsmd.getColumnType(4));
+        assertEquals(CENTROID_VECTOR, rsmd.getColumnName(4));
+        assertEquals(Types.VARBINARY, rsmd.getColumnType(4));
         assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(4));
+
+        assertEquals(CLUSTER_SIZE, rsmd.getColumnName(5));
+        assertEquals(Types.BIGINT, rsmd.getColumnType(5));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(5));
+
+        assertEquals(REASSIGN_COUNT, rsmd.getColumnName(6));
+        assertEquals(Types.BIGINT, rsmd.getColumnType(6));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(6));
+
+        assertEquals(SKEW_METRICS, rsmd.getColumnName(7));
+        assertEquals(Types.VARBINARY, rsmd.getColumnType(7));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(7));
+
+        assertEquals(REBUILD_STATE, rsmd.getColumnName(8));
+        assertEquals(Types.CHAR, rsmd.getColumnType(8));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(8));
+
+        assertEquals(TRIGGER_REASON, rsmd.getColumnName(9));
+        assertEquals(Types.VARCHAR, rsmd.getColumnType(9));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(9));
+
+        assertEquals(LAST_REBUILD_TIME, rsmd.getColumnName(10));
+        assertEquals(Types.BIGINT, rsmd.getColumnType(10));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(10));
+
+        assertEquals(LAST_SCORECARD_UPDATE, rsmd.getColumnName(11));
+        assertEquals(Types.BIGINT, rsmd.getColumnType(11));
+        assertEquals(ResultSetMetaData.columnNullable, rsmd.isNullable(11));
       }
     }
   }
 
   @Test
+  public void testPrimaryKeyShape() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      DatabaseMetaData dbmd = conn.getMetaData();
+      java.util.Map<String, Short> pkColToSeq = new java.util.HashMap<>();
+      try (ResultSet rs =
+        dbmd.getPrimaryKeys(null, SYSTEM_CATALOG_SCHEMA, SYSTEM_VECTOR_CENTROID_TABLE)) {
+        while (rs.next()) {
+          pkColToSeq.put(rs.getString(COLUMN_NAME), rs.getShort(KEY_SEQ));
+        }
+      }
+      assertEquals(3, pkColToSeq.size());
+      assertEquals(Short.valueOf((short) 1), pkColToSeq.get(INDEX_NAME));
+      assertEquals(Short.valueOf((short) 2), pkColToSeq.get(GENERATION_ID));
+      assertEquals(Short.valueOf((short) 3), pkColToSeq.get(CENTROID_ID));
+    }
+  }
+
+  @Test
   public void testPrimaryKeyConstraintAndUpsert() throws Exception {
-    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
     byte[] vector1 = new byte[] { 1, 2, 3, 4 };
     byte[] vector2 = new byte[] { 5, 6, 7, 8 };
     byte[] vector3 = new byte[] { 9, 10, 11, 12 };
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String upsertSql = "UPSERT INTO " + SYSTEM_VECTOR_CENTROID_NAME + " (" + INDEX_NAME + ", "
-        + CENTROID_ID + ", " + CENTROID_VECTOR + ", " + GENERATION_ID + ") VALUES (?, ?, ?, ?)";
+        + GENERATION_ID + ", " + CENTROID_ID + ", " + CENTROID_VECTOR + ") VALUES (?, ?, ?, ?)";
 
-      // Upsert an initial centroid row for the index.
       try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
         ps.setString(1, indexName);
-        ps.setInt(2, 0);
-        ps.setBytes(3, vector1);
-        ps.setLong(4, 1L);
+        ps.setLong(2, 1L);
+        ps.setInt(3, 0);
+        ps.setBytes(4, vector1);
         ps.executeUpdate();
       }
       conn.commit();
 
-      // Upserting with the same primary key (INDEX_NAME, CENTROID_ID) updates the record in place.
+      // Upsert second row with the SAME (INDEX_NAME, GENERATION_ID, CENTROID_ID) PK
       try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
         ps.setString(1, indexName);
-        ps.setInt(2, 0);
-        ps.setBytes(3, vector2);
-        ps.setLong(4, 2L);
+        ps.setLong(2, 1L);
+        ps.setInt(3, 0);
+        ps.setBytes(4, vector2);
         ps.executeUpdate();
       }
       conn.commit();
@@ -125,35 +210,35 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
         }
       }
 
-      // Verify updated centroid vector and generation.
-      String selectSql = "SELECT " + CENTROID_VECTOR + ", " + GENERATION_ID + " FROM "
-        + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME + " = ? AND " + CENTROID_ID + " = ?";
+      // Assert updated values
+      String selectSql = "SELECT " + CENTROID_VECTOR + " FROM " + SYSTEM_VECTOR_CENTROID_NAME
+        + " WHERE " + INDEX_NAME + " = ? AND " + GENERATION_ID + " = ? AND " + CENTROID_ID + " = ?";
       try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
         ps.setString(1, indexName);
-        ps.setInt(2, 0);
+        ps.setLong(2, 1L);
+        ps.setInt(3, 0);
         try (ResultSet rs = ps.executeQuery()) {
           assertTrue(rs.next());
           assertArrayEquals(vector2, rs.getBytes(1));
-          assertEquals(2L, rs.getLong(2));
         }
       }
 
-      // Upserting with a distinct centroid ID creates a separate entry for the index.
+      // Upsert a second generation for the same index and centroid_id (generation=2)
       try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
         ps.setString(1, indexName);
-        ps.setInt(2, 1);
-        ps.setBytes(3, vector3);
-        ps.setLong(4, 2L);
+        ps.setLong(2, 2L);
+        ps.setInt(3, 0);
+        ps.setBytes(4, vector3);
         ps.executeUpdate();
       }
       conn.commit();
 
-      // Verify the index now contains two distinct centroid records.
+      // Assert count is now 2 for this index (generations coexist)
       try (PreparedStatement ps = conn.prepareStatement(countSql)) {
         ps.setString(1, indexName);
         try (ResultSet rs = ps.executeQuery()) {
           assertTrue(rs.next());
-          assertEquals("Expected two centroid rows for distinct centroid IDs", 2, rs.getInt(1));
+          assertEquals("Expected two rows for distinct generations", 2, rs.getInt(1));
         }
       }
     }
@@ -168,13 +253,16 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
 
       // Validate primary key column schema
       List<PColumn> pkColumns = table.getPKColumns();
-      assertEquals(2, pkColumns.size());
+      assertEquals(3, pkColumns.size());
       assertEquals(INDEX_NAME, pkColumns.get(0).getName().getString());
       assertEquals(PVarchar.INSTANCE, pkColumns.get(0).getDataType());
       assertFalse(pkColumns.get(0).isNullable());
-      assertEquals(CENTROID_ID, pkColumns.get(1).getName().getString());
-      assertEquals(PInteger.INSTANCE, pkColumns.get(1).getDataType());
+      assertEquals(GENERATION_ID, pkColumns.get(1).getName().getString());
+      assertEquals(PLong.INSTANCE, pkColumns.get(1).getDataType());
       assertFalse(pkColumns.get(1).isNullable());
+      assertEquals(CENTROID_ID, pkColumns.get(2).getName().getString());
+      assertEquals(PInteger.INSTANCE, pkColumns.get(2).getDataType());
+      assertFalse(pkColumns.get(2).isNullable());
 
       // Validate non-primary key column schema
       PColumn centroidVectorCol = table.getColumnForColumnName(CENTROID_VECTOR);
@@ -182,10 +270,40 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
       assertEquals(PVarbinary.INSTANCE, centroidVectorCol.getDataType());
       assertTrue(centroidVectorCol.isNullable());
 
-      PColumn generationIdCol = table.getColumnForColumnName(GENERATION_ID);
-      assertNotNull(generationIdCol);
-      assertEquals(PLong.INSTANCE, generationIdCol.getDataType());
-      assertTrue(generationIdCol.isNullable());
+      PColumn clusterSizeCol = table.getColumnForColumnName(CLUSTER_SIZE);
+      assertNotNull(clusterSizeCol);
+      assertEquals(PLong.INSTANCE, clusterSizeCol.getDataType());
+      assertTrue(clusterSizeCol.isNullable());
+
+      PColumn reassignCountCol = table.getColumnForColumnName(REASSIGN_COUNT);
+      assertNotNull(reassignCountCol);
+      assertEquals(PLong.INSTANCE, reassignCountCol.getDataType());
+      assertTrue(reassignCountCol.isNullable());
+
+      PColumn skewMetricsCol = table.getColumnForColumnName(SKEW_METRICS);
+      assertNotNull(skewMetricsCol);
+      assertEquals(PVarbinary.INSTANCE, skewMetricsCol.getDataType());
+      assertTrue(skewMetricsCol.isNullable());
+
+      PColumn rebuildStateCol = table.getColumnForColumnName(REBUILD_STATE);
+      assertNotNull(rebuildStateCol);
+      assertEquals(PChar.INSTANCE, rebuildStateCol.getDataType());
+      assertTrue(rebuildStateCol.isNullable());
+
+      PColumn triggerReasonCol = table.getColumnForColumnName(TRIGGER_REASON);
+      assertNotNull(triggerReasonCol);
+      assertEquals(PVarchar.INSTANCE, triggerReasonCol.getDataType());
+      assertTrue(triggerReasonCol.isNullable());
+
+      PColumn lastRebuildTimeCol = table.getColumnForColumnName(LAST_REBUILD_TIME);
+      assertNotNull(lastRebuildTimeCol);
+      assertEquals(PLong.INSTANCE, lastRebuildTimeCol.getDataType());
+      assertTrue(lastRebuildTimeCol.isNullable());
+
+      PColumn lastScorecardUpdateCol = table.getColumnForColumnName(LAST_SCORECARD_UPDATE);
+      assertNotNull(lastScorecardUpdateCol);
+      assertEquals(PLong.INSTANCE, lastScorecardUpdateCol.getDataType());
+      assertTrue(lastScorecardUpdateCol.isNullable());
     }
   }
 
@@ -199,6 +317,10 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
         assertEquals(INDEX_NAME, rs.getString(COLUMN_NAME));
         assertEquals(Types.VARCHAR, rs.getInt(DATA_TYPE));
 
+        assertTrue("Expected GENERATION_ID column", rs.next());
+        assertEquals(GENERATION_ID, rs.getString(COLUMN_NAME));
+        assertEquals(Types.BIGINT, rs.getInt(DATA_TYPE));
+
         assertTrue("Expected CENTROID_ID column", rs.next());
         assertEquals(CENTROID_ID, rs.getString(COLUMN_NAME));
         assertEquals(Types.INTEGER, rs.getInt(DATA_TYPE));
@@ -207,8 +329,32 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
         assertEquals(CENTROID_VECTOR, rs.getString(COLUMN_NAME));
         assertEquals(Types.VARBINARY, rs.getInt(DATA_TYPE));
 
-        assertTrue("Expected GENERATION_ID column", rs.next());
-        assertEquals(GENERATION_ID, rs.getString(COLUMN_NAME));
+        assertTrue("Expected CLUSTER_SIZE column", rs.next());
+        assertEquals(CLUSTER_SIZE, rs.getString(COLUMN_NAME));
+        assertEquals(Types.BIGINT, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected REASSIGN_COUNT column", rs.next());
+        assertEquals(REASSIGN_COUNT, rs.getString(COLUMN_NAME));
+        assertEquals(Types.BIGINT, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected SKEW_METRICS column", rs.next());
+        assertEquals(SKEW_METRICS, rs.getString(COLUMN_NAME));
+        assertEquals(Types.VARBINARY, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected REBUILD_STATE column", rs.next());
+        assertEquals(REBUILD_STATE, rs.getString(COLUMN_NAME));
+        assertEquals(Types.CHAR, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected TRIGGER_REASON column", rs.next());
+        assertEquals(TRIGGER_REASON, rs.getString(COLUMN_NAME));
+        assertEquals(Types.VARCHAR, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected LAST_REBUILD_TIME column", rs.next());
+        assertEquals(LAST_REBUILD_TIME, rs.getString(COLUMN_NAME));
+        assertEquals(Types.BIGINT, rs.getInt(DATA_TYPE));
+
+        assertTrue("Expected LAST_SCORECARD_UPDATE column", rs.next());
+        assertEquals(LAST_SCORECARD_UPDATE, rs.getString(COLUMN_NAME));
         assertEquals(Types.BIGINT, rs.getInt(DATA_TYPE));
 
         assertFalse("No additional columns expected", rs.next());
@@ -217,8 +363,328 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testGenerationsCoexist() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    List<byte[]> gen1 =
+      Arrays.asList(new byte[] { 1 }, new byte[] { 2 }, new byte[] { 3 }, new byte[] { 4 });
+    List<byte[]> gen2 =
+      Arrays.asList(new byte[] { 5 }, new byte[] { 6 }, new byte[] { 7 }, new byte[] { 8 });
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, gen1);
+      manager.persistCentroids(indexName, 2L, gen2);
+
+      List<byte[]> loaded1 = manager.loadCentroids(indexName, 1L);
+      assertEquals(4, loaded1.size());
+      for (int i = 0; i < 4; i++) {
+        assertArrayEquals(gen1.get(i), loaded1.get(i));
+      }
+
+      List<byte[]> loaded2 = manager.loadCentroids(indexName, 2L);
+      assertEquals(4, loaded2.size());
+      for (int i = 0; i < 4; i++) {
+        assertArrayEquals(gen2.get(i), loaded2.get(i));
+      }
+    }
+  }
+
+  @Test
+  public void testSentinelRowExcludedFromCentroidLoads() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    List<byte[]> centroids =
+      Arrays.asList(new byte[] { 10 }, new byte[] { 20 }, new byte[] { 30 }, new byte[] { 40 });
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, centroids);
+
+      manager.persistGenerationSummary(new GenerationSummary.Builder().setIndexName(indexName)
+        .setGenerationId(1L).setRebuildState("A").setTriggerReason("TEST").build());
+
+      List<byte[]> loaded = manager.loadCentroids(indexName, 1L);
+      assertEquals(4, loaded.size());
+      for (int i = 0; i < 4; i++) {
+        assertArrayEquals(centroids.get(i), loaded.get(i));
+      }
+    }
+  }
+
+  /**
+   * Verifies that the sentinel row ({@code CENTROID_ID = -1}) orders ahead of centroid rows in
+   * physical row key order.
+   */
+  @Test
+  public void testSentinelRowSortsBeforeCentroidsInKeyOrder() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    List<byte[]> centroids =
+      Arrays.asList(new byte[] { 1 }, new byte[] { 2 }, new byte[] { 3 }, new byte[] { 4 });
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, centroids);
+      manager.persistGenerationSummary(new GenerationSummary.Builder().setIndexName(indexName)
+        .setGenerationId(1L).setRebuildState("A").setTriggerReason("TEST").build());
+
+      String selectSql = "SELECT " + CENTROID_ID + " FROM " + SYSTEM_VECTOR_CENTROID_NAME
+        + " WHERE " + INDEX_NAME + " = ? AND " + GENERATION_ID + " = ?";
+
+      try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+        ps.setString(1, indexName);
+        ps.setLong(2, 1L);
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals("Sentinel row (-1) must precede centroid 0 in key order", -1, rs.getInt(1));
+          for (int i = 0; i < 4; i++) {
+            assertTrue(rs.next());
+            assertEquals(i, rs.getInt(1));
+          }
+          assertFalse(rs.next());
+        }
+      }
+    }
+  }
+
+  /**
+   * Verifies loading centroids excludes the sentinel row and orders results by {@code CENTROID_ID}.
+   */
+  @Test
+  public void testCentroidLoadSkipsSentinelByScanBoundary() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String sql = "SELECT " + CENTROID_VECTOR + " FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE "
+        + INDEX_NAME + " = ? AND " + GENERATION_ID + " = ? AND " + CENTROID_ID + " >= 0 ORDER BY "
+        + CENTROID_ID + " ASC";
+      String plan = explain(conn, sql, indexName, 1L);
+      assertTrue(plan, plan.contains("RANGE SCAN OVER " + SYSTEM_VECTOR_CENTROID_NAME + " ['"
+        + indexName + "',1,0] - ['" + indexName + "',1,*]"));
+      assertFalse("sentinel exclusion must not become a per-row filter", plan.contains("FILTER"));
+      assertFalse("the key order already satisfies ORDER BY CENTROID_ID",
+        plan.contains("SORTED BY"));
+    }
+  }
+
+  /**
+   * Verifies that retiring a generation deletes all rows for that generation.
+   */
+  @Test
+  public void testDeleteGenerationIsAPrefixRangeDelete() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String sql = "DELETE FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME
+        + " = ? AND " + GENERATION_ID + " = ?";
+      String plan = explain(conn, sql, indexName, 2L);
+      assertTrue(plan, plan
+        .contains("RANGE SCAN OVER " + SYSTEM_VECTOR_CENTROID_NAME + " ['" + indexName + "',2]"));
+    }
+  }
+
+  /**
+   * Verifies listing distinct generation IDs for an index.
+   */
+  @Test
+  public void testListGenerationsSeeksBetweenGenerations() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String sql = "SELECT DISTINCT " + GENERATION_ID + " FROM " + SYSTEM_VECTOR_CENTROID_NAME
+        + " WHERE " + INDEX_NAME + " = ? ORDER BY " + GENERATION_ID + " ASC";
+      String plan = explain(conn, sql, indexName);
+      assertTrue(plan, plan.contains("DISTINCT PREFIX FILTER OVER [" + GENERATION_ID + "]"));
+      assertFalse("generations are already ordered by the row key", plan.contains("SORTED BY"));
+    }
+  }
+
+  private static String explain(Connection conn, String sql, Object... binds) throws Exception {
+    StringBuilder plan = new StringBuilder();
+    try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + sql)) {
+      for (int i = 0; i < binds.length; i++) {
+        ps.setObject(i + 1, binds[i]);
+      }
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          plan.append(rs.getString(1)).append('\n');
+        }
+      }
+    }
+    return plan.toString();
+  }
+
+  @Test
+  public void testScorecardAndGenerationSummaryRoundTrip() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+
+      manager.persistCentroids(indexName, 1L, Arrays.asList(new byte[] { 1 }, new byte[] { 2 }));
+
+      ScorecardRow sc0 = new ScorecardRow(indexName, 1L, 0, 50L, 2L, 1000L);
+      ScorecardRow sc1 = new ScorecardRow(indexName, 1L, 1, 60L, 1L, 1000L);
+      manager.persistScorecardRow(sc0);
+      manager.persistScorecardRow(sc1);
+
+      List<ScorecardRow> scorecard = manager.loadScorecard(indexName, 1L);
+      assertEquals(2, scorecard.size());
+      assertEquals(sc0, scorecard.get(0));
+      assertEquals(sc1, scorecard.get(1));
+
+      int[] sizes = new int[] { 50, 60 };
+      ClusterSkewMetrics skew = ClusterSkewMetrics.compute(sizes);
+      GenerationSummary summary =
+        new GenerationSummary.Builder().setIndexName(indexName).setGenerationId(1L)
+          .setSkewMetrics(skew).setRebuildState("A").setTriggerReason("DRIFT_CHECK")
+          .setLastRebuildTime(2000L).setLastScorecardUpdate(3000L).build();
+      manager.persistGenerationSummary(summary);
+
+      GenerationSummary loadedSummary = manager.loadGenerationSummary(indexName, 1L);
+      assertNotNull(loadedSummary);
+      assertEquals(summary, loadedSummary);
+
+      manager.persistCentroids(indexName, 2L, Arrays.asList(new byte[] { 3 }));
+      List<Long> gens = manager.listGenerations(indexName);
+      assertEquals(Arrays.asList(1L, 2L), gens);
+    }
+  }
+
+  /**
+   * Verifies partial updates to sentinel and scorecard rows preserve unmentioned columns.
+   */
+  @Test
+  public void testPartialWritesPreserveUnwrittenColumns() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    byte[] centroidVector = new byte[] { 7, 7, 7, 7 };
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, Arrays.asList(centroidVector));
+
+      // Write reconciliation metrics
+      manager.persistScorecardRow(new ScorecardRow(indexName, 1L, 0, 500L, 0L, 1000L));
+      // Write counter updates
+      manager.persistScorecardRow(indexName, 1L, 0, 512L, 6L, null);
+
+      List<ScorecardRow> scorecard = manager.loadScorecard(indexName, 1L);
+      assertEquals(1, scorecard.size());
+      assertEquals(Long.valueOf(512L), scorecard.get(0).getClusterSize());
+      assertEquals(Long.valueOf(6L), scorecard.get(0).getReassignCount());
+      assertEquals("reconciliation timestamp must survive a counter-only flush",
+        Long.valueOf(1000L), scorecard.get(0).getLastScorecardUpdate());
+      assertArrayEquals("the centroid vector shares the row and must be untouched", centroidVector,
+        manager.loadCentroids(indexName, 1L).get(0));
+
+      ClusterSkewMetrics skew = ClusterSkewMetrics.compute(new int[] { 500, 12 });
+      manager.persistGenerationSummary(indexName, 1L, skew, REBUILD_STATE_BUILDING, "DRIFT_SKEW",
+        null, null);
+      // Activate generation lifecycle columns
+      manager.persistGenerationSummary(indexName, 1L, null, REBUILD_STATE_ACTIVE, null, 4000L,
+        null);
+
+      GenerationSummary summary = manager.loadGenerationSummary(indexName, 1L);
+      assertNotNull(summary);
+      assertEquals(REBUILD_STATE_ACTIVE, summary.getRebuildState());
+      assertEquals(Long.valueOf(4000L), summary.getLastRebuildTime());
+      assertEquals("the trigger reason must survive activation", "DRIFT_SKEW",
+        summary.getTriggerReason());
+      assertEquals("training metrics must survive activation", skew, summary.getSkewMetrics());
+    }
+  }
+
+  /**
+   * Verifies that persisting centroids updates skew metrics and rebuild state without setting
+   * {@code LAST_REBUILD_TIME}.
+   */
+  @Test
+  public void testPersistCentroidsRecordsTrainingSummary() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      List<float[]> vectors = Arrays.asList(new float[] { 0f, 0f }, new float[] { 0.1f, 0.1f },
+        new float[] { 9f, 9f }, new float[] { 9.1f, 9.1f });
+      KMeansResult result =
+        KMeansTrainer.train(vectors, 2, KMeansConfig.builder().maxIterations(10).build());
+      assertNotNull("training must produce skew metrics to record", result.getSkewMetrics());
+
+      CentroidManager.persistCentroids(conn, indexName, 1L, result, TRIGGER_REASON_CREATE_INDEX);
+
+      GenerationSummary summary = manager.loadGenerationSummary(indexName, 1L);
+      assertNotNull(summary);
+      assertEquals(result.getSkewMetrics(), summary.getSkewMetrics());
+      assertEquals(REBUILD_STATE_ACTIVE, summary.getRebuildState());
+      assertEquals(TRIGGER_REASON_CREATE_INDEX, summary.getTriggerReason());
+      assertNull("index creation is not a completed rebuild", summary.getLastRebuildTime());
+      assertEquals(2, manager.loadCentroids(indexName, 1L).size());
+    }
+  }
+
+  /**
+   * Verifies that invalid or corrupted {@code SKEW_METRICS} payloads surface as decode failures
+   * rather than returning null.
+   */
+  @Test
+  public void testUndecodableSkewMetricsAreDistinguishableFromAbsent() throws Exception {
+    String undecodableIndex = uniqueIndex("TEST_VECTOR_IDX_BADSKEW_");
+    String absentIndex = uniqueIndex("TEST_VECTOR_IDX_NOSKEW_");
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+
+      byte[] valid = ClusterSkewMetrics.compute(new int[] { 10, 90 }).toBytes();
+      byte[] truncated = Arrays.copyOf(valid, valid.length / 2);
+      try (PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + SYSTEM_VECTOR_CENTROID_NAME
+        + " (" + INDEX_NAME + ", " + GENERATION_ID + ", " + CENTROID_ID + ", " + SKEW_METRICS + ", "
+        + REBUILD_STATE + ") VALUES (?, 1, -1, ?, ?)")) {
+        ps.setString(1, undecodableIndex);
+        ps.setBytes(2, truncated);
+        ps.setString(3, REBUILD_STATE_ACTIVE);
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // The other generation gets a sentinel row with every column but SKEW_METRICS.
+      manager.persistGenerationSummary(absentIndex, 1L, null, REBUILD_STATE_ACTIVE, "CREATE_INDEX",
+        null, 1234L);
+
+      GenerationSummary undecodable = manager.loadGenerationSummary(undecodableIndex, 1L);
+      assertNotNull(undecodable);
+      assertNull(undecodable.getSkewMetrics());
+      assertNotNull("a truncated blob must surface as a decode failure",
+        undecodable.getSkewMetricsDecodeError());
+      assertEquals(REBUILD_STATE_ACTIVE, undecodable.getRebuildState());
+
+      GenerationSummary absent = manager.loadGenerationSummary(absentIndex, 1L);
+      assertNotNull(absent);
+      assertNull(absent.getSkewMetrics());
+      assertNull("no metrics recorded is not a decode failure", absent.getSkewMetricsDecodeError());
+    }
+  }
+
+  @Test
+  public void testPersistScorecardBatch() throws Exception {
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      List<ScorecardRow> rows = new ArrayList<>();
+      for (int i = 0; i < 16; i++) {
+        rows.add(new ScorecardRow(indexName, 1L, i, 10L * i, (long) i, 7000L));
+      }
+      manager.persistScorecard(rows);
+      // Ensure sentinel row is excluded from centroids
+      manager.persistGenerationSummary(new GenerationSummary.Builder().setIndexName(indexName)
+        .setGenerationId(1L).setRebuildState(REBUILD_STATE_ACTIVE).build());
+
+      List<ScorecardRow> loaded = manager.loadScorecard(indexName, 1L);
+      assertEquals(16, loaded.size());
+      for (int i = 0; i < 16; i++) {
+        assertEquals("rows must come back in CENTROID_ID order", rows.get(i), loaded.get(i));
+      }
+    }
+  }
+
+  @Test
   public void testPersistAndLoadRoundTrip() throws Exception {
-    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
     byte[] v0 = new byte[] { 1, 2, 3, 4 };
     byte[] v1 = new byte[] { 5, 6, 7, 8 };
     byte[] v2 = new byte[] { 9, 10, 11, 12 };
@@ -245,7 +711,7 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testGenerationIsolation() throws Exception {
-    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
     byte[] v0 = new byte[] { 10, 20, 30, 40 };
     byte[] v1 = new byte[] { 50, 60, 70, 80 };
     List<byte[]> centroids = Arrays.asList(v0, v1);
@@ -265,34 +731,45 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testDeleteGeneration() throws Exception {
-    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
-    String indexName2 = "TEST_VECTOR_IDX_" + generateUniqueName();
-    byte[] v0 = new byte[] { 1, 1, 1, 1 };
-    byte[] v1 = new byte[] { 2, 2, 2, 2 };
-    List<byte[]> gen1Centroids = Arrays.asList(v0);
-    List<byte[]> gen2Centroids = Arrays.asList(v1);
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
+    String otherIndexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    List<byte[]> gen1 =
+      Arrays.asList(new byte[] { 1 }, new byte[] { 2 }, new byte[] { 3 }, new byte[] { 4 });
+    List<byte[]> gen2 =
+      Arrays.asList(new byte[] { 5 }, new byte[] { 6 }, new byte[] { 7 }, new byte[] { 8 });
+    byte[] otherVector = new byte[] { 9 };
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       CentroidManager manager = new CentroidManager(conn);
-      // Verify that deleting a generation removes only the targeted generation and isolates other
-      // index records.
-      manager.persistCentroids(indexName, 1L, gen1Centroids);
-      manager.persistCentroids(indexName2, 2L, gen2Centroids);
-
-      assertEquals(1, manager.loadCentroids(indexName, 1L).size());
-      assertEquals(1, manager.loadCentroids(indexName2, 2L).size());
+      manager.persistCentroids(indexName, 1L, gen1);
+      manager.persistCentroids(indexName, 2L, gen2);
+      manager.persistCentroids(otherIndexName, 1L, Arrays.asList(otherVector));
+      manager.persistGenerationSummary(new GenerationSummary.Builder().setIndexName(indexName)
+        .setGenerationId(1L).setRebuildState(REBUILD_STATE_RETIRED).build());
+      manager.persistScorecardRow(new ScorecardRow(indexName, 1L, 0, 100L, 5L, 1000L));
 
       manager.deleteGeneration(indexName, 1L);
 
+      // Verify retired generation rows are removed
       assertTrue(manager.loadCentroids(indexName, 1L).isEmpty());
-      assertEquals(1, manager.loadCentroids(indexName2, 2L).size());
-      assertArrayEquals(v1, manager.loadCentroids(indexName2, 2L).get(0));
+      assertTrue(manager.loadScorecard(indexName, 1L).isEmpty());
+      assertNull(manager.loadGenerationSummary(indexName, 1L));
+      assertEquals(Arrays.asList(2L), manager.listGenerations(indexName));
+
+      // Verify other generations and indexes remain unaffected
+      List<byte[]> survivors = manager.loadCentroids(indexName, 2L);
+      assertEquals(4, survivors.size());
+      for (int i = 0; i < 4; i++) {
+        assertArrayEquals(gen2.get(i), survivors.get(i));
+      }
+      assertEquals(1, manager.loadCentroids(otherIndexName, 1L).size());
+      assertArrayEquals(otherVector, manager.loadCentroids(otherIndexName, 1L).get(0));
     }
   }
 
   @Test
   public void testIncrementGeneration() throws Exception {
-    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String indexName = uniqueIndex("TEST_VECTOR_IDX_");
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       CentroidManager manager = new CentroidManager(conn);

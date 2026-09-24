@@ -57,6 +57,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -66,6 +67,12 @@ import org.junit.runners.Parameterized;
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
+
+  /** Reset shared vector state after each test. */
+  @After
+  public void resetVectorState() {
+    VectorIndexTestUtil.resetSharedVectorState();
+  }
 
   private final ImmutableStorageScheme storageScheme;
 

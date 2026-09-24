@@ -126,12 +126,6 @@ import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENC
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.VECTOR_OVERSAMPLE_FACTOR_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.VECTOR_PROBE_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 
 import java.util.Map.Entry;
@@ -176,30 +170,6 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
   public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
   public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
-
-  public QueryServicesOptions setVectorCentroidCacheMaxSize(long maxSize) {
-    return set(VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB, maxSize);
-  }
-
-  public QueryServicesOptions setVectorCentroidBruteforceLimit(int limit) {
-    return set(VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB, limit);
-  }
-
-  public QueryServicesOptions setVectorCentroidProbeBuckets(int probeBuckets) {
-    return set(VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB, probeBuckets);
-  }
-
-  public QueryServicesOptions setVectorProbeCount(int probeCount) {
-    return set(VECTOR_PROBE_COUNT_ATTRIB, probeCount);
-  }
-
-  public QueryServicesOptions setVectorMaxProbeLimit(int maxProbeLimit) {
-    return set(VECTOR_MAX_PROBE_LIMIT_ATTRIB, maxProbeLimit);
-  }
-
-  public QueryServicesOptions setVectorOversampleFactor(double oversampleFactor) {
-    return set(VECTOR_OVERSAMPLE_FACTOR_ATTRIB, oversampleFactor);
-  }
 
   public static final String DEFAULT_DATE_FORMAT_TIMEZONE = DateUtil.DEFAULT_TIME_ZONE_ID;
   public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true;
@@ -265,11 +235,18 @@ public class QueryServicesOptions {
   public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE = 1024L * 1024L * 10L; // 10 Mb
   public static final long DEFAULT_VECTOR_CENTROID_CACHE_MAX_SIZE = 1000L;
   public static final int DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT = 1024;
-  public static final int DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS = 3;
   public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
   public static final int DEFAULT_VECTOR_MAX_PROBE_LIMIT = Integer.MAX_VALUE;
   public static final double DEFAULT_VECTOR_OVERSAMPLE_FACTOR = 3.0;
   public static final boolean DEFAULT_VECTOR_KMEANS_LOCAL = false;
+  public static final long DEFAULT_VECTOR_INDEX_SCORECARD_FLUSH_INTERVAL_MS = 60000L;
+  public static final long DEFAULT_VECTOR_INDEX_SCORECARD_RECONCILE_INTERVAL_MS = 86400000L;
+  public static final double DEFAULT_VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD = 4.0;
+  public static final long DEFAULT_VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE = 1000L;
+  public static final boolean DEFAULT_VECTOR_INDEX_REBUILD_AUTO_ENABLED = false;
+  public static final long DEFAULT_VECTOR_INDEX_REBUILD_MIN_INTERVAL_MS = 86400000L;
+  public static final String DEFAULT_VECTOR_INDEX_REBUILD_PROBE_POLICY = "EXPAND";
+  public static final double DEFAULT_VECTOR_INDEX_REBUILD_PROBE_FACTOR = 2.0;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
   public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
