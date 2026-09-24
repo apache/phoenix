@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
@@ -31,12 +32,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.List;
 import java.util.Properties;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -90,9 +89,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
       String dql = String.format("SELECT * FROM %s where org_id='%s' AND kp='%s' LIMIT 1",
         tableName, tenantId, kp);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains("POINT LOOKUP ON 1 KEY"));
+        assertPlan(conn, dql).scanType("POINT LOOKUP ON 1 KEY");
         assertTrue(rs.next());
         assertEquals(tenantId, rs.getString(1));
         assertEquals(kp, rs.getString(2));
@@ -100,9 +97,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
       dql = String.format("SELECT count(*) FROM %s where org_id='%s' AND kp='%s'", tableName,
         tenantId, kp);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains("POINT LOOKUP ON 1 KEY"));
+        assertPlan(conn, dql).scanType("POINT LOOKUP ON 1 KEY");
         assertTrue(rs.next());
         assertEquals(nRows, rs.getInt(1));
       }

@@ -116,13 +116,18 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     resultIterators.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
     planSteps.add("CLIENT MERGE SORT");
+    explainPlanAttributesBuilder.addClientStep("CLIENT MERGE SORT");
     if (offset > 0) {
       explainPlanAttributesBuilder.setClientOffset(offset);
-      planSteps.add("CLIENT OFFSET " + offset);
+      String step = "CLIENT OFFSET " + offset;
+      planSteps.add(step);
+      explainPlanAttributesBuilder.addClientStep(step);
     }
     if (limit > 0) {
       explainPlanAttributesBuilder.setClientRowLimit(limit);
-      planSteps.add("CLIENT LIMIT " + limit);
+      String step = "CLIENT LIMIT " + limit;
+      planSteps.add(step);
+      explainPlanAttributesBuilder.addClientStep(step);
     }
   }
 

@@ -18,8 +18,6 @@
 package org.apache.phoenix.end2end.join;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -30,13 +28,11 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Map;
 import java.util.Properties;
-import java.util.regex.Pattern;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
@@ -104,18 +100,15 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
   protected String seqName;
   private String schemaName;
   protected final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-  protected final String[] plans;
   private final String[] indexDDL;
   private final Map<String, String> virtualNameToRealNameMap = Maps.newHashMap();
 
-  public BaseJoinIT(String[] indexDDL, String[] plans) {
+  public BaseJoinIT(String[] indexDDL) {
     this.indexDDL = indexDDL;
-    this.plans = plans;
   }
 
   public BaseJoinIT() {
     this.indexDDL = new String[0];
-    this.plans = new String[0];
   }
 
   protected String getSchemaName() {
@@ -162,33 +155,6 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
     } finally {
       conn.close();
     }
-  }
-
-  private String translateToVirtualPlan(String actualPlan) {
-    int size = getTableNameMap().size();
-    String[] virtualNames = new String[size + 1];
-    String[] realNames = new String[size + 1];
-    int count = 0;
-    for (Map.Entry<String, String> entry : getTableNameMap().entrySet()) {
-      virtualNames[count] = entry.getKey();
-      realNames[count] = entry.getValue();
-      count++;
-    }
-    realNames[count] = getSchemaName();
-    virtualNames[count] = JOIN_SCHEMA;
-    String convertedPlan = StringUtil.replace(actualPlan, realNames, virtualNames);
-    return convertedPlan;
-  }
-
-  protected void assertPlansMatch(String virtualPlanRegEx, String actualPlan) {
-    String convertedPlan = translateToVirtualPlan(actualPlan);
-    assertTrue("\"" + convertedPlan + "\" does not match \"" + virtualPlanRegEx + "\"",
-      Pattern.matches(virtualPlanRegEx, convertedPlan));
-  }
-
-  protected void assertPlansEqual(String virtualPlan, String actualPlan) {
-    String convertedPlan = translateToVirtualPlan(actualPlan);
-    assertEquals(virtualPlan, convertedPlan);
   }
 
   private static void initValues(Connection conn, String virtualName, String realName)
