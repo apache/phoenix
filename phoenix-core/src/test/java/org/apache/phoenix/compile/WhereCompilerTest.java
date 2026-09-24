@@ -59,7 +59,10 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.SubstrFunction;
+import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
+import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
+import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -1179,6 +1182,132 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         WhereCompiler.contains(getDNF(pconn, containedQueries[i]),
           getDNF(pconn, containingQueries[i])));
     }
+  }
+
+  // ===== PHOENIX-5236: Filter selection tests for dynamic columns =====
+
+  /**
+   * Test that a single dynamic column in WHERE uses SingleCQKeyValueComparisonFilter.
+   */
+  @Test
+  public void testSingleDynamicColumnFilterSelection() throws SQLException {
+    PhoenixConnection pconn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class);
+    String tableName = "T_" + generateUniqueName();
+    pconn.createStatement().execute(
+      "CREATE TABLE " + tableName + " (id VARCHAR PRIMARY KEY, name VARCHAR)");
+
+    String query = "SELECT id FROM " + tableName
+      + " (city VARCHAR) WHERE city = 'Chennai'";
+    PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+    QueryPlan plan = pstmt.optimizeQuery();
+    Scan scan = plan.getContext().getScan();
+    Filter filter = scan.getFilter();
+    assertTrue("Expected SingleCQKeyValueComparisonFilter for single dynamic column in WHERE, got: "
+      + (filter == null ? "null" : filter.getClass().getSimpleName()),
+      filter instanceof SingleCQKeyValueComparisonFilter);
+  }
+
+  /**
+   * Test that multiple dynamic columns in WHERE uses MultiCQKeyValueComparisonFilter
+   * (not MultiEncodedCQKeyValueComparisonFilter) on a table with encoding enabled.
+   * This is the regression test for PHOENIX-5236.
+   */
+  @Test
+  public void testMultipleDynamicColumnsFilterSelection() throws SQLException {
+    PhoenixConnection pconn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class);
+    String tableName = "T_" + generateUniqueName();
+    pconn.createStatement().execute(
+      "CREATE TABLE " + tableName + " (id VARCHAR PRIMARY KEY, name VARCHAR)");
+
+    String query = "SELECT id FROM " + tableName
+      + " (city VARCHAR, department VARCHAR) WHERE city = 'Chennai' AND department = 'Engineering'";
+    PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+    QueryPlan plan = pstmt.optimizeQuery();
+    Scan scan = plan.getContext().getScan();
+    Filter filter = scan.getFilter();
+    assertTrue(
+      "Expected MultiCQKeyValueComparisonFilter for multiple dynamic columns in WHERE, got: "
+        + (filter == null ? "null" : filter.getClass().getSimpleName()),
+      filter instanceof MultiCQKeyValueComparisonFilter);
+  }
+
+  /**
+   * Test that multiple schema-defined columns in WHERE still uses
+   * MultiEncodedCQKeyValueComparisonFilter on a table with encoding enabled.
+   */
+  @Test
+  public void testMultipleSchemaColumnsStillUsesEncodedFilter() throws SQLException {
+    PhoenixConnection pconn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class);
+    String tableName = "T_" + generateUniqueName();
+    pconn.createStatement().execute(
+      "CREATE TABLE " + tableName
+        + " (id VARCHAR PRIMARY KEY, city VARCHAR, department VARCHAR)");
+
+    String query = "SELECT id FROM " + tableName
+      + " WHERE city = 'Chennai' AND department = 'Engineering'";
+    PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
+    QueryPlan plan = pstmt.optimizeQuery();
+    Scan scan = plan.getContext().getScan();
+    Filter filter = scan.getFilter();
+    assertTrue(
+      "Expected MultiEncodedCQKeyValueComparisonFilter for schema columns in WHERE, got: "
+        + (filter == null ? "null" : filter.getClass().getSimpleName()),
+      filter instanceof MultiEncodedCQKeyValueComparisonFilter);
+  }
+
+  /**
+   * Test that a table with COLUMN_ENCODED_BYTES=NONE uses MultiCQKeyValueComparisonFilter
+   * for multiple columns (regardless of whether they are dynamic).
+   */
+  @Test
+  public void testNonEncodedTableUsesMultiCQFilter() throws SQLException {
+    PhoenixConnection pconn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class);
+    String tableName = "T_" + generateUniqueName();
+    pconn.createStatement().execute(
+      "CREATE TABLE " + tableName
+        + " (id VARCHAR PRIMARY KEY, city VARCHAR, department VARCHAR) COLUMN_ENCODED_BYTES=NONE");
+
+    String query = "SELECT id FROM " + tableName
+      + " WHERE city = 'Chennai' AND department = 'Engineering'";
+    PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
+    QueryPlan plan = pstmt.optimizeQuery();
+    Scan scan = plan.getContext().getScan();
+    Filter filter = scan.getFilter();
+    assertTrue(
+      "Expected MultiCQKeyValueComparisonFilter for non-encoded table, got: "
+        + (filter == null ? "null" : filter.getClass().getSimpleName()),
+      filter instanceof MultiCQKeyValueComparisonFilter);
+  }
+
+  /**
+   * Test that a single schema column in WHERE uses SingleCQKeyValueComparisonFilter
+   * (baseline behavior unchanged).
+   */
+  @Test
+  public void testSingleSchemaColumnFilterSelection() throws SQLException {
+    PhoenixConnection pconn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class);
+    String tableName = "T_" + generateUniqueName();
+    pconn.createStatement().execute(
+      "CREATE TABLE " + tableName + " (id VARCHAR PRIMARY KEY, city VARCHAR)");
+
+    String query = "SELECT id FROM " + tableName + " WHERE city = 'Chennai'";
+    PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
+    QueryPlan plan = pstmt.optimizeQuery();
+    Scan scan = plan.getContext().getScan();
+    Filter filter = scan.getFilter();
+    assertTrue("Expected SingleCQKeyValueComparisonFilter for single schema column in WHERE, got: "
+      + (filter == null ? "null" : filter.getClass().getSimpleName()),
+      filter instanceof SingleCQKeyValueComparisonFilter);
   }
 
 }
