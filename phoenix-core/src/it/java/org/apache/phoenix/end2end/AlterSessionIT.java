@@ -17,20 +17,18 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -58,16 +56,12 @@ public class AlterSessionIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       Statement st = conn.createStatement();
       st.execute("alter session set Consistency = 'timeline'");
-      ResultSet rs = st.executeQuery("explain select * from " + tableName);
       assertEquals(Consistency.TIMELINE, conn.unwrap(PhoenixConnection.class).getConsistency());
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(queryPlan.indexOf("TIMELINE") > 0);
+      assertPlan(conn, "select * from " + tableName).consistency("TIMELINE");
 
       // turn off timeline read consistency
       st.execute("alter session set Consistency = 'strong'");
-      rs = st.executeQuery("explain select * from " + tableName);
-      queryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(queryPlan.indexOf("TIMELINE") < 0);
+      assertPlan(conn, "select * from " + tableName).consistency("STRONG");
     }
   }
 
@@ -77,10 +71,7 @@ public class AlterSessionIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(
       getUrl() + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + "Consistency=TIMELINE", props)) {
       assertEquals(Consistency.TIMELINE, ((PhoenixConnection) conn).getConsistency());
-      Statement st = conn.createStatement();
-      ResultSet rs = st.executeQuery("explain select * from " + tableName);
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(queryPlan.indexOf("TIMELINE") > 0);
+      assertPlan(conn, "select * from " + tableName).consistency("TIMELINE");
       conn.close();
     }
   }

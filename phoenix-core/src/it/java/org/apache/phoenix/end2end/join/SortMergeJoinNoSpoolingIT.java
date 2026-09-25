@@ -43,8 +43,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class SortMergeJoinNoSpoolingIT extends SortMergeJoinNoIndexIT {
 
-  public SortMergeJoinNoSpoolingIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinNoSpoolingIT(String[] indexDDL) {
+    super(indexDDL);
   }
 
   @Parameters(name = "SortMergeJoinNoSpoolingIT_{index}") // name is used by failsafe as file name

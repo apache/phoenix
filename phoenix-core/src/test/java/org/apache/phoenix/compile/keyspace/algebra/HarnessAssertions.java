@@ -21,32 +21,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Row-enumeration-based assertions for comparing two {@link AbstractKeySpaceList}s and the
- * original expression. Used by the differential harness to check that V2's output is:
+ * Row-enumeration-based assertions for comparing two {@link AbstractKeySpaceList}s and the original
+ * expression. Used by the differential harness to check that V2's output is:
  * <ul>
- * <li><b>Sound</b> — every row matching the expression is contained in V2's emitted list
- * (no false negatives). This is the primary correctness property; a violation is a
- * production bug.</li>
- * <li><b>Not overly wide</b> — V2's list does not contain rows that fall outside the
- * oracle's list. Equivalently, V2 ⊆ oracle. Violations are performance concerns, not
- * correctness bugs — the residual filter still rejects the extras.</li>
+ * <li><b>Sound</b> — every row matching the expression is contained in V2's emitted list (no false
+ * negatives). This is the primary correctness property; a violation is a production bug.</li>
+ * <li><b>Not overly wide</b> — V2's list does not contain rows that fall outside the oracle's list.
+ * Equivalently, V2 ⊆ oracle. Violations are performance concerns, not correctness bugs — the
+ * residual filter still rejects the extras.</li>
  * </ul>
  */
 public final class HarnessAssertions {
 
-  private HarnessAssertions() {}
+  private HarnessAssertions() {
+  }
 
   /** One enumerated test row with the values for every PK column. */
   public static final class Row {
     public final List<Object> values;
-    public Row(List<Object> values) { this.values = values; }
-    @Override public String toString() { return values.toString(); }
+
+    public Row(List<Object> values) {
+      this.values = values;
+    }
+
+    @Override
+    public String toString() {
+      return values.toString();
+    }
   }
 
   /**
-   * Enumerate all rows in the cartesian product of {@code perDimValues}. Each inner list
-   * is the set of candidate values for that PK column. The total row count is the product
-   * of the inner sizes, so keep those small (≤10) to avoid explosion.
+   * Enumerate all rows in the cartesian product of {@code perDimValues}. Each inner list is the set
+   * of candidate values for that PK column. The total row count is the product of the inner sizes,
+   * so keep those small (≤10) to avoid explosion.
    */
   public static List<Row> enumerateRows(List<List<Object>> perDimValues) {
     List<Row> out = new ArrayList<>();
@@ -72,8 +79,8 @@ public final class HarnessAssertions {
     public final int exprMatches;
     public final int oracleContains;
     public final int v2Contains;
-    public final List<Row> soundnessViolations;  // matched expr but NOT in V2
-    public final List<Row> wideningViolations;   // in V2 but NOT in oracle
+    public final List<Row> soundnessViolations; // matched expr but NOT in V2
+    public final List<Row> wideningViolations; // in V2 but NOT in oracle
     public final List<Row> oracleMissesExprMatch; // matched expr but NOT in oracle (oracle bug!)
 
     public Report(int totalRows, int exprMatches, int oracleContains, int v2Contains,
@@ -88,24 +95,32 @@ public final class HarnessAssertions {
       this.oracleMissesExprMatch = oracleMissesExprMatch;
     }
 
-    public boolean v2Sound() { return soundnessViolations.isEmpty(); }
-    public boolean oracleSound() { return oracleMissesExprMatch.isEmpty(); }
-    public boolean v2SubsetOfOracle() { return wideningViolations.isEmpty(); }
+    public boolean v2Sound() {
+      return soundnessViolations.isEmpty();
+    }
+
+    public boolean oracleSound() {
+      return oracleMissesExprMatch.isEmpty();
+    }
+
+    public boolean v2SubsetOfOracle() {
+      return wideningViolations.isEmpty();
+    }
 
     @Override
     public String toString() {
       return String.format(
         "Report[rows=%d, exprMatches=%d, oracleContains=%d, v2Contains=%d, "
           + "v2Sound=%s, oracleSound=%s, v2SubsetOfOracle=%s]",
-        totalRows, exprMatches, oracleContains, v2Contains,
-        v2Sound(), oracleSound(), v2SubsetOfOracle());
+        totalRows, exprMatches, oracleContains, v2Contains, v2Sound(), oracleSound(),
+        v2SubsetOfOracle());
     }
   }
 
   /**
    * Enumerate every row in {@code domain} and classify it under each of:
-   * {@code expr.evaluate(row)}, {@code oracle.matches(row)}, {@code v2.matches(row)}.
-   * Collect any row that violates soundness (expr → V2) or V2's subset-of-oracle property.
+   * {@code expr.evaluate(row)}, {@code oracle.matches(row)}, {@code v2.matches(row)}. Collect any
+   * row that violates soundness (expr → V2) or V2's subset-of-oracle property.
    */
   public static Report evaluate(AbstractExpression expr, AbstractKeySpaceList oracle,
     AbstractKeySpaceList v2, List<Row> domain) {
@@ -129,7 +144,7 @@ public final class HarnessAssertions {
       if (matchesExpr && !inOracle) oracleMissesExprMatch.add(row);
       if (inV2 && !inOracle) wideningViolations.add(row);
     }
-    return new Report(domain.size(), exprMatches, oracleContains, v2Contains,
-      soundnessViolations, wideningViolations, oracleMissesExprMatch);
+    return new Report(domain.size(), exprMatches, oracleContains, v2Contains, soundnessViolations,
+      wideningViolations, oracleMissesExprMatch);
   }
 }

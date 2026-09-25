@@ -28,6 +28,7 @@ import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -103,4 +104,17 @@ public interface QueryPlan extends StatementPlan {
    * </pre>
    */
   public List<OrderBy> getOutputOrderBys();
+
+  /**
+   * The optimizer's index selection rationale for this plan, or {@code null} if this plan did not
+   * participate in optimizer index selection.
+   */
+  default OptimizerDecision getOptimizerDecision() {
+    return null;
+  }
+
+  /** Records the optimizer's index selection rationale on this plan. */
+  default void setOptimizerDecision(OptimizerDecision decision) {
+    // no-op
+  }
 }

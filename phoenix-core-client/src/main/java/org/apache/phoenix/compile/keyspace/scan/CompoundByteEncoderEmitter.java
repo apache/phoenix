@@ -24,22 +24,19 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.RowKeySchema;
 
 /**
- * Overrides a {@link Scan}'s start/stop rows with bytes produced by
- * {@link CompoundByteEncoder}, using {@link CompoundByteEncoder#encodeListLower} /
- * {@link CompoundByteEncoder#encodeListUpper} for the user-tail and prepending the caller's
- * prefix bytes (salt/viewIndexId/tenantId).
+ * Overrides a {@link Scan}'s start/stop rows with bytes produced by {@link CompoundByteEncoder},
+ * using {@link CompoundByteEncoder#encodeListLower} / {@link CompoundByteEncoder#encodeListUpper}
+ * for the user-tail and prepending the caller's prefix bytes (salt/viewIndexId/tenantId).
  * <p>
  * Applies only to shapes within the encoder's proven envelope, as established by
- * {@link CompoundByteEncoderDifferentialTest} (ASC fields, no IS_NULL/IS_NOT_NULL
- * sentinels) and {@link CompoundByteEncoderListDifferentialTest} (multi-space
- * byte-lex-min/max bounding envelope). For out-of-envelope shapes the caller leaves the
- * classical scan bytes in place.
+ * {@link CompoundByteEncoderDifferentialTest} (ASC fields, no IS_NULL/IS_NOT_NULL sentinels) and
+ * {@link CompoundByteEncoderListDifferentialTest} (multi-space byte-lex-min/max bounding envelope).
+ * For out-of-envelope shapes the caller leaves the classical scan bytes in place.
  * <p>
- * The {@link org.apache.phoenix.compile.ScanRanges} emitted by the existing path still
- * drives the {@link org.apache.phoenix.filter.SkipScanFilter} and point-lookup
- * classification — only the row bytes on the {@link Scan} are replaced. This narrows the
- * scan to exactly the envelope the encoder defines while preserving downstream machinery
- * unchanged.
+ * The {@link org.apache.phoenix.compile.ScanRanges} emitted by the existing path still drives the
+ * {@link org.apache.phoenix.filter.SkipScanFilter} and point-lookup classification — only the row
+ * bytes on the {@link Scan} are replaced. This narrows the scan to exactly the envelope the encoder
+ * defines while preserving downstream machinery unchanged.
  */
 public final class CompoundByteEncoderEmitter {
 
@@ -50,30 +47,28 @@ public final class CompoundByteEncoderEmitter {
    * Returns {@code true} iff the encoder should override the scan's row bytes for this
    * {@link KeySpaceList}.
    * <p>
-   * The encoder emits bytes per its own well-defined rules (separator rules, nextKey
-   * bumps, per-dim encoding with DESC terminator on exclusive-lower var-width). It does
-   * not mimic V1's {@code ScanUtil.setKey} tail-strip — that's a historical V1 artifact
-   * tied to V1's compound-slot packing, not a semantic correctness requirement. For any
-   * row, the encoder's output and V1's output admit the same rows; they may differ on
-   * whether a trailing separator byte is included.
+   * The encoder emits bytes per its own well-defined rules (separator rules, nextKey bumps, per-dim
+   * encoding with DESC terminator on exclusive-lower var-width). It does not mimic V1's
+   * {@code ScanUtil.setKey} tail-strip — that's a historical V1 artifact tied to V1's compound-slot
+   * packing, not a semantic correctness requirement. For any row, the encoder's output and V1's
+   * output admit the same rows; they may differ on whether a trailing separator byte is included.
    * <p>
-   * Covers single-space and multi-space lists, ASC and DESC. Single-space: encoder's
-   * bytes are semantically equivalent to V1's — tests that assert specific byte shapes
-   * have been updated to the encoder form. Multi-space: the encoder's list envelope
-   * (byte-lex-min/max across per-space encodings) preserves cross-dim tuple correlation
-   * that V1's per-slot projection loses — this is the fix for
-   * {@code testRVCScanBoundaries1/2}.
+   * Covers single-space and multi-space lists, ASC and DESC. Single-space: encoder's bytes are
+   * semantically equivalent to V1's — tests that assert specific byte shapes have been updated to
+   * the encoder form. Multi-space: the encoder's list envelope (byte-lex-min/max across per-space
+   * encodings) preserves cross-dim tuple correlation that V1's per-slot projection loses — this is
+   * the fix for {@code testRVCScanBoundaries1/2}.
    * <p>
    * Exclusions:
    * <ul>
    * <li>IS_NULL / IS_NOT_NULL sentinels — ScanUtil has dedicated paths the encoder doesn't
-   *     reproduce.</li>
-   * <li>Salted tables — salt bytes are computed per row-key (hash mod nBuckets), not
-   *     known statically. V1's ScanRanges.create path recognizes point-lookups on salted
-   *     tables and computes per-key salt bytes via SaltingUtil. The encoder's
-   *     overrideScanRows uses a single static salt prefix (0x00), which would only match
-   *     rows in bucket 0 — missing rows hashed into buckets 1-3. Defer to the classical
-   *     path for salted tables until encoder gains salt-aware point-lookup handling.</li>
+   * reproduce.</li>
+   * <li>Salted tables — salt bytes are computed per row-key (hash mod nBuckets), not known
+   * statically. V1's ScanRanges.create path recognizes point-lookups on salted tables and computes
+   * per-key salt bytes via SaltingUtil. The encoder's overrideScanRows uses a single static salt
+   * prefix (0x00), which would only match rows in bucket 0 — missing rows hashed into buckets 1-3.
+   * Defer to the classical path for salted tables until encoder gains salt-aware point-lookup
+   * handling.</li>
    * </ul>
    */
   public static boolean isInScope(KeySpaceList list, RowKeySchema schema, int prefixSlots,
@@ -119,10 +114,10 @@ public final class CompoundByteEncoderEmitter {
   }
 
   /**
-   * Override {@code scan.startRow} / {@code scan.stopRow} with the encoder's bytes
-   * prepended by {@code prefixBytes}. When the encoder returns {@link KeyRange#UNBOUND}
-   * for a bound, the scan's existing row for that bound is kept — it already reflects
-   * whatever the classical path computed (typically {@code UNBOUND} itself for that side).
+   * Override {@code scan.startRow} / {@code scan.stopRow} with the encoder's bytes prepended by
+   * {@code prefixBytes}. When the encoder returns {@link KeyRange#UNBOUND} for a bound, the scan's
+   * existing row for that bound is kept — it already reflects whatever the classical path computed
+   * (typically {@code UNBOUND} itself for that side).
    */
   public static void overrideScanRows(Scan scan, KeySpaceList list, RowKeySchema schema,
     int prefixSlots, byte[] prefixBytes) {

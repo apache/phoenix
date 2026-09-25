@@ -22,7 +22,6 @@ import org.apache.phoenix.compile.keyspace.KeySpaceList;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
@@ -31,45 +30,44 @@ import org.apache.phoenix.util.SchemaUtil;
 /**
  * V2-owned byte encoder for a compound primary-key scan bound.
  * <p>
- * Converts a single {@link KeySpace} (one N-dim box) into the start-row/stop-row byte
- * sequences that HBase consumes. Owns the separator-insertion rules, DESC inversion,
- * inclusive/exclusive bound bumping — the same responsibilities as
- * {@code ScanUtil.setKey}, but with V2-specific choices about slot spans and tail-strip
- * behavior that the V1-shaped entry point can't easily accommodate.
+ * Converts a single {@link KeySpace} (one N-dim box) into the start-row/stop-row byte sequences
+ * that HBase consumes. Owns the separator-insertion rules, DESC inversion, inclusive/exclusive
+ * bound bumping — the same responsibilities as {@code ScanUtil.setKey}, but with V2-specific
+ * choices about slot spans and tail-strip behavior that the V1-shaped entry point can't easily
+ * accommodate.
  * <p>
- * <b>Scope of this commit (infrastructure).</b> The encoder is standalone and golden-
- * tested against hand-constructed {@link KeySpace} inputs with expected V1-equivalent
- * byte outputs. It is NOT yet wired into the scan path; V2ScanBuilder still delegates
- * to {@code ScanRanges.create} for actual scan construction. Wiring happens in a
- * follow-up commit once the encoder has enough shape coverage to back the RVC-boundary
- * class of test failures.
+ * <b>Scope of this commit (infrastructure).</b> The encoder is standalone and golden- tested
+ * against hand-constructed {@link KeySpace} inputs with expected V1-equivalent byte outputs. It is
+ * NOT yet wired into the scan path; V2ScanBuilder still delegates to {@code ScanRanges.create} for
+ * actual scan construction. Wiring happens in a follow-up commit once the encoder has enough shape
+ * coverage to back the RVC-boundary class of test failures.
  * <p>
  * <b>Rules.</b> For each PK column between {@code prefixSlots} and {@code lastConstrained}:
  * <ol>
- * <li>Write the column's lower (for {@link org.apache.phoenix.query.KeyRange.Bound#LOWER}) or
- *     upper (for {@link org.apache.phoenix.query.KeyRange.Bound#UPPER}) bytes.</li>
- * <li>If the column is variable-width and not the last PK column, append a separator byte
- *     (ASC {@code \x00} / DESC {@code \xFF}).</li>
- * <li>If setting the lower bound with exclusive-lower: {@code nextKey} the whole key so
- *     far (bump), then continue.</li>
- * <li>If setting the upper bound with exclusive-upper: stop iterating — nothing trailing
- *     can match the bound.</li>
+ * <li>Write the column's lower (for {@link org.apache.phoenix.query.KeyRange.Bound#LOWER}) or upper
+ * (for {@link org.apache.phoenix.query.KeyRange.Bound#UPPER}) bytes.</li>
+ * <li>If the column is variable-width and not the last PK column, append a separator byte (ASC
+ * {@code \x00} / DESC {@code \xFF}).</li>
+ * <li>If setting the lower bound with exclusive-lower: {@code nextKey} the whole key so far (bump),
+ * then continue.</li>
+ * <li>If setting the upper bound with exclusive-upper: stop iterating — nothing trailing can match
+ * the bound.</li>
  * <li>After all columns processed, if the upper is inclusive (either a single-key or a
- *     range-inclusive-upper), {@code nextKey} the whole key to convert to the
- *     byte-exclusive form HBase expects for {@code setStopRow}.</li>
+ * range-inclusive-upper), {@code nextKey} the whole key to convert to the byte-exclusive form HBase
+ * expects for {@code setStopRow}.</li>
  * </ol>
  * <p>
- * These rules are deliberately a strict subset of what {@code ScanUtil.setKey} handles —
- * they cover single-space {@link KeySpace}s with point or range ranges per dim.
+ * These rules are deliberately a strict subset of what {@code ScanUtil.setKey} handles — they cover
+ * single-space {@link KeySpace}s with point or range ranges per dim.
  * <p>
- * <b>Multi-space lists.</b> {@link #encodeListLower} and {@link #encodeListUpper} extend
- * the single-space encoding to a {@link org.apache.phoenix.compile.keyspace.KeySpaceList}:
- * the list's scan lower is the byte-lex-min of per-space lower encodings; the scan upper
- * is the byte-lex-max of per-space upper encodings. This preserves within-space tuple
- * correlation (the single-space encoder already gets that right) and widens to the
- * bounding envelope of the union — the residual filter handles rows in the envelope
- * gap. Unbounded sides ({@link KeyRange#UNBOUND}) short-circuit to UNBOUND for LOWER/UPPER
- * respectively, matching HBase's semantics for {@code scan.withStartRow} / {@code withStopRow}.
+ * <b>Multi-space lists.</b> {@link #encodeListLower} and {@link #encodeListUpper} extend the
+ * single-space encoding to a {@link org.apache.phoenix.compile.keyspace.KeySpaceList}: the list's
+ * scan lower is the byte-lex-min of per-space lower encodings; the scan upper is the byte-lex-max
+ * of per-space upper encodings. This preserves within-space tuple correlation (the single-space
+ * encoder already gets that right) and widens to the bounding envelope of the union — the residual
+ * filter handles rows in the envelope gap. Unbounded sides ({@link KeyRange#UNBOUND}) short-circuit
+ * to UNBOUND for LOWER/UPPER respectively, matching HBase's semantics for {@code scan.withStartRow}
+ * / {@code withStopRow}.
  */
 public final class CompoundByteEncoder {
 
@@ -77,13 +75,12 @@ public final class CompoundByteEncoder {
   }
 
   /**
-   * Encode the lower-row bytes for the given {@link KeySpace} against the given schema.
-   * Returns {@link KeyRange#UNBOUND} (empty byte array) when the result is unbounded.
-   *
-   * @param schema      full row-key schema
-   * @param space       the N-dim box; {@code space.nDims()} must equal {@code schema.getMaxFields()}
-   * @param startField  first PK column to include in the encoding (0 for user queries,
-   *                    {@code prefixSlots} when the caller prepends salt/viewIndexId/tenantId)
+   * Encode the lower-row bytes for the given {@link KeySpace} against the given schema. Returns
+   * {@link KeyRange#UNBOUND} (empty byte array) when the result is unbounded.
+   * @param schema     full row-key schema
+   * @param space      the N-dim box; {@code space.nDims()} must equal {@code schema.getMaxFields()}
+   * @param startField first PK column to include in the encoding (0 for user queries,
+   *                   {@code prefixSlots} when the caller prepends salt/viewIndexId/tenantId)
    * @return lower-row bytes suitable for {@code scan.withStartRow(...)}
    */
   public static byte[] encodeLower(RowKeySchema schema, KeySpace space, int startField) {
@@ -91,17 +88,17 @@ public final class CompoundByteEncoder {
   }
 
   /**
-   * Encode the upper-row bytes for the given {@link KeySpace} against the given schema.
-   * Returns {@link KeyRange#UNBOUND} (empty byte array) when the result is unbounded.
+   * Encode the upper-row bytes for the given {@link KeySpace} against the given schema. Returns
+   * {@link KeyRange#UNBOUND} (empty byte array) when the result is unbounded.
    */
   public static byte[] encodeUpper(RowKeySchema schema, KeySpace space, int startField) {
     return encode(schema, space, startField, KeyRange.Bound.UPPER);
   }
 
   /**
-   * Encode the lower-row bytes for a {@link KeySpaceList}: the byte-lex-min of per-space
-   * lower encodings. Any space that encodes to {@link KeyRange#UNBOUND} (empty bytes)
-   * collapses the whole list's lower to UNBOUND.
+   * Encode the lower-row bytes for a {@link KeySpaceList}: the byte-lex-min of per-space lower
+   * encodings. Any space that encodes to {@link KeyRange#UNBOUND} (empty bytes) collapses the whole
+   * list's lower to UNBOUND.
    */
   public static byte[] encodeListLower(RowKeySchema schema, KeySpaceList list, int startField) {
     if (list.isUnsatisfiable() || list.isEverything()) {
@@ -121,9 +118,9 @@ public final class CompoundByteEncoder {
   }
 
   /**
-   * Encode the upper-row bytes for a {@link KeySpaceList}: the byte-lex-max of per-space
-   * upper encodings. Any space that encodes to {@link KeyRange#UNBOUND} (empty bytes)
-   * collapses the whole list's upper to UNBOUND.
+   * Encode the upper-row bytes for a {@link KeySpaceList}: the byte-lex-max of per-space upper
+   * encodings. Any space that encodes to {@link KeyRange#UNBOUND} (empty bytes) collapses the whole
+   * list's upper to UNBOUND.
    */
   public static byte[] encodeListUpper(RowKeySchema schema, KeySpaceList list, int startField) {
     if (list.isUnsatisfiable() || list.isEverything()) {
@@ -198,17 +195,17 @@ public final class CompoundByteEncoder {
       anyInclusiveUpperRangeKey |= !kr.isSingleKey() && inclusiveUpper;
 
       // Separator rules. For var-width fields: append SEP when
-      //   - SEP is DESC (always append — DESC-var-width terminator must be there), OR
-      //   - not exclusive upper AND (there are trailing fields to separate OR the bound
-      //     needs the SEP to be bumped correctly for inclusive/exclusive semantics).
+      // - SEP is DESC (always append — DESC-var-width terminator must be there), OR
+      // - not exclusive upper AND (there are trailing fields to separate OR the bound
+      // needs the SEP to be bumped correctly for inclusive/exclusive semantics).
       //
       // LOWER-bound + inclusive-lower-single-key special case: suppress the SEP. For a
       // row with the constrained value and trailing-null PK columns (stored with no
       // trailing bytes), the row-key is just the value bytes — shorter than "value·SEP".
-      // Appending SEP would make startRow > such rows and exclude them.  A simple value
+      // Appending SEP would make startRow > such rows and exclude them. A simple value
       // like `N000001` (SYSTEM.STATS metadata row) has row-key `N000001` with no
       // trailing bytes; a scan startRow of `N000001·\x00` skips it. Leaving the raw
-      // value bytes as startRow correctly includes it.  V1's setKey appends SEP then
+      // value bytes as startRow correctly includes it. V1's setKey appends SEP then
       // tail-strips on LOWER; the encoder achieves the same by not appending in the
       // first place.
       // Only suppress on the LAST processed dim. Mid-compound dims still need the SEP
@@ -218,17 +215,16 @@ public final class CompoundByteEncoder {
       boolean lowerSingleKeyInclusive = bound == KeyRange.Bound.LOWER && kr.isSingleKey()
         && kr.isLowerInclusive() && isLastProcessedDim;
       if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
-        byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(),
-          bytes.length == 0, field);
+        byte sepByte =
+          SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
         boolean forceDesc = sepByte == QueryConstants.DESC_SEPARATOR_BYTE;
-        boolean appendForBoundSemantics = !exclusiveUpper
-          && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
+        boolean appendForBoundSemantics =
+          !exclusiveUpper && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
         // DESC separators must always be appended — DESC-var-width terminator is load-
         // bearing at scan time. Suppress only ASC SEPs on the last-processed-dim when
         // the bound is inclusive-lower + single-key.
         boolean suppress = !forceDesc && lowerSingleKeyInclusive;
-        boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics)
-          && !suppress;
+        boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics) && !suppress;
         if (shouldAppend) {
           buf[offset++] = sepByte;
           if (sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
@@ -239,11 +235,10 @@ public final class CompoundByteEncoder {
         byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
           schema.rowKeyOrderOptimizable(), bytes.length == 0, field.getSortOrder());
         boolean forceDesc = sepBytes == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES;
-        boolean appendForBoundSemantics = !exclusiveUpper
-          && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
+        boolean appendForBoundSemantics =
+          !exclusiveUpper && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
         boolean suppress = !forceDesc && lowerSingleKeyInclusive;
-        boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics)
-          && !suppress;
+        boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics) && !suppress;
         if (shouldAppend) {
           buf[offset++] = sepBytes[0];
           buf[offset++] = sepBytes[1];
@@ -269,16 +264,20 @@ public final class CompoundByteEncoder {
         // DESC_SEPARATOR_BYTE, the bumped separator byte would be interpreted as the
         // terminator and the filter would mis-match non-null values.
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
-          if (!isFixedWidth && bytes.length == 0
-            && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field)
-                == QueryConstants.DESC_SEPARATOR_BYTE) {
+          if (
+            !isFixedWidth && bytes.length == 0
+              && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field)
+                  == QueryConstants.DESC_SEPARATOR_BYTE
+          ) {
             buf[offset++] = QueryConstants.DESC_SEPARATOR_BYTE;
           }
         } else {
-          if (!isFixedWidth && bytes.length == 0
-            && SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
-              schema.rowKeyOrderOptimizable(), false, field.getSortOrder())
-                == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES) {
+          if (
+            !isFixedWidth && bytes.length == 0
+              && SchemaUtil.getSeparatorBytesForVarBinaryEncoded(schema.rowKeyOrderOptimizable(),
+                false, field.getSortOrder())
+                  == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES
+          ) {
             buf[offset++] = QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[0];
             buf[offset++] = QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[1];
           }

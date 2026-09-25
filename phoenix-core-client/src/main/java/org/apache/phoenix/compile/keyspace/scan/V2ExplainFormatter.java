@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile.keyspace.scan;
 
 import java.text.Format;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.keyspace.KeySpace;
@@ -34,17 +33,17 @@ import org.apache.phoenix.util.StringUtil;
 /**
  * V2-owned explain-plan keyRanges formatter.
  * <p>
- * Reads from {@link V2ScanArtifact#list()} directly rather than re-decoding the byte-
- * encoded {@code ScanRanges} that drives actual scan execution. The artifact carries the
- * pre-encoding, mathematical form of the scan, so inclusive-upper displays as
- * {@code [*, 1]} (matching V1) instead of {@code [*, 2)} (what V2's compound byte
- * emission produces after {@code nextKey(1) = 2}).
+ * Reads from {@link V2ScanArtifact#list()} directly rather than re-decoding the byte- encoded
+ * {@code ScanRanges} that drives actual scan execution. The artifact carries the pre-encoding,
+ * mathematical form of the scan, so inclusive-upper displays as {@code [*, 1]} (matching V1)
+ * instead of {@code [*, 2)} (what V2's compound byte emission produces after
+ * {@code nextKey(1) = 2}).
  * <p>
- * Current scope: single-space KeySpaceList with point or range ranges per dim. For
- * multi-space lists the caller falls back to the legacy byte-decoding path in
- * {@code ExplainTable.appendKeyRanges}, which produces different but semantically
- * equivalent output. A future extension will handle the multi-space case by computing
- * per-dim unions and emitting SkipScanFilter-style displays.
+ * Current scope: single-space KeySpaceList with point or range ranges per dim. For multi-space
+ * lists the caller falls back to the legacy byte-decoding path in
+ * {@code ExplainTable.appendKeyRanges}, which produces different but semantically equivalent
+ * output. A future extension will handle the multi-space case by computing per-dim unions and
+ * emitting SkipScanFilter-style displays.
  */
 public final class V2ExplainFormatter {
 
@@ -52,9 +51,9 @@ public final class V2ExplainFormatter {
   }
 
   /**
-   * Build the keyRanges display string for a scan whose V2 artifact is {@code artifact}.
-   * Returns {@code null} if this formatter does not handle the input shape — the caller
-   * should fall back to the legacy formatter.
+   * Build the keyRanges display string for a scan whose V2 artifact is {@code artifact}. Returns
+   * {@code null} if this formatter does not handle the input shape — the caller should fall back to
+   * the legacy formatter.
    */
   public static String appendKeyRanges(StatementContext context, TableRef tableRef,
     V2ScanArtifact artifact) {
@@ -101,8 +100,10 @@ public final class V2ExplainFormatter {
     // logic, defer to the legacy byte-decoding formatter.
     for (int d = prefixSlots; d < nPk && d < space.nDims(); d++) {
       KeyRange kr = space.get(d);
-      if (kr == KeyRange.EVERYTHING_RANGE || kr == KeyRange.IS_NULL_RANGE
-        || kr == KeyRange.IS_NOT_NULL_RANGE) {
+      if (
+        kr == KeyRange.EVERYTHING_RANGE || kr == KeyRange.IS_NULL_RANGE
+          || kr == KeyRange.IS_NOT_NULL_RANGE
+      ) {
         continue;
       }
       PColumn col = table.getPKColumns().get(d);
@@ -118,8 +119,10 @@ public final class V2ExplainFormatter {
       int expected = maxLen != null ? maxLen : typeSize;
       byte[] lb = kr.getRange(KeyRange.Bound.LOWER);
       byte[] ub = kr.getRange(KeyRange.Bound.UPPER);
-      if ((lb != null && lb.length != 0 && lb.length != expected)
-        || (ub != null && ub.length != 0 && ub.length != expected)) {
+      if (
+        (lb != null && lb.length != 0 && lb.length != expected)
+          || (ub != null && ub.length != 0 && ub.length != expected)
+      ) {
         return null;
       }
     }
@@ -175,9 +178,9 @@ public final class V2ExplainFormatter {
     // Now walk the KeySpaceList dims aligned with PK columns [prefixSlots, lastConstrained].
     for (int d = prefixSlots; d <= lastConstrained; d++) {
       KeyRange kr = space.get(d);
-      Boolean isNull =
-        kr == KeyRange.IS_NULL_RANGE ? Boolean.TRUE
-          : kr == KeyRange.IS_NOT_NULL_RANGE ? Boolean.FALSE : null;
+      Boolean isNull = kr == KeyRange.IS_NULL_RANGE ? Boolean.TRUE
+        : kr == KeyRange.IS_NOT_NULL_RANGE ? Boolean.FALSE
+        : null;
       byte[] lb = kr.getRange(KeyRange.Bound.LOWER);
       byte[] ub = kr.getRange(KeyRange.Bound.UPPER);
       boolean changeViewIndexId = isLocalIndex && d == viewIndexIdSlot;
@@ -212,14 +215,15 @@ public final class V2ExplainFormatter {
 
   /**
    * Render {@code [prefix_1, ..., prefix_k]} from the per-slot ranges in the attached
-   * {@link org.apache.phoenix.compile.ScanRanges}. Used when the user-dim KeySpaceList
-   * is EVERYTHING but the scan is still narrowed by salt / viewIndexId / tenantId
-   * prefix slots — e.g. a tenant-specific full-view scan.
+   * {@link org.apache.phoenix.compile.ScanRanges}. Used when the user-dim KeySpaceList is
+   * EVERYTHING but the scan is still narrowed by salt / viewIndexId / tenantId prefix slots — e.g.
+   * a tenant-specific full-view scan.
    */
-  private static String renderPrefixOnly(StatementContext context, PTable table,
-    int prefixSlots) {
-    if (prefixSlots == 0 || context.getScanRanges() == null
-      || context.getScanRanges().getRanges().isEmpty()) {
+  private static String renderPrefixOnly(StatementContext context, PTable table, int prefixSlots) {
+    if (
+      prefixSlots == 0 || context.getScanRanges() == null
+        || context.getScanRanges().getRanges().isEmpty()
+    ) {
       return "";
     }
     boolean isLocalIndex = org.apache.phoenix.util.ScanUtil.isLocalIndex(context.getScan());
@@ -259,11 +263,11 @@ public final class V2ExplainFormatter {
   }
 
   /**
-   * Mirrors {@code ExplainTable.appendPKColumnValue} for V2. Consolidated here so the
-   * formatter can render each column value without depending on ExplainTable internals.
+   * Mirrors {@code ExplainTable.appendPKColumnValue} for V2. Consolidated here so the formatter can
+   * render each column value without depending on ExplainTable internals.
    */
-  private static void appendPKColumnValue(StringBuilder buf, StatementContext context,
-    PTable table, byte[] range, Boolean isNull, int slotIndex, boolean changeViewIndexId) {
+  private static void appendPKColumnValue(StringBuilder buf, StatementContext context, PTable table,
+    byte[] range, Boolean isNull, int slotIndex, boolean changeViewIndexId) {
     if (Boolean.TRUE.equals(isNull)) {
       buf.append("null");
       return;

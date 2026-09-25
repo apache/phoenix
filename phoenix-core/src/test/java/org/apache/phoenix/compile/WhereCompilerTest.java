@@ -92,16 +92,16 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
   /**
-   * True when the V2 WHERE optimizer is enabled for this test JVM. Tests whose expected
-   * scan bytes differ between V1 and V2 (typically a trailing SEP byte that V2 retains
-   * and V1 strips) branch on this helper to pin both forms.
+   * True when the V2 WHERE optimizer is enabled for this test JVM. Tests whose expected scan bytes
+   * differ between V1 and V2 (typically a trailing SEP byte that V2 retains and V1 strips) branch
+   * on this helper to pin both forms.
    */
   protected static boolean isV2Optimizer() {
     try (java.sql.Connection conn = java.sql.DriverManager.getConnection(getUrl(),
       org.apache.phoenix.util.PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
       return conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class).getQueryServices()
-        .getConfiguration().getBoolean(
-          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+        .getConfiguration()
+        .getBoolean(org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
           org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
     } catch (java.sql.SQLException e) {
       return false;

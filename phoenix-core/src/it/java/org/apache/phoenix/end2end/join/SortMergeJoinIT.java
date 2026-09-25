@@ -40,7 +40,6 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -48,9 +47,57 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public abstract class SortMergeJoinIT extends BaseJoinIT {
 
-  public SortMergeJoinIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinIT(String[] indexDDL) {
+    super(indexDDL);
   }
+
+  /*
+   * The expected EXPLAIN plan for each of the queries below differs per index configuration, so
+   * each concrete subclass supplies the attribute-based assertions via these hooks.
+   */
+
+  /**
+   * {@link #testJoinWithSkipMergeOptimization()}:
+   *
+   * <pre>
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ s.name FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity &lt; 5000
+   *   RIGHT JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+   * </pre>
+   */
+  protected abstract void assertSkipMergeOptimizationPlan(Connection conn, String query)
+    throws Exception;
+
+  /**
+   * {@link #testSelfJoin()}:
+   *
+   * <pre>
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ i2.item_id, i1.name FROM joinItemTable i1
+   *   JOIN joinItemTable i2 ON i1.item_id = i2.item_id
+   *   ORDER BY i1.item_id
+   * </pre>
+   */
+  protected abstract void assertSelfJoinPlan(Connection conn, String query) throws Exception;
+
+  /**
+   * Assert the EXPLAIN plan for {@link #testJoinWithSetMaxRows()} (with a max-rows limit of 4). The
+   * {@code CLIENT 4 ROW LIMIT} comes from {@link java.sql.Statement#setMaxRows(int)} rather than
+   * the SQL, so subclasses must compile via a {@code PhoenixPreparedStatement}.
+   *
+   * <pre>
+   * statement.setMaxRows(4);
+   *
+   * // queryIndex 0:
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ order_id, i.name, quantity FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id
+   *
+   * // queryIndex 1:
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ o.order_id, i.name, o.quantity FROM joinItemTable i
+   *   JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o ON o.item_id = i.item_id
+   * </pre>
+   */
+  protected abstract void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
+    throws Exception;
 
   @Test
   public void testDefaultJoin() throws Exception {
@@ -1663,8 +1710,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertPlansEqual(plans[0], QueryUtil.getExplainPlan(rs));
+      assertSkipMergeOptimizationPlan(conn, query);
     } finally {
       conn.close();
     }
@@ -1707,8 +1753,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
-      assertPlansEqual(plans[2], QueryUtil.getExplainPlan(rs));
+      assertSelfJoinPlan(conn, query1);
 
       statement = conn.prepareStatement(query2);
       rs = statement.executeQuery();
@@ -2581,9 +2626,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
         assertFalse(rs.next());
 
-        rs = statement.executeQuery("EXPLAIN " + query);
-        assertPlansEqual(i == 0 ? plans[1] : plans[1].replaceFirst("O\\.item_id", "item_id"),
-          QueryUtil.getExplainPlan(rs));
+        assertSetMaxRowsPlan(conn, query, i);
       }
     } finally {
       conn.close();

@@ -196,19 +196,18 @@ public abstract class BaseTest {
   protected static final String NULL_STRING = "NULL";
 
   /**
-   * Captures the {@code -Dphoenix.where.optimizer.v2.enabled=...} value (if any) layered
-   * into the test driver via {@link #initDriver}. Tests use {@link #isV2Optimizer()} to
-   * branch their expected output between V1 and V2 forms when the optimizer's compound
-   * scan emission produces a tighter scan range or different residual filter shape.
+   * Captures the {@code -Dphoenix.where.optimizer.v2.enabled=...} value (if any) layered into the
+   * test driver via {@link #initDriver}. Tests use {@link #isV2Optimizer()} to branch their
+   * expected output between V1 and V2 forms when the optimizer's compound scan emission produces a
+   * tighter scan range or different residual filter shape.
    */
   private static volatile String v2OptimizerEnabledOverride;
 
   /**
    * True when the V2 WHERE optimizer is enabled for this test JVM (either via the
-   * {@code -Dphoenix.where.optimizer.v2.enabled=true} JVM arg or the codebase default
-   * if it has been flipped on). Returns false when the property is unset and the
-   * codebase default is V1. Use this from IT/UT tests whose expected scan-range or
-   * EXPLAIN output differs between V1 and V2.
+   * {@code -Dphoenix.where.optimizer.v2.enabled=true} JVM arg or the codebase default if it has
+   * been flipped on). Returns false when the property is unset and the codebase default is V1. Use
+   * this from IT/UT tests whose expected scan-range or EXPLAIN output differs between V1 and V2.
    */
   protected static boolean isV2Optimizer() {
     String prop = v2OptimizerEnabledOverride != null

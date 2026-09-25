@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.keyspace.KeySpace;
 import org.apache.phoenix.query.KeyRange;
@@ -43,20 +42,18 @@ import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 
 /**
- * Differential validation of {@link CompoundByteEncoder} against V1's
- * {@link ScanUtil#getMinKey} / {@link ScanUtil#getMaxKey}.
+ * Differential validation of {@link CompoundByteEncoder} against V1's {@link ScanUtil#getMinKey} /
+ * {@link ScanUtil#getMaxKey}.
  * <p>
- * For each shape, builds a {@link KeySpace} and the equivalent per-column slot list,
- * runs both encoders, and asserts byte-for-byte agreement. Any divergence is either a
- * bug in the encoder or an V1 edge case the encoder's rules don't cover yet — in either
- * case, a gap worth pinning down before the encoder becomes load-bearing in the scan
- * path.
+ * For each shape, builds a {@link KeySpace} and the equivalent per-column slot list, runs both
+ * encoders, and asserts byte-for-byte agreement. Any divergence is either a bug in the encoder or
+ * an V1 edge case the encoder's rules don't cover yet — in either case, a gap worth pinning down
+ * before the encoder becomes load-bearing in the scan path.
  * <p>
- * This test is intentionally strict. The encoder and V1's setKey need to agree on
- * byte-level output for the shapes covered here so that when V2ScanBuilder starts
- * calling the encoder, the scan bytes V2 emits are provably V1-equivalent. Shapes the
- * encoder doesn't handle yet (multi-space lists, RVC-spans) live in future tests as
- * they land in the encoder.
+ * This test is intentionally strict. The encoder and V1's setKey need to agree on byte-level output
+ * for the shapes covered here so that when V2ScanBuilder starts calling the encoder, the scan bytes
+ * V2 emits are provably V1-equivalent. Shapes the encoder doesn't handle yet (multi-space lists,
+ * RVC-spans) live in future tests as they land in the encoder.
  */
 public class CompoundByteEncoderDifferentialTest {
 
@@ -64,9 +61,7 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void pointLookupOnFixedWidthLeading() {
-    RowKeySchema sch = schema(
-      fixed(PChar.INSTANCE, 3),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PChar.INSTANCE, 3), fixed(PInteger.INSTANCE, 4));
     byte[] abc = PChar.INSTANCE.toBytes("abc");
     KeySpace space = space(2, point(abc));
     assertAgree(sch, space);
@@ -74,9 +69,7 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void pinnedVarPlusRangeInclusiveUpperOnFixed() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PSmallint.INSTANCE, 2),
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PSmallint.INSTANCE, 2),
       fixed(PTinyint.INSTANCE, 1));
     byte[] c0 = Bytes.toBytes("c0");
     byte[] ds = PSmallint.INSTANCE.toBytes((short) 0);
@@ -87,32 +80,26 @@ public class CompoundByteEncoderDifferentialTest {
   }
 
   /**
-   * Pinned var-width leading column + inclusive-lower range on var-width second column
-   * with trailing unconstrained PK columns. V1's {@link ScanUtil#getMinKey} strips the
-   * trailing SEP after the score (via its tail-strip loop at line 659-678). The encoder
-   * preserves the SEP — which is still a correct scan lower-row (both 6-byte and 7-byte
-   * versions admit the same rows, since every legitimate row has score bytes followed
-   * by the SEP delimiter anyway).
+   * Pinned var-width leading column + inclusive-lower range on var-width second column with
+   * trailing unconstrained PK columns. V1's {@link ScanUtil#getMinKey} strips the trailing SEP
+   * after the score (via its tail-strip loop at line 659-678). The encoder preserves the SEP —
+   * which is still a correct scan lower-row (both 6-byte and 7-byte versions admit the same rows,
+   * since every legitimate row has score bytes followed by the SEP delimiter anyway).
    * <p>
-   * This divergence is intentional and semantically equivalent; assert both behaviors
-   * explicitly so future changes to either path can't regress one without updating the
-   * other.
+   * This divergence is intentional and semantically equivalent; assert both behaviors explicitly so
+   * future changes to either path can't regress one without updating the other.
    */
   @Test
   public void pinnedVarPlusInclusiveLowerRangeOnVarWithTrailing() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PDecimal.INSTANCE, null),
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PLong.INSTANCE, 8));
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PDecimal.INSTANCE, null),
+      fixed(PVarchar.INSTANCE, null), fixed(PLong.INSTANCE, 8));
     byte[] c0 = Bytes.toBytes("c0");
     byte[] score = PDecimal.INSTANCE.toBytes(new BigDecimal("4980"));
     KeyRange scoreGte = KeyRange.getKeyRange(score, true, KeyRange.UNBOUND, false);
     KeySpace space = space(4, point(c0), scoreGte);
 
     // V1: strips the trailing SEP after score via the tail-strip loop.
-    byte[] expectedV1 =
-      org.apache.phoenix.util.ByteUtil.concat(c0, SEP, score);
+    byte[] expectedV1 = org.apache.phoenix.util.ByteUtil.concat(c0, SEP, score);
     List<List<KeyRange>> slots = toSlots(space);
     int[] slotSpan = new int[slots.size()];
     assertArrayEquals(expectedV1, ScanUtil.getMinKey(sch, slots, slotSpan));
@@ -129,9 +116,7 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void exclusiveUpperRangeOnVarTerminates() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PDecimal.INSTANCE, null),
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PDecimal.INSTANCE, null),
       fixed(PVarchar.INSTANCE, null));
     byte[] c0 = Bytes.toBytes("c0");
     byte[] score = PDecimal.INSTANCE.toBytes(new BigDecimal("5000"));
@@ -142,37 +127,25 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void fullyPinnedAllFixed() {
-    RowKeySchema sch = schema(
-      fixed(PChar.INSTANCE, 3),
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PLong.INSTANCE, 8));
-    KeySpace space = space(3,
-      point(PChar.INSTANCE.toBytes("aaa")),
-      point(PInteger.INSTANCE.toBytes(42)),
-      point(PLong.INSTANCE.toBytes(999L)));
+    RowKeySchema sch =
+      schema(fixed(PChar.INSTANCE, 3), fixed(PInteger.INSTANCE, 4), fixed(PLong.INSTANCE, 8));
+    KeySpace space = space(3, point(PChar.INSTANCE.toBytes("aaa")),
+      point(PInteger.INSTANCE.toBytes(42)), point(PLong.INSTANCE.toBytes(999L)));
     assertAgree(sch, space);
   }
 
   @Test
   public void fullyPinnedMixedFixedVar() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PLong.INSTANCE, 8));
-    KeySpace space = space(4,
-      point(Bytes.toBytes("a")),
-      point(PInteger.INSTANCE.toBytes(1)),
-      point(Bytes.toBytes("b")),
-      point(PLong.INSTANCE.toBytes(7L)));
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PInteger.INSTANCE, 4),
+      fixed(PVarchar.INSTANCE, null), fixed(PLong.INSTANCE, 8));
+    KeySpace space = space(4, point(Bytes.toBytes("a")), point(PInteger.INSTANCE.toBytes(1)),
+      point(Bytes.toBytes("b")), point(PLong.INSTANCE.toBytes(7L)));
     assertAgree(sch, space);
   }
 
   @Test
   public void exclusiveLowerRangeOnFixedLeading() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     byte[] five = PInteger.INSTANCE.toBytes(5);
     KeyRange gtFive = KeyRange.getKeyRange(five, false, KeyRange.UNBOUND, false);
     KeySpace space = space(2, gtFive);
@@ -181,9 +154,7 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void inclusiveLowerInclusiveUpperFullyBoundedRange() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PInteger.INSTANCE, 4));
     byte[] c0 = Bytes.toBytes("c0");
     KeyRange iRange = KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(10), true,
       PInteger.INSTANCE.toBytes(20), true);
@@ -193,10 +164,8 @@ public class CompoundByteEncoderDifferentialTest {
 
   @Test
   public void leadingRangeNoTrailingConstraint() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch =
+      schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     KeyRange r = KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(5), true,
       PInteger.INSTANCE.toBytes(10), false);
     KeySpace space = space(3, r);
@@ -248,6 +217,7 @@ public class CompoundByteEncoderDifferentialTest {
   /** Field descriptor for schema building. */
   private static final class FieldDatum {
     final PDatum datum;
+
     FieldDatum(PDatum datum) {
       this.datum = datum;
     }
@@ -255,11 +225,30 @@ public class CompoundByteEncoderDifferentialTest {
 
   private static FieldDatum fixed(PDataType type, Integer maxLen) {
     return new FieldDatum(new PDatum() {
-      @Override public boolean isNullable() { return false; }
-      @Override public PDataType getDataType() { return type; }
-      @Override public Integer getMaxLength() { return maxLen; }
-      @Override public Integer getScale() { return null; }
-      @Override public SortOrder getSortOrder() { return SortOrder.ASC; }
+      @Override
+      public boolean isNullable() {
+        return false;
+      }
+
+      @Override
+      public PDataType getDataType() {
+        return type;
+      }
+
+      @Override
+      public Integer getMaxLength() {
+        return maxLen;
+      }
+
+      @Override
+      public Integer getScale() {
+        return null;
+      }
+
+      @Override
+      public SortOrder getSortOrder() {
+        return SortOrder.ASC;
+      }
     });
   }
 

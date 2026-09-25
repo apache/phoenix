@@ -32,12 +32,17 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 
 public abstract class DelegateQueryPlan implements QueryPlan {
   protected final QueryPlan delegate;
+  // Fallback storage for the optimizer decision used only when this plan has no delegate to
+  // forward to. Some DelegateQueryPlan subclasses intentionally pass a null delegate and override
+  // getContext()/getTableRef()/getProjector() to serve from local state.
+  private OptimizerDecision optimizerDecision;
 
   public DelegateQueryPlan(QueryPlan delegate) {
     this.delegate = delegate;
@@ -170,5 +175,19 @@ public abstract class DelegateQueryPlan implements QueryPlan {
   @Override
   public boolean isApplicable() {
     return delegate.isApplicable();
+  }
+
+  @Override
+  public OptimizerDecision getOptimizerDecision() {
+    return delegate != null ? delegate.getOptimizerDecision() : optimizerDecision;
+  }
+
+  @Override
+  public void setOptimizerDecision(OptimizerDecision decision) {
+    if (delegate != null) {
+      delegate.setOptimizerDecision(decision);
+    } else {
+      this.optimizerDecision = decision;
+    }
   }
 }

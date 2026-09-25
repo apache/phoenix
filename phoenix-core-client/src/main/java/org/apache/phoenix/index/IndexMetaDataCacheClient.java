@@ -40,6 +40,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
@@ -145,9 +146,11 @@ public class IndexMetaDataCacheClient {
         QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
         && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
           QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
-      boolean serverSideImmutableIndexes =
-        props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
-          DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      // Keep ROW_TIMESTAMP tables client-maintained so the send-metadata decision matches the
+      // client-vs-server maintenance decision made for the same table elsewhere.
+      boolean serverSideImmutableIndexes = IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(
+        table, props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED));
       boolean useServerCacheRpc =
         useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
           && sendIndexMaintainers;

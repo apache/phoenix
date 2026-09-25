@@ -20,10 +20,9 @@ package org.apache.phoenix.compile.keyspace.algebra;
 import java.util.Objects;
 
 /**
- * A 1-D interval over any {@link Comparable} type. Used by the reference implementation
- * (oracle) to model one dimension of an N-dimensional key space. Deliberately free of any
- * Phoenix dependency so the oracle can be exercised without an HBase cluster, a schema,
- * or a byte encoding.
+ * A 1-D interval over any {@link Comparable} type. Used by the reference implementation (oracle) to
+ * model one dimension of an N-dimensional key space. Deliberately free of any Phoenix dependency so
+ * the oracle can be exercised without an HBase cluster, a schema, or a byte encoding.
  * <p>
  * Semantics are standard interval arithmetic:
  * <ul>
@@ -36,8 +35,8 @@ import java.util.Objects;
  * <p>
  * This class is the 1-D primitive for {@link AbstractKeySpace}'s per-dim slot. Operations
  * {@link #intersect}, {@link #union}, {@link #contains} are defined purely in terms of the
- * comparator, so a {@code Long} range and a {@code String} range can coexist in different
- * dims of the same key space.
+ * comparator, so a {@code Long} range and a {@code String} range can coexist in different dims of
+ * the same key space.
  */
 public final class AbstractRange<T extends Comparable<T>> {
 
@@ -61,8 +60,8 @@ public final class AbstractRange<T extends Comparable<T>> {
 
   /** The (−∞, +∞) interval — the AND identity and OR absorbing element. */
   @SuppressWarnings("rawtypes")
-  private static final AbstractRange EVERYTHING = new AbstractRange<>(null, null, false, false,
-    false);
+  private static final AbstractRange EVERYTHING =
+    new AbstractRange<>(null, null, false, false, false);
 
   @SuppressWarnings("unchecked")
   public static <T extends Comparable<T>> AbstractRange<T> empty() {
@@ -170,9 +169,9 @@ public final class AbstractRange<T extends Comparable<T>> {
   }
 
   /**
-   * Standard interval intersection. Returns {@link #empty()} when the intervals don't
-   * overlap. Correctness here is by direct algebra — {@code max(lo)} and {@code min(hi)}
-   * with careful inclusivity at each endpoint.
+   * Standard interval intersection. Returns {@link #empty()} when the intervals don't overlap.
+   * Correctness here is by direct algebra — {@code max(lo)} and {@code min(hi)} with careful
+   * inclusivity at each endpoint.
    */
   public AbstractRange<T> intersect(AbstractRange<T> other) {
     if (this.empty || other.empty) return empty();
@@ -232,12 +231,12 @@ public final class AbstractRange<T extends Comparable<T>> {
   }
 
   /**
-   * Union when the two intervals overlap or touch (adjacent at the shared endpoint with one
-   * side inclusive). If they are disjoint (non-touching), returns {@code null} so the caller
-   * knows the union is not a single interval and must be kept as two separate entries.
+   * Union when the two intervals overlap or touch (adjacent at the shared endpoint with one side
+   * inclusive). If they are disjoint (non-touching), returns {@code null} so the caller knows the
+   * union is not a single interval and must be kept as two separate entries.
    * <p>
-   * OR rule 2 requires non-disjoint ranges on the merging dim; this method encodes that
-   * as "single-interval union exists ⟺ non-disjoint-or-adjacent".
+   * OR rule 2 requires non-disjoint ranges on the merging dim; this method encodes that as
+   * "single-interval union exists ⟺ non-disjoint-or-adjacent".
    */
   public AbstractRange<T> union(AbstractRange<T> other) {
     if (this.empty) return other;
@@ -309,9 +308,9 @@ public final class AbstractRange<T extends Comparable<T>> {
   }
 
   /**
-   * True iff the two ranges overlap OR are adjacent (share an endpoint with one inclusive,
-   * the other not inclusive — so the shared point is covered by exactly one of them). Used
-   * to decide whether {@link #union} can produce a single interval.
+   * True iff the two ranges overlap OR are adjacent (share an endpoint with one inclusive, the
+   * other not inclusive — so the shared point is covered by exactly one of them). Used to decide
+   * whether {@link #union} can produce a single interval.
    */
   private static <T extends Comparable<T>> boolean overlapsOrTouches(AbstractRange<T> a,
     AbstractRange<T> b) {

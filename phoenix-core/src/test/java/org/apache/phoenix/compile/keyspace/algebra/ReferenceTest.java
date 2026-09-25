@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.compile.keyspace.algebra;
 
-import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.and;
-import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.or;
-import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.pred;
 import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.EQ;
 import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GE;
 import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GT;
 import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LE;
 import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LT;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.and;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.or;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.pred;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,7 +32,6 @@ import static org.junit.Assert.assertTrue;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-
 import org.junit.Test;
 
 /**
@@ -40,9 +39,8 @@ import org.junit.Test;
  * <ul>
  * <li><b>Algebra</b> — AND/OR identity, idempotence, commutativity on the list algebra.</li>
  * <li><b>Worked examples</b> — specific scenarios that exercise the merge rules.</li>
- * <li><b>Soundness</b> — for random expressions, every row satisfying the expression is
- * contained in the emitted KeySpaceList (no false negatives). The core correctness
- * guarantee.</li>
+ * <li><b>Soundness</b> — for random expressions, every row satisfying the expression is contained
+ * in the emitted KeySpaceList (no false negatives). The core correctness guarantee.</li>
  * </ul>
  */
 public class ReferenceTest {
@@ -122,10 +120,10 @@ public class ReferenceTest {
     // `d0 > 7` vs `d0 < 7` — those ARE adjacent at 7 with both exclusive, so they must
     // stay separate (the point 7 is missing from both). Build equivalent inputs and
     // confirm: 2 spaces.
-    AbstractKeySpace a = AbstractKeySpace.of(
-      AbstractRange.greaterThan(7L), AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
-    AbstractKeySpace b = AbstractKeySpace.of(
-      AbstractRange.lessThan(7L), AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
+    AbstractKeySpace a = AbstractKeySpace.of(AbstractRange.greaterThan(7L),
+      AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
+    AbstractKeySpace b = AbstractKeySpace.of(AbstractRange.lessThan(7L), AbstractRange.lessThan(8L),
+      AbstractRange.of(4L, true, 7L, true));
     AbstractKeySpaceList la = AbstractKeySpaceList.of(3, a);
     AbstractKeySpaceList lb = AbstractKeySpaceList.of(3, b);
     AbstractKeySpaceList combined = la.or(lb);
@@ -136,11 +134,12 @@ public class ReferenceTest {
   public void workedExample_containmentMergesTwoSpaces() {
     // `[(*, +∞), (*, 8), (4,7)] OR [(5,*), (*,8), (4,7)]` → the first contains the second
     // (first has everything on d0, second constrains d0 to `> 5`). Merged result: first.
-    AbstractKeySpace outer = AbstractKeySpace.of(
-      AbstractRange.everything(), AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
-    AbstractKeySpace inner = AbstractKeySpace.of(
-      AbstractRange.greaterThan(5L), AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
-    AbstractKeySpaceList merged = AbstractKeySpaceList.of(3, outer).or(AbstractKeySpaceList.of(3, inner));
+    AbstractKeySpace outer = AbstractKeySpace.of(AbstractRange.everything(),
+      AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
+    AbstractKeySpace inner = AbstractKeySpace.of(AbstractRange.greaterThan(5L),
+      AbstractRange.lessThan(8L), AbstractRange.of(4L, true, 7L, true));
+    AbstractKeySpaceList merged =
+      AbstractKeySpaceList.of(3, outer).or(AbstractKeySpaceList.of(3, inner));
     assertEquals(1, merged.size());
     assertEquals(outer, merged.spaces().get(0));
   }
@@ -148,22 +147,17 @@ public class ReferenceTest {
   @Test
   public void workedExample_andOfRvcLexExpansion() {
     // This mirrors testRVCScanBoundaries1's first case at the abstract level:
-    //   category = 'cat0' AND score <= 5000 AND (score, pk, sk) > (4990, 'pk_90', 4990)
+    // category = 'cat0' AND score <= 5000 AND (score, pk, sk) > (4990, 'pk_90', 4990)
     // Normalized: the RVC expands to 3 OR branches:
-    //   score > 4990
-    //   score = 4990 AND pk > 'pk_90'
-    //   score = 4990 AND pk = 'pk_90' AND sk > 4990
+    // score > 4990
+    // score = 4990 AND pk > 'pk_90'
+    // score = 4990 AND pk = 'pk_90' AND sk > 4990
     // Conjoined with `category = 'cat0' AND score <= 5000`, the oracle should produce
     // 3 spaces describing the valid compound lex region.
-    AbstractExpression rvcExpanded = or(
-      pred(1, GT, 4990L),
-      and(pred(1, EQ, 4990L), pred(2, GT, "pk_90")),
-      and(pred(1, EQ, 4990L), pred(2, EQ, "pk_90"), pred(3, GT, 4990L))
-    );
-    AbstractExpression full = and(
-      pred(0, EQ, "cat_0"),
-      pred(1, LE, 5000L),
-      rvcExpanded);
+    AbstractExpression rvcExpanded =
+      or(pred(1, GT, 4990L), and(pred(1, EQ, 4990L), pred(2, GT, "pk_90")),
+        and(pred(1, EQ, 4990L), pred(2, EQ, "pk_90"), pred(3, GT, 4990L)));
+    AbstractExpression full = and(pred(0, EQ, "cat_0"), pred(1, LE, 5000L), rvcExpanded);
     AbstractKeySpaceList result = Reference.extract(full, 4);
     assertEquals(3, result.size());
     // Every space should carry category = 'cat_0' on dim 0.
@@ -178,17 +172,16 @@ public class ReferenceTest {
   public void soundnessRandom_3Dims_boundedValues() {
     Random rnd = new Random(42);
     for (int trial = 0; trial < 50; trial++) {
-      AbstractExpression expr = randomExpression(rnd, 3, /*maxDepth=*/3, /*valueRange=*/5);
+      AbstractExpression expr = randomExpression(rnd, 3, /* maxDepth= */3, /* valueRange= */5);
       AbstractKeySpaceList extracted = Reference.extract(expr, 3);
       // Enumerate all (a, b, c) ∈ [0..10)³ and check: if expr is true, extracted matches.
       for (long a = 0; a < 10; a++) {
         for (long b = 0; b < 10; b++) {
           for (long c = 0; c < 10; c++) {
-            List<Object> row = Arrays.<Object>asList(a, b, c);
+            List<Object> row = Arrays.<Object> asList(a, b, c);
             if (expr.evaluate(row) && !extracted.matches(row)) {
-              throw new AssertionError(
-                "soundness violation: expr " + expr + " matches row " + row
-                  + " but extracted " + extracted + " does not");
+              throw new AssertionError("soundness violation: expr " + expr + " matches row " + row
+                + " but extracted " + extracted + " does not");
             }
           }
         }
@@ -206,13 +199,13 @@ public class ReferenceTest {
       branches[i] = and(pred(0, EQ, (long) i), pred(1, GE, (long) i));
     }
     AbstractExpression expr = or(branches);
-    AbstractKeySpaceList wide = Reference.extract(expr, 2, /*cartesianBound=*/10);
+    AbstractKeySpaceList wide = Reference.extract(expr, 2, /* cartesianBound= */10);
     // Post-widening size should be at most the bound (or 1 if widened all the way down).
     assertTrue("widened list should fit the bound, got " + wide.size(), wide.size() <= 50);
     // Soundness: every row that matches expr must also match wide.
     for (long a = 0; a < 60; a++) {
       for (long b = 0; b < 60; b++) {
-        List<Object> row = Arrays.<Object>asList(a, b);
+        List<Object> row = Arrays.<Object> asList(a, b);
         if (expr.evaluate(row)) assertTrue(wide.matches(row));
       }
     }
@@ -284,12 +277,8 @@ public class ReferenceTest {
   public void leadingEqualityLockedByAndHasOneSpaceAfterRvcExpand() {
     // PK2 is pinned to 5; RVC expansion adds ORs that would normally produce 3 spaces, but
     // any branch that conflicts with PK2=5 is ruled out.
-    AbstractExpression expr = and(
-      pred(1, EQ, 5L),
-      or(
-        and(pred(0, EQ, 1L), pred(1, EQ, 5L)),
-        and(pred(0, EQ, 2L), pred(1, EQ, 5L))
-      ));
+    AbstractExpression expr = and(pred(1, EQ, 5L),
+      or(and(pred(0, EQ, 1L), pred(1, EQ, 5L)), and(pred(0, EQ, 2L), pred(1, EQ, 5L))));
     AbstractKeySpaceList result = Reference.extract(expr, 3);
     // 2 spaces: (d0=1, d1=5, *), (d0=2, d1=5, *)
     assertEquals(2, result.size());

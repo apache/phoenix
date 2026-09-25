@@ -19,27 +19,26 @@ package org.apache.phoenix.compile.keyspace;
 
 import java.util.Arrays;
 import java.util.Optional;
-
 import org.apache.phoenix.query.KeyRange;
 
 /**
  * An N-dimensional key space over a table's primary key columns. Each dimension is a
- * {@link KeyRange} over the encoded byte representation of a single PK column. An
- * expression node is modeled as a list of {@code KeySpace} instances; see
- * {@link KeySpaceList} for the list-level algebra.
+ * {@link KeyRange} over the encoded byte representation of a single PK column. An expression node
+ * is modeled as a list of {@code KeySpace} instances; see {@link KeySpaceList} for the list-level
+ * algebra.
  * <p>
  * Instances are immutable. {@link #and(KeySpace)} is the per-dimension intersection;
- * {@link #unionIfMergeable(KeySpace)} returns the union when either (a) one space contains
- * the other or (b) the two spaces agree on all but one dimension and the differing dim's
- * ranges are non-disjoint.
+ * {@link #unionIfMergeable(KeySpace)} returns the union when either (a) one space contains the
+ * other or (b) the two spaces agree on all but one dimension and the differing dim's ranges are
+ * non-disjoint.
  * <p>
  * A single-value predicate like {@code PK2 >= 3} on a 3-PK table is represented as
  * {@code [(*,*), [3,*), (*,*)]} — a singleton {@link KeySpaceList} containing a single
  * {@code KeySpace} where every dim not mentioned in the predicate holds
  * {@link KeyRange#EVERYTHING_RANGE}. RVC inequalities are pre-normalized by
- * {@link ExpressionNormalizer} into lexicographic AND/OR of scalar comparisons so that
- * per-dim intersection composes correctly with every other predicate; this class therefore
- * never needs to model compound-byte concatenation directly.
+ * {@link ExpressionNormalizer} into lexicographic AND/OR of scalar comparisons so that per-dim
+ * intersection composes correctly with every other predicate; this class therefore never needs to
+ * model compound-byte concatenation directly.
  */
 public final class KeySpace {
 
@@ -93,10 +92,9 @@ public final class KeySpace {
   }
 
   /**
-   * Returns a new {@link KeySpace} identical to this one except with dim {@code dim}
-   * replaced by {@code r}. Used by {@link KeySpaceList}'s widening path to drop a
-   * trailing dim (by replacing it with {@link KeyRange#EVERYTHING_RANGE}). Allocates a
-   * fresh dims array; original is unchanged.
+   * Returns a new {@link KeySpace} identical to this one except with dim {@code dim} replaced by
+   * {@code r}. Used by {@link KeySpaceList}'s widening path to drop a trailing dim (by replacing it
+   * with {@link KeyRange#EVERYTHING_RANGE}). Allocates a fresh dims array; original is unchanged.
    */
   public KeySpace withDimReplaced(int dim, KeyRange r) {
     if (dims[dim].equals(r)) {
@@ -127,8 +125,8 @@ public final class KeySpace {
   }
 
   /**
-   * Per-dimension intersection. If any dim collapses to {@link KeyRange#EMPTY_RANGE}, the
-   * result is {@link #empty(int)}.
+   * Per-dimension intersection. If any dim collapses to {@link KeyRange#EMPTY_RANGE}, the result is
+   * {@link #empty(int)}.
    */
   public KeySpace and(KeySpace other) {
     requireSameArity(other);
@@ -151,8 +149,8 @@ public final class KeySpace {
   /**
    * Per-dim intersection that special-cases {@link KeyRange#EVERYTHING_RANGE} against
    * {@link KeyRange#IS_NULL_RANGE} / {@link KeyRange#IS_NOT_NULL_RANGE}. Plain
-   * {@link KeyRange#intersect} treats EVERYTHING ∩ IS_NULL as EMPTY because IS_NULL uses
-   * an empty-byte-array sentinel that coincides with the EVERYTHING representation.
+   * {@link KeyRange#intersect} treats EVERYTHING ∩ IS_NULL as EMPTY because IS_NULL uses an
+   * empty-byte-array sentinel that coincides with the EVERYTHING representation.
    */
   private static KeyRange intersectRange(KeyRange a, KeyRange b) {
     if (a == KeyRange.EVERYTHING_RANGE) {
@@ -165,12 +163,12 @@ public final class KeySpace {
   }
 
   /**
-   * Returns the union of {@code this} and {@code other} as a single {@code KeySpace} when
-   * one of the two merge rules applies; otherwise {@link Optional#empty()}.
+   * Returns the union of {@code this} and {@code other} as a single {@code KeySpace} when one of
+   * the two merge rules applies; otherwise {@link Optional#empty()}.
    * <ul>
    * <li>Rule 1 (containment): one space is fully contained in the other; return the larger.</li>
-   * <li>Rule 2 (adjacent boxes): agreeing on all-but-one dim and the remaining dim's ranges
-   * overlap or are adjacent; return the space with the merged dim's range.</li>
+   * <li>Rule 2 (adjacent boxes): agreeing on all-but-one dim and the remaining dim's ranges overlap
+   * or are adjacent; return the space with the merged dim's range.</li>
    * </ul>
    */
   public Optional<KeySpace> unionIfMergeable(KeySpace other) {
@@ -209,8 +207,10 @@ public final class KeySpace {
     // the intersection is computed as a non-empty backward range rather than
     // EMPTY_RANGE, so the check below would incorrectly fall through to union. Detect
     // this shape explicitly.
-    if (a.isSingleKey() && b.isSingleKey()
-      && !java.util.Arrays.equals(a.getLowerRange(), b.getLowerRange())) {
+    if (
+      a.isSingleKey() && b.isSingleKey()
+        && !java.util.Arrays.equals(a.getLowerRange(), b.getLowerRange())
+    ) {
       return Optional.empty();
     }
     if (a.intersect(b) == KeyRange.EMPTY_RANGE && !isAdjacent(a, b)) {
@@ -222,9 +222,8 @@ public final class KeySpace {
   }
 
   /**
-   * Two 1-D ranges are adjacent when the upper bound of one equals the lower bound of the
-   * other and exactly one side is inclusive (so together they cover the shared endpoint
-   * exactly once).
+   * Two 1-D ranges are adjacent when the upper bound of one equals the lower bound of the other and
+   * exactly one side is inclusive (so together they cover the shared endpoint exactly once).
    */
   private static boolean isAdjacent(KeyRange a, KeyRange b) {
     return adjacentOneWay(a, b) || adjacentOneWay(b, a);
@@ -327,11 +326,11 @@ public final class KeySpace {
   }
 
   /**
-   * A hashable representative of {@code this}'s dim tuple with position {@code wildcard}
-   * excluded. Two spaces share a signature iff they agree on every dim except possibly
-   * {@code wildcard} — the exact precondition for rule 2 of {@link #unionIfMergeable}.
-   * Used by {@link KeySpaceList#mergeToFixpoint} to group mergeable spaces in O(K) via a
-   * hash map, avoiding the naive O(K²) pair scan.
+   * A hashable representative of {@code this}'s dim tuple with position {@code wildcard} excluded.
+   * Two spaces share a signature iff they agree on every dim except possibly {@code wildcard} — the
+   * exact precondition for rule 2 of {@link #unionIfMergeable}. Used by
+   * {@link KeySpaceList#mergeToFixpoint} to group mergeable spaces in O(K) via a hash map, avoiding
+   * the naive O(K²) pair scan.
    */
   public Signature signatureExcluding(int wildcard) {
     return new Signature(dims, wildcard, empty);
@@ -369,8 +368,10 @@ public final class KeySpace {
         return false;
       }
       Signature that = (Signature) o;
-      if (that.hash != this.hash || that.wildcard != this.wildcard
-        || that.empty != this.empty || that.dims.length != this.dims.length) {
+      if (
+        that.hash != this.hash || that.wildcard != this.wildcard || that.empty != this.empty
+          || that.dims.length != this.dims.length
+      ) {
         return false;
       }
       for (int i = 0; i < dims.length; i++) {

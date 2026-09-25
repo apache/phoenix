@@ -40,6 +40,7 @@ import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -238,16 +239,59 @@ public class UnionPlan implements QueryPlan {
     String abstractExplainPlan = "UNION ALL OVER " + this.plans.size() + " QUERIES";
     builder.setAbstractExplainPlan(abstractExplainPlan);
     steps.add(abstractExplainPlan);
-    ResultIterator iterator = iterator();
-    iterator.explain(steps, builder);
-    // Indent plans steps nested under union, except last client-side merge/concat step (if there is
-    // one)
-    int offset =
-      !orderBy.getOrderByExpressions().isEmpty() && limit != null ? 2 : limit != null ? 1 : 0;
-    for (int i = 1; i < steps.size() - offset; i++) {
-      steps.set(i, "    " + steps.get(i));
+    // Carry the requested EXPLAIN options down to each branch so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    for (QueryPlan plan : plans) {
+      plan.getContext().setExplainOptions(getContext().getExplainOptions());
+    }
+    // Compose each branch from its own getExplainPlan() so the full sub-plan structure of every
+    // branch is preserved and explaining the union does not trigger sub-plan execution.
+    UnionResultIterators.explainBranches(plans, steps, builder);
+    addUnionTailLines(steps, builder);
+    if (getContext().isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
     }
     return new ExplainPlan(steps, builder.build());
+  }
+
+  /**
+   * Appends the client-side merge/offset/limit lines that follow the union branches, mirroring the
+   * iterator chain assembled in {@link #iterator(ParallelScanGrouper, Scan)}. These lines stay at
+   * column 0, after the indented branch steps.
+   */
+  private void addUnionTailLines(List<String> steps, ExplainPlanAttributesBuilder builder) {
+    if (!orderBy.isEmpty() || this.supportOrderByOptimize) {
+      String mergeSort = "CLIENT MERGE SORT";
+      steps.add(mergeSort);
+      builder.setClientSortAlgo(mergeSort);
+      builder.addClientStep(mergeSort);
+      if (offset != null && offset > 0) {
+        String step = "CLIENT OFFSET " + offset;
+        steps.add(step);
+        builder.setClientOffset(offset);
+        builder.addClientStep(step);
+      }
+      if (limit != null && limit > 0) {
+        String step = "CLIENT LIMIT " + limit;
+        steps.add(step);
+        builder.setClientRowLimit(limit);
+        builder.addClientStep(step);
+      }
+    } else {
+      if (offset != null) {
+        String step = "CLIENT OFFSET " + offset;
+        steps.add(step);
+        builder.setClientOffset(offset);
+        builder.addClientStep(step);
+      }
+      if (limit != null) {
+        String step = "CLIENT " + limit + " ROW LIMIT";
+        steps.add(step);
+        builder.setClientRowLimit(limit);
+        builder.addClientStep(step);
+      }
+    }
   }
 
   @Override

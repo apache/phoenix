@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -33,11 +35,8 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -285,11 +284,7 @@ public class HBaseScanMetricsIT extends BaseTest {
       stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
       conn.commit();
       String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'b1'";
-      ExplainPlan explainPlan =
-        stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql).getExplainPlan();
-      ExplainPlanAttributes planAttributes = explainPlan.getPlanStepsAsAttributes();
-      String tableNameFromExplainPlan = planAttributes.getTableName();
-      Assert.assertEquals(indexName, tableNameFromExplainPlan);
+      assertPlan(conn, sql).table(indexName);
       ResultSet rs = stmt.executeQuery(sql);
       assertOnReadsFromMemstore(indexName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));
@@ -316,11 +311,7 @@ public class HBaseScanMetricsIT extends BaseTest {
       stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1', 'c2')");
       conn.commit();
       String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'b1'";
-      ExplainPlan explainPlan =
-        stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql).getExplainPlan();
-      ExplainPlanAttributes planAttributes = explainPlan.getPlanStepsAsAttributes();
-      String tableNameFromExplainPlan = planAttributes.getTableName();
-      Assert.assertEquals(indexName, tableNameFromExplainPlan);
+      assertPlan(conn, sql).table(indexName);
       ResultSet rs = stmt.executeQuery(sql);
       assertOnReadsFromMemstore(indexName, getQueryReadMetrics(rs));
       TestUtil.flush(utility, TableName.valueOf(tableName));

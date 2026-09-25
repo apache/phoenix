@@ -514,9 +514,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
     explainPlanAttributesBuilder.setClientOffset(offset);
     explainPlanAttributesBuilder.setClientRowLimit(limit);
     explainPlanAttributesBuilder.setClientSortedBy(orderByExpressions.toString());
-    planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
+    String step = "CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
       + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY "
-      + orderByExpressions.toString());
+      + orderByExpressions.toString();
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

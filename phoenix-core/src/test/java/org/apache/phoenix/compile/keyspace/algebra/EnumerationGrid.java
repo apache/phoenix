@@ -19,7 +19,6 @@ package org.apache.phoenix.compile.keyspace.algebra;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -27,33 +26,34 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Builds a row-enumeration grid for a given {@link AbstractExpression} tree. Walks the
- * tree collecting per-dim literal values, then for each dim produces a small candidate set
- * <em>around</em> those literals — literal-ε, literal, literal+ε — so every boundary
- * condition in the predicate gets exercised by enumeration.
+ * Builds a row-enumeration grid for a given {@link AbstractExpression} tree. Walks the tree
+ * collecting per-dim literal values, then for each dim produces a small candidate set
+ * <em>around</em> those literals — literal-ε, literal, literal+ε — so every boundary condition in
+ * the predicate gets exercised by enumeration.
  * <p>
  * The strategy is type-aware:
  * <ul>
  * <li>{@link Long} / {@link Integer}: literals themselves plus ±1.</li>
  * <li>{@link BigDecimal}: literals plus ±1.</li>
- * <li>{@link String}: literals plus one character less (`"pk_9"` → `"pk_8"`, `"pk_9"`,
- * `"pk_a"`) via character increment/decrement on the last char. Strings are awkward
- * because the "next string" depends on ordering, so we use: literal, stripped-last-char,
- * last-char-plus-one (where meaningful).</li>
+ * <li>{@link String}: literals plus one character less (`"pk_9"` → `"pk_8"`, `"pk_9"`, `"pk_a"`)
+ * via character increment/decrement on the last char. Strings are awkward because the "next string"
+ * depends on ordering, so we use: literal, stripped-last-char, last-char-plus-one (where
+ * meaningful).</li>
  * </ul>
- * For dims with no literal in the expression (everything-everything cases), we include a
- * single sentinel value per type so enumeration still produces rows.
+ * For dims with no literal in the expression (everything-everything cases), we include a single
+ * sentinel value per type so enumeration still produces rows.
  * <p>
- * Grid size is bounded by {@code maxPerDim^nPk}. Callers should check via
- * {@link #estimateSize} before building.
+ * Grid size is bounded by {@code maxPerDim^nPk}. Callers should check via {@link #estimateSize}
+ * before building.
  */
 public final class EnumerationGrid {
 
-  private EnumerationGrid() {}
+  private EnumerationGrid() {
+  }
 
   /**
-   * Build a per-dim list of candidate values. Each sublist is sorted and deduplicated.
-   * Empty dims (no literal seen) get one placeholder.
+   * Build a per-dim list of candidate values. Each sublist is sorted and deduplicated. Empty dims
+   * (no literal seen) get one placeholder.
    */
   public static List<List<Object>> build(AbstractExpression expr, int nPk) {
     List<Set<Object>> perDim = new ArrayList<>(nPk);
@@ -68,7 +68,7 @@ public final class EnumerationGrid {
       if (values.isEmpty()) {
         // Dim has no literal; use a single placeholder. Pick a Long — works for numeric
         // dims and enumerates as anything for unconstrained dims.
-        out.add(java.util.Collections.<Object>singletonList(0L));
+        out.add(java.util.Collections.<Object> singletonList(0L));
         continue;
       }
       Set<Object> expanded = new TreeSet<>(AnyComparator.INSTANCE);
@@ -79,7 +79,7 @@ public final class EnumerationGrid {
         Object plus = perturbUp(v);
         if (plus != null) expanded.add(plus);
       }
-      out.add(Collections.<Object>unmodifiableList(new ArrayList<>(expanded)));
+      out.add(Collections.<Object> unmodifiableList(new ArrayList<>(expanded)));
     }
     return out;
   }
@@ -103,11 +103,13 @@ public final class EnumerationGrid {
       return;
     }
     if (expr instanceof AbstractExpression.And) {
-      for (AbstractExpression c : ((AbstractExpression.And) expr).children) collect(c, perDim);
+      for (AbstractExpression c : ((AbstractExpression.And) expr).children)
+        collect(c, perDim);
       return;
     }
     if (expr instanceof AbstractExpression.Or) {
-      for (AbstractExpression c : ((AbstractExpression.Or) expr).children) collect(c, perDim);
+      for (AbstractExpression c : ((AbstractExpression.Or) expr).children)
+        collect(c, perDim);
       return;
     }
     // Unknown contributes nothing.
@@ -142,8 +144,8 @@ public final class EnumerationGrid {
   }
 
   /**
-   * Compares arbitrary {@link Comparable}s, tolerating heterogeneous types within a dim
-   * (e.g. a BigDecimal literal and an Integer perturbation).
+   * Compares arbitrary {@link Comparable}s, tolerating heterogeneous types within a dim (e.g. a
+   * BigDecimal literal and an Integer perturbation).
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
   private enum AnyComparator implements java.util.Comparator<Object> {

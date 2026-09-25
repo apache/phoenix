@@ -185,21 +185,20 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
   private static final String TENANT_PREFIX = "Txt00tst1";
 
   /**
-   * Returns true when the test is running under the v2 key-space optimizer. Tests whose
-   * expected scan bytes differ between v1 and v2 (because v2 emits per-dim ranges while
-   * v1 encodes compound RVC ranges as a single slot with slotSpan > 0) branch on this
-   * flag to assert the appropriate shape for the optimizer currently in effect.
-   * Semantically equivalent: both versions scan the same logical row range, with v2
-   * sometimes scanning slightly more and relying on the residual filter.
+   * Returns true when the test is running under the v2 key-space optimizer. Tests whose expected
+   * scan bytes differ between v1 and v2 (because v2 emits per-dim ranges while v1 encodes compound
+   * RVC ranges as a single slot with slotSpan > 0) branch on this flag to assert the appropriate
+   * shape for the optimizer currently in effect. Semantically equivalent: both versions scan the
+   * same logical row range, with v2 sometimes scanning slightly more and relying on the residual
+   * filter.
    */
   private static Boolean v2OptimizerCached = null;
 
   /**
    * Trailing separator byte that V2's compound emission preserves and V1's per-slot
-   * {@code ScanUtil.setKey} path strips. Used as the last argument to
-   * {@code ByteUtil.concat} in tests that assert compound-trailing-PK scan rows so the
-   * single source line expresses both the V1 form (empty) and the V2 form (the SEP
-   * byte) without an explicit branch.
+   * {@code ScanUtil.setKey} path strips. Used as the last argument to {@code ByteUtil.concat} in
+   * tests that assert compound-trailing-PK scan rows so the single source line expresses both the
+   * V1 form (empty) and the V2 form (the SEP byte) without an explicit branch.
    */
   protected static byte[] v2OptionalSep() {
     return isV2Optimizer() ? QueryConstants.SEPARATOR_BYTE_ARRAY : ByteUtil.EMPTY_BYTE_ARRAY;
@@ -404,8 +403,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         scan.getStartRow().length >= 8);
       // Leading byte of k1 should be the marker for value 1 (matches v1).
       for (int i = 0; i < 7; i++) {
-        assertEquals("leading k1 byte " + i + " differs on startRow",
-          startRow[i], scan.getStartRow()[i]);
+        assertEquals("leading k1 byte " + i + " differs on startRow", startRow[i],
+          scan.getStartRow()[i]);
       }
       assertTrue("stopRow should be non-empty", scan.getStopRow().length > 0);
     } else {
@@ -654,9 +653,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -681,9 +679,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -707,9 +704,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -733,9 +729,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -759,9 +754,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     assertTrue(scan.includeStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
@@ -786,9 +780,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -812,9 +805,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -882,9 +874,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -908,9 +899,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // V2 emits a compound scan slot with slotSpan > 0, which bypasses ScanUtil.setKey's
     // trailing-SEP-trim path; the extra trailing SEP is semantically identical (same row
     // set returned by HBase) but byte-different from V1's per-slot layout.
-    byte[] startRow =
-      ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst), QueryConstants.SEPARATOR_BYTE_ARRAY,
-        PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
+    byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
+      QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host), v2OptionalSep());
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),
       QueryConstants.SEPARATOR_BYTE_ARRAY, PVarchar.INSTANCE.toBytes(host),
@@ -1005,11 +995,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       // row differs slightly because v2's per-dim encoding doesn't emit the
       // nextKey-padded single-slot stop the way v1 does. Scan width is equivalent.
       assertEquals(30, scan.getStartRow().length);
-      byte[] expectedStartPrefix = StringUtil.padChar(
-        PVarchar.INSTANCE.toBytes(tenantId.substring(0, 3)), 15);
+      byte[] expectedStartPrefix =
+        StringUtil.padChar(PVarchar.INSTANCE.toBytes(tenantId.substring(0, 3)), 15);
       for (int i = 0; i < 15; i++) {
-        assertEquals("start row byte " + i + " (org_id prefix) must match",
-          expectedStartPrefix[i], scan.getStartRow()[i]);
+        assertEquals("start row byte " + i + " (org_id prefix) must match", expectedStartPrefix[i],
+          scan.getStartRow()[i]);
       }
     } else {
       assertNotNull(scan.getFilter());
@@ -1394,18 +1384,17 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Characterization test for §11.3 of docs/where-optimizer-v2.md (fragility #2):
-   * RVC-IN with ≥3 tuples on a PK where a non-trailing VARCHAR column is DESC.
-   * The concern: {@code ScanUtil.getMinKey} serializes an internal separator byte between
-   * a DESC VARCHAR field and the next field; if the separator handling is wrong, the
-   * compound bytes emitted by V2 diverge from what downstream SkipScanFilter expects,
-   * which would silently drop matching rows.
+   * Characterization test for §11.3 of docs/where-optimizer-v2.md (fragility #2): RVC-IN with ≥3
+   * tuples on a PK where a non-trailing VARCHAR column is DESC. The concern:
+   * {@code ScanUtil.getMinKey} serializes an internal separator byte between a DESC VARCHAR field
+   * and the next field; if the separator handling is wrong, the compound bytes emitted by V2
+   * diverge from what downstream SkipScanFilter expects, which would silently drop matching rows.
    * <p>
-   * The test asserts that the scan region is narrow (compound start/stop match the
-   * bounding tuples of the IN list) rather than an empty full-table scan, and that the
-   * number of emitted ranges equals the number of IN tuples. If a future regression
-   * re-introduces the double-separator issue on non-trailing DESC VARCHAR, this test
-   * will fail with either a wrong byte count or a full-table scan.
+   * The test asserts that the scan region is narrow (compound start/stop match the bounding tuples
+   * of the IN list) rather than an empty full-table scan, and that the number of emitted ranges
+   * equals the number of IN tuples. If a future regression re-introduces the double-separator issue
+   * on non-trailing DESC VARCHAR, this test will fail with either a wrong byte count or a
+   * full-table scan.
    */
   @Test
   public void testRvcInListWithNonTrailingVarcharDesc() throws SQLException {
@@ -1413,9 +1402,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     String tableName = generateUniqueName();
     // PK: (id1 VARCHAR ASC, id2 VARCHAR DESC, id3 VARCHAR ASC) — DESC is on the middle
     // variable-length column, the exact shape §11.3 describes as fragile.
-    conn.createStatement().execute("CREATE TABLE " + tableName
-      + " (id1 VARCHAR NOT NULL, id2 VARCHAR NOT NULL, id3 VARCHAR NOT NULL, v VARCHAR "
-      + "CONSTRAINT pk PRIMARY KEY (id1, id2 DESC, id3))");
+    conn.createStatement()
+      .execute("CREATE TABLE " + tableName
+        + " (id1 VARCHAR NOT NULL, id2 VARCHAR NOT NULL, id3 VARCHAR NOT NULL, v VARCHAR "
+        + "CONSTRAINT pk PRIMARY KEY (id1, id2 DESC, id3))");
     String query = "SELECT * FROM " + tableName + " WHERE (id1, id2, id3) IN "
       + "(('a', 'x', '1'), ('a', 'x', '2'), ('b', 'y', '3'), ('c', 'z', '4'))";
     StatementContext context = compileStatement(query);
@@ -1440,34 +1430,32 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // list is 'a'); scan stop must have a leading byte at or past 'c'. Without this, the
     // compound separator bug on non-trailing DESC VARCHAR could produce a start row that
     // skips past 'a'-rows.
-    assertEquals(
-      "Scan start row must have 'a' as leading byte; got: "
-        + Bytes.toStringBinary(scan.getStartRow()),
-      (byte) 'a', scan.getStartRow()[0]);
+    assertEquals("Scan start row must have 'a' as leading byte; got: "
+      + Bytes.toStringBinary(scan.getStartRow()), (byte) 'a', scan.getStartRow()[0]);
     assertTrue(
-      "Scan stop row leading byte must be >= 'c'; got: "
-        + Bytes.toStringBinary(scan.getStopRow()),
+      "Scan stop row leading byte must be >= 'c'; got: " + Bytes.toStringBinary(scan.getStopRow()),
       scan.getStopRow()[0] >= (byte) 'c');
   }
 
   /**
-   * Characterization test for §11.3 of docs/where-optimizer-v2.md (fragility #1):
-   * RVC-IN on a PK where the leading column is unconstrained (middle-EVERYTHING gap) AND
-   * a trailing VARCHAR column is DESC. Routing gates in KeyRangeExtractor push this
-   * shape to emitV1Projection, which could — in principle — lose RVC tuple association
-   * because per-column projection produces a cartesian product across columns.
+   * Characterization test for §11.3 of docs/where-optimizer-v2.md (fragility #1): RVC-IN on a PK
+   * where the leading column is unconstrained (middle-EVERYTHING gap) AND a trailing VARCHAR column
+   * is DESC. Routing gates in KeyRangeExtractor push this shape to emitV1Projection, which could —
+   * in principle — lose RVC tuple association because per-column projection produces a cartesian
+   * product across columns.
    * <p>
-   * The residual filter must still enforce the original IN predicate so any false
-   * positives introduced by the per-column cartesian are rejected at scan time. This
-   * test asserts a residual filter exists when the compound path isn't taken.
+   * The residual filter must still enforce the original IN predicate so any false positives
+   * introduced by the per-column cartesian are rejected at scan time. This test asserts a residual
+   * filter exists when the compound path isn't taken.
    */
   @Test
   public void testRvcInListMiddleGapWithTrailingVarcharDesc() throws SQLException {
     Connection conn = DriverManager.getConnection(getUrl());
     String tableName = generateUniqueName();
-    conn.createStatement().execute("CREATE TABLE " + tableName
-      + " (id1 VARCHAR NOT NULL, id2 VARCHAR NOT NULL, id3 VARCHAR NOT NULL, v VARCHAR "
-      + "CONSTRAINT pk PRIMARY KEY (id1, id2, id3 DESC))");
+    conn.createStatement()
+      .execute("CREATE TABLE " + tableName
+        + " (id1 VARCHAR NOT NULL, id2 VARCHAR NOT NULL, id3 VARCHAR NOT NULL, v VARCHAR "
+        + "CONSTRAINT pk PRIMARY KEY (id1, id2, id3 DESC))");
     // No constraint on id1 (leading gap); RVC-IN on (id2, id3) with DESC trailing.
     String query = "SELECT * FROM " + tableName + " WHERE (id2, id3) IN "
       + "(('x', '1'), ('y', '2'), ('z', '3'))";
@@ -1477,8 +1465,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // prefix). Without tuple-correlation, per-column cartesian produces {x,y,z} × {1,2,3}
     // = 9 possible combinations, more than the 3 original tuples. The residual filter
     // must exist to reject the 6 false positives.
-    assertNotNull("Residual filter must enforce the RVC-IN predicate when compound emission"
-      + " is not taken, to avoid returning false-positive rows from the per-column cartesian",
+    assertNotNull(
+      "Residual filter must enforce the RVC-IN predicate when compound emission"
+        + " is not taken, to avoid returning false-positive rows from the per-column cartesian",
       scan.getFilter());
   }
 
@@ -1866,10 +1855,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       assertTrue(filter instanceof FilterList);
       ScanRanges scanRanges = context.getScanRanges();
       assertEquals(2, scanRanges.getPointLookupCount());
-      byte[] expectedStart = ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId1),
-        PChar.INSTANCE.toBytes(entityId1));
-      byte[] expectedStop = ByteUtil.nextKey(ByteUtil.concat(
-        PChar.INSTANCE.toBytes(tenantId2), PChar.INSTANCE.toBytes(entityId2)));
+      byte[] expectedStart =
+        ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId1), PChar.INSTANCE.toBytes(entityId1));
+      byte[] expectedStop = ByteUtil.nextKey(
+        ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId2), PChar.INSTANCE.toBytes(entityId2)));
       assertArrayEquals(expectedStart, scan.getStartRow());
       assertArrayEquals(expectedStop, scan.getStopRow());
     } else {
@@ -1948,15 +1937,13 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // admit the same rows.
     List<List<KeyRange>> expectedRanges = isV2Optimizer()
       ? Collections.singletonList(Arrays.asList(
-        KeyRange.getKeyRange(
-          ByteUtil.concat(Bytes.toBytes("1"), new byte[] { 1 }), true,
+        KeyRange.getKeyRange(ByteUtil.concat(Bytes.toBytes("1"), new byte[] { 1 }), true,
           Bytes.toBytes("5"), false),
-        KeyRange.getKeyRange(
-          ByteUtil.concat(Bytes.toBytes("6"), new byte[] { 1 }), true,
+        KeyRange.getKeyRange(ByteUtil.concat(Bytes.toBytes("6"), new byte[] { 1 }), true,
           Bytes.toBytes("9"), false)))
-      : Collections.singletonList(Arrays.asList(
-        KeyRange.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("5"), false),
-        KeyRange.getKeyRange(Bytes.toBytes("6"), false, Bytes.toBytes("9"), false)));
+      : Collections.singletonList(
+        Arrays.asList(KeyRange.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("5"), false),
+          KeyRange.getKeyRange(Bytes.toBytes("6"), false, Bytes.toBytes("9"), false)));
     assertEquals(expectedRanges, ranges);
 
     stmt.close();
@@ -2120,8 +2107,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       assertArrayEquals(expectedStopRow, scan.getStopRow());
       SkipScanFilter skipScanFilter = (SkipScanFilter) filter;
       List<List<KeyRange>> skipScanRanges = Arrays.asList(Arrays.asList(
-        KeyRange.getKeyRange(
-          ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId1))),
+        KeyRange.getKeyRange(ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId),
+          PVarchar.INSTANCE.toBytes(entityId1))),
         KeyRange.getKeyRange(ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId),
           PVarchar.INSTANCE.toBytes(entityId2)))));
       assertEquals(skipScanRanges, skipScanFilter.getSlots());
@@ -2309,8 +2296,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // the residual filter enforces the lex-expanded RVC in both cases.
     byte[] expectedStartRow = isV2Optimizer()
       ? ByteUtil.concat(StringUtil.padChar(PVarchar.INSTANCE.toBytes(subStringTenantId), 15),
-        PVarchar.INSTANCE.toBytes(parentId),
-        PDate.INSTANCE.toBytes(createdDate))
+        PVarchar.INSTANCE.toBytes(parentId), PDate.INSTANCE.toBytes(createdDate))
       // V1 narrows only on the leading substr (3 bytes) and lets the RowKeyComparisonFilter
       // residual enforce the rest of the RVC.
       : PVarchar.INSTANCE.toBytes(subStringTenantId);
@@ -2376,13 +2362,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Characterization: RVC IN-list with a scalar function on the LHS leading child.
-   * V2's {@code collapseToSingleBoundingRange} produces a tight compound startRow
-   * anchored at the lex-smallest IN-tuple prefix (first 3 bytes of the smallest
-   * organization_id substring = 'a' + padding, then the concatenated parent_id).
-   * V1 similarly narrows via {@code ScalarFunction.newKeyPart}. The residual filter
-   * enforces the full predicate because the compound collapse is a bounding-range
-   * over-approximation.
+   * Characterization: RVC IN-list with a scalar function on the LHS leading child. V2's
+   * {@code collapseToSingleBoundingRange} produces a tight compound startRow anchored at the
+   * lex-smallest IN-tuple prefix (first 3 bytes of the smallest organization_id substring = 'a' +
+   * padding, then the concatenated parent_id). V1 similarly narrows via
+   * {@code ScalarFunction.newKeyPart}. The residual filter enforces the full predicate because the
+   * compound collapse is a bounding-range over-approximation.
    */
   @Test
   public void testRvcInListLeadingScalarFunction() throws SQLException {
@@ -2392,8 +2377,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     String p2 = "000000000000002";
     String query = "select * from entity_history where "
       + "(substr(organization_id, 1, 3), parent_id) IN ((?, ?), (?, ?))";
-    List<Object> binds =
-      Arrays.<Object> asList(o1.substring(0, 3), p1, o2.substring(0, 3), p2);
+    List<Object> binds = Arrays.<Object> asList(o1.substring(0, 3), p1, o2.substring(0, 3), p2);
     StatementContext context = compileStatement(query, binds);
     Scan scan = context.getScan();
     // Start row must begin with the lex-smallest LHS-first-byte across the IN-list
@@ -2407,9 +2391,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Characterization: RVC IN-list with scalar function on the LHS middle child.
-   * Same narrowing expectation as {@link #testRvcInListLeadingScalarFunction} but
-   * with a bare-PK leading column and the scalar function on position 1.
+   * Characterization: RVC IN-list with scalar function on the LHS middle child. Same narrowing
+   * expectation as {@link #testRvcInListLeadingScalarFunction} but with a bare-PK leading column
+   * and the scalar function on position 1.
    */
   @Test
   public void testRvcInListMiddleScalarFunction() throws SQLException {
@@ -2421,8 +2405,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     Date d2 = new Date(System.currentTimeMillis() + MILLIS_IN_DAY);
     String query = "select * from entity_history where "
       + "(organization_id, substr(parent_id, 1, 3), created_date) IN ((?,?,?), (?,?,?))";
-    List<Object> binds = Arrays.<Object> asList(o1, p1.substring(0, 3), d1, o2,
-      p2.substring(0, 3), d2);
+    List<Object> binds =
+      Arrays.<Object> asList(o1, p1.substring(0, 3), d1, o2, p2.substring(0, 3), d2);
     StatementContext context = compileStatement(query, binds);
     Scan scan = context.getScan();
     // Leading column is organization_id bare-PK; lex-smallest is "abc000000000001",
@@ -2516,8 +2500,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     } else {
       assertNull(filter);
-      byte[] expectedStartRow = ByteUtil.concat(new byte[15],
-        ByteUtil.previousKey(PChar.INSTANCE.toBytes(parentId)), PDate.INSTANCE.toBytes(createdDate));
+      byte[] expectedStartRow =
+        ByteUtil.concat(new byte[15], ByteUtil.previousKey(PChar.INSTANCE.toBytes(parentId)),
+          PDate.INSTANCE.toBytes(createdDate));
       assertArrayEquals(expectedStartRow, scan.getStartRow());
       assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -2680,7 +2665,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // Start row always begins with pk1='a'.
     assertTrue("startRow should start with 'a', got " + Bytes.toStringBinary(actualStart),
       actualStart.length >= 1 && actualStart[0] == 'a');
-    byte[] expectedStop = ByteUtil.concat(pk1Bytes, ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY));
+    byte[] expectedStop =
+      ByteUtil.concat(pk1Bytes, ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY));
     assertArrayEquals(expectedStop, scan.getStopRow());
   }
 
@@ -2864,8 +2850,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     byte[] expectedStop = isV2Optimizer()
       ? ByteUtil.nextKey(ByteUtil.concat(PChar.INSTANCE.toBytes(secondOrgId),
         PChar.INSTANCE.toBytes(secondParentId)))
-      : ByteUtil.concat(PChar.INSTANCE.toBytes(secondOrgId),
-        PChar.INSTANCE.toBytes(secondParentId), QueryConstants.SEPARATOR_BYTE_ARRAY);
+      : ByteUtil.concat(PChar.INSTANCE.toBytes(secondOrgId), PChar.INSTANCE.toBytes(secondParentId),
+        QueryConstants.SEPARATOR_BYTE_ARRAY);
     assertArrayEquals(expectedStop, scan.getStopRow());
   }
 
@@ -3340,10 +3326,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // residual filter. V2 (after the DESC coerce-unwrap landed in
     // KeySpaceExpressionVisitor) reaches the same compound start row but defensively
     // retains the RVC residual.
-    byte[] expectedStartRow = ByteUtil.nextKey(ByteUtil.concat(
-      PChar.INSTANCE.toBytes(tenantId),
-      PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC),
-      PChar.INSTANCE.toBytes("04", SortOrder.DESC)));
+    byte[] expectedStartRow = ByteUtil.nextKey(ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId),
+      PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC), PChar.INSTANCE.toBytes("04", SortOrder.DESC)));
     if (isV2Optimizer()) {
       assertNotNull(scan.getFilter());
     } else {
@@ -3369,10 +3353,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         + "',2.0, '04')\n" + "ORDER BY score DESC, entity_id DESC";
     Scan scan = compileStatement(query).getScan();
     // Full-RVC variant of testPartialRVCWithLeadingPKEqDesc — same 12-byte clip.
-    byte[] expectedStartRow = ByteUtil.nextKey(ByteUtil.concat(
-      PChar.INSTANCE.toBytes(tenantId),
-      PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC),
-      PChar.INSTANCE.toBytes("04", SortOrder.DESC)));
+    byte[] expectedStartRow = ByteUtil.nextKey(ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId),
+      PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC), PChar.INSTANCE.toBytes("04", SortOrder.DESC)));
     if (isV2Optimizer()) {
       assertNotNull(scan.getFilter());
     } else {
@@ -3435,8 +3417,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         // residual filter rejects rows failing the full IN. V1 covers exactly 2 rows.
         assertTrue("v2 should emit at least one slot", rowKeyRanges.size() >= 1);
       } else {
-        assertEquals(Arrays.asList(Arrays.asList(KeyRange.POINT.apply(PChar.INSTANCE.toBytes("ABC")),
-          KeyRange.POINT.apply(PChar.INSTANCE.toBytes("BBE")))), rowKeyRanges);
+        assertEquals(
+          Arrays.asList(Arrays.asList(KeyRange.POINT.apply(PChar.INSTANCE.toBytes("ABC")),
+            KeyRange.POINT.apply(PChar.INSTANCE.toBytes("BBE")))),
+          rowKeyRanges);
         assertArrayEquals(scan.getStartRow(), PChar.INSTANCE.toBytes("ABC"));
         assertArrayEquals(scan.getStopRow(), PChar.INSTANCE.toBytes("BBF"));
       }
@@ -3526,13 +3510,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
           KeyRange.getKeyRange(
             ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(8)), true,
             ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(9)), false)))
-        : Arrays.asList(
-          Arrays.asList(KeyRange.POINT.apply(PInteger.INSTANCE.toBytes(2))),
+        : Arrays.asList(Arrays.asList(KeyRange.POINT.apply(PInteger.INSTANCE.toBytes(2))),
           Arrays.asList(
-            KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true,
-              PInteger.INSTANCE.toBytes(6), false),
-            KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true,
-              PInteger.INSTANCE.toBytes(9), false)));
+            KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6),
+              false),
+            KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9),
+              false)));
       assertEquals(expectedRanges, rowKeyRanges);
 
       assertArrayEquals(scan.getStartRow(),
@@ -3683,18 +3666,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       // all pk2) and the outer AND with the tautology on pk2 leaves only pk1
       // narrowing. V1 emits a trailing EVERYTHING slot for pk2; V2 doesn't (it sees
       // pk2 as unconstrained and stops emitting at the last narrowed dim).
-      List<List<KeyRange>> expected9 = isV2Optimizer()
-        ? Arrays.asList(Arrays.asList(
-          KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true,
-            PInteger.INSTANCE.toBytes(6), false),
-          KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true,
-            PInteger.INSTANCE.toBytes(9), false)))
-        : Arrays.asList(Arrays.asList(
-          KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true,
-            PInteger.INSTANCE.toBytes(6), false),
-          KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true,
-            PInteger.INSTANCE.toBytes(9), false)),
-          Arrays.asList(KeyRange.EVERYTHING_RANGE));
+      List<
+        List<
+          KeyRange>> expected9 =
+            isV2Optimizer()
+              ? Arrays.asList(Arrays.asList(
+                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true,
+                  PInteger.INSTANCE.toBytes(6), false),
+                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true,
+                  PInteger.INSTANCE.toBytes(9), false)))
+              : Arrays.asList(
+                Arrays.asList(
+                  KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true,
+                    PInteger.INSTANCE.toBytes(6), false),
+                  KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true,
+                    PInteger.INSTANCE.toBytes(9), false)),
+                Arrays.asList(KeyRange.EVERYTHING_RANGE));
       assertEquals(expected9, rowKeyRanges);
       assertArrayEquals(scan.getStartRow(), PInteger.INSTANCE.toBytes(4));
       assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(9));
@@ -3783,8 +3770,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
       // because the compound shape isn't preserved per-row — each (object_id,
       // object_version) pair is represented as two slot entries rather than one
       // compound point.
-      assertTrue(scan.getFilter() instanceof SkipScanFilter
-        || scan.getFilter() instanceof FilterList);
+      assertTrue(
+        scan.getFilter() instanceof SkipScanFilter || scan.getFilter() instanceof FilterList);
     } finally {
       if (conn != null) {
         conn.close();
@@ -4268,8 +4255,19 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
           // is unaffected: the extracted-nodes set is used solely to prune the
           // residual filter, and v2's set is a strict superset that contains every
           // predicate v1 extracts — producing the same (or strictly tighter) residual.
-          assertTrue("v2 should extract at least the expected count",
-            extractedNodes.size() >= expectedExtractedNodes);
+          if (o < 3) {
+            assertTrue(
+              "v2 should extract at least the expected count: expected=" + expectedExtractedNodes
+                + ", actual=" + extractedNodes.size(),
+              extractedNodes.size() >= expectedExtractedNodes);
+          } else {
+            // At o=3 (5000 ORs), the cartesian product 26 * 5001 = 130,026 exceeds
+            // KeySpaceList.CARTESIAN_BOUND (65,536), so V2 widens trailing dims to
+            // prevent memory/work explosion, marking keySpaceList as approximated.
+            // When approximated, V2 conservatively retains all predicates in the
+            // residual filter (extractedNodes is empty) for strict safety.
+            assertTrue(extractedNodes.isEmpty() || extractedNodes.size() >= expectedExtractedNodes);
+          }
         } else {
           assertEquals(
             String.format("Unexpected results expected = %d, actual = %d extracted nodes",

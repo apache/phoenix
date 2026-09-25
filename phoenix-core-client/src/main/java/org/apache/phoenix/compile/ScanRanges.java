@@ -772,26 +772,27 @@ public class ScanRanges {
         // pinned to point values and a trailing run of dims expresses an open or
         // half-open range. The decomposition must recognize three byte-shape cases:
         //
-        //  (a) lower and upper agree at every field up through {@code pkPosition} —
-        //      classical V1 form for compound equality with a trailing range. Each
-        //      pre-divergence field is equality.
-        //  (b) lower and upper diverge at field f, but {@code upper} is exactly
-        //      {@code lower[..f_end]} with the last byte bumped (i.e., upper is
-        //      `nextKey` of the cumulative lower prefix ending at f) and upper has no
-        //      bytes past f. f is equality — the upper expresses an exclusive next-
-        //      prefix boundary, equivalent to a point on field f. Fields beyond f in
-        //      lower contribute the range portion. This is the V2 compound-emission
-        //      shape for "equality on leading dims + range on trailing dim(s)".
-        //  (c) lower and upper diverge at field f and case (b) doesn't hold —
-        //      f is the first range field; equality holds for fields strictly less
-        //      than f.
+        // (a) lower and upper agree at every field up through {@code pkPosition} —
+        // classical V1 form for compound equality with a trailing range. Each
+        // pre-divergence field is equality.
+        // (b) lower and upper diverge at field f, but {@code upper} is exactly
+        // {@code lower[..f_end]} with the last byte bumped (i.e., upper is
+        // `nextKey` of the cumulative lower prefix ending at f) and upper has no
+        // bytes past f. f is equality — the upper expresses an exclusive next-
+        // prefix boundary, equivalent to a point on field f. Fields beyond f in
+        // lower contribute the range portion. This is the V2 compound-emission
+        // shape for "equality on leading dims + range on trailing dim(s)".
+        // (c) lower and upper diverge at field f and case (b) doesn't hold —
+        // f is the first range field; equality holds for fields strictly less
+        // than f.
         if (slotSpan[i] == 0 || schema == null) {
           return false;
         }
         byte[] lower = r.getLowerRange();
         byte[] upper = r.getUpperRange();
-        if (lower == KeyRange.UNBOUND || upper == KeyRange.UNBOUND
-          || lower == null || upper == null) {
+        if (
+          lower == KeyRange.UNBOUND || upper == KeyRange.UNBOUND || lower == null || upper == null
+        ) {
           return false;
         }
         int slotLeadingPk = pkOffset;
@@ -809,8 +810,10 @@ public class ScanRanges {
             // run ended earlier; {@code fieldPos} is in the range portion.
             return false;
           }
-          if (Bytes.equals(lo.get(), lo.getOffset(), lo.getLength(),
-            up.get(), up.getOffset(), up.getLength())) {
+          if (
+            Bytes.equals(lo.get(), lo.getOffset(), lo.getLength(), up.get(), up.getOffset(),
+              up.getLength())
+          ) {
             // Field equal in both bounds — this dim is pinned. Continue to next.
             continue;
           }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -34,8 +35,6 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -770,10 +769,7 @@ public class WhereOptimizerForArrayAnyIT extends WhereOptimizerForArrayAnyITBase
   }
 
   private void assertPointLookupsAreNotGenerated(PreparedStatement stmt) throws SQLException {
-    ExplainPlan explain =
-      stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+    assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("FULL SCAN");
   }
 
   private void assertPointLookupsAreGenerated(Statement stmt, String selectSql,

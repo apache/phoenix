@@ -323,7 +323,19 @@ public class UpgradeNamespaceIT extends ParallelStatsDisabledIT {
   public void assertTableUsed(Connection conn, String phoenixTableName, String hbaseTableName)
     throws SQLException {
     ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + phoenixTableName);
-    assertTrue(rs.next());
-    assertTrue(rs.getString(1).contains(hbaseTableName));
+    // The EXPLAIN output may prepend top-of-plan disclosure lines (e.g. TENANT '...') before the
+    // SCAN line that carries the physical HBase table name, so scan every row of the plan rather
+    // than only the first.
+    boolean found = false;
+    while (rs.next()) {
+      String step = rs.getString(1);
+      if (step != null && step.contains(hbaseTableName)) {
+        found = true;
+        break;
+      }
+    }
+    assertTrue(
+      "EXPLAIN of " + phoenixTableName + " did not reference physical table " + hbaseTableName,
+      found);
   }
 }

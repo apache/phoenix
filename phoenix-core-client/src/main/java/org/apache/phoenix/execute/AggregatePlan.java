@@ -330,7 +330,7 @@ public class AggregatePlan extends BaseQueryPlan {
     }
 
     if (having != null) {
-      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having);
+      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having, context);
     }
 
     if (statement.isDistinct() && statement.isAggregate()) { // Dedup on client if select distinct

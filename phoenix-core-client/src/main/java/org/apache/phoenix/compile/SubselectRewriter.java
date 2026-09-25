@@ -298,8 +298,8 @@ public class SubselectRewriter extends ParseNodeRewriter {
       newSelectAliasedNodes);
   }
 
-  public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection)
-    throws SQLException {
+  public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection,
+    StatementContext context) throws SQLException {
     TableNode from = select.getFrom();
     while (from != null && from instanceof DerivedTableNode) {
       DerivedTableNode derivedTable = (DerivedTableNode) from;
@@ -313,6 +313,9 @@ public class SubselectRewriter extends ParseNodeRewriter {
       SelectStatement ret = rewriter.flatten(select, subselect);
       if (ret == select) {
         break;
+      }
+      if (context != null) {
+        context.incrementDerivedTableFlattenCount();
       }
       select = ret;
       from = select.getFrom();

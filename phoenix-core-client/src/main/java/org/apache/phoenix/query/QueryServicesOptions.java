@@ -76,8 +76,6 @@ import static org.apache.phoenix.query.QueryServices.LOG_SAMPLE_RATE;
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
-import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_CARTESIAN_BOUND;
-import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
@@ -129,6 +127,8 @@ import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_CARTESIAN_BOUND;
+import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED;
 
 import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;

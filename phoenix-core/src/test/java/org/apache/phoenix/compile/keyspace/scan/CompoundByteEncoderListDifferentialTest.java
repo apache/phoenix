@@ -22,7 +22,6 @@ import static org.junit.Assert.assertArrayEquals;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.keyspace.KeySpace;
 import org.apache.phoenix.compile.keyspace.KeySpaceList;
@@ -41,34 +40,30 @@ import org.junit.Test;
 
 /**
  * Differential validation of {@link CompoundByteEncoder#encodeListLower} /
- * {@link CompoundByteEncoder#encodeListUpper} against a V1-equivalent reference
- * computation: the byte-lex-min of per-space {@code ScanUtil.getMinKey} outputs for the
- * lower bound, and the byte-lex-max of per-space {@code ScanUtil.getMaxKey} outputs for
- * the upper bound.
+ * {@link CompoundByteEncoder#encodeListUpper} against a V1-equivalent reference computation: the
+ * byte-lex-min of per-space {@code ScanUtil.getMinKey} outputs for the lower bound, and the
+ * byte-lex-max of per-space {@code ScanUtil.getMaxKey} outputs for the upper bound.
  * <p>
- * The target shape class here is OR-of-AND expansion of RVC-inequality — the class of
- * queries the single-space encoder can't express on its own. Each {@link KeySpaceList}
- * carries multiple {@link KeySpace}s representing one lex branch of the expansion. The
- * encoder's list-level output is the bounding envelope of the union; the reference
- * computation is the same thing computed by exercising V1's per-space getMinKey/getMaxKey
- * through {@link ScanUtil}.
+ * The target shape class here is OR-of-AND expansion of RVC-inequality — the class of queries the
+ * single-space encoder can't express on its own. Each {@link KeySpaceList} carries multiple
+ * {@link KeySpace}s representing one lex branch of the expansion. The encoder's list-level output
+ * is the bounding envelope of the union; the reference computation is the same thing computed by
+ * exercising V1's per-space getMinKey/getMaxKey through {@link ScanUtil}.
  * <p>
- * This mirrors the single-space differential test's methodology — if any shape here
- * diverges, it's either an encoder bug or a V1 edge case the encoder doesn't cover yet.
+ * This mirrors the single-space differential test's methodology — if any shape here diverges, it's
+ * either an encoder bug or a V1 edge case the encoder doesn't cover yet.
  */
 public class CompoundByteEncoderListDifferentialTest {
 
   private static final byte[] SEP = new byte[] { QueryConstants.SEPARATOR_BYTE };
 
   /**
-   * RVC inequality {@code (a, b) > (1, 5)} expanded to {@code a > 1 OR (a = 1 AND b > 5)}.
-   * Two spaces: one with {@code a > 1}, one with {@code a = 1 AND b > 5}.
+   * RVC inequality {@code (a, b) > (1, 5)} expanded to {@code a > 1 OR (a = 1 AND b > 5)}. Two
+   * spaces: one with {@code a > 1}, one with {@code a = 1 AND b > 5}.
    */
   @Test
   public void rvcGreaterThanExpanded() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     byte[] one = PInteger.INSTANCE.toBytes(1);
     byte[] five = PInteger.INSTANCE.toBytes(5);
 
@@ -88,9 +83,7 @@ public class CompoundByteEncoderListDifferentialTest {
    */
   @Test
   public void rvcGreaterOrEqualExpanded() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     byte[] one = PInteger.INSTANCE.toBytes(1);
     byte[] five = PInteger.INSTANCE.toBytes(5);
 
@@ -111,10 +104,8 @@ public class CompoundByteEncoderListDifferentialTest {
    */
   @Test
   public void rvcLessThanThreeTupleExpanded() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch =
+      schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     byte[] five = PInteger.INSTANCE.toBytes(5);
     byte[] seven = PInteger.INSTANCE.toBytes(7);
     byte[] three = PInteger.INSTANCE.toBytes(3);
@@ -142,11 +133,8 @@ public class CompoundByteEncoderListDifferentialTest {
    */
   @Test
   public void pinnedLeadingPlusRvcGreaterThan() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PLong.INSTANCE, 8));
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PInteger.INSTANCE, 4),
+      fixed(PVarchar.INSTANCE, null), fixed(PLong.INSTANCE, 8));
     byte[] c0 = Bytes.toBytes("c0");
     byte[] i5000 = PInteger.INSTANCE.toBytes(5000);
     byte[] pk0 = Bytes.toBytes("pk_0");
@@ -154,7 +142,8 @@ public class CompoundByteEncoderListDifferentialTest {
 
     KeyRange catEqC0 = KeyRange.getKeyRange(c0, true, c0, true);
     KeyRange scoreGt5000 = KeyRange.getKeyRange(i5000, false, KeyRange.UNBOUND, false);
-    KeySpace b1 = space(4, catEqC0, scoreGt5000, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE);
+    KeySpace b1 =
+      space(4, catEqC0, scoreGt5000, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE);
 
     KeyRange scoreEq5000 = KeyRange.getKeyRange(i5000, true, i5000, true);
     KeyRange pkGtPk0 = KeyRange.getKeyRange(pk0, false, KeyRange.UNBOUND, false);
@@ -169,14 +158,12 @@ public class CompoundByteEncoderListDifferentialTest {
   }
 
   /**
-   * OR of two equalities on leading column: {@code a = 1 OR a = 3}. Simple multi-space
-   * sanity — the envelope is {@code [1, nextKey(3))}.
+   * OR of two equalities on leading column: {@code a = 1 OR a = 3}. Simple multi-space sanity — the
+   * envelope is {@code [1, nextKey(3))}.
    */
   @Test
   public void disjointEqualitiesOnLeadingColumn() {
-    RowKeySchema sch = schema(
-      fixed(PInteger.INSTANCE, 4),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PInteger.INSTANCE, 4), fixed(PInteger.INSTANCE, 4));
     byte[] one = PInteger.INSTANCE.toBytes(1);
     byte[] three = PInteger.INSTANCE.toBytes(3);
 
@@ -194,9 +181,7 @@ public class CompoundByteEncoderListDifferentialTest {
    */
   @Test
   public void pointOrRange() {
-    RowKeySchema sch = schema(
-      fixed(PChar.INSTANCE, 3),
-      fixed(PInteger.INSTANCE, 4));
+    RowKeySchema sch = schema(fixed(PChar.INSTANCE, 3), fixed(PInteger.INSTANCE, 4));
     byte[] aaa = PChar.INSTANCE.toBytes("aaa");
     byte[] bbb = PChar.INSTANCE.toBytes("bbb");
     byte[] two = PInteger.INSTANCE.toBytes(2);
@@ -217,8 +202,8 @@ public class CompoundByteEncoderListDifferentialTest {
   // ------- helpers -------
 
   /**
-   * Reference: per-space V1 encoding via {@code ScanUtil.getMinKey}/{@code getMaxKey},
-   * then byte-lex-min/max across the list. Encoder output must match.
+   * Reference: per-space V1 encoding via {@code ScanUtil.getMinKey}/{@code getMaxKey}, then
+   * byte-lex-min/max across the list. Encoder output must match.
    */
   private static void assertListAgree(RowKeySchema schema, KeySpaceList list) {
     byte[] refLower = null;
@@ -245,10 +230,10 @@ public class CompoundByteEncoderListDifferentialTest {
     }
     byte[] encLower = CompoundByteEncoder.encodeListLower(schema, list, 0);
     byte[] encUpper = CompoundByteEncoder.encodeListUpper(schema, list, 0);
-    assertArrayEquals("list lower bytes must match per-space min of V1 getMinKey",
-      refLower, encLower);
-    assertArrayEquals("list upper bytes must match per-space max of V1 getMaxKey",
-      refUpper, encUpper);
+    assertArrayEquals("list lower bytes must match per-space min of V1 getMinKey", refLower,
+      encLower);
+    assertArrayEquals("list upper bytes must match per-space max of V1 getMaxKey", refUpper,
+      encUpper);
   }
 
   private static List<List<KeyRange>> toSlots(KeySpace space) {
@@ -275,16 +260,38 @@ public class CompoundByteEncoderListDifferentialTest {
 
   private static final class FieldDatum {
     final PDatum datum;
-    FieldDatum(PDatum datum) { this.datum = datum; }
+
+    FieldDatum(PDatum datum) {
+      this.datum = datum;
+    }
   }
 
   private static FieldDatum fixed(PDataType type, Integer maxLen) {
     return new FieldDatum(new PDatum() {
-      @Override public boolean isNullable() { return false; }
-      @Override public PDataType getDataType() { return type; }
-      @Override public Integer getMaxLength() { return maxLen; }
-      @Override public Integer getScale() { return null; }
-      @Override public SortOrder getSortOrder() { return SortOrder.ASC; }
+      @Override
+      public boolean isNullable() {
+        return false;
+      }
+
+      @Override
+      public PDataType getDataType() {
+        return type;
+      }
+
+      @Override
+      public Integer getMaxLength() {
+        return maxLen;
+      }
+
+      @Override
+      public Integer getScale() {
+        return null;
+      }
+
+      @Override
+      public SortOrder getSortOrder() {
+        return SortOrder.ASC;
+      }
     });
   }
 

@@ -24,27 +24,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * An immutable list of {@link KeySpace} instances representing one expression node's
- * contribution to the WHERE optimizer. The list is the closure of {@link KeySpace} under
- * OR: a single {@code KeySpace} is not sufficient because {@code OR} of two non-mergeable
- * spaces produces two spaces.
+ * An immutable list of {@link KeySpace} instances representing one expression node's contribution
+ * to the WHERE optimizer. The list is the closure of {@link KeySpace} under OR: a single
+ * {@code KeySpace} is not sufficient because {@code OR} of two non-mergeable spaces produces two
+ * spaces.
  * <p>
  * The algebra is:
  * <ul>
  * <li>{@link #and(KeySpaceList)} distributes AND over OR, then merges to fixpoint.</li>
  * <li>{@link #or(KeySpaceList)} concatenates and merges to fixpoint.</li>
  * </ul>
- * An empty list is unsatisfiable (the expression cannot be true). The "everything" list
- * is the singleton containing {@link KeySpace#everything(int)}.
+ * An empty list is unsatisfiable (the expression cannot be true). The "everything" list is the
+ * singleton containing {@link KeySpace#everything(int)}.
  */
 public final class KeySpaceList {
 
   private final List<KeySpace> spaces;
   private final int nDims;
   /**
-   * True when this list was produced by {@link #widenToBudget} (trailing dims replaced
-   * with EVERYTHING to stay under the cartesian bound). Residual filter must retain
-   * predicates for dropped dimensions.
+   * True when this list was produced by {@link #widenToBudget} (trailing dims replaced with
+   * EVERYTHING to stay under the cartesian bound). Residual filter must retain predicates for
+   * dropped dimensions.
    */
   private final boolean approximated;
 
@@ -63,12 +63,11 @@ public final class KeySpaceList {
   }
 
   public static KeySpaceList unsatisfiable(int nDims) {
-    return new KeySpaceList(nDims, Collections.<KeySpace>emptyList());
+    return new KeySpaceList(nDims, Collections.<KeySpace> emptyList());
   }
 
   public static KeySpaceList everything(int nDims) {
-    return new KeySpaceList(nDims,
-      Collections.singletonList(KeySpace.everything(nDims)));
+    return new KeySpaceList(nDims, Collections.singletonList(KeySpace.everything(nDims)));
   }
 
   public static KeySpaceList of(KeySpace... spaces) {
@@ -141,29 +140,27 @@ public final class KeySpaceList {
   }
 
   /**
-   * Upper bound on the number of spaces a {@link KeySpaceList} may hold. Every operation
-   * that could produce a list above this bound — AND cross-products, OR concatenations —
-   * applies the widening rule in {@link #enforceCartesianBound} instead of enumerating
-   * the full product.
+   * Upper bound on the number of spaces a {@link KeySpaceList} may hold. Every operation that could
+   * produce a list above this bound — AND cross-products, OR concatenations — applies the widening
+   * rule in {@link #enforceCartesianBound} instead of enumerating the full product.
    * <p>
-   * Set to 65,536: well above the scan-range bound (50,000) so normal queries aren't
-   * affected, but low enough that even a double-exceeded product (4 × bound) still
-   * computes fast. Enforced uniformly via {@link #fromNormalized}, so no code path can
-   * bypass it.
+   * Set to 65,536: well above the scan-range bound (50,000) so normal queries aren't affected, but
+   * low enough that even a double-exceeded product (4 × bound) still computes fast. Enforced
+   * uniformly via {@link #fromNormalized}, so no code path can bypass it.
    */
   private static final int CARTESIAN_BOUND = 65_536;
 
   /**
-   * AND distributes over OR: for each pair {@code (a ∈ this, b ∈ other)} compute
-   * {@code a.and(b)}, drop empties, then normalize. The output size is bounded by
-   * {@code this.size() × other.size()}, but — critically — we don't enumerate that
-   * product when it would exceed {@link #CARTESIAN_BOUND}. Instead, we apply the design's
-   * "drop trailing dims" widening to the larger side until its size falls to
-   * {@code ceil(bound / smaller.size())}, then do the bounded cross-product.
+   * AND distributes over OR: for each pair {@code (a ∈ this, b ∈ other)} compute {@code a.and(b)},
+   * drop empties, then normalize. The output size is bounded by {@code this.size() × other.size()},
+   * but — critically — we don't enumerate that product when it would exceed
+   * {@link #CARTESIAN_BOUND}. Instead, we apply the design's "drop trailing dims" widening to the
+   * larger side until its size falls to {@code ceil(bound / smaller.size())}, then do the bounded
+   * cross-product.
    * <p>
-   * Widening only drops information (every key the original matched is still matched by
-   * the widened list). The residual filter enforces the dropped predicates at scan time,
-   * so correctness is preserved. Scan narrowing on the kept dims is unchanged.
+   * Widening only drops information (every key the original matched is still matched by the widened
+   * list). The residual filter enforces the dropped predicates at scan time, so correctness is
+   * preserved. Scan narrowing on the kept dims is unchanged.
    */
   public KeySpaceList and(KeySpaceList other) {
     requireSameArity(other);
@@ -183,14 +180,16 @@ public final class KeySpaceList {
       // Choose the smaller side as the cap denominator. Widen the larger side down to
       // ceil(bound / smaller.size()); that guarantees the post-widen product fits.
       if (left.spaces.size() > right.spaces.size()) {
-        KeySpaceList tmp = left; left = right; right = tmp;
+        KeySpaceList tmp = left;
+        left = right;
+        right = tmp;
       }
       int budget = Math.max(1, CARTESIAN_BOUND / Math.max(1, left.spaces.size()));
       right = widenToBudget(right, budget);
       productSize = (long) left.spaces.size() * (long) right.spaces.size();
     }
-    boolean approx = this.approximated || other.approximated
-        || left.approximated || right.approximated;
+    boolean approx =
+      this.approximated || other.approximated || left.approximated || right.approximated;
     List<KeySpace> result = new ArrayList<>((int) Math.min(productSize, CARTESIAN_BOUND));
     for (KeySpace a : left.spaces) {
       for (KeySpace b : right.spaces) {
@@ -205,16 +204,16 @@ public final class KeySpaceList {
   }
 
   /**
-   * Widens a list down to at most {@code budget} spaces by dropping trailing dims (design
-   * rule "drop trailing dims to prevent range explosion"). Each drop replaces one dim
-   * with {@link KeyRange#EVERYTHING_RANGE} in every space, then re-normalizes —
-   * duplicates collapse via the merge fixpoint. Repeats until size ≤ budget or there's
-   * nothing left to drop; in the worst case returns a single all-EVERYTHING KeySpace.
+   * Widens a list down to at most {@code budget} spaces by dropping trailing dims (design rule
+   * "drop trailing dims to prevent range explosion"). Each drop replaces one dim with
+   * {@link KeyRange#EVERYTHING_RANGE} in every space, then re-normalizes — duplicates collapse via
+   * the merge fixpoint. Repeats until size ≤ budget or there's nothing left to drop; in the worst
+   * case returns a single all-EVERYTHING KeySpace.
    * <p>
-   * The choice of *which* trailing dim to drop matters for residual-filter correctness.
-   * We drop the highest-indexed dim that is constrained in at least one space — the
-   * leading dims do the bulk of the scan narrowing and should be preserved. O(K · N · D)
-   * where D is the number of drops performed (at most N), so overall O(K · N²).
+   * The choice of *which* trailing dim to drop matters for residual-filter correctness. We drop the
+   * highest-indexed dim that is constrained in at least one space — the leading dims do the bulk of
+   * the scan narrowing and should be preserved. O(K · N · D) where D is the number of drops
+   * performed (at most N), so overall O(K · N²).
    */
   private static KeySpaceList widenToBudget(KeySpaceList list, int budget) {
     int n = list.nDims;
@@ -229,7 +228,8 @@ public final class KeySpaceList {
       // bound-enforcement recursion — we're in the middle of enforcing it.
       List<KeySpace> dropped = new ArrayList<>(current.size());
       for (KeySpace ks : current) {
-        dropped.add(ks.withDimReplaced(trailing, org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE));
+        dropped
+          .add(ks.withDimReplaced(trailing, org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE));
       }
       mergeToFixpoint(dropped);
       if (dropped.size() >= current.size()) {
@@ -243,9 +243,9 @@ public final class KeySpaceList {
   }
 
   /**
-   * Returns the highest dim index that is constrained (not EVERYTHING) in at least one
-   * space of the list, or {@code -1} if every space is all-EVERYTHING. Used to pick the
-   * next trailing dim to drop during widening.
+   * Returns the highest dim index that is constrained (not EVERYTHING) in at least one space of the
+   * list, or {@code -1} if every space is all-EVERYTHING. Used to pick the next trailing dim to
+   * drop during widening.
    */
   private static int highestConstrainedDim(List<KeySpace> list) {
     if (list.isEmpty()) return -1;
@@ -279,18 +279,19 @@ public final class KeySpaceList {
     combined.addAll(other.spaces);
     KeySpaceList out = fromNormalized(nDims, combined);
     return (this.approximated || other.approximated)
-      ? new KeySpaceList(out.nDims, new java.util.ArrayList<>(out.spaces), true) : out;
+      ? new KeySpaceList(out.nDims, new java.util.ArrayList<>(out.spaces), true)
+      : out;
   }
 
   /**
-   * Bulk-OR variant for large OR nodes. Collects every branch's spaces into a single list,
-   * then runs the merge-fixpoint once. Equivalent to folding {@link #or(KeySpaceList)}
-   * left-to-right, but avoids the quadratic fold cost of re-merging the accumulator on
-   * every step — with K branches the left-fold runs K mergeToFixpoint passes over lists
-   * of growing size, whereas this runs exactly one pass over the concatenated list.
+   * Bulk-OR variant for large OR nodes. Collects every branch's spaces into a single list, then
+   * runs the merge-fixpoint once. Equivalent to folding {@link #or(KeySpaceList)} left-to-right,
+   * but avoids the quadratic fold cost of re-merging the accumulator on every step — with K
+   * branches the left-fold runs K mergeToFixpoint passes over lists of growing size, whereas this
+   * runs exactly one pass over the concatenated list.
    * <p>
-   * Used by {@link KeySpaceExpressionVisitor#visitLeave(OrExpression, List)} for OR nodes
-   * with more than a handful of children; benchmark shows ~45× improvement at K=500.
+   * Used by {@link KeySpaceExpressionVisitor#visitLeave(OrExpression, List)} for OR nodes with more
+   * than a handful of children; benchmark shows ~45× improvement at K=500.
    */
   public static KeySpaceList orAll(int nDims, List<KeySpaceList> branches) {
     if (branches == null || branches.isEmpty()) {
@@ -316,22 +317,22 @@ public final class KeySpaceList {
   /**
    * Folds pairwise merges in-place until no merge is possible.
    * <p>
-   * <b>Algorithm.</b> Rule 2 of {@link KeySpace#unionIfMergeable} requires two spaces to
-   * agree on N−1 dims. Equivalent spaces-up-to-one-dim are partitioned by a "signature"
-   * that is the dim-tuple with one coordinate replaced by a wildcard. For arity N there
-   * are N candidate wildcard positions; we try each in turn so any single disagreeing
-   * dim can be found by a hash lookup rather than a quadratic scan.
+   * <b>Algorithm.</b> Rule 2 of {@link KeySpace#unionIfMergeable} requires two spaces to agree on
+   * N−1 dims. Equivalent spaces-up-to-one-dim are partitioned by a "signature" that is the
+   * dim-tuple with one coordinate replaced by a wildcard. For arity N there are N candidate
+   * wildcard positions; we try each in turn so any single disagreeing dim can be found by a hash
+   * lookup rather than a quadratic scan.
    * <p>
-   * Within a bucket (all spaces sharing N−1 coordinates) we sort the remaining dim's
-   * ranges by lower bound and sweep left-to-right, merging overlapping/adjacent ranges.
+   * Within a bucket (all spaces sharing N−1 coordinates) we sort the remaining dim's ranges by
+   * lower bound and sweep left-to-right, merging overlapping/adjacent ranges.
    * <p>
-   * Rule 1 (containment) is also handled by the bucket sweep: a range fully inside the
-   * running merged range is absorbed. Containment across different signatures is rare
-   * and not worth a quadratic check; the residual filter handles any over-approximation.
+   * Rule 1 (containment) is also handled by the bucket sweep: a range fully inside the running
+   * merged range is absorbed. Containment across different signatures is rare and not worth a
+   * quadratic check; the residual filter handles any over-approximation.
    * <p>
-   * Complexity per pass: O(N · K · log K). Rounds converge in O(log K) because each
-   * round halves (at worst) the number of non-mergeable groups. Total: O(N · K · (log K)²),
-   * bounded and practical for K in the thousands.
+   * Complexity per pass: O(N · K · log K). Rounds converge in O(log K) because each round halves
+   * (at worst) the number of non-mergeable groups. Total: O(N · K · (log K)²), bounded and
+   * practical for K in the thousands.
    */
   private static void mergeToFixpoint(List<KeySpace> list) {
     if (list.size() < 2) {
@@ -379,8 +380,8 @@ public final class KeySpaceList {
   }
 
   /**
-   * If every space in the list has at most one non-EVERYTHING dim and they all agree on
-   * which dim that is, returns that dim index; otherwise {@code -1}.
+   * If every space in the list has at most one non-EVERYTHING dim and they all agree on which dim
+   * that is, returns that dim index; otherwise {@code -1}.
    */
   private static int onlyConstrainedDim(List<KeySpace> list) {
     int n = list.get(0).nDims();
@@ -410,17 +411,15 @@ public final class KeySpaceList {
   }
 
   /**
-   * Specialized merge when every space constrains only dim {@code d}. Extracts the 1D
-   * ranges, coalesces them, then writes the coalesced ranges back as single-dim
-   * KeySpaces.
+   * Specialized merge when every space constrains only dim {@code d}. Extracts the 1D ranges,
+   * coalesces them, then writes the coalesced ranges back as single-dim KeySpaces.
    * <p>
-   * Strategy: lift each range to a single-dim KeySpace, then run the standard
-   * mergeToFixpoint which uses {@link KeySpace#unionIfMergeable}'s correct disjoint-
-   * singletons check. This avoids the {@link org.apache.phoenix.query.KeyRange#coalesce}
-   * bug with inverted (DESC) singleton ranges where distinct points like `\xCD` ('2')
-   * and `\xCD\xCC` ('23') get incorrectly merged because the underlying
-   * {@code KeyRange.intersect} for inverted singletons computes a non-empty "backward"
-   * range rather than EMPTY_RANGE.
+   * Strategy: lift each range to a single-dim KeySpace, then run the standard mergeToFixpoint which
+   * uses {@link KeySpace#unionIfMergeable}'s correct disjoint- singletons check. This avoids the
+   * {@link org.apache.phoenix.query.KeyRange#coalesce} bug with inverted (DESC) singleton ranges
+   * where distinct points like `\xCD` ('2') and `\xCD\xCC` ('23') get incorrectly merged because
+   * the underlying {@code KeyRange.intersect} for inverted singletons computes a non-empty
+   * "backward" range rather than EMPTY_RANGE.
    */
   private static void mergeSingleDim(List<KeySpace> list, int d) {
     int n = list.get(0).nDims();
@@ -449,8 +448,8 @@ public final class KeySpaceList {
   }
 
   /**
-   * Returns an N-length array where {@code varies[d]} is true iff the list contains at
-   * least two distinct ranges on dim {@code d}. A single linear pass over the list.
+   * Returns an N-length array where {@code varies[d]} is true iff the list contains at least two
+   * distinct ranges on dim {@code d}. A single linear pass over the list.
    */
   private static boolean[] dimsThatVary(List<KeySpace> list) {
     int n = list.get(0).nDims();
@@ -468,9 +467,9 @@ public final class KeySpaceList {
   }
 
   /**
-   * Groups spaces by their dim signature with dim {@code wildcard} excluded, then merges
-   * the wildcard dim's ranges within each bucket via sort-and-sweep. Mutates {@code list}
-   * in place. Returns {@code true} if any merge happened.
+   * Groups spaces by their dim signature with dim {@code wildcard} excluded, then merges the
+   * wildcard dim's ranges within each bucket via sort-and-sweep. Mutates {@code list} in place.
+   * Returns {@code true} if any merge happened.
    */
   private static boolean mergeByWildcard(List<KeySpace> list, int wildcard) {
     if (list.size() < 2) {
@@ -503,9 +502,9 @@ public final class KeySpaceList {
   }
 
   /**
-   * Sort the wildcard-dim ranges and sweep left-to-right, merging overlapping/adjacent
-   * pairs. All spaces in {@code bucket} share the other N−1 dims, so the result's
-   * non-wildcard dims are just taken from any representative.
+   * Sort the wildcard-dim ranges and sweep left-to-right, merging overlapping/adjacent pairs. All
+   * spaces in {@code bucket} share the other N−1 dims, so the result's non-wildcard dims are just
+   * taken from any representative.
    */
   private static List<KeySpace> sweepAndMerge(List<KeySpace> bucket, int wildcard) {
     List<KeySpace> sorted = new ArrayList<>(bucket);
@@ -518,7 +517,8 @@ public final class KeySpaceList {
       if (rb.lowerUnbound()) {
         return 1;
       }
-      int cmp = org.apache.hadoop.hbase.util.Bytes.compareTo(ra.getLowerRange(), rb.getLowerRange());
+      int cmp =
+        org.apache.hadoop.hbase.util.Bytes.compareTo(ra.getLowerRange(), rb.getLowerRange());
       if (cmp != 0) {
         return cmp;
       }
@@ -542,8 +542,8 @@ public final class KeySpaceList {
   }
 
   /**
-   * Removes exact duplicates while preserving order. Returns true if any duplicates were
-   * removed. O(K) via a hash set.
+   * Removes exact duplicates while preserving order. Returns true if any duplicates were removed.
+   * O(K) via a hash set.
    */
   private static boolean dedupInPlace(List<KeySpace> list) {
     if (list.size() < 2) {

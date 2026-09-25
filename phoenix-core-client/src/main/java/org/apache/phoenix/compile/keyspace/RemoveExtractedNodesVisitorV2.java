@@ -21,7 +21,6 @@ import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
@@ -30,11 +29,10 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 
 /**
- * V2 variant of {@link org.apache.phoenix.compile.WhereOptimizer.RemoveExtractedNodesVisitor}
- * that also collapses {@link OrExpression} nodes when every branch was extracted. The v1
- * visitor only collapses {@link AndExpression}; this version closes the gap so
- * normalized RVC-inequality trees (which expand to OR-of-AND) collapse fully when every
- * scalar comparison is consumed.
+ * V2 variant of {@link org.apache.phoenix.compile.WhereOptimizer.RemoveExtractedNodesVisitor} that
+ * also collapses {@link OrExpression} nodes when every branch was extracted. The v1 visitor only
+ * collapses {@link AndExpression}; this version closes the gap so normalized RVC-inequality trees
+ * (which expand to OR-of-AND) collapse fully when every scalar comparison is consumed.
  */
 final class RemoveExtractedNodesVisitorV2 extends StatelessTraverseNoExpressionVisitor<Expression> {
   private final Set<Expression> nodesToRemove;

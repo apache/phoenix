@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -35,10 +36,10 @@ import java.util.Properties;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -157,17 +158,20 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
       stmt.setDate(5, date);
 
       // verify that the query does a range scan on the index table
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
-      assertEquals(localIndex
-        ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName + "(" + fullDataTableName
-          + ")"
-          + " [1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
-        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName
-          + " ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
-        QueryUtil.getExplainPlan(rs));
+      if (localIndex) {
+        assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
+          .tableContains("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
+          .keyRanges(
+            "[1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]")
+          .clientSortAlgo("CLIENT MERGE SORT");
+      } else {
+        assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
+          .tableContains("INDEX_TEST." + indexName).keyRanges(
+            "['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]");
+      }
 
       // verify that the correct results are returned
-      rs = stmt.executeQuery();
+      ResultSet rs = stmt.executeQuery();
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));
       assertEquals(1, rs.getInt(2));
@@ -179,13 +183,14 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
           + "decimal_pk+int_pk+decimal_col2+int_col1, " + "date_pk+1, date1+1, date2+1, "
           + "varchar_pk, char_pk, int_pk, long_pk, decimal_pk, " + "long_col1, long_col2 " + "from "
           + fullDataTableName;
-      rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelectSql);
-      assertEquals(
-        localIndex
-          ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName + "("
-            + fullDataTableName + ") [1]\nCLIENT MERGE SORT"
-          : "CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST." + indexName,
-        QueryUtil.getExplainPlan(rs));
+      if (localIndex) {
+        assertPlan(conn, indexSelectSql).scanType("RANGE SCAN")
+          .tableContains("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges("[1]")
+          .clientSortAlgo("CLIENT MERGE SORT");
+      } else {
+        assertPlan(conn, indexSelectSql).scanType("FULL SCAN")
+          .tableContains("INDEX_TEST." + indexName);
+      }
       rs = conn.createStatement().executeQuery(indexSelectSql);
       verifyResult(rs, 1);
       verifyResult(rs, 2);

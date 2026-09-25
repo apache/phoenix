@@ -1156,10 +1156,15 @@ public class CompactionScanner implements InternalScanner {
       throws IOException {
 
       boolean isSystemTable = pTable.getType() == PTableType.SYSTEM;
+      // A SYSTEM table with a CONDITIONAL TTL (e.g. SYSTEM.CDC_STREAM) must NOT be forced onto the
+      // column-family descriptor TTL (which is FOREVER for such tables); its conditional expression
+      // has to be compiled so that expired rows are physically purged at major compaction, not
+      // merely masked at read time.
+      boolean conditionalTTL = pTable.hasConditionalTTL();
       boolean ttlFromDescriptor = false;
       try {
         if (
-          isSystemTable
+          isSystemTable && !conditionalTTL
             || pTable.getTTLExpression().equals(TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR)
         ) {
           ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();

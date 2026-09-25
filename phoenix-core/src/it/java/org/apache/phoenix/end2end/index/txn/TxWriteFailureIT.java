@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index.txn;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -43,7 +44,6 @@ import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
@@ -159,9 +159,7 @@ public class TxWriteFailureIT extends BaseTest {
 
     // verify that only k3,v3 exists in the data table
     String dataSql = "SELECT k, v1 FROM " + dataTableFullName + " order by k";
-    rs = conn.createStatement().executeQuery("EXPLAIN " + dataSql);
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableFullName,
-      QueryUtil.getExplainPlan(rs));
+    assertPlan(conn, dataSql).scanType("FULL SCAN").table(dataTableFullName);
     rs = conn.createStatement().executeQuery(dataSql);
     assertTrue(rs.next());
     assertEquals("k3", rs.getString(1));
@@ -170,15 +168,10 @@ public class TxWriteFailureIT extends BaseTest {
 
     // verify the only k3,v3 exists in the index table
     String indexSql = "SELECT k, v1 FROM " + dataTableFullName + " order by v1";
-    rs = conn.createStatement().executeQuery("EXPLAIN " + indexSql);
     if (localIndex) {
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName + "(" + dataTableFullName
-          + ") [1]\n" + "    SERVER FILTER BY EMPTY COLUMN ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, indexSql).scanType("RANGE SCAN").tableContains(indexFullName);
     } else {
-      assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName
-        + "\n    SERVER FILTER BY EMPTY COLUMN ONLY", QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, indexSql).scanType("FULL SCAN").tableContains(indexFullName);
     }
     rs = conn.createStatement().executeQuery(indexSql);
     assertTrue(rs.next());

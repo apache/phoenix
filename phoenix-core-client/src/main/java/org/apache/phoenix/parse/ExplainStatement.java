@@ -21,11 +21,11 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class ExplainStatement implements BindableStatement {
   private final BindableStatement statement;
-  private final ExplainType explainType;
+  private final ExplainOptions options;
 
-  public ExplainStatement(BindableStatement statement, ExplainType explainType) {
+  public ExplainStatement(BindableStatement statement, ExplainOptions options) {
     this.statement = statement;
-    this.explainType = explainType;
+    this.options = options == null ? ExplainOptions.DEFAULT : options;
   }
 
   public BindableStatement getStatement() {
@@ -42,7 +42,7 @@ public class ExplainStatement implements BindableStatement {
     return Operation.QUERY;
   }
 
-  public ExplainType getExplainType() {
-    return explainType;
+  public ExplainOptions getOptions() {
+    return options;
   }
 }

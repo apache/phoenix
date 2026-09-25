@@ -20,7 +20,6 @@ package org.apache.phoenix.compile.keyspace.scan;
 import static org.junit.Assert.assertArrayEquals;
 
 import java.math.BigDecimal;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.keyspace.KeySpace;
 import org.apache.phoenix.compile.keyspace.KeySpaceList;
@@ -39,24 +38,26 @@ import org.junit.Test;
 /**
  * Validates the encoder reproduces the exact scan bytes V1 produces for
  * {@code QueryCompilerTest.testRVCScanBoundaries1} case 3:
+ *
  * <pre>
  *   WHERE category = 'category_0'
  *     AND score &gt;= 4980
  *     AND (score, pk, sk) &lt; (5010, 'pk_10', 5010)
  * </pre>
+ *
  * on schema {@code (category VARCHAR, score DECIMAL, pk VARCHAR, sk BIGINT)}.
  * <p>
  * V1 expects:
  * <ul>
  * <li>startRow: {@code cat0 · SEP · dec4980 · SEP} (15 bytes)</li>
- * <li>stopRow:  {@code cat0 · SEP · dec5010 · SEP · pk10 · SEP · long5010} (28 bytes)</li>
+ * <li>stopRow: {@code cat0 · SEP · dec5010 · SEP · pk10 · SEP · long5010} (28 bytes)</li>
  * </ul>
  * <p>
- * This is the shape the current V2 scan-construction path fails on: the leading SEP after
- * score is stripped. The encoder's multi-space path preserves it (because dim index 1 is
- * followed by more PK columns, the separator rule appends SEP). This test verifies the
- * encoder produces the V1-expected bytes for this exact logical KeySpaceList —
- * demonstrating that making the encoder load-bearing fixes the test.
+ * This is the shape the current V2 scan-construction path fails on: the leading SEP after score is
+ * stripped. The encoder's multi-space path preserves it (because dim index 1 is followed by more PK
+ * columns, the separator rule appends SEP). This test verifies the encoder produces the V1-expected
+ * bytes for this exact logical KeySpaceList — demonstrating that making the encoder load-bearing
+ * fixes the test.
  */
 public class RVCScanBoundariesEncoderTest {
 
@@ -64,11 +65,8 @@ public class RVCScanBoundariesEncoderTest {
 
   @Test
   public void testRVCScanBoundaries1Case3() {
-    RowKeySchema sch = schema(
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PDecimal.INSTANCE, null),
-      fixed(PVarchar.INSTANCE, null),
-      fixed(PLong.INSTANCE, 8));
+    RowKeySchema sch = schema(fixed(PVarchar.INSTANCE, null), fixed(PDecimal.INSTANCE, null),
+      fixed(PVarchar.INSTANCE, null), fixed(PLong.INSTANCE, 8));
 
     byte[] cat0 = Bytes.toBytes("category_0");
     byte[] dec4980 = PDecimal.INSTANCE.toBytes(new BigDecimal("4980"));
@@ -83,8 +81,8 @@ public class RVCScanBoundariesEncoderTest {
     //
     // Branch 1: category=c0 AND 4980 <= score < 5010
     KeyRange scoreRange4980To5010 = KeyRange.getKeyRange(dec4980, true, dec5010, false);
-    KeySpace b1 = space(4, catEqC0, scoreRange4980To5010,
-      KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE);
+    KeySpace b1 =
+      space(4, catEqC0, scoreRange4980To5010, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE);
 
     // Branch 2: category=c0 AND score=5010 AND pk < 'pk_10'
     KeyRange scoreEq5010 = KeyRange.getKeyRange(dec5010, true, dec5010, true);
@@ -122,16 +120,38 @@ public class RVCScanBoundariesEncoderTest {
 
   private static final class FieldDatum {
     final PDatum datum;
-    FieldDatum(PDatum datum) { this.datum = datum; }
+
+    FieldDatum(PDatum datum) {
+      this.datum = datum;
+    }
   }
 
   private static FieldDatum fixed(PDataType type, Integer maxLen) {
     return new FieldDatum(new PDatum() {
-      @Override public boolean isNullable() { return false; }
-      @Override public PDataType getDataType() { return type; }
-      @Override public Integer getMaxLength() { return maxLen; }
-      @Override public Integer getScale() { return null; }
-      @Override public SortOrder getSortOrder() { return SortOrder.ASC; }
+      @Override
+      public boolean isNullable() {
+        return false;
+      }
+
+      @Override
+      public PDataType getDataType() {
+        return type;
+      }
+
+      @Override
+      public Integer getMaxLength() {
+        return maxLen;
+      }
+
+      @Override
+      public Integer getScale() {
+        return null;
+      }
+
+      @Override
+      public SortOrder getSortOrder() {
+        return SortOrder.ASC;
+      }
     });
   }
 

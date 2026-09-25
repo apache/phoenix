@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertMutationPlan;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -51,6 +52,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalMetric;
@@ -60,7 +62,6 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
@@ -197,12 +198,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         + "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, "
         + "a_string  FROM " + aTable + " WHERE ?=a_string";
       if (createIndex) { // Confirm index is used
-        try (PreparedStatement upsertStmt = conn.prepareStatement("EXPLAIN " + upsert)) {
+        try (PhoenixPreparedStatement upsertStmt =
+          conn.prepareStatement(upsert).unwrap(PhoenixPreparedStatement.class)) {
           upsertStmt.setString(1, tenantId);
-          ResultSet ers = upsertStmt.executeQuery();
-          assertTrue(ers.next());
-          String explainPlan = QueryUtil.getExplainPlan(ers);
-          assertTrue(explainPlan.contains(" SCAN OVER " + indexName));
+          assertMutationPlan(upsertStmt).tableContains(indexName);
         }
       }
 

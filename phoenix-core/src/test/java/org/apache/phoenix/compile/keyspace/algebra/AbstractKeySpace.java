@@ -22,17 +22,17 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * An N-dim box: one {@link AbstractRange} per primary-key dimension. The key-space
- * primitive of the V2 optimizer. Dimensions can hold ranges over different value types
- * (e.g. dim 0 is {@code String}, dim 1 is {@code Long}) — the dim index plus the per-range
- * {@code <T>} carries the type.
+ * An N-dim box: one {@link AbstractRange} per primary-key dimension. The key-space primitive of the
+ * V2 optimizer. Dimensions can hold ranges over different value types (e.g. dim 0 is
+ * {@code String}, dim 1 is {@code Long}) — the dim index plus the per-range {@code <T>} carries the
+ * type.
  * <p>
  * This class intentionally uses raw {@code AbstractRange} entries ({@code AbstractRange<?>})
- * because Java's type system cannot express a heterogeneous tuple of typed ranges without
- * per-test ceremony. The oracle's correctness does not depend on type parity — each range
- * internally uses {@link Comparable#compareTo} on its own typed bounds, so mixing types
- * across dims is safe as long as no operation compares ranges of different dims to each
- * other (which no AND/OR rule does — per-dim intersection/union stays within one dim).
+ * because Java's type system cannot express a heterogeneous tuple of typed ranges without per-test
+ * ceremony. The oracle's correctness does not depend on type parity — each range internally uses
+ * {@link Comparable#compareTo} on its own typed bounds, so mixing types across dims is safe as long
+ * as no operation compares ranges of different dims to each other (which no AND/OR rule does —
+ * per-dim intersection/union stays within one dim).
  */
 public final class AbstractKeySpace {
 
@@ -97,9 +97,9 @@ public final class AbstractKeySpace {
   }
 
   /**
-   * Per-dim intersection. The AND operation on key spaces: the intersection of two key
-   * spaces is the intersection of each corresponding pair of dim ranges. Any dim collapsing
-   * to empty makes the whole space empty.
+   * Per-dim intersection. The AND operation on key spaces: the intersection of two key spaces is
+   * the intersection of each corresponding pair of dim ranges. Any dim collapsing to empty makes
+   * the whole space empty.
    */
   public AbstractKeySpace and(AbstractKeySpace other) {
     requireSameArity(other);
@@ -117,8 +117,8 @@ public final class AbstractKeySpace {
    * Attempts the OR merge rules:
    * <ul>
    * <li>Rule 1: one space contains the other → return the larger.</li>
-   * <li>Rule 2: agreeing on N−1 dims and the differing dim's ranges overlap or are
-   * adjacent → return the space with the merged dim's range.</li>
+   * <li>Rule 2: agreeing on N−1 dims and the differing dim's ranges overlap or are adjacent →
+   * return the space with the merged dim's range.</li>
    * </ul>
    * If neither rule applies, returns {@code null} so the caller must keep both spaces.
    */
@@ -146,7 +146,10 @@ public final class AbstractKeySpace {
     return new AbstractKeySpace(out, false);
   }
 
-  /** {@code this} contains {@code other} iff every dim of {@code this} contains the dim of {@code other}. */
+  /**
+   * {@code this} contains {@code other} iff every dim of {@code this} contains the dim of
+   * {@code other}.
+   */
   public boolean contains(AbstractKeySpace other) {
     requireSameArity(other);
     if (other.empty) return true;
@@ -158,14 +161,13 @@ public final class AbstractKeySpace {
   }
 
   /**
-   * Does the concrete tuple {@code row} satisfy this key space? Used by correctness tests
-   * to verify that the emitted ranges contain all rows matching the original expression.
+   * Does the concrete tuple {@code row} satisfy this key space? Used by correctness tests to verify
+   * that the emitted ranges contain all rows matching the original expression.
    */
   public boolean matches(List<Object> row) {
     if (empty) return false;
     if (row.size() != dims.length) {
-      throw new IllegalArgumentException(
-        "row arity " + row.size() + " != nDims " + dims.length);
+      throw new IllegalArgumentException("row arity " + row.size() + " != nDims " + dims.length);
     }
     for (int i = 0; i < dims.length; i++) {
       if (!containsValueAny(dims[i], row.get(i))) return false;
@@ -191,12 +193,13 @@ public final class AbstractKeySpace {
   }
 
   /**
-   * Length of the leading non-EVERYTHING run starting at {@code from}. The productive
-   * prefix length — dims past the first EVERYTHING are ignored when emitting scan ranges.
+   * Length of the leading non-EVERYTHING run starting at {@code from}. The productive prefix length
+   * — dims past the first EVERYTHING are ignored when emitting scan ranges.
    */
   public int productiveLen(int from) {
     int d = from;
-    while (d < dims.length && !dims[d].isEverything()) d++;
+    while (d < dims.length && !dims[d].isEverything())
+      d++;
     return d - from;
   }
 
@@ -252,7 +255,8 @@ public final class AbstractKeySpace {
   public String toString() {
     if (empty) return "KS[EMPTY n=" + dims.length + "]";
     List<String> parts = new ArrayList<>(dims.length);
-    for (AbstractRange<?> r : dims) parts.add(r.toString());
+    for (AbstractRange<?> r : dims)
+      parts.add(r.toString());
     return "KS" + parts;
   }
 }

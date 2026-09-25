@@ -134,7 +134,9 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     targetAggregatingResultIterator.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientDistinctFilter(rowProjector.toString());
-    planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
+    String step = "CLIENT DISTINCT ON " + rowProjector.toString();
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
-
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -40,29 +39,29 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PTable;
 
 /**
- * End-to-end harness: given a CREATE TABLE and a SELECT query, run both V2 and the oracle
- * over a shared enumerated row domain and report any soundness or widening divergences.
+ * End-to-end harness: given a CREATE TABLE and a SELECT query, run both V2 and the oracle over a
+ * shared enumerated row domain and report any soundness or widening divergences.
  * <p>
  * The runner:
  * <ol>
  * <li>Creates the table via the supplied DDL statements.</li>
- * <li>Compiles the SELECT — V2 runs as part of compilation and populates
- *     {@link ScanRanges}.</li>
+ * <li>Compiles the SELECT — V2 runs as part of compilation and populates {@link ScanRanges}.</li>
  * <li>Re-parses the SELECT to grab its WHERE {@link ParseNode}, then runs just
- *     {@link WhereCompiler#compile(StatementContext, ParseNode)} to get a raw
- *     {@link Expression} tree (no V2 rewrite). This is the input the oracle operates on.</li>
- * <li>Converts via {@link ExpressionAdapter} to {@link AbstractExpression}; unsupported
- *     shapes become {@link AbstractExpression#unknown(String)} leaves.</li>
+ * {@link WhereCompiler#compile(StatementContext, ParseNode)} to get a raw {@link Expression} tree
+ * (no V2 rewrite). This is the input the oracle operates on.</li>
+ * <li>Converts via {@link ExpressionAdapter} to {@link AbstractExpression}; unsupported shapes
+ * become {@link AbstractExpression#unknown(String)} leaves.</li>
  * <li>Builds an enumeration grid via {@link EnumerationGrid#build(AbstractExpression, int)}.</li>
- * <li>Decodes {@link ScanRanges} via {@link ScanRangesDecoder}. If the decoder can't handle
- *     the shape (salted, slotSpan issues, etc.), the result is {@link Report#skipped}.</li>
+ * <li>Decodes {@link ScanRanges} via {@link ScanRangesDecoder}. If the decoder can't handle the
+ * shape (salted, slotSpan issues, etc.), the result is {@link Report#skipped}.</li>
  * <li>Runs the oracle on the abstract expression.</li>
  * <li>Calls {@link HarnessAssertions#evaluate} to get the soundness report.</li>
  * </ol>
  */
 public final class HarnessRunner {
 
-  private HarnessRunner() {}
+  private HarnessRunner() {
+  }
 
   /** A final report from one run. */
   public static final class Report {
@@ -95,18 +94,18 @@ public final class HarnessRunner {
       if (skipped) {
         return "Report[SKIPPED, query=" + query + ", reason=" + skipReason + "]";
       }
-      return "Report[query=" + query + ", expr=" + expr
-        + ", oracle=" + oracleView + ", v2=" + v2View + ", " + assertions + "]";
+      return "Report[query=" + query + ", expr=" + expr + ", oracle=" + oracleView + ", v2="
+        + v2View + ", " + assertions + "]";
     }
   }
 
   /**
    * Runs the harness for a single query.
-   * @param jdbcUrl         Phoenix JDBC URL for a connectionless or real instance
-   * @param ddlStatements   list of CREATE TABLE (or related) statements to run before the
-   *                        query; may be empty if the table already exists
-   * @param query           the SELECT query to inspect
-   * @param gridSizeCap     maximum enumeration grid size; exceeding this causes a SKIP
+   * @param jdbcUrl       Phoenix JDBC URL for a connectionless or real instance
+   * @param ddlStatements list of CREATE TABLE (or related) statements to run before the query; may
+   *                      be empty if the table already exists
+   * @param query         the SELECT query to inspect
+   * @param gridSizeCap   maximum enumeration grid size; exceeding this causes a SKIP
    */
   public static Report run(String jdbcUrl, List<String> ddlStatements, String query,
     long gridSizeCap) {
@@ -153,8 +152,9 @@ public final class HarnessRunner {
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, pconn);
         ParseNode normalizedWhere =
           org.apache.phoenix.compile.StatementNormalizer.normalize(whereNode, resolver);
-        StatementContext ctx = new StatementContext(freshStmt, resolver, new org.apache.hadoop
-          .hbase.client.Scan(), new org.apache.phoenix.compile.SequenceManager(freshStmt));
+        StatementContext ctx =
+          new StatementContext(freshStmt, resolver, new org.apache.hadoop.hbase.client.Scan(),
+            new org.apache.phoenix.compile.SequenceManager(freshStmt));
         whereExpr = WhereCompiler.compile(ctx, normalizedWhere);
       } catch (Exception e) {
         return Report.skip(query, "could not re-compile WHERE: " + e.getMessage());
@@ -172,8 +172,7 @@ public final class HarnessRunner {
       List<List<Object>> grid = EnumerationGrid.build(abstractExpr, nPk);
       long gridSize = EnumerationGrid.estimateSize(grid);
       if (gridSize > gridSizeCap) {
-        return Report.skip(query,
-          "grid size " + gridSize + " exceeds cap " + gridSizeCap);
+        return Report.skip(query, "grid size " + gridSize + " exceeds cap " + gridSizeCap);
       }
 
       // 5. Decode ScanRanges.

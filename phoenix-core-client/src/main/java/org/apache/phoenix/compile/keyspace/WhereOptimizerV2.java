@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereOptimizer;
@@ -32,8 +31,8 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.util.ScanUtil;
@@ -42,14 +41,14 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 
 /**
  * Entry point for the N-dimensional key-space WHERE optimizer. Pipes an expression through
- * {@link ExpressionNormalizer}, {@link KeySpaceExpressionVisitor}, {@link KeyRangeExtractor},
- * and finally {@link ScanRanges#create}, then strips fully-consumed nodes via
+ * {@link ExpressionNormalizer}, {@link KeySpaceExpressionVisitor}, {@link KeyRangeExtractor}, and
+ * finally {@link ScanRanges#create}, then strips fully-consumed nodes via
  * {@link WhereOptimizer.RemoveExtractedNodesVisitor}.
  * <p>
  * The driver is invoked in place of the legacy {@link WhereOptimizer} visitor when the
- * {@link QueryServices#WHERE_OPTIMIZER_V2_ENABLED} flag is set. Both the legacy path and this
- * one write the same shape to {@code context.setScanRanges(...)} and return an Expression
- * representing the residual filter.
+ * {@link QueryServices#WHERE_OPTIMIZER_V2_ENABLED} flag is set. Both the legacy path and this one
+ * write the same shape to {@code context.setScanRanges(...)} and return an Expression representing
+ * the residual filter.
  */
 public final class WhereOptimizerV2 {
 
@@ -66,9 +65,8 @@ public final class WhereOptimizerV2 {
     PName tenantId = context.getConnection().getTenantId();
     boolean isMultiTenant = tenantId != null && table.isMultiTenant();
     boolean isSharedIndex = table.getViewIndexId() != null;
-    byte[] tenantIdBytes = isMultiTenant
-      ? ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex)
-      : null;
+    byte[] tenantIdBytes =
+      isMultiTenant ? ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex) : null;
 
     // Short-circuits matching WhereOptimizer.pushKeyExpressionsToScan.
     if (whereClause == null && !isMultiTenant && !isSharedIndex && !minOffset.isPresent()) {
@@ -120,13 +118,13 @@ public final class WhereOptimizerV2 {
       }
     }
 
-    int bound = context.getConnection().getQueryServices().getConfiguration()
-      .getInt(QueryServices.WHERE_OPTIMIZER_V2_CARTESIAN_BOUND,
-        QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_CARTESIAN_BOUND);
+    int bound = context.getConnection().getQueryServices().getConfiguration().getInt(
+      QueryServices.WHERE_OPTIMIZER_V2_CARTESIAN_BOUND,
+      QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_CARTESIAN_BOUND);
 
-    V2ScanBuilder.Inputs inputs = new V2ScanBuilder.Inputs(keySpaceList, table, schema, nPk,
-      prefixSlots, nBuckets, isSalted, isMultiTenant, isSharedIndex, tenantIdBytes, hints,
-      bound, minOffset);
+    V2ScanBuilder.Inputs inputs =
+      new V2ScanBuilder.Inputs(keySpaceList, table, schema, nPk, prefixSlots, nBuckets, isSalted,
+        isMultiTenant, isSharedIndex, tenantIdBytes, hints, bound, minOffset);
     V2ScanBuilder.Result r = V2ScanBuilder.build(inputs);
     if (r.isNothing) {
       context.setScanRanges(ScanRanges.NOTHING);
@@ -147,10 +145,13 @@ public final class WhereOptimizerV2 {
     // cross-dim tuple correlation that per-slot projection loses — see
     // docs/where-optimizer-v2-scan-construction.md. RVC OFFSET is skipped because
     // RVCOffsetCompiler reads scan.startRow to build the paging cursor and is sensitive
-    // to the classical path's exact byte layout. See QueryMoreIT.testRVCOnDescWithLeadingPKEquality.
-    if (!emittedEverything && !minOffset.isPresent()
-      && org.apache.phoenix.compile.keyspace.scan.CompoundByteEncoderEmitter.isInScope(
-        keySpaceList, schema, prefixSlots, isSalted)) {
+    // to the classical path's exact byte layout. See
+    // QueryMoreIT.testRVCOnDescWithLeadingPKEquality.
+    if (
+      !emittedEverything && !minOffset.isPresent()
+        && org.apache.phoenix.compile.keyspace.scan.CompoundByteEncoderEmitter
+          .isInScope(keySpaceList, schema, prefixSlots, isSalted)
+    ) {
       org.apache.phoenix.compile.keyspace.scan.CompoundByteEncoderEmitter.overrideScanRows(
         context.getScan(), keySpaceList, schema, prefixSlots,
         buildPrefixBytes(isSalted, isSharedIndex, isMultiTenant, table, tenantIdBytes));
@@ -179,8 +180,8 @@ public final class WhereOptimizerV2 {
     // associated risk (V1 has the same behavior); consume so the shape matches V1's
     // compile-plan output.
     boolean forcedSkipScan = hints != null && hints.contains(Hint.SKIP_SCAN);
-    boolean leadingEverythingPastPrefix = !emittedEverything && !forcedSkipScan
-        && hasLeadingEverythingAt(keySpaceList, prefixSlots);
+    boolean leadingEverythingPastPrefix =
+      !emittedEverything && !forcedSkipScan && hasLeadingEverythingAt(keySpaceList, prefixSlots);
     // When the algebra or extractor approximated (dropped dims / collapsed compounds),
     // visitor-consumed nodes are no longer fully enforced by the scan — keep them in
     // the residual filter.
@@ -216,9 +217,9 @@ public final class WhereOptimizerV2 {
 
   /**
    * True when every space in {@code list} has {@link org.apache.phoenix.query.KeyRange
-   * #EVERYTHING_RANGE} at dimension {@code prefixSlots} — i.e., the first user-PK slot is
-   * unbounded in every branch. When this holds, SkipScanFilter cannot be installed (its
-   * seek-hint construction requires a concrete lower bound on the leading slot).
+   * #EVERYTHING_RANGE} at dimension {@code prefixSlots} — i.e., the first user-PK slot is unbounded
+   * in every branch. When this holds, SkipScanFilter cannot be installed (its seek-hint
+   * construction requires a concrete lower bound on the leading slot).
    */
   private static boolean hasLeadingEverythingAt(KeySpaceList list, int prefixSlots) {
     if (list.spaces().isEmpty()) {
@@ -236,10 +237,10 @@ public final class WhereOptimizerV2 {
   }
 
   /**
-   * Concatenate the prefix bytes the scan carries before the user-PK columns: salt byte
-   * (0x00 placeholder), viewIndexId, tenantId — each a concrete point-key. Matches the
-   * byte layout {@code ScanUtil.setKey} produces for the same prefix slots so encoder
-   * output can be prepended with these bytes and equal the scan-path's full row.
+   * Concatenate the prefix bytes the scan carries before the user-PK columns: salt byte (0x00
+   * placeholder), viewIndexId, tenantId — each a concrete point-key. Matches the byte layout
+   * {@code ScanUtil.setKey} produces for the same prefix slots so encoder output can be prepended
+   * with these bytes and equal the scan-path's full row.
    */
   private static byte[] buildPrefixBytes(boolean isSalted, boolean isSharedIndex,
     boolean isMultiTenant, PTable table, byte[] tenantIdBytes) {
@@ -262,7 +263,8 @@ public final class WhereOptimizerV2 {
       }
     }
     int total = 0;
-    for (byte[] p : parts) total += p.length;
+    for (byte[] p : parts)
+      total += p.length;
     byte[] out = new byte[total];
     int off = 0;
     for (byte[] p : parts) {

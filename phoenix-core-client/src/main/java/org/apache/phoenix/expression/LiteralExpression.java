@@ -265,10 +265,12 @@ public class LiteralExpression extends BaseTerminalExpression {
 
   @Override
   public String toString() {
-    if (value == null && byteValue != null) {
-      return Bytes.toStringBinary(byteValue);
-    } else if (value == null) {
-      return "null";
+    // Typed null literals carry an empty byteValue (ByteUtil.EMPTY_BYTE_ARRAY); render those as
+    // "null" rather than the empty string Bytes.toStringBinary would produce, so callers like
+    // FunctionExpression.toString that emit comma-separated children don't print a phantom
+    // trailing empty argument such as BSON_VALUE(payload, 'k', 'VARCHAR', ).
+    if (value == null) {
+      return (byteValue != null && byteValue.length > 0) ? Bytes.toStringBinary(byteValue) : "null";
     }
     // TODO: move into PDataType?
     if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
