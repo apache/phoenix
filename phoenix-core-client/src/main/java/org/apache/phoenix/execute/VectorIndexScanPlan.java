@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -36,6 +37,7 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -43,6 +45,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -58,8 +61,10 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -76,9 +81,11 @@ import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -636,27 +643,176 @@ public class VectorIndexScanPlan extends ScanPlan {
   @Override
   public Cost getCost() {
     Cost baseCost = super.getCost();
-    if (baseCost == null || baseCost.isUnknown()) {
+    Cost scanCost = null;
+    QueryPlan effectiveDataPlan = getDataPlan();
+    PTable indexTable = getTableRef() != null ? getTableRef().getTable() : null;
+    PTable dataTable = effectiveDataPlan != null && effectiveDataPlan.getTableRef() != null
+      ? effectiveDataPlan.getTableRef().getTable()
+      : null;
+
+    int lists = cachedCentroids != null ? cachedCentroids.getCentroidCount() : 0;
+    double probeFraction = (probing && lists > 0) ? ((double) probeCount / (double) lists) : 1.0;
+
+    Long derivedRows = null;
+
+    if (baseCost != null && !baseCost.isUnknown()) {
+      // When guideposts exist on the vector index, the base scan cost accurately reflects
+      // the ranges of probed centroid posting lists.
+      scanCost = baseCost;
+    } else if (
+      effectiveDataPlan != null && effectiveDataPlan.getCost() != null
+        && !effectiveDataPlan.getCost().isUnknown() && indexTable != null && dataTable != null
+    ) {
+      // When index statistics are absent, derive scan volume from data table statistics
+      // adjusted for relative row size and centroid probe selectivity.
+      try {
+        Long dataBytes = effectiveDataPlan.getEstimatedBytesToScan();
+        if (dataBytes != null) {
+          long indexRowSize = SchemaUtil.estimateRowSize(indexTable);
+          long dataRowSize = SchemaUtil.estimateRowSize(dataTable);
+          double rowSizeRatio =
+            dataRowSize > 0 ? ((double) indexRowSize / (double) dataRowSize) : 1.0;
+          double derivedBytes = (double) dataBytes * rowSizeRatio * probeFraction;
+
+          Long dataRows = effectiveDataPlan.getEstimatedRowsToScan();
+          if (dataRows != null && dataRows > 0) {
+            derivedRows = (long) Math.ceil((double) dataRows * probeFraction);
+          } else if (indexRowSize > 0) {
+            derivedRows = (long) Math.ceil(derivedBytes / (double) indexRowSize);
+          }
+
+          int parallelLevel = CostUtil.estimateParallelLevel(true,
+            context != null && context.getConnection() != null
+              ? context.getConnection().getQueryServices()
+              : null);
+          Cost derivedCost = new Cost(0, 0, derivedBytes);
+          if (orderBy != null && !orderBy.getOrderByExpressions().isEmpty()) {
+            Double outputBytes = this.accept(new ByteCountVisitor());
+            if (outputBytes == null) {
+              long effectiveLimit = (limit != null ? limit : 0) + (offset != null ? offset : 0);
+              double outputRows = effectiveLimit > 0 && derivedRows != null
+                ? Math.min(derivedRows.doubleValue(), (double) effectiveLimit)
+                : (derivedRows != null ? derivedRows.doubleValue() : 1.0);
+              outputBytes = outputRows * (indexRowSize > 0 ? indexRowSize : 1.0);
+            }
+            Cost orderByCost =
+              CostUtil.estimateOrderByCost(derivedBytes, outputBytes, parallelLevel);
+            derivedCost = derivedCost.plus(orderByCost);
+          }
+          scanCost = derivedCost;
+        }
+      } catch (SQLException e) {
+        // Fall through to UNKNOWN
+      }
+    }
+
+    if (scanCost == null || scanCost.isUnknown()) {
       return Cost.UNKNOWN;
     }
-    int lists = cachedCentroids != null ? cachedCentroids.getCentroidCount() : 0;
-    if (!probing || lists <= 0) {
-      return baseCost;
+
+    // Add point lookup overhead to retrieve uncovered columns from the data table.
+    if (isProjectionTimeUncoveredLookup() && dataTable != null) {
+      long lookupRows = (limit != null ? limit : 0) + (offset != null ? offset : 0);
+      Cost lookupCost = CostUtil.estimateVectorLookupCost(lookupRows, dataTable);
+      scanCost = scanCost.plus(lookupCost);
+    } else if (isFilterTimeUncoveredLookup() && dataTable != null) {
+      Long lookupRows = null;
+      try {
+        lookupRows = getEstimatedRowsToScan();
+      } catch (SQLException e) {
+        // ignored
+      }
+      if (lookupRows == null || lookupRows <= 0) {
+        if (derivedRows != null && derivedRows > 0) {
+          lookupRows = derivedRows;
+        } else if (effectiveDataPlan != null) {
+          try {
+            Long dataRows = effectiveDataPlan.getEstimatedRowsToScan();
+            if (dataRows != null && dataRows > 0) {
+              lookupRows = (long) Math.ceil((double) dataRows * probeFraction);
+            }
+          } catch (SQLException e) {
+            // ignored
+          }
+        }
+      }
+      if (lookupRows != null && lookupRows > 0) {
+        Cost lookupCost = CostUtil.estimateVectorLookupCost(lookupRows, dataTable);
+        scanCost = scanCost.plus(lookupCost);
+      }
     }
-    double ratio = (double) probeCount / (double) lists;
-    return baseCost.multiplyBy(ratio);
+
+    return scanCost;
   }
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     ExplainPlan baseExplain = super.getExplainPlan();
-    if (!probing) {
-      return baseExplain;
-    }
     List<String> steps = new ArrayList<>(baseExplain.getPlanSteps());
+    ExplainPlanAttributes baseAttributes = baseExplain.getPlanStepsAsAttributes();
+    ExplainPlanAttributesBuilder builder = baseAttributes != null
+      ? new ExplainPlanAttributesBuilder(baseAttributes)
+      : new ExplainPlanAttributesBuilder();
+
     int lists = cachedCentroids != null ? cachedCentroids.getCentroidCount() : 0;
-    steps.add(0, "CLIENT PROBING " + probeCount + " OF " + lists + " CENTROIDS");
-    return new ExplainPlan(steps, baseExplain.getPlanStepsAsAttributes());
+    String metric = (getTableRef() != null && getTableRef().getTable() != null
+      && getTableRef().getTable().getVectorDistanceMetric() != null)
+        ? getTableRef().getTable().getVectorDistanceMetric()
+        : this.distanceMetric;
+
+    if (probing) {
+      String probeLine = "CLIENT PROBING " + probeCount + " OF " + lists + " CENTROIDS"
+        + (metric != null && !metric.isEmpty() ? " (" + metric + ")" : "");
+      steps.add(0, probeLine);
+      builder.setVectorProbeCount(probeCount);
+      builder.setVectorCentroidCount(lists);
+      builder.setVectorDistanceMetric(metric);
+    }
+
+    if (isProjectionTimeUncoveredLookup()) {
+      PTable indexTable = getTableRef() != null ? getTableRef().getTable() : null;
+      QueryPlan effectiveDataPlan = getDataPlan();
+      PTable dataTable = effectiveDataPlan != null && effectiveDataPlan.getTableRef() != null
+        ? effectiveDataPlan.getTableRef().getTable()
+        : null;
+      SelectStatement select =
+        (effectiveDataPlan != null && effectiveDataPlan.getStatement() instanceof SelectStatement)
+          ? (SelectStatement) effectiveDataPlan.getStatement()
+          : (statement instanceof SelectStatement ? (SelectStatement) statement : null);
+      Set<PColumn> uncoveredCols =
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, select);
+      builder.setClientMergeColumns(uncoveredCols);
+      if (!uncoveredCols.isEmpty()) {
+        String clientMergeLine =
+          "CLIENT MERGE " + uncoveredCols.toString() + " FOR TOP-" + limit + " ROWS";
+        insertAfterClientMergeSort(steps, clientMergeLine);
+        // Keep the ordered client-side pipeline carried by the attributes in step with the plan
+        // text, so EXPLAIN FORMAT JSON reports the deferred merge in the same position.
+        List<String> clientSteps = baseAttributes == null || baseAttributes.getClientSteps() == null
+          ? new ArrayList<>()
+          : new ArrayList<>(baseAttributes.getClientSteps());
+        insertAfterClientMergeSort(clientSteps, clientMergeLine);
+        builder.setClientSteps(clientSteps);
+      }
+    } else {
+      builder.setClientMergeColumns(Collections.emptySet());
+    }
+
+    return new ExplainPlan(steps, builder.build());
+  }
+
+  /**
+   * Inserts {@code line} immediately after the first {@code CLIENT MERGE SORT} entry of
+   * {@code lines}, or appends it when no merge sort step is present.
+   */
+  private static void insertAfterClientMergeSort(List<String> lines, String line) {
+    for (int i = 0; i < lines.size(); i++) {
+      if (lines.get(i).startsWith("CLIENT MERGE SORT")) {
+        lines.add(i + 1, line);
+        return;
+      }
+    }
+    lines.add(line);
   }
 
   public int getProbeCount() {

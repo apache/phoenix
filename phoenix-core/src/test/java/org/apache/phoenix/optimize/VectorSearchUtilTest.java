@@ -764,26 +764,41 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
       // Projection referencing only covered columns
       SelectStatement p1 = parse("SELECT ID, CATEGORY FROM T_UNCOV_FILTER_TEST LIMIT 5");
       assertFalse(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p1));
+      assertTrue(
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p1).isEmpty());
 
       // Projection referencing an uncovered column
       SelectStatement p2 = parse("SELECT ID, DESCRIPTION FROM T_UNCOV_FILTER_TEST LIMIT 5");
       assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p2));
+      assertEquals(1,
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p2).size());
+      assertEquals("DESCRIPTION",
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p2).iterator().next()
+          .getName().getString());
 
       // Wildcard projection over entire data table
       SelectStatement p3 = parse("SELECT * FROM T_UNCOV_FILTER_TEST LIMIT 5");
       assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p3));
+      assertFalse(
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p3).isEmpty());
 
       // Table-qualified wildcard projection
       SelectStatement p4 = parse("SELECT t.* FROM T_UNCOV_FILTER_TEST t LIMIT 5");
       assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p4));
+      assertFalse(
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p4).isEmpty());
 
       // Expression evaluating uncovered column
       SelectStatement p5 = parse("SELECT UPPER(DESCRIPTION) FROM T_UNCOV_FILTER_TEST LIMIT 5");
       assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p5));
+      assertEquals(1,
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p5).size());
 
       // Expression evaluating covered column
       SelectStatement p6 = parse("SELECT UPPER(CATEGORY) FROM T_UNCOV_FILTER_TEST LIMIT 5");
       assertFalse(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p6));
+      assertTrue(
+        VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p6).isEmpty());
     }
   }
 }

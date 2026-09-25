@@ -849,66 +849,6 @@ public class QueryOptimizer {
       return plans;
     }
 
-    if (this.costBased) {
-      Collections.sort(plans, new Comparator<QueryPlan>() {
-        @Override
-        public int compare(QueryPlan plan1, QueryPlan plan2) {
-          return plan1.getCost().compareTo(plan2.getCost());
-        }
-      });
-      // Return ordered list based on cost if stats are available; otherwise fall
-      // back to static ordering.
-      if (!plans.get(0).getCost().isUnknown()) {
-        QueryPlan costWinner = plans.get(0);
-        for (int i = 1; i < plans.size(); i++) {
-          PTable losingTable = plans.get(i).getTableRef().getTable();
-          if (losingTable.getType() == PTableType.INDEX) {
-            state.reject(losingTable, OptimizerReasons.REASON_COST_BASED_LOSS);
-          }
-        }
-        recordDecision(costWinner, OptimizerReasons.RULE_COST_BASED, state);
-        return stopAtBestPlan ? plans.subList(0, 1) : plans;
-      }
-    }
-
-    /**
-     * If we have a plan(s) that are just point lookups (i.e. fully qualified row keys), then favor
-     * those first.
-     */
-    List<QueryPlan> candidates = Lists.newArrayListWithExpectedSize(plans.size());
-    if (stopAtBestPlan) { // If we're stopping at the best plan, only consider point lookups if
-                          // there are any
-      for (QueryPlan plan : plans) {
-        if (plan.getContext().getScanRanges().isPointLookup()) {
-          candidates.add(plan);
-        }
-      }
-    } else {
-      candidates.addAll(plans);
-    }
-    /**
-     * If we have a plan(s) that removes the order by, choose from among these, as this is typically
-     * the most expensive operation. Once we have stats, if there's a limit on the query, we might
-     * choose a different plan. For example if the limit was a very large number and the combination
-     * of applying other filters on the row key are estimated to choose fewer rows, we'd choose that
-     * one.
-     */
-    List<QueryPlan> stillCandidates = plans;
-    List<QueryPlan> bestCandidates = candidates;
-    if (!candidates.isEmpty()) {
-      stillCandidates = candidates;
-      bestCandidates = Lists.<QueryPlan> newArrayListWithExpectedSize(candidates.size());
-    }
-    for (QueryPlan plan : stillCandidates) {
-      // If ORDER BY optimized out (or not present at all)
-      if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
-        bestCandidates.add(plan);
-      }
-    }
-    if (bestCandidates.isEmpty()) {
-      bestCandidates.addAll(stillCandidates);
-    }
-
     int nViewConstants = 0;
     PTable dataTable = dataPlan.getTableRef().getTable();
     if (dataTable.getType() == PTableType.VIEW) {
@@ -921,17 +861,42 @@ public class QueryOptimizer {
     final int boundRanges = nViewConstants;
     final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
     final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
-    Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
+
+    final Comparator<QueryPlan> staticComparator = new Comparator<QueryPlan>() {
 
       @Override
       public int compare(QueryPlan plan1, QueryPlan plan2) {
         PTable table1 = plan1.getTableRef().getTable();
         PTable table2 = plan2.getTableRef().getTable();
-        if (table1.isVectorIndex() != table2.isVectorIndex()) {
-          return table1.isVectorIndex()
-            ? -comparisonOfDataVersusIndexTable
-            : comparisonOfDataVersusIndexTable;
+        boolean isVector1 = table1.isVectorIndex();
+        boolean isVector2 = table2.isVectorIndex();
+
+        if (isVector1 != isVector2) {
+          // Vector indexes take precedence over standard secondary indexes for approximate
+          // nearest neighbor queries, and over the primary data table unless hinted otherwise.
+          if (isVector1) {
+            if (table2.getType() == PTableType.INDEX) {
+              return -1;
+            } else {
+              return -comparisonOfDataVersusIndexTable;
+            }
+          } else {
+            if (table1.getType() == PTableType.INDEX) {
+              return 1;
+            } else {
+              return comparisonOfDataVersusIndexTable;
+            }
+          }
+        } else if (isVector1 && isVector2) {
+          // When choosing among vector indexes, prioritize plans that minimize base table
+          // lookups: fully covered scans precede projection lookups, which precede filter lookups.
+          int rank1 = getVectorPlanLookupRank(plan1);
+          int rank2 = getVectorPlanLookupRank(plan2);
+          if (rank1 != rank2) {
+            return Integer.compare(rank1, rank2);
+          }
         }
+
         int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
         int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
         // For shared indexes (i.e. indexes on views and local indexes),
@@ -992,8 +957,73 @@ public class QueryOptimizer {
         }
         return 0;
       }
+    };
 
-    });
+    if (this.costBased) {
+      Collections.sort(plans, new Comparator<QueryPlan>() {
+        @Override
+        public int compare(QueryPlan plan1, QueryPlan plan2) {
+          int c = plan1.getCost().compareTo(plan2.getCost());
+          if (c != 0) {
+            return c;
+          }
+          return staticComparator.compare(plan1, plan2);
+        }
+      });
+      // Return ordered list based on cost if stats are available; otherwise fall
+      // back to static ordering.
+      if (!plans.get(0).getCost().isUnknown()) {
+        QueryPlan costWinner = plans.get(0);
+        for (int i = 1; i < plans.size(); i++) {
+          PTable losingTable = plans.get(i).getTableRef().getTable();
+          if (losingTable.getType() == PTableType.INDEX) {
+            state.reject(losingTable, OptimizerReasons.REASON_COST_BASED_LOSS);
+          }
+        }
+        recordDecision(costWinner, OptimizerReasons.RULE_COST_BASED, state);
+        return stopAtBestPlan ? plans.subList(0, 1) : plans;
+      }
+    }
+
+    /**
+     * If we have a plan(s) that are just point lookups (i.e. fully qualified row keys), then favor
+     * those first.
+     */
+    List<QueryPlan> candidates = Lists.newArrayListWithExpectedSize(plans.size());
+    if (stopAtBestPlan) { // If we're stopping at the best plan, only consider point lookups if
+                          // there are any
+      for (QueryPlan plan : plans) {
+        if (plan.getContext().getScanRanges().isPointLookup()) {
+          candidates.add(plan);
+        }
+      }
+    } else {
+      candidates.addAll(plans);
+    }
+    /**
+     * If we have a plan(s) that removes the order by, choose from among these, as this is typically
+     * the most expensive operation. Once we have stats, if there's a limit on the query, we might
+     * choose a different plan. For example if the limit was a very large number and the combination
+     * of applying other filters on the row key are estimated to choose fewer rows, we'd choose that
+     * one.
+     */
+    List<QueryPlan> stillCandidates = plans;
+    List<QueryPlan> bestCandidates = candidates;
+    if (!candidates.isEmpty()) {
+      stillCandidates = candidates;
+      bestCandidates = Lists.<QueryPlan> newArrayListWithExpectedSize(candidates.size());
+    }
+    for (QueryPlan plan : stillCandidates) {
+      // If ORDER BY optimized out (or not present at all)
+      if (plan.getOrderBy().getOrderByExpressions().isEmpty()) {
+        bestCandidates.add(plan);
+      }
+    }
+    if (bestCandidates.isEmpty()) {
+      bestCandidates.addAll(stillCandidates);
+    }
+
+    Collections.sort(bestCandidates, staticComparator);
 
     // Capture the optimizer's rationale for the chosen plan without altering the ordering above.
     QueryPlan winner = bestCandidates.get(0);
@@ -1231,6 +1261,24 @@ public class QueryOptimizer {
           OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE, winner.getContext()));
       }
     }
+  }
+
+  /**
+   * Ranks vector index plans by data table lookup overhead, prioritizing fully covered indexes over
+   * deferred projection lookups, and projection lookups over filter-time lookups.
+   */
+  private static int getVectorPlanLookupRank(QueryPlan plan) {
+    if (plan instanceof VectorIndexScanPlan) {
+      VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+      if (vPlan.isFilterTimeUncoveredLookup()) {
+        return 2;
+      }
+      if (vPlan.isProjectionTimeUncoveredLookup()) {
+        return 1;
+      }
+      return 0;
+    }
+    return 0;
   }
 
   private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -41,14 +42,20 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -1733,6 +1740,300 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
         "Two-phase recall count (" + twoPhaseRecallCount
           + ") should be >= single-phase recall count (" + singlePhaseRecallCount + ")",
         twoPhaseRecallCount >= singlePhaseRecallCount);
+    }
+  }
+
+  @Test
+  public void testStaticOrderingPrefersCoveringVectorIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String t = generateUniqueName();
+      String idxCovering = generateUniqueName();
+      String idxNonCovering = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + t
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR, DESCRIPTION VARCHAR)");
+        stmt.execute("CREATE VECTOR INDEX " + idxCovering + " ON " + t + " (V) "
+          + "INCLUDE (DESCRIPTION) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+        stmt.execute("CREATE VECTOR INDEX " + idxNonCovering + " ON " + t + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      List<float[]> l2Centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 50.0f, 0.0f, 0.0f, 0.0f }, new float[] { 100.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 150.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, idxCovering, l2Centroids, 1L);
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, idxNonCovering, l2Centroids, 1L);
+
+      String query = "SELECT ID, DESCRIPTION FROM " + t + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        PhoenixPreparedStatement pps = ps.unwrap(PhoenixPreparedStatement.class);
+        QueryPlan plan = pps.optimizeQuery();
+        assertTrue("Expected VectorIndexScanPlan", plan instanceof VectorIndexScanPlan);
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+        assertEquals(idxCovering, vPlan.getTableRef().getTable().getTableName().getString());
+        assertFalse("Covering index should not do projection-time lookup",
+          vPlan.isProjectionTimeUncoveredLookup());
+      }
+    }
+  }
+
+  @Test
+  public void testStaticOrderingPrefersVectorIndexOverRegularIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String t = generateUniqueName();
+      String regularIdx = generateUniqueName();
+      String vectorIdx = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + t
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR, DESCRIPTION VARCHAR)");
+        stmt.execute(
+          "CREATE INDEX " + regularIdx + " ON " + t + " (CATEGORY) INCLUDE (V, DESCRIPTION)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + t + " (V) "
+          + "INCLUDE (CATEGORY, DESCRIPTION) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      List<float[]> l2Centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 50.0f, 0.0f, 0.0f, 0.0f }, new float[] { 100.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 150.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, vectorIdx, l2Centroids, 1L);
+
+      Map<String, float[]> scienceVectors = new LinkedHashMap<>();
+      String upsert = "UPSERT INTO " + t + " (ID, V, CATEGORY, DESCRIPTION) VALUES (?, ?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+        for (int i = 0; i < 20; i++) {
+          String id = "r" + i;
+          float[] v = new float[] { (float) i, 0.0f, 0.0f, 0.0f };
+          String cat = (i % 2 == 0) ? "science" : "art";
+          if ("science".equals(cat)) {
+            scienceVectors.put(id, v);
+          }
+          ps.setString(1, id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setString(3, cat);
+          ps.setString(4, "desc_" + id);
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      // Verify static ordering favors vector indexes over standard secondary indexes for distance
+      // queries
+      String defaultQuery =
+        "SELECT ID FROM " + t + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(defaultQuery)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 0.0f }));
+        PhoenixPreparedStatement pps = ps.unwrap(PhoenixPreparedStatement.class);
+        QueryPlan plan = pps.optimizeQuery();
+        assertTrue("Default plan should be VectorIndexScanPlan",
+          plan instanceof VectorIndexScanPlan);
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+        assertEquals(vectorIdx, vPlan.getTableRef().getTable().getTableName().getString());
+      }
+
+      // Verify an explicit index hint overrides the default vector index selection
+      String hintedQuery = "SELECT /*+ INDEX(" + t + " " + regularIdx + ") */ ID FROM " + t
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      float[] queryVec = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      List<String> expectedGroundTruth =
+        VectorIndexTestUtil.bruteForceTopK(scienceVectors, queryVec, "L2", 5);
+      try (PreparedStatement ps = conn.prepareStatement(hintedQuery)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 0.0f }));
+        PhoenixPreparedStatement pps = ps.unwrap(PhoenixPreparedStatement.class);
+        QueryPlan plan = pps.optimizeQuery();
+        assertFalse("Hinted plan should not be VectorIndexScanPlan",
+          plan instanceof VectorIndexScanPlan);
+        assertEquals(regularIdx, plan.getTableRef().getTable().getTableName().getString());
+
+        List<String> results = new ArrayList<>();
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            results.add(rs.getString(1));
+          }
+        }
+        assertEquals(expectedGroundTruth, results);
+      }
+    }
+  }
+
+  @Test
+  public void testExplainDistinguishesLookupStrategies() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      float[] q = new float[] { 50.2f, 0.1f, -0.1f, 0.05f };
+      Float[] boxedQ = new Float[] { q[0], q[1], q[2], q[3] };
+
+      // Fully covered vector scan where all referenced columns reside in the index
+      String queryCov = "SELECT ID, CATEGORY FROM " + fixL2Covered.tableName
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + queryCov)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("Covered plan must probe centroids: " + plan, plan.contains("CLIENT PROBING"));
+          assertTrue("Covered plan must contain metric (L2): " + plan, plan.contains("(L2)"));
+          assertFalse("Covered plan must not contain SERVER MERGE: " + plan,
+            plan.contains("SERVER MERGE"));
+          assertFalse("Covered plan must not contain CLIENT MERGE [: " + plan,
+            plan.contains("CLIENT MERGE ["));
+        }
+      }
+
+      // Projection-time lookup plan merging uncovered columns on the client for top rows
+      String queryProj = "SELECT ID, DESCRIPTION FROM " + fixL2Covered.tableName
+        + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + queryProj)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("Projection lookup plan must probe centroids: " + plan,
+            plan.contains("CLIENT PROBING"));
+          assertTrue("Projection lookup plan must contain metric (L2): " + plan,
+            plan.contains("(L2)"));
+          assertTrue(
+            "Projection lookup plan must contain CLIENT MERGE [0.DESCRIPTION] FOR TOP-5 ROWS: "
+              + plan,
+            plan.contains("CLIENT MERGE [0.DESCRIPTION] FOR TOP-5 ROWS"));
+          assertFalse("Projection lookup plan must not contain SERVER MERGE: " + plan,
+            plan.contains("SERVER MERGE"));
+        }
+      }
+
+      // Filter-time lookup plan joining against the data table before sorting
+      String queryFilter = "SELECT ID, DESCRIPTION FROM " + fixL2Uncovered.tableName
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + queryFilter)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("Filter lookup plan must probe centroids: " + plan,
+            plan.contains("CLIENT PROBING"));
+          assertTrue("Filter lookup plan must contain metric (L2): " + plan, plan.contains("(L2)"));
+          assertTrue("Filter lookup plan must contain SERVER MERGE: " + plan,
+            plan.contains("SERVER MERGE"));
+          assertFalse("Filter lookup plan must not contain CLIENT MERGE [: " + plan,
+            plan.contains("CLIENT MERGE ["));
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testStructuredExplainAttributes() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      float[] q = new float[] { 50.2f, 0.1f, -0.1f, 0.05f };
+      Float[] boxedQ = new Float[] { q[0], q[1], q[2], q[3] };
+
+      // Projection-time lookup plan specifying an explicit probe count hint
+      String queryProj = "SELECT /*+ VECTOR_PROBE_COUNT(3) */ ID, DESCRIPTION FROM "
+        + fixL2Covered.tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(queryProj).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        QueryPlan plan = pps.optimizeQuery();
+        assertTrue("Plan must be VectorIndexScanPlan", plan instanceof VectorIndexScanPlan);
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+        ExplainPlan explainPlan = vPlan.getExplainPlan();
+        ExplainPlanAttributes attrs = explainPlan.getPlanStepsAsAttributes();
+        assertNotNull("ExplainPlanAttributes must not be null", attrs);
+
+        assertEquals(Integer.valueOf(3), attrs.getVectorProbeCount());
+        assertEquals(Integer.valueOf(4), attrs.getVectorCentroidCount());
+        assertEquals("L2", attrs.getVectorDistanceMetric());
+        assertNotNull("Client merge columns must not be null", attrs.getClientMergeColumns());
+        assertEquals(1, attrs.getClientMergeColumns().size());
+        PColumn mergeCol = attrs.getClientMergeColumns().iterator().next();
+        assertEquals("DESCRIPTION", mergeCol.getName().getString());
+      }
+
+      // Fully covered vector index plan
+      String queryCov = "SELECT ID, CATEGORY FROM " + fixL2Covered.tableName
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(queryCov).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        QueryPlan plan = pps.optimizeQuery();
+        assertTrue("Plan must be VectorIndexScanPlan", plan instanceof VectorIndexScanPlan);
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+        ExplainPlan explainPlan = vPlan.getExplainPlan();
+        ExplainPlanAttributes attrs = explainPlan.getPlanStepsAsAttributes();
+        assertNotNull("ExplainPlanAttributes must not be null", attrs);
+
+        assertNull(
+          "Covered query must report no client merge columns: " + attrs.getClientMergeColumns(),
+          attrs.getClientMergeColumns());
+      }
+    }
+  }
+
+  @Test
+  public void testVectorLiteralAbbreviationInExplain() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      String indexName = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 128))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = new ArrayList<>();
+      for (int k = 0; k < 4; k++) {
+        float[] c = new float[128];
+        c[0] = k * 10.0f;
+        centroids.add(c);
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      float[] rowVector = new float[128];
+      rowVector[0] = 1.0f;
+      Float[] boxedRow = new Float[128];
+      for (int i = 0; i < 128; i++) {
+        boxedRow[i] = rowVector[i];
+      }
+
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)")) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", boxedRow));
+        ps.executeUpdate();
+        conn.commit();
+      }
+
+      float[] queryVector = new float[128];
+      queryVector[0] = 1.0f;
+      queryVector[99] = 77.125f; // 100th element
+      Float[] boxedQ = new Float[128];
+      for (int i = 0; i < 128; i++) {
+        boxedQ[i] = queryVector[i];
+      }
+
+      String sql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + sql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          String[] lines = plan.split("\\r?\\n");
+          String serverTopLine = null;
+          for (String line : lines) {
+            if (line.contains("SERVER TOP-")) {
+              serverTopLine = line;
+              break;
+            }
+          }
+          assertNotNull("EXPLAIN plan must contain SERVER TOP- line: " + plan, serverTopLine);
+          assertTrue("SERVER TOP- line must be < 256 chars (was " + serverTopLine.trim().length()
+            + "): " + serverTopLine, serverTopLine.trim().length() < 256);
+          assertTrue("SERVER TOP- line must contain VECTOR(FLOAT, 128)[: " + serverTopLine,
+            serverTopLine.contains("VECTOR(FLOAT, 128)["));
+          assertFalse("SERVER TOP- line must not contain 77.125: " + serverTopLine,
+            serverTopLine.contains("77.125"));
+        }
+      }
+
+      // Verify that abbreviation applies only to EXPLAIN output, leaving
+      // LiteralExpression.toString() unchanged
+      LiteralExpression litExpr = LiteralExpression.newConstant(queryVector, PVectorFloat.INSTANCE);
+      assertTrue("LiteralExpression.toString() must contain 77.125: " + litExpr.toString(),
+        litExpr.toString().contains("77.125"));
     }
   }
 }
