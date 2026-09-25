@@ -67,6 +67,12 @@ public class ScanRanges {
       ScanUtil.SINGLE_COLUMN_SLOT_SPAN, null, true, -1);
   }
 
+  public static ScanRanges createCentroidScanRanges(List<KeyRange> centroidKeyRanges) {
+    return ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA,
+      Collections.singletonList(centroidKeyRanges), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, null, true,
+      -1);
+  }
+
   // For testing
   public static ScanRanges createSingleSpan(RowKeySchema schema, List<List<KeyRange>> ranges) {
     return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), null, true, -1);

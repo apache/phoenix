@@ -108,7 +108,8 @@ public interface PTable extends PMetaDataEntity {
   public enum IndexType {
     GLOBAL((byte) 1), // Covered Global
     LOCAL((byte) 2), // Covered Local
-    UNCOVERED_GLOBAL((byte) 3); // Uncovered Global
+    UNCOVERED_GLOBAL((byte) 3), // Uncovered Global
+    VECTOR_GLOBAL((byte) 4);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -207,7 +208,9 @@ public interface PTable extends PMetaDataEntity {
     DROP_CHILD_VIEWS((byte) 1),
     INDEX_REBUILD((byte) 2),
     TRANSFORM_MONITOR((byte) 3),
-    CDC_STREAM_PARTITION((byte) 4);
+    CDC_STREAM_PARTITION((byte) 4),
+    VECTOR_SCORECARD_RECONCILE((byte) 5),
+    VECTOR_INDEX_REBUILD((byte) 6);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -1061,6 +1064,34 @@ public interface PTable extends PMetaDataEntity {
    *         words this will be one-to-one mapping between view and PREFIXED KeyRange that'll exist.
    */
   byte[] getRowKeyMatcher();
+
+  /** Returns the vector index algorithm name if this table is a vector index, or null otherwise. */
+  String getVectorIndexAlgorithm();
+
+  /** Returns the vector distance metric if this table is a vector index, or null otherwise. */
+  String getVectorDistanceMetric();
+
+  /** Returns the vector dimension if this table is a vector index, or null otherwise. */
+  Integer getVectorDimension();
+
+  /**
+   * Returns the number of IVF partitions or lists if this table is an IVF vector index, or null
+   * otherwise.
+   */
+  Integer getVectorIvfLists();
+
+  /** Returns the training sample size if this table is an IVF vector index, or null otherwise. */
+  Integer getVectorIvfSampleSize();
+
+  /**
+   * Returns the active centroid generation ID if this table is a vector index, or null otherwise.
+   */
+  Long getVectorCentroidGeneration();
+
+  /** Returns true if this table is a vector index. */
+  default boolean isVectorIndex() {
+    return getVectorIndexAlgorithm() != null;
+  }
 
   /**
    * Class to help track encoded column qualifier counters per column family.

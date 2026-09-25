@@ -116,6 +116,7 @@ import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.index.vector.ScorecardAccumulator;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -539,6 +540,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     try {
       final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
       encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
+      ScorecardAccumulator.getInstance(env.getConfiguration());
       String serverName = env.getServerName().getServerName();
       if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
         // make sure the right version <-> combinations are allowed.
@@ -635,6 +637,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     this.postWriter.stop(msg);
     if (this.indexCDCConsumer != null) {
       this.indexCDCConsumer.stop();
+    }
+    try {
+      ScorecardAccumulator.getInstance().flush();
+    } catch (Exception ex) {
+      LOG.warn("Failed to flush scorecard accumulator on stop: {}", ex.getMessage());
     }
   }
 
@@ -1389,47 +1396,74 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
       IndexMaintainer indexMaintainer = pair.getFirst();
       HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
+      if (!indexMaintainer.isVectorIndex() && indexMaintainer.hasCentroidColumn()) {
+        throw new DoNotRetryIOException(
+          "Server upgrade is required: vector maintainer fields not recognized for index "
+            + indexMaintainer.getIndexDisplayName());
+      }
+      if (
+        indexMaintainer.isVectorIndex() && (indexMaintainer.getVectorDistanceMetric() == null
+          || indexMaintainer.getVectorDimension() == null)
+      ) {
+        throw new DoNotRetryIOException(
+          "Server upgrade is required: vector maintainer fields not recognized for index "
+            + indexMaintainer.getIndexDisplayName());
+      }
       if (
         nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
       ) {
         ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
+        boolean isVectorUnchanged = false;
+        if (indexMaintainer.isVectorIndex() && currentDataRowState != null) {
+          isVectorUnchanged =
+            indexMaintainer.isVectorUnchanged(currentDataRowState, nextDataRowState);
+        }
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName, isVectorUnchanged);
         if (indexPut == null) {
           // No covered column. Just prepare an index row with the empty column
           byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
             encodedRegionName);
-          indexPut = new Put(indexRowKey);
+          if (indexRowKey != null) {
+            indexPut = new Put(indexRowKey);
+          }
         } else {
           IndexUtil.removeEmptyColumn(indexPut,
             indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
             indexMaintainer.getEmptyKeyValueQualifier());
         }
-        byte[] finalEmptyColumnValue =
-          indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
-        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-          indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
-        indexUpdates.put(hTableInterfaceReference, indexPut);
-        if (!ignoreWritingDeleteColumnsToIndex) {
-          Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
-          if (deleteColumn != null) {
-            indexUpdates.put(hTableInterfaceReference, deleteColumn);
+        byte[] indexRowKeyForCurrentDataRow = null;
+        if (indexPut != null) {
+          byte[] finalEmptyColumnValue =
+            indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
+          indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+            indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
+          indexUpdates.put(hTableInterfaceReference, indexPut);
+          if (!ignoreWritingDeleteColumnsToIndex) {
+            Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+            if (deleteColumn != null) {
+              indexUpdates.put(hTableInterfaceReference, deleteColumn);
+            }
+          }
+          // Delete the current index row if the new index key is different from the
+          // current one and the index is not a CDC index
+          if (currentDataRowState != null && !isVectorUnchanged) {
+            ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+            indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
+              null, null, ts, encodedRegionName);
+            if (
+              indexRowKeyForCurrentDataRow != null && !indexMaintainer.isCDCIndex()
+                && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
+            ) {
+              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+              indexUpdates.put(hTableInterfaceReference, del);
+            }
           }
         }
-        // Delete the current index row if the new index key is different from the
-        // current one and the index is not a CDC index
-        if (currentDataRowState != null) {
-          ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-          byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
-            rowKeyPtr, null, null, ts, encodedRegionName);
-          if (
-            !indexMaintainer.isCDCIndex()
-              && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
-          ) {
-            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-              IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-            indexUpdates.put(hTableInterfaceReference, del);
-          }
+        if (indexMaintainer.isVectorIndex()) {
+          updateVectorScorecardSafely(indexMaintainer, currentDataRowState, nextDataRowState,
+            nextDataRowVG, indexPut, isVectorUnchanged, indexRowKeyForCurrentDataRow, ts);
         }
       } else if (
         currentDataRowState != null
@@ -1445,9 +1479,119 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
             indexMaintainer, ts, rowKeyPtr, encodedRegionName));
         } else {
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          // Construct the index row key once to avoid redundant nearest-centroid lookups.
+          byte[] priorIndexRowKey =
+            indexMaintainer.buildRowKey(new IndexUtil.SimpleValueGetter(currentDataRowState),
+              rowKeyPtr, null, null, ts, encodedRegionName);
+          indexUpdates.put(hTableInterfaceReference, indexMaintainer
+            .buildRowDeleteMutation(priorIndexRowKey, IndexMaintainer.DeleteType.ALL_VERSIONS, ts));
+          if (indexMaintainer.isVectorIndex()) {
+            updateVectorScorecardSafely(indexMaintainer, currentDataRowState, null, null, null,
+              false, priorIndexRowKey, ts);
+          }
         }
+      }
+    }
+  }
+
+  /**
+   * Best-effort scorecard update that catches exceptions to avoid failing the primary index
+   * mutation.
+   */
+  private static void updateVectorScorecardSafely(IndexMaintainer indexMaintainer,
+    Put currentDataRowState, Put nextDataRowState, ValueGetter nextDataRowVG, Put indexPut,
+    boolean isVectorUnchanged, byte[] indexRowKeyForCurrentDataRow, long ts) {
+    try {
+      updateVectorScorecard(indexMaintainer, currentDataRowState, nextDataRowState, nextDataRowVG,
+        indexPut, isVectorUnchanged, indexRowKeyForCurrentDataRow, ts);
+    } catch (Throwable t) {
+      LOG.warn("Vector scorecard maintenance failed for index {}; counters will be corrected by "
+        + "reconciliation.", indexMaintainer.getLogicalIndexName(), t);
+    }
+  }
+
+  private static void updateVectorScorecard(IndexMaintainer indexMaintainer,
+    Put currentDataRowState, Put nextDataRowState, ValueGetter nextDataRowVG, Put indexPut,
+    boolean isVectorUnchanged, byte[] indexRowKeyForCurrentDataRow, long ts) {
+    if (!indexMaintainer.isVectorIndex()) {
+      return;
+    }
+    String indexName = indexMaintainer.getLogicalIndexName();
+    Long genLong = indexMaintainer.getVectorCentroidGeneration();
+    long generationId = genLong != null ? genLong : 1L;
+
+    if (nextDataRowState != null && currentDataRowState == null) {
+      // Insert: increment cluster size on assigned centroid
+      if (indexPut != null) {
+        Integer centroidId = indexMaintainer.extractCentroidId(indexPut.getRow());
+        if (centroidId == null && nextDataRowVG != null) {
+          centroidId = indexMaintainer.getCentroidId(nextDataRowVG, ts);
+        }
+        if (centroidId != null) {
+          ScorecardAccumulator.getInstance().accumulate(indexName, generationId, centroidId, 1L,
+            0L);
+          MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource()
+            .incrementVectorCentroidAssignments(indexName);
+        }
+      }
+    } else if (nextDataRowState != null && currentDataRowState != null) {
+      if (isVectorUnchanged) {
+        // Update: vector unchanged
+        return;
+      }
+      if (indexPut != null && indexRowKeyForCurrentDataRow != null) {
+        if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
+          // Update: centroid changed; update cluster sizes and increment reassign count
+          Integer priorCentroidId = indexMaintainer.extractCentroidId(indexRowKeyForCurrentDataRow);
+          if (priorCentroidId == null) {
+            priorCentroidId = indexMaintainer
+              .getCentroidId(new IndexUtil.SimpleValueGetter(currentDataRowState), ts);
+          }
+          Integer arrivingCentroidId = indexMaintainer.extractCentroidId(indexPut.getRow());
+          if (arrivingCentroidId == null && nextDataRowVG != null) {
+            arrivingCentroidId = indexMaintainer.getCentroidId(nextDataRowVG, ts);
+          }
+          if (priorCentroidId != null) {
+            ScorecardAccumulator.getInstance().accumulate(indexName, generationId, priorCentroidId,
+              -1L, 0L);
+          }
+          if (arrivingCentroidId != null) {
+            ScorecardAccumulator.getInstance().accumulate(indexName, generationId,
+              arrivingCentroidId, 1L, 1L);
+            MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource()
+              .incrementVectorCentroidAssignments(indexName);
+            MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource()
+              .incrementVectorCentroidReassignments(indexName);
+          }
+        }
+        // Update: vector changed within same centroid
+      } else if (indexPut != null && indexRowKeyForCurrentDataRow == null) {
+        // Insert: vector added to existing row
+        Integer arrivingCentroidId = indexMaintainer.extractCentroidId(indexPut.getRow());
+        if (arrivingCentroidId == null && nextDataRowVG != null) {
+          arrivingCentroidId = indexMaintainer.getCentroidId(nextDataRowVG, ts);
+        }
+        if (arrivingCentroidId != null) {
+          ScorecardAccumulator.getInstance().accumulate(indexName, generationId, arrivingCentroidId,
+            1L, 0L);
+          MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource()
+            .incrementVectorCentroidAssignments(indexName);
+        }
+      }
+      // Vector removals that emit no index mutation are reconciled during periodic sweeps.
+    } else if (nextDataRowState == null && currentDataRowState != null) {
+      // Delete: decrement cluster size on prior centroid
+      Integer priorCentroidId = null;
+      if (indexRowKeyForCurrentDataRow != null) {
+        priorCentroidId = indexMaintainer.extractCentroidId(indexRowKeyForCurrentDataRow);
+      }
+      if (priorCentroidId == null) {
+        priorCentroidId =
+          indexMaintainer.getCentroidId(new IndexUtil.SimpleValueGetter(currentDataRowState), ts);
+      }
+      if (priorCentroidId != null) {
+        ScorecardAccumulator.getInstance().accumulate(indexName, generationId, priorCentroidId, -1L,
+          0L);
       }
     }
   }

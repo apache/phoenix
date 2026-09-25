@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
@@ -51,6 +52,8 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -72,6 +75,8 @@ import org.apache.phoenix.schema.types.PUnsignedTimeArray;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestampArray;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -249,14 +254,20 @@ public class CreateIndexCompiler {
       new StatementContext(statement, resolver, scan, new SequenceManager(statement));
     verifyIndexWhere(create.getWhere(), context, create.getTable().getName());
     ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-    List<ParseNode> splitNodes = create.getSplitNodes();
-    if (create.getIndexType() == IndexType.LOCAL) {
+    final CreateIndexStatement stmtToCreate;
+    if (create.getIndexType() == IndexType.VECTOR_GLOBAL) {
+      stmtToCreate = verifyVectorIndex(create, context, expressionCompiler);
+    } else {
+      stmtToCreate = create;
+    }
+    List<ParseNode> splitNodes = stmtToCreate.getSplitNodes();
+    if (stmtToCreate.getIndexType() == IndexType.LOCAL) {
       if (!splitNodes.isEmpty()) {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX).build()
           .buildException();
       }
       List<Pair<String, Object>> list =
-        create.getProps() != null ? create.getProps().get("") : null;
+        stmtToCreate.getProps() != null ? stmtToCreate.getProps().get("") : null;
       if (list != null) {
         for (Pair<String, Object> pair : list) {
           if (pair.getFirst().equals(PhoenixDatabaseMetaData.SALT_BUCKETS)) {
@@ -273,6 +284,7 @@ public class CreateIndexCompiler {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
           .setMessage("Node: " + node).build().buildException();
       }
+      expressionCompiler.reset();
       LiteralExpression expression = (LiteralExpression) node.accept(expressionCompiler);
       splits[i] = expression.getBytes();
     }
@@ -281,7 +293,7 @@ public class CreateIndexCompiler {
     return new BaseMutationPlan(context, operation) {
       @Override
       public MutationState execute() throws SQLException {
-        return client.createIndex(create, splits);
+        return client.createIndex(stmtToCreate, splits);
       }
 
       @Override
@@ -290,6 +302,123 @@ public class CreateIndexCompiler {
       }
 
     };
+  }
+
+  /**
+   * Validates vector index DDL specifications and resolves indexing metadata. Verifies that the
+   * indexed expression targets a single vector-typed column, validates distance metric and indexing
+   * algorithm options against supported configurations, ensures algorithm parameters satisfy
+   * required bounds, and resolves the vector dimensionality against the underlying column
+   * definition.
+   */
+  private CreateIndexStatement verifyVectorIndex(CreateIndexStatement create,
+    StatementContext context, ExpressionCompiler expressionCompiler) throws SQLException {
+    // Vector indexes are not supported on views.
+    PTable dataTable = context.getResolver().getTables().get(0).getTable();
+    if (dataTable.getType() == PTableType.VIEW) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector indexes are not supported on views").build().buildException();
+    }
+
+    // Vector indexes require exactly one indexed expression evaluating to a vector type.
+    IndexKeyConstraint ik = create.getIndexConstraint();
+    List<Pair<ParseNode, SortOrder>> pairs = ik != null
+      ? ik.getParseNodeAndSortOrderList()
+      : Collections.<Pair<ParseNode, SortOrder>> emptyList();
+    if (pairs.isEmpty()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector index key constraint must contain exactly one vector expression")
+        .build().buildException();
+    }
+
+    int vectorCount = 0;
+    Expression vectorExpr = null;
+    for (Pair<ParseNode, SortOrder> pair : pairs) {
+      ParseNode node = pair.getFirst();
+      ParseNode normalizedNode = StatementNormalizer.normalize(node, context.getResolver());
+      expressionCompiler.reset();
+      Expression expr = normalizedNode.accept(expressionCompiler);
+      if (
+        expr.getDataType() instanceof PVectorFloat || expr.getDataType() instanceof PVectorDouble
+      ) {
+        vectorCount++;
+        if (vectorExpr == null) {
+          vectorExpr = expr;
+        }
+      }
+    }
+
+    if (vectorCount == 0) {
+      ParseNode firstNode = pairs.get(0).getFirst();
+      ParseNode normalizedNode = StatementNormalizer.normalize(firstNode, context.getResolver());
+      expressionCompiler.reset();
+      Expression firstExpr = normalizedNode.accept(expressionCompiler);
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_NON_VECTOR_TYPE)
+        .setMessage("Vector index can only be created on a VECTOR column. Expression '" + firstNode
+          + "' has type " + firstExpr.getDataType().getSqlTypeName())
+        .build().buildException();
+    }
+
+    if (vectorCount > 1 || pairs.size() > 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS).setMessage(
+        "Vector index key constraint must contain exactly one vector expression. Found: "
+          + (vectorCount > 1 ? vectorCount + " vector expressions" : pairs.size() + " expressions"))
+        .build().buildException();
+    }
+
+    // Validate that the specified similarity metric is supported.
+    String metric = create.getVectorMetric();
+    boolean validMetric = metric != null
+      && (metric.trim().equalsIgnoreCase("L2") || metric.trim().equalsIgnoreCase("COSINE")
+        || metric.trim().equalsIgnoreCase("INNER_PRODUCT"));
+    if (!validMetric) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_DISTANCE_METRIC)
+        .setMessage("Unsupported vector distance metric: " + metric).build().buildException();
+    }
+
+    // Validate that the requested indexing algorithm is supported.
+    String algorithm = create.getVectorAlgorithm();
+    boolean validAlgorithm = algorithm != null && algorithm.trim().equalsIgnoreCase("IVF");
+    if (!validAlgorithm) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
+        .setMessage("Unsupported vector index algorithm: " + algorithm).build().buildException();
+    }
+
+    // Validate IVF cluster partition count and training sample bounds.
+    if ("IVF".equalsIgnoreCase(algorithm.trim())) {
+      Integer lists = create.getVectorLists();
+      Integer sampleSize = create.getVectorSampleSize();
+      if (lists == null || sampleSize == null) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS).setMessage(
+          "Missing required IVF parameters: " + (lists == null ? "lists is required. " : "")
+            + (sampleSize == null ? "sample_size is required." : ""))
+          .build().buildException();
+      }
+      if (lists <= 0 || sampleSize < lists) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage(
+            "Invalid vector index parameters: lists=" + lists + ", sample_size=" + sampleSize)
+          .build().buildException();
+      }
+    }
+
+    // Ensure the vector dimensionality can be determined at compile time and matches any explicit
+    // DDL dimension.
+    Integer dimension = vectorExpr.getMaxLength();
+    if (dimension == null || dimension <= 0) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage(
+          "Vector expression dimension must be resolvable at compile time and greater than 0")
+        .build().buildException();
+    }
+    if (create.getVectorDimension() != null && !create.getVectorDimension().equals(dimension)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_DIMENSION_MISMATCH)
+        .setMessage("Vector index dimension " + create.getVectorDimension()
+          + " does not match source column dimension " + dimension)
+        .build().buildException();
+    }
+
+    return new CreateIndexStatement(create, dimension);
   }
 
   /**

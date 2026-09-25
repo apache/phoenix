@@ -170,6 +170,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
   public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
   public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
+
   public static final String DEFAULT_DATE_FORMAT_TIMEZONE = DateUtil.DEFAULT_TIME_ZONE_ID;
   public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true;
   public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;
@@ -232,6 +233,20 @@ public class QueryServicesOptions {
                                                                                            // mins
   public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE = 1024L * 1024L * 20L; // 20 Mb
   public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE = 1024L * 1024L * 10L; // 10 Mb
+  public static final long DEFAULT_VECTOR_CENTROID_CACHE_MAX_SIZE = 1000L;
+  public static final int DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT = 1024;
+  public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
+  public static final int DEFAULT_VECTOR_MAX_PROBE_LIMIT = Integer.MAX_VALUE;
+  public static final double DEFAULT_VECTOR_OVERSAMPLE_FACTOR = 3.0;
+  public static final boolean DEFAULT_VECTOR_KMEANS_LOCAL = false;
+  public static final long DEFAULT_VECTOR_INDEX_SCORECARD_FLUSH_INTERVAL_MS = 60000L;
+  public static final long DEFAULT_VECTOR_INDEX_SCORECARD_RECONCILE_INTERVAL_MS = 86400000L;
+  public static final double DEFAULT_VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD = 4.0;
+  public static final long DEFAULT_VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE = 1000L;
+  public static final boolean DEFAULT_VECTOR_INDEX_REBUILD_AUTO_ENABLED = false;
+  public static final long DEFAULT_VECTOR_INDEX_REBUILD_MIN_INTERVAL_MS = 86400000L;
+  public static final String DEFAULT_VECTOR_INDEX_REBUILD_PROBE_POLICY = "EXPAND";
+  public static final double DEFAULT_VECTOR_INDEX_REBUILD_PROBE_FACTOR = 2.0;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
   public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
@@ -776,6 +791,11 @@ public class QueryServicesOptions {
 
   QueryServicesOptions set(String name, long value) {
     config.set(name, Long.toString(value));
+    return this;
+  }
+
+  QueryServicesOptions set(String name, double value) {
+    config.set(name, Double.toString(value));
     return this;
   }
 

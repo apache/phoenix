@@ -451,6 +451,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String INDEX_WHERE = "INDEX_WHERE";
   public static final byte[] INDEX_WHERE_BYTES = Bytes.toBytes(INDEX_WHERE);
 
+  public static final String VECTOR_INDEX_ALGORITHM = "VECTOR_INDEX_ALGORITHM";
+  public static final byte[] VECTOR_INDEX_ALGORITHM_BYTES = Bytes.toBytes(VECTOR_INDEX_ALGORITHM);
+
+  public static final String VECTOR_DISTANCE_METRIC = "VECTOR_DISTANCE_METRIC";
+  public static final byte[] VECTOR_DISTANCE_METRIC_BYTES = Bytes.toBytes(VECTOR_DISTANCE_METRIC);
+
+  public static final String VECTOR_DIMENSION = "VECTOR_DIMENSION";
+  public static final byte[] VECTOR_DIMENSION_BYTES = Bytes.toBytes(VECTOR_DIMENSION);
+
+  public static final String VECTOR_IVF_LISTS = "VECTOR_IVF_LISTS";
+  public static final byte[] VECTOR_IVF_LISTS_BYTES = Bytes.toBytes(VECTOR_IVF_LISTS);
+
+  public static final String VECTOR_IVF_SAMPLE_SIZE = "VECTOR_IVF_SAMPLE_SIZE";
+  public static final byte[] VECTOR_IVF_SAMPLE_SIZE_BYTES = Bytes.toBytes(VECTOR_IVF_SAMPLE_SIZE);
+
+  public static final String VECTOR_CENTROID_GENERATION = "VECTOR_CENTROID_GENERATION";
+  public static final byte[] VECTOR_CENTROID_GENERATION_BYTES =
+    Bytes.toBytes(VECTOR_CENTROID_GENERATION);
+
   public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
   public static final String SYSTEM_CHILD_LINK_NAME =
     SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
@@ -509,6 +528,43 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String TRACKER_STATUS_IN_PROGRESS = "i";
   public static final String TRACKER_STATUS_COMPLETE = "c";
   public static final int IDX_CDC_TRACKER_TTL = 10 * 24 * 60 * 60;
+
+  public static final String SYSTEM_VECTOR_CENTROID_TABLE = "VECTOR_CENTROID";
+  public static final String SYSTEM_VECTOR_CENTROID_NAME =
+    SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_VECTOR_CENTROID_TABLE);
+  public static final byte[] SYSTEM_VECTOR_CENTROID_NAME_BYTES =
+    Bytes.toBytes(SYSTEM_VECTOR_CENTROID_NAME);
+  public static final TableName SYSTEM_VECTOR_CENTROID_HBASE_TABLE_NAME =
+    TableName.valueOf(SYSTEM_VECTOR_CENTROID_NAME);
+  public static final String INDEX_NAME = "INDEX_NAME";
+  public static final byte[] INDEX_NAME_BYTES = Bytes.toBytes(INDEX_NAME);
+  public static final String CENTROID_ID = "CENTROID_ID";
+  public static final byte[] CENTROID_ID_BYTES = Bytes.toBytes(CENTROID_ID);
+  public static final String CENTROID_VECTOR = "CENTROID_VECTOR";
+  public static final byte[] CENTROID_VECTOR_BYTES = Bytes.toBytes(CENTROID_VECTOR);
+  public static final String GENERATION_ID = "GENERATION_ID";
+  public static final byte[] GENERATION_ID_BYTES = Bytes.toBytes(GENERATION_ID);
+  public static final String CLUSTER_SIZE = "CLUSTER_SIZE";
+  public static final byte[] CLUSTER_SIZE_BYTES = Bytes.toBytes(CLUSTER_SIZE);
+  public static final String REASSIGN_COUNT = "REASSIGN_COUNT";
+  public static final byte[] REASSIGN_COUNT_BYTES = Bytes.toBytes(REASSIGN_COUNT);
+  public static final String SKEW_METRICS = "SKEW_METRICS";
+  public static final byte[] SKEW_METRICS_BYTES = Bytes.toBytes(SKEW_METRICS);
+  public static final String REBUILD_STATE = "REBUILD_STATE";
+  public static final byte[] REBUILD_STATE_BYTES = Bytes.toBytes(REBUILD_STATE);
+  public static final String TRIGGER_REASON = "TRIGGER_REASON";
+  public static final byte[] TRIGGER_REASON_BYTES = Bytes.toBytes(TRIGGER_REASON);
+  public static final String LAST_REBUILD_TIME = "LAST_REBUILD_TIME";
+  public static final byte[] LAST_REBUILD_TIME_BYTES = Bytes.toBytes(LAST_REBUILD_TIME);
+  public static final String LAST_SCORECARD_UPDATE = "LAST_SCORECARD_UPDATE";
+  public static final byte[] LAST_SCORECARD_UPDATE_BYTES = Bytes.toBytes(LAST_SCORECARD_UPDATE);
+
+  public static final int SENTINEL_CENTROID_ID = -1;
+  public static final String REBUILD_STATE_ACTIVE = "A";
+  public static final String REBUILD_STATE_BUILDING = "B";
+  public static final String REBUILD_STATE_RETIRED = "R";
+  public static final String TRIGGER_REASON_CREATE_INDEX = "CREATE_INDEX";
+  public static final String TRIGGER_REASON_INDEX_TOOL = "INDEX_TOOL";
 
   public static final String QUERY_ID = "QUERY_ID";
   public static final String USER = "USER";

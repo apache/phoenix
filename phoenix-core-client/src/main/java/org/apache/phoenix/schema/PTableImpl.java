@@ -39,6 +39,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVID
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_MULTI_TENANT;
@@ -224,6 +230,12 @@ public class PTableImpl implements PTable {
   private Set<ColumnReference> indexWhereColumns;
   private Map<PTableKey, Long> ancestorLastDDLTimestampMap;
   private Set<CDCChangeScope> cdcIncludeScopes;
+  private final String vectorIndexAlgorithm;
+  private final String vectorDistanceMetric;
+  private final Integer vectorDimension;
+  private final Integer vectorIvfLists;
+  private final Integer vectorIvfSampleSize;
+  private final Long vectorCentroidGeneration;
 
   public static class Builder {
     private PTableKey key;
@@ -294,6 +306,12 @@ public class PTableImpl implements PTable {
     private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
     private TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
     private byte[] rowKeyMatcher;
+    private String vectorIndexAlgorithm;
+    private String vectorDistanceMetric;
+    private Integer vectorDimension;
+    private Integer vectorIvfLists;
+    private Integer vectorIvfSampleSize;
+    private Long vectorCentroidGeneration;
 
     // Used to denote which properties a view has explicitly modified
     private BitSet viewModifiedPropSet = new BitSet(3);
@@ -745,6 +763,78 @@ public class PTableImpl implements PTable {
       return this;
     }
 
+    public Builder setVectorIndexAlgorithm(String vectorIndexAlgorithm) {
+      if (vectorIndexAlgorithm != null) {
+        propertyValues.put(VECTOR_INDEX_ALGORITHM, vectorIndexAlgorithm);
+      }
+      this.vectorIndexAlgorithm = vectorIndexAlgorithm;
+      return this;
+    }
+
+    public Builder vectorIndexAlgorithm(String vectorIndexAlgorithm) {
+      return setVectorIndexAlgorithm(vectorIndexAlgorithm);
+    }
+
+    public Builder setVectorDistanceMetric(String vectorDistanceMetric) {
+      if (vectorDistanceMetric != null) {
+        propertyValues.put(VECTOR_DISTANCE_METRIC, vectorDistanceMetric);
+      }
+      this.vectorDistanceMetric = vectorDistanceMetric;
+      return this;
+    }
+
+    public Builder vectorDistanceMetric(String vectorDistanceMetric) {
+      return setVectorDistanceMetric(vectorDistanceMetric);
+    }
+
+    public Builder setVectorDimension(Integer vectorDimension) {
+      if (vectorDimension != null) {
+        propertyValues.put(VECTOR_DIMENSION, String.valueOf(vectorDimension));
+      }
+      this.vectorDimension = vectorDimension;
+      return this;
+    }
+
+    public Builder vectorDimension(Integer vectorDimension) {
+      return setVectorDimension(vectorDimension);
+    }
+
+    public Builder setVectorIvfLists(Integer vectorIvfLists) {
+      if (vectorIvfLists != null) {
+        propertyValues.put(VECTOR_IVF_LISTS, String.valueOf(vectorIvfLists));
+      }
+      this.vectorIvfLists = vectorIvfLists;
+      return this;
+    }
+
+    public Builder vectorIvfLists(Integer vectorIvfLists) {
+      return setVectorIvfLists(vectorIvfLists);
+    }
+
+    public Builder setVectorIvfSampleSize(Integer vectorIvfSampleSize) {
+      if (vectorIvfSampleSize != null) {
+        propertyValues.put(VECTOR_IVF_SAMPLE_SIZE, String.valueOf(vectorIvfSampleSize));
+      }
+      this.vectorIvfSampleSize = vectorIvfSampleSize;
+      return this;
+    }
+
+    public Builder vectorIvfSampleSize(Integer vectorIvfSampleSize) {
+      return setVectorIvfSampleSize(vectorIvfSampleSize);
+    }
+
+    public Builder setVectorCentroidGeneration(Long vectorCentroidGeneration) {
+      if (vectorCentroidGeneration != null) {
+        propertyValues.put(VECTOR_CENTROID_GENERATION, String.valueOf(vectorCentroidGeneration));
+      }
+      this.vectorCentroidGeneration = vectorCentroidGeneration;
+      return this;
+    }
+
+    public Builder vectorCentroidGeneration(Long vectorCentroidGeneration) {
+      return setVectorCentroidGeneration(vectorCentroidGeneration);
+    }
+
     /**
      * Populate derivable attributes of the PTable
      * @return PTableImpl.Builder object
@@ -1028,6 +1118,12 @@ public class PTableImpl implements PTable {
     this.indexWhere = builder.indexWhere;
     this.ancestorLastDDLTimestampMap = builder.ancestorLastDDLTimestampMap;
     this.rowKeyMatcher = builder.rowKeyMatcher;
+    this.vectorIndexAlgorithm = builder.vectorIndexAlgorithm;
+    this.vectorDistanceMetric = builder.vectorDistanceMetric;
+    this.vectorDimension = builder.vectorDimension;
+    this.vectorIvfLists = builder.vectorIvfLists;
+    this.vectorIvfSampleSize = builder.vectorIvfSampleSize;
+    this.vectorCentroidGeneration = builder.vectorCentroidGeneration;
   }
 
   // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1100,7 +1196,12 @@ public class PTableImpl implements PTable {
       .setStreamingTopicName(table.getStreamingTopicName()).setIndexWhere(table.getIndexWhere())
       .setCDCIncludeScopes(table.getCDCIncludeScopes())
       .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap())
-      .setTTL(table.getTTLExpression()).setRowKeyMatcher(table.getRowKeyMatcher());
+      .setTTL(table.getTTLExpression()).setRowKeyMatcher(table.getRowKeyMatcher())
+      .setVectorIndexAlgorithm(table.getVectorIndexAlgorithm())
+      .setVectorDistanceMetric(table.getVectorDistanceMetric())
+      .setVectorDimension(table.getVectorDimension()).setVectorIvfLists(table.getVectorIvfLists())
+      .setVectorIvfSampleSize(table.getVectorIvfSampleSize())
+      .setVectorCentroidGeneration(table.getVectorCentroidGeneration());
   }
 
   @Override
@@ -2111,6 +2212,30 @@ public class PTableImpl implements PTable {
     if (table.hasRowKeyMatcher()) {
       rowKeyMatcher = table.getRowKeyMatcher().toByteArray();
     }
+    String vectorIndexAlgorithm = null;
+    if (table.hasVectorIndexAlgorithm()) {
+      vectorIndexAlgorithm = table.getVectorIndexAlgorithm();
+    }
+    String vectorDistanceMetric = null;
+    if (table.hasVectorDistanceMetric()) {
+      vectorDistanceMetric = table.getVectorDistanceMetric();
+    }
+    Integer vectorDimension = null;
+    if (table.hasVectorDimension()) {
+      vectorDimension = table.getVectorDimension();
+    }
+    Integer vectorIvfLists = null;
+    if (table.hasVectorIvfLists()) {
+      vectorIvfLists = table.getVectorIvfLists();
+    }
+    Integer vectorIvfSampleSize = null;
+    if (table.hasVectorIvfSampleSize()) {
+      vectorIvfSampleSize = table.getVectorIvfSampleSize();
+    }
+    Long vectorCentroidGeneration = null;
+    if (table.hasVectorCentroidGeneration()) {
+      vectorCentroidGeneration = table.getVectorCentroidGeneration();
+    }
     IndexConsistency indexConsistency = null;
     if (tableType == PTableType.INDEX) {
       if (table.hasIndexConsistency()) {
@@ -2154,10 +2279,18 @@ public class PTableImpl implements PTable {
         .setIsStrictTTL(isStrictTTL).setSchemaVersion(schemaVersion)
         .setExternalSchemaId(externalSchemaId).setStreamingTopicName(streamingTopicName)
         .setCDCIncludeScopes(CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
-        .setIndexWhere(indexWhere).setTTL(ttl).setRowKeyMatcher(rowKeyMatcher).build();
+        .setIndexWhere(indexWhere).setTTL(ttl).setRowKeyMatcher(rowKeyMatcher)
+        .setVectorIndexAlgorithm(vectorIndexAlgorithm).setVectorDistanceMetric(vectorDistanceMetric)
+        .setVectorDimension(vectorDimension).setVectorIvfLists(vectorIvfLists)
+        .setVectorIvfSampleSize(vectorIvfSampleSize)
+        .setVectorCentroidGeneration(vectorCentroidGeneration).build();
     } catch (SQLException e) {
       throw new RuntimeException(e); // Impossible
     }
+  }
+
+  public static PTable fromProto(PTableProtos.PTable table) {
+    return createFromProto(table);
   }
 
   public static PTableProtos.PTable toProto(PTable table) {
@@ -2326,6 +2459,24 @@ public class PTableImpl implements PTable {
     }
     if (table.getRowKeyMatcher() != null) {
       builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
+    }
+    if (table.getVectorIndexAlgorithm() != null) {
+      builder.setVectorIndexAlgorithm(table.getVectorIndexAlgorithm());
+    }
+    if (table.getVectorDistanceMetric() != null) {
+      builder.setVectorDistanceMetric(table.getVectorDistanceMetric());
+    }
+    if (table.getVectorDimension() != null) {
+      builder.setVectorDimension(table.getVectorDimension());
+    }
+    if (table.getVectorIvfLists() != null) {
+      builder.setVectorIvfLists(table.getVectorIvfLists());
+    }
+    if (table.getVectorIvfSampleSize() != null) {
+      builder.setVectorIvfSampleSize(table.getVectorIvfSampleSize());
+    }
+    if (table.getVectorCentroidGeneration() != null) {
+      builder.setVectorCentroidGeneration(table.getVectorCentroidGeneration());
     }
     return builder.build();
   }
@@ -2568,6 +2719,41 @@ public class PTableImpl implements PTable {
   @Override
   public byte[] getRowKeyMatcher() {
     return rowKeyMatcher;
+  }
+
+  @Override
+  public String getVectorIndexAlgorithm() {
+    return vectorIndexAlgorithm;
+  }
+
+  @Override
+  public String getVectorDistanceMetric() {
+    return vectorDistanceMetric;
+  }
+
+  @Override
+  public Integer getVectorDimension() {
+    return vectorDimension;
+  }
+
+  @Override
+  public Integer getVectorIvfLists() {
+    return vectorIvfLists;
+  }
+
+  @Override
+  public Integer getVectorIvfSampleSize() {
+    return vectorIvfSampleSize;
+  }
+
+  @Override
+  public Long getVectorCentroidGeneration() {
+    return vectorCentroidGeneration;
+  }
+
+  @Override
+  public boolean isVectorIndex() {
+    return vectorIndexAlgorithm != null;
   }
 
   private static final class KVColumnFamilyQualifier {

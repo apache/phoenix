@@ -19,6 +19,7 @@ package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +30,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,8 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -52,8 +56,13 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnValueDecoder;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -443,6 +452,312 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
           }
         }
       }
+    }
+  }
+
+  @Test
+  public void testBuildDeleteColumnMutationReturnsNullWhenAllCoveredColumnsPresent()
+    throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String ddl = String
+      .format("create table %s (id varchar primary key, col1 varchar, col2 varchar)", tableName);
+    String index =
+      String.format("create index %s on %s (col2) include (col1)", indexName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(index);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable table = pconn.getTable(tableName);
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      table.getIndexMaintainers(ptr, pconn);
+      List<IndexMaintainer> ims =
+        IndexMaintainer.deserialize(ptr, GenericKeyValueBuilder.INSTANCE, true);
+      assertEquals(1, ims.size());
+      IndexMaintainer im = ims.get(0);
+      String dml = String.format("upsert into %s values ('a', 'ab', 'abc')", tableName);
+      pconn.createStatement().execute(dml);
+      Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+      while (iterator.hasNext()) {
+        Pair<byte[], List<Mutation>> mutationPair = iterator.next();
+        Put dataRow = (Put) mutationPair.getSecond().get(0);
+        ValueGetter vg = new IndexUtil.SimpleValueGetter(dataRow);
+        long ts = EnvironmentEdgeManager.currentTimeMillis();
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(dataRow.getRow());
+        Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, vg, rowKey, ts, null,
+          null, false, null);
+        if (indexPut == null) {
+          byte[] indexRowKey = im.buildRowKey(vg, rowKey, null, null, ts, null);
+          indexPut = new Put(indexRowKey);
+        }
+        indexPut.addColumn(im.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+          im.getEmptyKeyValueQualifier(), ts, QueryConstants.UNVERIFIED_BYTES);
+        Delete deleteCol = im.buildDeleteColumnMutation(indexPut, ts);
+        assertNull("Full update should produce null delete (not an empty Delete)", deleteCol);
+      }
+    }
+  }
+
+  @Test
+  public void testCoveredVectorColumnTypeTracking() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String ddl = String.format(
+      "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3))",
+      tableName);
+    String indexDdl = String.format(
+      "CREATE VECTOR INDEX %s ON %s (V) INCLUDE (COV_D) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)",
+      indexName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(indexDdl);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable dataTable = pconn.getTable(tableName);
+      PTable indexTable = pconn.getTable(indexName);
+      IndexMaintainer maintainer = indexTable.getIndexMaintainer(dataTable, pconn);
+
+      PColumn covCol = dataTable.getColumnForColumnName("COV_D");
+      ColumnReference covRef =
+        new ColumnReference(covCol.getFamilyName().getBytes(), covCol.getColumnQualifierBytes());
+      PColumn indexedCol = dataTable.getColumnForColumnName("V");
+      ColumnReference indexedRef = new ColumnReference(indexedCol.getFamilyName().getBytes(),
+        indexedCol.getColumnQualifierBytes());
+
+      assertTrue("COV_D should be recognized as a covered vector column",
+        maintainer.isCoveredVectorColumn(covRef));
+      assertTrue("In vector index, V is stored in index CF and recognized as covered vector column",
+        maintainer.isCoveredVectorColumn(indexedRef));
+
+      assertFalse("COV_D is not the indexed vector column",
+        maintainer.isIndexedVectorColumn(covRef));
+      assertTrue("V is the indexed vector column", maintainer.isIndexedVectorColumn(indexedRef));
+
+      // Verify covered vector column data type resolution is independent of indexed column type
+      assertTrue("COV_D covered column is VECTOR(DOUBLE) so isDoubleVector should be true",
+        maintainer.isDoubleVector(covRef));
+      assertFalse("V indexed column is VECTOR(FLOAT) so isDoubleVector should be false",
+        maintainer.isDoubleVector(indexedRef));
+
+      // Verify serialization preserves covered vector column types
+      ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(maintainer);
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(proto, dataTable.getRowKeySchema(),
+        dataTable.getBucketNum() != null);
+
+      assertTrue("COV_D should survive proto round-trip", fromProto.isCoveredVectorColumn(covRef));
+      assertTrue("V should survive proto round-trip", fromProto.isCoveredVectorColumn(indexedRef));
+      assertTrue("isDoubleVector(covRef) should survive proto round-trip",
+        fromProto.isDoubleVector(covRef));
+      assertFalse("isDoubleVector(indexedRef) should be false after proto round-trip",
+        fromProto.isDoubleVector(indexedRef));
+    }
+  }
+
+  @Test
+  public void testSingleCellVectorColumnIdentity() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String ddl = String.format(
+      "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3)) "
+        + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2",
+      tableName);
+    String indexDdl = String.format(
+      "CREATE VECTOR INDEX %s ON %s (V) INCLUDE (COV_D) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)",
+      indexName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(indexDdl);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable dataTable = pconn.getTable(tableName);
+      PTable indexTable = pconn.getTable(indexName);
+      IndexMaintainer maintainer = indexTable.getIndexMaintainer(dataTable, pconn);
+
+      PColumn covCol = dataTable.getColumnForColumnName("COV_D");
+      ColumnReference covRef =
+        new ColumnReference(covCol.getFamilyName().getBytes(), covCol.getColumnQualifierBytes());
+      PColumn indexedCol = dataTable.getColumnForColumnName("V");
+      ColumnReference indexedRef = new ColumnReference(indexedCol.getFamilyName().getBytes(),
+        indexedCol.getColumnQualifierBytes());
+
+      assertEquals("V", maintainer.getIndexedVectorColumnName(dataTable));
+      assertTrue("V is the indexed vector column under single-cell storage",
+        maintainer.isIndexedVectorColumn(indexedRef));
+      assertFalse("COV_D is not the indexed vector column under single-cell storage",
+        maintainer.isIndexedVectorColumn(covRef));
+      assertTrue("COV_D should be recognized as a covered vector column",
+        maintainer.isCoveredVectorColumn(covRef));
+      assertTrue("In vector index, V is recognized as covered vector column",
+        maintainer.isCoveredVectorColumn(indexedRef));
+      assertTrue("COV_D covered column is VECTOR(DOUBLE)", maintainer.isDoubleVector(covRef));
+      assertFalse("V indexed column is VECTOR(FLOAT)", maintainer.isDoubleVector(indexedRef));
+      assertEquals(SortOrder.ASC, maintainer.getVectorSortOrder(indexedRef));
+
+      // Test Proto round-trip preserves single-cell identity
+      ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(maintainer);
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(proto, dataTable.getRowKeySchema(),
+        dataTable.getBucketNum() != null);
+
+      assertEquals("V", fromProto.getIndexedVectorColumnName(dataTable));
+      assertTrue("V should be indexed vector column after proto round-trip",
+        fromProto.isIndexedVectorColumn(indexedRef));
+      assertFalse("COV_D should not be indexed vector column after proto round-trip",
+        fromProto.isIndexedVectorColumn(covRef));
+      assertTrue("COV_D should survive proto round-trip", fromProto.isCoveredVectorColumn(covRef));
+      assertTrue("V should survive proto round-trip", fromProto.isCoveredVectorColumn(indexedRef));
+      assertTrue("isDoubleVector(covRef) should survive proto round-trip",
+        fromProto.isDoubleVector(covRef));
+      assertFalse("isDoubleVector(indexedRef) should be false after proto round-trip",
+        fromProto.isDoubleVector(indexedRef));
+      assertEquals(SortOrder.ASC, fromProto.getVectorSortOrder(indexedRef));
+    }
+  }
+
+  @Test
+  public void testBothStorageSchemesProduceIdenticalIndexVectorBytes() throws Exception {
+    String tableOneName = "T_ONE_" + generateUniqueName();
+    String indexOneName = "I_ONE_" + generateUniqueName();
+    String ddlOne = String.format(
+      "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3)) "
+        + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0",
+      tableOneName);
+    String indexDdlOne = String.format(
+      "CREATE VECTOR INDEX %s ON %s (V) INCLUDE (COV_D) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100, "
+        + "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2)",
+      indexOneName, tableOneName);
+
+    String tableSingleName = "T_SINGLE_" + generateUniqueName();
+    String indexSingleName = "I_SINGLE_" + generateUniqueName();
+    String ddlSingle = String.format(
+      "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3)) "
+        + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2",
+      tableSingleName);
+    String indexDdlSingle = String.format(
+      "CREATE VECTOR INDEX %s ON %s (V) INCLUDE (COV_D) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)",
+      indexSingleName, tableSingleName);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddlOne);
+      conn.createStatement().execute(indexDdlOne);
+      conn.createStatement().execute(ddlSingle);
+      conn.createStatement().execute(indexDdlSingle);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable dataTableOne = pconn.getTable(tableOneName);
+      PTable indexTableOne = pconn.getTable(indexOneName);
+      IndexMaintainer maintainerOne = indexTableOne.getIndexMaintainer(dataTableOne, pconn);
+
+      PTable dataTableSingle = pconn.getTable(tableSingleName);
+      PTable indexTableSingle = pconn.getTable(indexSingleName);
+      IndexMaintainer maintainerSingle =
+        indexTableSingle.getIndexMaintainer(dataTableSingle, pconn);
+
+      Float[] v = new Float[] { 1.0f, 2.5f, -3.2f, 4.8f };
+      Double[] covD = new Double[] { 10.5, -20.25, 30.125 };
+
+      String upsertOne = "UPSERT INTO " + tableOneName + " (ID, V, COV_D) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertOne)) {
+        ps.setString(1, "row1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", v));
+        ps.setArray(3, conn.createArrayOf("DOUBLE", covD));
+        ps.executeUpdate();
+      }
+      Iterator<Pair<byte[], List<Mutation>>> iterOne = pconn.getMutationState().toMutations();
+      assertTrue("Mutation state for tableOne should have mutations", iterOne.hasNext());
+      Put dataRowOne = (Put) iterOne.next().getSecond().get(0);
+      pconn.getMutationState().rollback();
+
+      String upsertSingle = "UPSERT INTO " + tableSingleName + " (ID, V, COV_D) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSingle)) {
+        ps.setString(1, "row1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", v));
+        ps.setArray(3, conn.createArrayOf("DOUBLE", covD));
+        ps.executeUpdate();
+      }
+      Iterator<Pair<byte[], List<Mutation>>> iterSingle = pconn.getMutationState().toMutations();
+      assertTrue("Mutation state for tableSingle should have mutations", iterSingle.hasNext());
+      Put dataRowSingle = (Put) iterSingle.next().getSecond().get(0);
+      pconn.getMutationState().rollback();
+
+      ValueGetter vgOne = new IndexUtil.SimpleValueGetter(dataRowOne);
+      ValueGetter vgSingle = new IndexUtil.SimpleValueGetter(dataRowSingle);
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(dataRowOne.getRow());
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 10.0f, 10.0f, 10.0f });
+      VectorCentroidCache.getInstance().putFloatCentroids(indexOneName, 1L, centroids);
+      VectorCentroidCache.getInstance().putFloatCentroids(indexSingleName, 1L, centroids);
+      // Point maintainers at the seeded centroid generation to simulate post-training metadata
+      // state.
+      maintainerOne.setCentroidGeneration(1L);
+      maintainerSingle.setCentroidGeneration(1L);
+
+      Put indexPutOne = maintainerOne.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, vgOne,
+        rowKey, ts, null, null, false, null);
+      Put indexPutSingle = maintainerSingle.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        vgSingle, rowKey, ts, null, null, false, null);
+
+      assertNotNull("indexPutOne should not be null", indexPutOne);
+      assertNotNull("indexPutSingle should not be null", indexPutSingle);
+
+      byte[] cf = indexTableOne.getDefaultFamilyName() != null
+        ? indexTableOne.getDefaultFamilyName().getBytes()
+        : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+      byte[] cq = QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES;
+
+      List<Cell> cellsOne = indexPutOne.get(cf, cq);
+      List<Cell> cellsSingle = indexPutSingle.get(cf, cq);
+
+      assertNotNull("cellsOne should contain single-cell array", cellsOne);
+      assertEquals(1, cellsOne.size());
+      assertNotNull("cellsSingle should contain single-cell array", cellsSingle);
+      assertEquals(1, cellsSingle.size());
+
+      byte[] valOne = CellUtil.cloneValue(cellsOne.get(0));
+      byte[] valSingle = CellUtil.cloneValue(cellsSingle.get(0));
+
+      assertArrayEquals("Both storage schemes must produce identical index vector bytes", valOne,
+        valSingle);
+
+      // Verify individual decoded vector columns from the single cell match expected bytes
+      PColumn indexVCol = indexTableOne.getColumnForColumnName(
+        IndexUtil.getIndexColumnName(dataTableOne.getColumnForColumnName("V")));
+      PColumn indexCovCol = indexTableOne.getColumnForColumnName(
+        IndexUtil.getIndexColumnName(dataTableOne.getColumnForColumnName("COV_D")));
+
+      int posV = indexTableOne.getEncodingScheme().decode(indexVCol.getColumnQualifierBytes())
+        - QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 1;
+      int posCov = indexTableOne.getEncodingScheme().decode(indexCovCol.getColumnQualifierBytes())
+        - QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 1;
+
+      ColumnValueDecoder decoder = indexTableOne.getImmutableStorageScheme().getDecoder();
+      ImmutableBytesWritable valPtr = new ImmutableBytesWritable(valSingle);
+      assertTrue(decoder.decode(valPtr, posV));
+      byte[] decodedV = valPtr.copyBytes();
+      byte[] expectedV = PVectorFloat.INSTANCE.toBytes(v);
+      assertArrayEquals("Decoded V from single cell must match expected float vector bytes",
+        expectedV, decodedV);
+
+      valPtr.set(valSingle);
+      assertTrue(decoder.decode(valPtr, posCov));
+      byte[] decodedCovD = valPtr.copyBytes();
+      byte[] expectedCovD = PVectorDouble.INSTANCE.toBytes(covD);
+      assertArrayEquals("Decoded COV_D from single cell must match expected double vector bytes",
+        expectedCovD, decodedCovD);
+
+      // Verify sort-order transcoding idempotence: transcoded DESC converts to ASC
+      byte[] transcodedDescV =
+        PVectorFloat.transcodeBytes(expectedV, 0, expectedV.length, SortOrder.DESC, SortOrder.ASC);
+      byte[] restoredV = PVectorFloat.transcodeBytes(transcodedDescV, 0, transcodedDescV.length,
+        SortOrder.DESC, SortOrder.ASC);
+      assertArrayEquals(expectedV, restoredV);
+
+      byte[] transcodedDescCovD = PVectorDouble.transcodeBytes(expectedCovD, 0, expectedCovD.length,
+        SortOrder.DESC, SortOrder.ASC);
+      byte[] restoredCovD = PVectorDouble.transcodeBytes(transcodedDescCovD, 0,
+        transcodedDescCovD.length, SortOrder.DESC, SortOrder.ASC);
+      assertArrayEquals(expectedCovD, restoredCovD);
     }
   }
 }

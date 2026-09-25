@@ -460,6 +460,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         int hbaseVersion = services.getLowestClusterHBaseVersion();
         return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
       }
+    }, Feature.VECTOR_INDEX, new FeatureSupported() {
+      @Override
+      public boolean isSupported(ConnectionQueryServices services) {
+        try {
+          PTable sysCatalog = services.getMetaDataCache()
+            .getTableRef(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))
+            .getTable();
+          return sysCatalog.getColumnForColumnName(PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM)
+              != null;
+        } catch (Exception e) {
+          return false;
+        }
+      }
     });
   private QueryLoggerDisruptor queryDisruptor;
 
@@ -4139,6 +4152,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
   }
 
+  protected String getVectorCentroidDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_VECTOR_CENTROID_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -4477,6 +4494,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     } catch (TableAlreadyExistsException ignore) {
     }
     try {
+      metaConnection.createStatement().executeUpdate(getVectorCentroidDDL());
+    } catch (TableAlreadyExistsException ignore) {
+    }
+    try {
       // check if we have old PHOENIX_INDEX_TOOL tables
       // move data to the new tables under System, or simply create the new tables
       IndexToolTableUtil.createNewIndexToolTables(metaConnection);
@@ -4803,22 +4824,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 15,
         PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 14,
         PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 13,
         PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 12,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 11,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 10,
         PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " " + PVarchar.INSTANCE.getSqlTypeName());
 
       /**
@@ -4826,16 +4847,35 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
        * PHOENIX_TTL Column. See PHOENIX-7023
        */
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
         PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
         PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
+        PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
+        PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM + " " + PVarchar.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC + " " + PVarchar.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
+        PhoenixDatabaseMetaData.VECTOR_DIMENSION + " " + PInteger.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        PhoenixDatabaseMetaData.VECTOR_IVF_LISTS + " " + PInteger.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE + " " + PInteger.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+        PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION + " " + PLong.INSTANCE.getSqlTypeName());
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
@@ -5063,6 +5103,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
     metaConnection = upgradeSystemCDCStream(metaConnection);
     metaConnection = upgradeSystemIdxCdcTracker(metaConnection);
+    metaConnection = upgradeSystemVectorCentroid(metaConnection);
 
     // As this is where the most time will be spent during an upgrade,
     // especially when there are large number of views.
@@ -5389,6 +5430,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     throws SQLException {
     try {
       metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
+    } catch (TableAlreadyExistsException ignored) {
+    }
+    return metaConnection;
+  }
+
+  private PhoenixConnection upgradeSystemVectorCentroid(PhoenixConnection metaConnection)
+    throws SQLException {
+    try {
+      metaConnection.createStatement().executeUpdate(getVectorCentroidDDL());
     } catch (TableAlreadyExistsException ignored) {
     }
     return metaConnection;
