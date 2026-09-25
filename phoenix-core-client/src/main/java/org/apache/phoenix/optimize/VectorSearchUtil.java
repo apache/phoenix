@@ -19,7 +19,10 @@ package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -422,14 +425,15 @@ public final class VectorSearchUtil {
   }
 
   /**
-   * Returns true if the query statement has projection (SELECT clause) columns that are not covered
-   * by the vector index table.
+   * Returns the set of data table columns in the query statement projection (SELECT clause) that
+   * are not covered by the vector index table.
    */
-  public static boolean hasUncoveredProjectionColumns(PTable indexTable, PTable dataTable,
+  public static Set<PColumn> getUncoveredProjectionColumns(PTable indexTable, PTable dataTable,
     SelectStatement select) {
     if (select == null || select.getSelect() == null || indexTable == null || dataTable == null) {
-      return false;
+      return Collections.emptySet();
     }
+    Set<PColumn> uncovered = new LinkedHashSet<>();
     final List<ColumnParseNode> colNodes = new ArrayList<>();
     for (AliasedNode aliasedNode : select.getSelect()) {
       ParseNode node = aliasedNode.getNode();
@@ -439,7 +443,7 @@ public final class VectorSearchUtil {
       ) {
         for (PColumn dataCol : dataTable.getColumns()) {
           if (!isColumnCovered(indexTable, dataTable, dataCol)) {
-            return true;
+            uncovered.add(dataCol);
           }
         }
         continue;
@@ -459,9 +463,18 @@ public final class VectorSearchUtil {
     for (ColumnParseNode node : colNodes) {
       PColumn dataCol = getDataColumn(dataTable, node.getName());
       if (dataCol != null && !isColumnCovered(indexTable, dataTable, dataCol)) {
-        return true;
+        uncovered.add(dataCol);
       }
     }
-    return false;
+    return uncovered;
+  }
+
+  /**
+   * Returns true if the query statement has projection (SELECT clause) columns that are not covered
+   * by the vector index table.
+   */
+  public static boolean hasUncoveredProjectionColumns(PTable indexTable, PTable dataTable,
+    SelectStatement select) {
+    return !getUncoveredProjectionColumns(indexTable, dataTable, select).isEmpty();
   }
 }
