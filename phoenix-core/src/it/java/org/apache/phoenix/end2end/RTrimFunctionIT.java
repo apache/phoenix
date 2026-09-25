@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -66,8 +65,7 @@ public class RTrimFunctionIT extends ParallelStatsDisabledIT {
     ResultSet rs = conn.createStatement().executeQuery(query);
     assertValueEqualsResultSet(rs, expectedResults);
 
-    rs = conn.createStatement().executeQuery("explain " + query);
-    assertTrue(QueryUtil.getExplainPlan(rs).contains("RANGE SCAN OVER " + tableName));
+    assertPlan(conn, query).scanType("RANGE SCAN").table(tableName);
 
     conn.close();
   }

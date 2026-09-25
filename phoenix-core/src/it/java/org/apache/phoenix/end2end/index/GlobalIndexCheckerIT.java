@@ -29,9 +29,12 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -52,19 +55,22 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assume;
@@ -140,19 +146,49 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
   public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
     String indexTableFullName) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-    IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
+    assertExplainPlan(conn, selectSql, dataTableFullName, indexTableFullName,
+      OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
+  }
+
+  public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
+    String indexTableFullName, String expectedRule) throws SQLException {
+    // Verify the query is served by a RANGE SCAN over the index table not the data table.
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN").indexRule(expectedRule);
+    assertScannedTableIsIndex(attributes, indexTableFullName);
+  }
+
+  /**
+   * Asserts the selection {@code expectedRule} and the separate
+   * {@code "matches <expectedFunctionalMatchExpr>"} functional index match.
+   */
+  public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
+    String indexTableFullName, String expectedRule, String expectedFunctionalMatchExpr)
+    throws SQLException {
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN").indexRule(expectedRule)
+      .functionalMatch(expectedFunctionalMatchExpr);
+    assertScannedTableIsIndex(attributes, indexTableFullName);
+  }
+
+  private static void assertScannedTableIsIndex(ExplainPlanAttributes attributes,
+    String indexTableFullName) {
+    String actualTable =
+      attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
+    String expectedTable = SchemaUtil.normalizeIdentifier(indexTableFullName);
+    assertTrue("expected scanned table <" + actualTable + "> to use index <" + expectedTable + ">",
+      actualTable != null && actualTable.contains(expectedTable));
   }
 
   public static void assertExplainPlanWithLimit(Connection conn, String selectSql,
     String dataTableFullName, String indexTableFullName, int limit) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-    IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
-    String expectedLimitPlan = String.format("SERVER %d ROW LIMIT", limit);
-    assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedLimitPlan,
-      actualExplainPlan.contains(expectedLimitPlan));
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN").serverRowLimit((long) limit);
+    String actualTable =
+      attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
+    String expectedTable = SchemaUtil.normalizeIdentifier(indexTableFullName);
+    assertTrue("expected scanned table <" + actualTable + "> to use index <" + expectedTable + ">",
+      actualTable != null && actualTable.contains(expectedTable));
   }
 
   private void populateTable(String tableName) throws Exception {
@@ -233,7 +269,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -252,7 +289,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -265,7 +303,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -277,10 +316,15 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from "
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
         + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
-      // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      // Verify that we will read from the data table. The NO_INDEX hint rejects every
+      // secondary index candidate. Under STRONG consistency only the user index exists.
+      // Under EVENTUAL consistency the user index is paired with an auto-created CDC index,
+      // so two candidates are rejected. Match the user index by name rather than position
+      // since the rejection order is not guaranteed.
+      int expectedRejected = isEventualConsistency() ? 2 : 1;
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedCount(expectedRejected)
+        .indexRejectedContains(indexTableName, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -300,7 +344,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
       query =
         "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -330,7 +375,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("ab", rs.getString(1));
@@ -367,7 +413,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
 
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      // This query carries an explicit INDEX hint, so the selection rule is "hint". The functional
+      // index match over PHOENIX_ROW_TIMESTAMP() is disclosed separately.
+      assertExplainPlan(conn, query, dataTableName, indexTableName, OptimizerReasons.RULE_HINT,
+        "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -725,6 +774,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2, val3) "
         + "values ('a', 'ab', 'abcc', null)");
       conn.commit();
+      waitForEventualConsistency();
       String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the index table
       assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
@@ -739,15 +789,82 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
       // now read the same row from data table
       selectSql = "SELECT * from " + dataTableName + " WHERE id  = 'a'";
+      assertPlan(conn, selectSql).table(dataTableName).indexRule(OptimizerReasons.RULE_POINT_LOOKUP)
+        .indexRejectedNone();
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(dataTableName));
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
         assertEquals("ab", rs.getString(2));
         assertEquals("abcc", rs.getString(3));
         assertEquals("abcd", rs.getString(4));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  /**
+   * Same partial-upsert scenario as testPartialRowUpdateForImmutable but for an UNCOVERED global
+   * index. A partial upsert that omits the indexed column (val1) must not create a spurious
+   * NULL-keyed index entry: for an immutable table val1 keeps its earlier value, so the index must
+   * still resolve the row under its original key and never under IS NULL. Verified via the index
+   * path (explain plan asserts the index table is used).
+   */
+  @Test
+  public void testPartialRowUpdateForImmutableUncovered() throws Exception {
+    if (async || encoded) {
+      // No need to run this test more than once
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      conn.createStatement()
+        .execute("create table " + dataTableName
+          + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10))"
+          + " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME="
+          + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+      // full upsert that sets the indexed column
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abc')");
+      conn.commit();
+      String indexTableName = generateUniqueName();
+      conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)" + this.indexDDLOptions);
+      // PARTIAL upsert that omits the indexed column val1. For immutable rows val1 stays 'ab'.
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val2) values ('a', 'xyz')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      // (a) index path must still resolve the row under its original key 'ab'
+      String selectAb = "SELECT id from " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, selectAb, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectAb)) {
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+      }
+
+      // (b) count via the index must be exactly 1. The scan path (a)/(c) self-heals unverified
+      // index rows at read time, but the COUNT aggregate does not: only server-side maintenance
+      // reads the current row back and rewrites a verified entry for the retained key, so the
+      // COUNT path agrees only when server-side immutable-index maintenance is enabled.
+      boolean serverSideImmutableIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      if (serverSideImmutableIndexes) {
+        String countAb = "SELECT COUNT(*) from " + dataTableName + " WHERE val1 = 'ab'";
+        assertExplainPlan(conn, countAb, dataTableName, indexTableName);
+        try (ResultSet rs = conn.createStatement().executeQuery(countAb)) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1));
+        }
+      }
+
+      // (c) a partial build lacking the read-back would emit a spurious NULL-keyed index entry
+      // pointing at id='a'; the index path for IS NULL must therefore return nothing
+      String selectNull = "SELECT id from " + dataTableName + " WHERE val1 IS NULL";
+      assertExplainPlan(conn, selectNull, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectNull)) {
         assertFalse(rs.next());
       }
     }
@@ -1264,11 +1381,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String selectSql =
         "SELECT id, val1, val3 from " + dataTableName + " WHERE val1 IN ('ab', 'bcc') ";
       // Verify that we will read from the index table
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
-        assertTrue(actualExplainPlan.contains(expectedExplainPlan));
-      }
+      assertPlan(conn, selectSql).scanType("SKIP SCAN ON 2 KEYS").table(indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         assertEquals("a", rs.getString("id"));
@@ -1289,16 +1402,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
       selectSql = "SELECT id, val3 from " + dataTableName
         + " WHERE val1 IN ('bc') AND val2 IN ('bcd', 'xcdf') AND val3 = 'bcde' ";
-      // Verify that we will read from the index table
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
-        String filter = "SERVER FILTER BY";
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(expectedExplainPlan));
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(filter));
-      }
+      // Verify that we will read from the index table with a server filter
+      ExplainPlanAttributes skipScanAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(skipScanAttributes).scanType("SKIP SCAN ON 2 KEYS").table(indexName);
+      assertNotNull("expected a server filter, plan=" + skipScanAttributes,
+        skipScanAttributes.getServerWhereFilter());
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         assertEquals("b", rs.getString("id"));
@@ -1351,9 +1459,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       List<String> expectedIDs = Lists.newArrayList("a", "d");
       List<String> actualIDs = Lists.newArrayList();
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(actualExplainPlan.contains(indexName));
+        assertPlan(conn, selectSql).table(indexName);
         while (rs.next()) {
           actualIDs.add(rs.getString("id"));
         }
@@ -1367,9 +1473,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       expectedIDs = Lists.newArrayList("e", "g");
       actualIDs = Lists.newArrayList();
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(actualExplainPlan.contains(indexName));
+        assertPlan(conn, selectSql).table(indexName);
         while (rs.next()) {
           actualIDs.add(rs.getString("id"));
         }
@@ -1532,11 +1636,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
   private void verifyDistinctQueryOnIndex(Connection conn, String indexName, String query,
     List<String> expectedValues) throws SQLException, IOException {
     try (ResultSet rs = conn.createStatement().executeQuery(query)) {
-      PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-      String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-      assertTrue(actualExplainPlan.contains(indexName));
-      assertTrue(actualExplainPlan, actualExplainPlan.contains("SERVER DISTINCT PREFIX FILTER"));
-      List actualValues = Lists.newArrayList();
+      ExplainPlanAttributes attributes = getExplainAttributes(conn, query);
+      assertPlan(attributes).table(indexName);
+      assertNotNull("expected a server distinct prefix filter, plan=" + attributes,
+        attributes.getServerDistinctFilter());
+      List<String> actualValues = Lists.newArrayList();
       while (rs.next()) {
         actualValues.add(rs.getString(1));
       }
@@ -1572,22 +1676,12 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
       String selectSql =
         "SELECT id, val3 from " + dataTableName + " WHERE val1 = 'bc' and val2 = 'bcd' ";
-      // Verify that we will read from the index table. V1 emits `RANGE SCAN` with the
-      // trailing constraint kept in a server filter; V2 emits `SKIP SCAN ON 1 KEY` with
-      // the trailing constraint consumed into the scan bounds. Either scan shape is
-      // correct; the subsequent query-result assertion (below) is the source of truth
-      // for correctness.
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String rangeScan = String.format("RANGE SCAN OVER %s", indexName);
-        String skipScan = String.format("SKIP SCAN ON 1 KEY OVER %s", indexName);
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(rangeScan) || actualExplainPlan.contains(skipScan));
-        String firstKeyOrEmpty =
-          String.format("SERVER FILTER BY %s ONLY", encoded ? "FIRST KEY" : "EMPTY COLUMN");
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(firstKeyOrEmpty));
-      }
+      // Verify that we will read from the index table with a first-key-only/empty-column filter
+      ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+      assertPlan(attributes).scanType("RANGE SCAN").table(indexName)
+        .serverProjectionFilter(encoded);
+      assertNotNull("serverWhereFilter=" + attributes.getServerWhereFilter(),
+        attributes.getServerWhereFilter());
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         assertEquals("b", rs.getString("id"));
@@ -1622,19 +1716,15 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
       String dql =
         String.format("select id, val2 from %s where val1='ab' and val3='abcd'", dataTableName);
+      assertPlan(conn, dql).table(indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
         assertFalse(rs.next());
       }
 
       dql =
         String.format("select id, val2 from %s where val1='ab' and val3 is null", dataTableName);
+      assertPlan(conn, dql).table(indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
         assertTrue(rs.next());
         assertEquals("abc", rs.getString("val2"));
       }
@@ -1647,10 +1737,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
       dql =
         String.format("select id, val2 from %s where val1='ac' and val3 is null", dataTableName);
+      assertPlan(conn, dql).table(indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
         assertTrue(rs.next());
         assertNull(rs.getString("val2"));
       }
@@ -1735,10 +1823,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
           // delete family marker on the unverified index row
           String dql =
             String.format("select id, val2, val3 from %s where val1='ab'", dataTableName);
+          assertPlan(conn, dql).table(indexName);
           try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-            PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-            String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-            assertTrue(explainPlan.contains(indexName));
             assertFalse(rs.next());
           }
         }
@@ -1889,11 +1975,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
       waitForEventualConsistency();
       String distinctQuery = "SELECT DISTINCT val1 FROM " + dataTableName;
       try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexTableName));
-        assertTrue(explainPlan.contains("SERVER DISTINCT PREFIX FILTER OVER"));
-        List actualValues = Lists.newArrayList();
+        ExplainPlanAttributes attributes = getExplainAttributes(conn, distinctQuery);
+        assertPlan(attributes).table(indexTableName);
+        assertNotNull("expected a server distinct prefix filter, plan=" + attributes,
+          attributes.getServerDistinctFilter());
+        List<String> actualValues = Lists.newArrayList();
         while (rs.next()) {
           actualValues.add(rs.getString(1));
         }
@@ -1915,6 +2001,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
   }
 
   protected void waitForEventualConsistency() throws Exception {
+  }
+
+  protected boolean isEventualConsistency() {
+    return false;
   }
 
   protected void verifyTableHealth(Connection conn, String dataTableName, String indexTableName)

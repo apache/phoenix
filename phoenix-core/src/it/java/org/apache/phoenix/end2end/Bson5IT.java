@@ -18,8 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_RETRY_PAUSE_MS;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -43,8 +43,6 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -81,7 +79,6 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60));
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(2000));
     props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(5));
     props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.TRUE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -600,6 +597,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     }
   }
 
+  @SuppressWarnings("unchecked")
   private static void testCDCAfterFirstUpsert(Connection conn, String cdcName, Timestamp ts1,
     Timestamp ts2, BsonDocument bsonDocument1, BsonDocument bsonDocument2,
     BsonDocument bsonDocument3) throws SQLException, JsonProcessingException {
@@ -650,6 +648,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     }
   }
 
+  @SuppressWarnings("unchecked")
   private static void testCDCPostUpdate(Connection conn, String cdcName, Timestamp ts1,
     Timestamp ts2, BsonDocument bsonDocument1, BsonDocument bsonDocument2,
     BsonDocument bsonDocument3) throws SQLException, IOException {
@@ -716,6 +715,7 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     }
   }
 
+  @SuppressWarnings("unchecked")
   private static void testCDCUpdateOneRowChange(Connection conn, String cdcName, Timestamp ts1,
     Timestamp ts2, BsonDocument bsonDocument1) throws SQLException, IOException {
     try (
@@ -747,11 +747,8 @@ public class Bson5IT extends ParallelStatsDisabledIT {
 
   private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
     throws SQLException {
-    ExplainPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals(scanType, explainPlanAttributes.getExplainScanType());
+    assertPlan(ps.unwrap(PhoenixPreparedStatement.class)).table(tableName)
+      .iteratorType("PARALLEL 1-WAY").scanType(scanType);
   }
 
 }

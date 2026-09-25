@@ -22,14 +22,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Optional;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
 import org.junit.Test;
 
 /**
- * Algebra-level tests for {@link KeySpace}. No {@code StatementContext} or database setup:
- * builds ranges directly from byte arrays.
+ * Algebra-level tests for {@link KeySpace}. No {@code StatementContext} or database setup: builds
+ * ranges directly from byte arrays.
  */
 public class KeySpaceTest {
 
@@ -75,10 +74,9 @@ public class KeySpaceTest {
 
   @Test
   public void andIntersectsEachDim() {
-    KeySpace a = KeySpace.of(
-      new KeyRange[] { gte("a"), KeyRange.EVERYTHING_RANGE, range("1", true, "9", false) });
-    KeySpace b = KeySpace.of(
-      new KeyRange[] { lt("z"), pt("m"), range("5", true, "7", true) });
+    KeySpace a = KeySpace
+      .of(new KeyRange[] { gte("a"), KeyRange.EVERYTHING_RANGE, range("1", true, "9", false) });
+    KeySpace b = KeySpace.of(new KeyRange[] { lt("z"), pt("m"), range("5", true, "7", true) });
 
     KeySpace c = a.and(b);
     assertEquals(range("a", true, "z", false), c.get(0));
@@ -90,10 +88,8 @@ public class KeySpaceTest {
 
   @Test
   public void andCollapsesWhenAnyDimIsDisjoint() {
-    KeySpace a = KeySpace.of(
-      new KeyRange[] { pt("a"), pt("x") });
-    KeySpace b = KeySpace.of(
-      new KeyRange[] { pt("a"), pt("y") });
+    KeySpace a = KeySpace.of(new KeyRange[] { pt("a"), pt("x") });
+    KeySpace b = KeySpace.of(new KeyRange[] { pt("a"), pt("y") });
     assertTrue(a.and(b).isEmpty());
   }
 
@@ -107,28 +103,25 @@ public class KeySpaceTest {
 
   @Test
   public void containsIdentifiesSubspaces() {
-    KeySpace outer = KeySpace.of(
-      new KeyRange[] { range("a", true, "z", false), KeyRange.EVERYTHING_RANGE });
-    KeySpace inner = KeySpace.of(
-      new KeyRange[] { range("c", true, "e", false), pt("q") });
+    KeySpace outer =
+      KeySpace.of(new KeyRange[] { range("a", true, "z", false), KeyRange.EVERYTHING_RANGE });
+    KeySpace inner = KeySpace.of(new KeyRange[] { range("c", true, "e", false), pt("q") });
     assertTrue(outer.contains(inner));
     assertFalse(inner.contains(outer));
   }
 
   /**
-   * Regression: raw {@link KeyRange#intersect} collapses EVERYTHING ∩ IS_NULL to EMPTY
-   * because IS_NULL's empty-byte sentinel coincides with EVERYTHING's UNBOUND. Without
-   * the EVERYTHING-aware intersect in {@link KeySpace#contains}, a space with EVERYTHING
-   * on a dim would falsely report not containing a space with IS_NULL on that dim, and
-   * {@link KeySpace#unionIfMergeable} would fail to merge by containment — leaving the
-   * disjunction larger than necessary and skewing widening / skip-scan decisions.
+   * Regression: raw {@link KeyRange#intersect} collapses EVERYTHING ∩ IS_NULL to EMPTY because
+   * IS_NULL's empty-byte sentinel coincides with EVERYTHING's UNBOUND. Without the EVERYTHING-aware
+   * intersect in {@link KeySpace#contains}, a space with EVERYTHING on a dim would falsely report
+   * not containing a space with IS_NULL on that dim, and {@link KeySpace#unionIfMergeable} would
+   * fail to merge by containment — leaving the disjunction larger than necessary and skewing
+   * widening / skip-scan decisions.
    */
   @Test
   public void containsHandlesEverythingVersusIsNull() {
-    KeySpace outer =
-      KeySpace.of(new KeyRange[] { pt("a"), KeyRange.EVERYTHING_RANGE });
-    KeySpace innerNull =
-      KeySpace.of(new KeyRange[] { pt("a"), KeyRange.IS_NULL_RANGE });
+    KeySpace outer = KeySpace.of(new KeyRange[] { pt("a"), KeyRange.EVERYTHING_RANGE });
+    KeySpace innerNull = KeySpace.of(new KeyRange[] { pt("a"), KeyRange.IS_NULL_RANGE });
     assertTrue("EVERYTHING must contain IS_NULL", outer.contains(innerNull));
 
     Optional<KeySpace> merged = outer.unionIfMergeable(innerNull);
@@ -138,10 +131,9 @@ public class KeySpaceTest {
 
   @Test
   public void unionMergesWhenOneContainsOther() {
-    KeySpace big = KeySpace.of(
-      new KeyRange[] { range("a", true, "z", false), KeyRange.EVERYTHING_RANGE });
-    KeySpace small = KeySpace.of(
-      new KeyRange[] { pt("m"), pt("q") });
+    KeySpace big =
+      KeySpace.of(new KeyRange[] { range("a", true, "z", false), KeyRange.EVERYTHING_RANGE });
+    KeySpace small = KeySpace.of(new KeyRange[] { pt("m"), pt("q") });
     Optional<KeySpace> merged = big.unionIfMergeable(small);
     assertTrue(merged.isPresent());
     assertEquals(big, merged.get());
@@ -150,10 +142,8 @@ public class KeySpaceTest {
   @Test
   public void unionMergesWhenEqualOnNminus1AndOverlapping() {
     // Same dim0, overlapping dim1.
-    KeySpace x = KeySpace.of(
-      new KeyRange[] { pt("k"), range("1", true, "5", false) });
-    KeySpace y = KeySpace.of(
-      new KeyRange[] { pt("k"), range("3", true, "9", false) });
+    KeySpace x = KeySpace.of(new KeyRange[] { pt("k"), range("1", true, "5", false) });
+    KeySpace y = KeySpace.of(new KeyRange[] { pt("k"), range("3", true, "9", false) });
     Optional<KeySpace> merged = x.unionIfMergeable(y);
     assertTrue(merged.isPresent());
     assertEquals(range("1", true, "9", false), merged.get().get(1));
@@ -161,20 +151,16 @@ public class KeySpaceTest {
 
   @Test
   public void unionIsNoOpWhenTwoDimsDiffer() {
-    KeySpace x = KeySpace.of(
-      new KeyRange[] { pt("a"), pt("1") });
-    KeySpace y = KeySpace.of(
-      new KeyRange[] { pt("b"), pt("2") });
+    KeySpace x = KeySpace.of(new KeyRange[] { pt("a"), pt("1") });
+    KeySpace y = KeySpace.of(new KeyRange[] { pt("b"), pt("2") });
     assertFalse(x.unionIfMergeable(y).isPresent());
   }
 
   @Test
   public void unionIsNoOpWhenDiffDimDisjoint() {
     // Same dim0, disjoint non-adjacent dim1.
-    KeySpace x = KeySpace.of(
-      new KeyRange[] { pt("k"), range("1", true, "3", false) });
-    KeySpace y = KeySpace.of(
-      new KeyRange[] { pt("k"), range("7", true, "9", false) });
+    KeySpace x = KeySpace.of(new KeyRange[] { pt("k"), range("1", true, "3", false) });
+    KeySpace y = KeySpace.of(new KeyRange[] { pt("k"), range("7", true, "9", false) });
     assertFalse(x.unionIfMergeable(y).isPresent());
   }
 
@@ -182,10 +168,8 @@ public class KeySpaceTest {
   public void unionMergesAdjacentDisjointWithComplementaryInclusivity() {
     // [1,5) ∪ [5,9) covers [1,9) because upper of first is exclusive and lower of second is
     // inclusive on the same byte value.
-    KeySpace x = KeySpace.of(
-      new KeyRange[] { pt("k"), range("1", true, "5", false) });
-    KeySpace y = KeySpace.of(
-      new KeyRange[] { pt("k"), range("5", true, "9", false) });
+    KeySpace x = KeySpace.of(new KeyRange[] { pt("k"), range("1", true, "5", false) });
+    KeySpace y = KeySpace.of(new KeyRange[] { pt("k"), range("5", true, "9", false) });
     Optional<KeySpace> merged = x.unionIfMergeable(y);
     assertTrue(merged.isPresent());
     assertEquals(range("1", true, "9", false), merged.get().get(1));
@@ -193,14 +177,12 @@ public class KeySpaceTest {
 
   /**
    * Regression for the inverted-singleton disjoint-merging bug seen in
-   * SkipScanQueryIT.testOrWithMixedOrderPKs. Distinct inverted (DESC) single-key
-   * byte sequences like {@code \xCD} (= '2' DESC) and {@code \xCD\xCC} (= '23' DESC)
-   * must NOT merge into a range — {@code KeyRange.intersect} has a bug where
-   * intersecting two inverted singletons of different byte widths returns a non-
-   * empty "backward" range instead of EMPTY_RANGE, which would cause
-   * {@code unionIfMergeable} to proceed to union. The explicit
-   * "two distinct single-keys with different bytes are disjoint" check in
-   * {@link KeySpace#unionIfMergeable} defends against this.
+   * SkipScanQueryIT.testOrWithMixedOrderPKs. Distinct inverted (DESC) single-key byte sequences
+   * like {@code \xCD} (= '2' DESC) and {@code \xCD\xCC} (= '23' DESC) must NOT merge into a range —
+   * {@code KeyRange.intersect} has a bug where intersecting two inverted singletons of different
+   * byte widths returns a non- empty "backward" range instead of EMPTY_RANGE, which would cause
+   * {@code unionIfMergeable} to proceed to union. The explicit "two distinct single-keys with
+   * different bytes are disjoint" check in {@link KeySpace#unionIfMergeable} defends against this.
    */
   @Test
   public void unionOfInvertedSingletonsOfDifferentBytesDoesNotMerge() {
@@ -214,17 +196,14 @@ public class KeySpaceTest {
     KeySpace ksCd = KeySpace.of(new KeyRange[] { invCd, KeyRange.EVERYTHING_RANGE });
     KeySpace ksCdcc = KeySpace.of(new KeyRange[] { invCdcc, KeyRange.EVERYTHING_RANGE });
     Optional<KeySpace> merged = ksCd.unionIfMergeable(ksCdcc);
-    assertFalse(
-      "Distinct inverted singletons must not merge even when KeyRange.intersect returns"
-        + " a non-empty backward range for their inverted-byte comparison",
-      merged.isPresent());
+    assertFalse("Distinct inverted singletons must not merge even when KeyRange.intersect returns"
+      + " a non-empty backward range for their inverted-byte comparison", merged.isPresent());
   }
 
   /**
-   * Companion to {@link #unionOfInvertedSingletonsOfDifferentBytesDoesNotMerge}: two
-   * non-inverted (ASC) singletons with different bytes also don't merge. This is the
-   * analogous case without the inversion bug, asserted to document the expected
-   * behavior.
+   * Companion to {@link #unionOfInvertedSingletonsOfDifferentBytesDoesNotMerge}: two non-inverted
+   * (ASC) singletons with different bytes also don't merge. This is the analogous case without the
+   * inversion bug, asserted to document the expected behavior.
    */
   @Test
   public void unionOfNonInvertedSingletonsOfDifferentBytesDoesNotMerge() {

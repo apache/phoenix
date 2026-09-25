@@ -20,7 +20,6 @@ package org.apache.phoenix.compile.keyspace.algebra;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.keyspace.ExpressionNormalizer;
@@ -39,22 +38,22 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 
 /**
- * Converts a Phoenix {@link Expression} tree into an {@link AbstractExpression} the oracle
- * can ingest. The adapter aims to be <em>complete</em>: if a sub-expression can't be mapped
- * precisely to a PK-keyable predicate, it becomes {@link AbstractExpression#unknown(String)}
- * rather than throwing. Unknowns are safe over-approximations that let the harness still
- * run a useful soundness check on the rest of the tree.
+ * Converts a Phoenix {@link Expression} tree into an {@link AbstractExpression} the oracle can
+ * ingest. The adapter aims to be <em>complete</em>: if a sub-expression can't be mapped precisely
+ * to a PK-keyable predicate, it becomes {@link AbstractExpression#unknown(String)} rather than
+ * throwing. Unknowns are safe over-approximations that let the harness still run a useful soundness
+ * check on the rest of the tree.
  * <p>
  * Supported shapes:
  * <ul>
  * <li>{@link AndExpression} / {@link OrExpression} — recurse on children.</li>
- * <li>{@link ComparisonExpression} on a PK column with a {@link LiteralExpression} RHS —
- * mapped to a {@link AbstractExpression.Pred} with the column's decoded value.</li>
+ * <li>{@link ComparisonExpression} on a PK column with a {@link LiteralExpression} RHS — mapped to
+ * a {@link AbstractExpression.Pred} with the column's decoded value.</li>
  * <li>{@link ComparisonExpression} between two {@link org.apache.phoenix.expression.
  * RowValueConstructorExpression}s (RVC inequality) — lex-expanded via
  * {@link ExpressionNormalizer#normalize}, then the result is re-visited.</li>
- * <li>{@link InListExpression} on a PK column — expanded to an {@link AbstractExpression.Or}
- * of {@link AbstractExpression#pred} equalities.</li>
+ * <li>{@link InListExpression} on a PK column — expanded to an {@link AbstractExpression.Or} of
+ * {@link AbstractExpression#pred} equalities.</li>
  * <li>{@link LikeExpression} {@code col LIKE 'prefix%'} — mapped to
  * {@code (col &gt;= prefix) AND (col &lt; nextKey(prefix))}.</li>
  * </ul>
@@ -67,9 +66,9 @@ import org.apache.phoenix.schema.SortOrder;
  * <li>LIKE with leading wildcard, case-insensitive LIKE, LIKE on non-PK, non-literal RHS.</li>
  * <li>Any other shape.</li>
  * </ul>
- * The semantic guarantee: {@code rows(originalExpr) ⊆ rows(adapter.convert(originalExpr))} —
- * the adapter's output never rejects a row the original accepts. That's what makes the
- * Unknown-as-true over-approximation safe for the harness soundness check.
+ * The semantic guarantee: {@code rows(originalExpr) ⊆ rows(adapter.convert(originalExpr))} — the
+ * adapter's output never rejects a row the original accepts. That's what makes the Unknown-as-true
+ * over-approximation safe for the harness soundness check.
  */
 public final class ExpressionAdapter {
 
@@ -82,8 +81,8 @@ public final class ExpressionAdapter {
   }
 
   /**
-   * Entry point: normalize the expression (lex-expands RVC inequalities and other shapes
-   * V2 handles) before converting.
+   * Entry point: normalize the expression (lex-expands RVC inequalities and other shapes V2
+   * handles) before converting.
    */
   public AbstractExpression convert(Expression expr) {
     try {
@@ -126,8 +125,7 @@ public final class ExpressionAdapter {
       // over-approximation.
       return AbstractExpression.unknown("IS [NOT] NULL not modeled");
     }
-    return AbstractExpression.unknown(
-      "unsupported node type: " + expr.getClass().getSimpleName());
+    return AbstractExpression.unknown("unsupported node type: " + expr.getClass().getSimpleName());
   }
 
   private AbstractExpression convertComparison(ComparisonExpression cmp) {
@@ -182,12 +180,12 @@ public final class ExpressionAdapter {
   }
 
   /**
-   * Convert {@code (c1, ..., cK) IN ((v1a, ..., vKa), (v1b, ..., vKb), ...)} to an OR of
-   * per-row AND chains of equalities. Requires every LHS child to be a bare PK column
+   * Convert {@code (c1, ..., cK) IN ((v1a, ..., vKa), (v1b, ..., vKb), ...)} to an OR of per-row
+   * AND chains of equalities. Requires every LHS child to be a bare PK column
    * {@link RowKeyColumnExpression} and each RHS row-value to be an
-   * {@link RowValueConstructorExpression} of literals. Phoenix may also pack row values
-   * as {@link LiteralExpression}s of concatenated bytes after its sort-and-coerce pass; in
-   * that case we fall back to Unknown.
+   * {@link RowValueConstructorExpression} of literals. Phoenix may also pack row values as
+   * {@link LiteralExpression}s of concatenated bytes after its sort-and-coerce pass; in that case
+   * we fall back to Unknown.
    */
   private AbstractExpression convertRvcInList(InListExpression in,
     RowValueConstructorExpression lhsRvc) {
@@ -253,14 +251,12 @@ public final class ExpressionAdapter {
     // Construct `col >= prefix AND col < nextString(prefix)`. nextString bumps the last
     // character up by 1; for strings it's the lex successor.
     String upper = nextString(prefix);
-    AbstractExpression lower =
-      AbstractExpression.pred(pkPos, AbstractExpression.Op.GE, prefix);
+    AbstractExpression lower = AbstractExpression.pred(pkPos, AbstractExpression.Op.GE, prefix);
     if (upper == null) {
       // Bump overflowed — upper is unbounded. Just lower bound alone.
       return lower;
     }
-    AbstractExpression upperBound =
-      AbstractExpression.pred(pkPos, AbstractExpression.Op.LT, upper);
+    AbstractExpression upperBound = AbstractExpression.pred(pkPos, AbstractExpression.Op.LT, upper);
     return AbstractExpression.and(lower, upperBound);
   }
 
@@ -279,13 +275,12 @@ public final class ExpressionAdapter {
   }
 
   /**
-   * Evaluate a "literal-like" RHS to a typed Comparable. Unwraps Phoenix's common
-   * function wrappers around literal values (e.g. {@code TO_BIGINT(5)} which Phoenix
-   * compiles as a {@link org.apache.phoenix.expression.CoerceExpression} or similar
-   * when the LHS's declared type differs from the integer literal's parsed type).
-   * These wrappers are semantically literals — they evaluate to a fixed value with no
-   * row context — so {@code rhs.evaluate(null, ptr)} succeeds and we can decode the
-   * resulting bytes regardless of whether {@code rhs} is a bare
+   * Evaluate a "literal-like" RHS to a typed Comparable. Unwraps Phoenix's common function wrappers
+   * around literal values (e.g. {@code TO_BIGINT(5)} which Phoenix compiles as a
+   * {@link org.apache.phoenix.expression.CoerceExpression} or similar when the LHS's declared type
+   * differs from the integer literal's parsed type). These wrappers are semantically literals —
+   * they evaluate to a fixed value with no row context — so {@code rhs.evaluate(null, ptr)}
+   * succeeds and we can decode the resulting bytes regardless of whether {@code rhs} is a bare
    * {@link LiteralExpression} or a wrapper around one.
    */
   private Comparable<?> evaluateLiteral(Expression rhs) {
@@ -303,12 +298,18 @@ public final class ExpressionAdapter {
 
   private static AbstractExpression.Op mapOp(CompareOperator op) {
     switch (op) {
-      case EQUAL: return AbstractExpression.Op.EQ;
-      case LESS: return AbstractExpression.Op.LT;
-      case LESS_OR_EQUAL: return AbstractExpression.Op.LE;
-      case GREATER: return AbstractExpression.Op.GT;
-      case GREATER_OR_EQUAL: return AbstractExpression.Op.GE;
-      default: throw new IllegalStateException("unexpected op " + op);
+      case EQUAL:
+        return AbstractExpression.Op.EQ;
+      case LESS:
+        return AbstractExpression.Op.LT;
+      case LESS_OR_EQUAL:
+        return AbstractExpression.Op.LE;
+      case GREATER:
+        return AbstractExpression.Op.GT;
+      case GREATER_OR_EQUAL:
+        return AbstractExpression.Op.GE;
+      default:
+        throw new IllegalStateException("unexpected op " + op);
     }
   }
 

@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.AndExpression;
@@ -45,8 +44,8 @@ import org.junit.Test;
 public class ExpressionNormalizerTest {
 
   /**
-   * A bare-bones stand-in for a PK column that gives ComparisonExpression.create an LHS with
-   * a data type but no constant value, so constant folding is skipped.
+   * A bare-bones stand-in for a PK column that gives ComparisonExpression.create an LHS with a data
+   * type but no constant value, so constant folding is skipped.
    */
   private static final class TestColumn implements PDatum {
     private final PDataType type;
@@ -83,7 +82,7 @@ public class ExpressionNormalizerTest {
 
   private static RowKeyColumnExpression col(int position) {
     return new RowKeyColumnExpression(new TestColumn(PVarchar.INSTANCE),
-      new RowKeyValueAccessor(Arrays.<PDatum>asList(new TestColumn(PVarchar.INSTANCE),
+      new RowKeyValueAccessor(Arrays.<PDatum> asList(new TestColumn(PVarchar.INSTANCE),
         new TestColumn(PVarchar.INSTANCE), new TestColumn(PVarchar.INSTANCE)), position));
   }
 
@@ -91,8 +90,10 @@ public class ExpressionNormalizerTest {
     return LiteralExpression.newConstant(s, PVarchar.INSTANCE);
   }
 
-  private static Expression cmp(CompareOperator op, Expression lhs, Expression rhs) throws Exception {
-    return ComparisonExpression.create(op, Arrays.asList(lhs, rhs), new ImmutableBytesWritable(), true);
+  private static Expression cmp(CompareOperator op, Expression lhs, Expression rhs)
+    throws Exception {
+    return ComparisonExpression.create(op, Arrays.asList(lhs, rhs), new ImmutableBytesWritable(),
+      true);
   }
 
   private static Expression rvc(Expression... children) {
@@ -112,39 +113,35 @@ public class ExpressionNormalizerTest {
 
   @Test
   public void rvcGreaterRewritesToLexicographicOr() throws Exception {
-    //   (c1, c2) > (a, b)
-    //     => (c1 > a) OR (c1 = a AND c2 > b)
+    // (c1, c2) > (a, b)
+    // => (c1 > a) OR (c1 = a AND c2 > b)
     Expression rvcCmp = new ComparisonExpression(
-      Arrays.<Expression>asList(rvc(col(0), col(1)), rvc(lit("a"), lit("b"))),
+      Arrays.<Expression> asList(rvc(col(0), col(1)), rvc(lit("a"), lit("b"))),
       CompareOperator.GREATER);
     Expression normalized = ExpressionNormalizer.normalize(rvcCmp);
     assertTrue(normalized instanceof OrExpression);
     List<Expression> orKids = normalized.getChildren();
     assertEquals(2, orKids.size());
     assertTrue(orKids.get(0) instanceof ComparisonExpression);
-    assertEquals(CompareOperator.GREATER,
-      ((ComparisonExpression) orKids.get(0)).getFilterOp());
+    assertEquals(CompareOperator.GREATER, ((ComparisonExpression) orKids.get(0)).getFilterOp());
     assertTrue(orKids.get(1) instanceof AndExpression);
     List<Expression> andKids = orKids.get(1).getChildren();
-    assertEquals(CompareOperator.EQUAL,
-      ((ComparisonExpression) andKids.get(0)).getFilterOp());
-    assertEquals(CompareOperator.GREATER,
-      ((ComparisonExpression) andKids.get(1)).getFilterOp());
+    assertEquals(CompareOperator.EQUAL, ((ComparisonExpression) andKids.get(0)).getFilterOp());
+    assertEquals(CompareOperator.GREATER, ((ComparisonExpression) andKids.get(1)).getFilterOp());
   }
 
   @Test
   public void rvcGreaterOrEqualKeepsInclusiveOnFinalTerm() throws Exception {
     // (c1, c2, c3) >= (a, b, c)
-    //   => (c1 > a) OR (c1 = a AND c2 > b) OR (c1 = a AND c2 = b AND c3 >= c)
+    // => (c1 > a) OR (c1 = a AND c2 > b) OR (c1 = a AND c2 = b AND c3 >= c)
     Expression rvcCmp = new ComparisonExpression(
-      Arrays.<Expression>asList(rvc(col(0), col(1), col(2)), rvc(lit("a"), lit("b"), lit("c"))),
+      Arrays.<Expression> asList(rvc(col(0), col(1), col(2)), rvc(lit("a"), lit("b"), lit("c"))),
       CompareOperator.GREATER_OR_EQUAL);
     Expression normalized = ExpressionNormalizer.normalize(rvcCmp);
     assertTrue(normalized instanceof OrExpression);
     List<Expression> orKids = normalized.getChildren();
     assertEquals(3, orKids.size());
-    assertEquals(CompareOperator.GREATER,
-      ((ComparisonExpression) orKids.get(0)).getFilterOp());
+    assertEquals(CompareOperator.GREATER, ((ComparisonExpression) orKids.get(0)).getFilterOp());
     List<Expression> lastAnd = orKids.get(2).getChildren();
     assertEquals(CompareOperator.GREATER_OR_EQUAL,
       ((ComparisonExpression) lastAnd.get(lastAnd.size() - 1)).getFilterOp());
@@ -153,7 +150,7 @@ public class ExpressionNormalizerTest {
   @Test
   public void rvcLessRewritesSymmetrically() throws Exception {
     Expression rvcCmp = new ComparisonExpression(
-      Arrays.<Expression>asList(rvc(col(0), col(1)), rvc(lit("a"), lit("b"))),
+      Arrays.<Expression> asList(rvc(col(0), col(1)), rvc(lit("a"), lit("b"))),
       CompareOperator.LESS);
     Expression normalized = ExpressionNormalizer.normalize(rvcCmp);
     assertTrue(normalized instanceof OrExpression);
@@ -189,11 +186,11 @@ public class ExpressionNormalizerTest {
     Expression inExpr = new InListExpression(inChildren, true);
 
     Expression rvcCmp = new ComparisonExpression(
-      Arrays.<Expression>asList(rvc(col(1), col(2)), rvc(lit("x"), lit("y"))),
+      Arrays.<Expression> asList(rvc(col(1), col(2)), rvc(lit("x"), lit("y"))),
       CompareOperator.GREATER);
 
-    Expression andNode = AndExpression.create(
-      new ArrayList<Expression>(Arrays.asList(inExpr, rvcCmp)));
+    Expression andNode =
+      AndExpression.create(new ArrayList<Expression>(Arrays.asList(inExpr, rvcCmp)));
     Expression normalized = ExpressionNormalizer.normalize(andNode);
 
     assertTrue(normalized instanceof AndExpression);

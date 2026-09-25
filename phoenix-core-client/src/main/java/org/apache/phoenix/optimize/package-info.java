@@ -15,12 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
 
 /**
- * Explain type attributes used to differentiate output of the explain plan.
+ * Query optimizer classes responsible for selecting the best query plan among the data table and
+ * available secondary indexes.
  */
-public enum ExplainType {
-  WITH_REGIONS,
-  DEFAULT
-}
+package org.apache.phoenix.optimize;

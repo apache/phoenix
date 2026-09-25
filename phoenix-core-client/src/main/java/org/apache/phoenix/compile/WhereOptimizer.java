@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.keyspace.WhereOptimizerV2;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseExpression;
 import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapper;
@@ -55,7 +56,6 @@ import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.compile.keyspace.WhereOptimizerV2;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -130,9 +130,11 @@ public class WhereOptimizer {
     // it. The v2 driver produces the same ScanRanges shape and residual Expression as the
     // legacy path below, with stricter correctness guarantees (see PHOENIX-6669 and the
     // design doc in docs/where-optimizer-v2.md).
-    if (context.getConnection().getQueryServices().getConfiguration()
-      .getBoolean(QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
-        QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)) {
+    if (
+      context.getConnection().getQueryServices().getConfiguration().getBoolean(
+        QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+        QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)
+    ) {
       return WhereOptimizerV2.run(context, hints, whereClause, extractNodes, minOffset);
     }
     PName tenantId = context.getConnection().getTenantId();

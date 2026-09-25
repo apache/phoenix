@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.rpc;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -32,9 +33,10 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
@@ -58,8 +60,14 @@ public class PhoenixClientRpcIT extends BaseTest {
       Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
         TestPhoenixIndexRpcSchedulerFactory.class.getName());
     NUM_SLAVES_BASE = 2;
+    // Keep immutable-index maintenance client-side: this test verifies that client-originated
+    // index writes do not use the region-server index RPC queue. Under server-side maintenance
+    // that invariant no longer holds (the write is routed through the index handler pool only
+    // when the index region is not colocated with the data region), so pin the flag off here.
+    Map<String, String> clientProps = Collections.singletonMap(
+      QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, Boolean.FALSE.toString());
     setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-      ReadOnlyProps.EMPTY_PROPS);
+      new ReadOnlyProps(clientProps.entrySet().iterator()));
   }
 
   @AfterClass
@@ -102,12 +110,11 @@ public class PhoenixClientRpcIT extends BaseTest {
       stmt.setString(1, "v1");
 
       // verify that the query does a range scan on the index table
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName + " ['v1']",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
+        .tableContains(indexFullName).keyRanges("['v1']");
 
       // verify that the correct results are returned
-      rs = stmt.executeQuery();
+      ResultSet rs = stmt.executeQuery();
       assertTrue(rs.next());
       assertEquals("k1", rs.getString(1));
       assertEquals("v2", rs.getString(2));

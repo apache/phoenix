@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.keyspace.KeySpaceExpressionVisitor.Result;
@@ -145,9 +144,9 @@ public class KeySpaceExpressionVisitorTest {
   @Test
   public void andIntersectsPerDim() throws Exception {
     PTable t = tableWith(3, PVarchar.INSTANCE);
-    Expression e = AndExpression.create(new ArrayList<>(Arrays.asList(
-      cmp(CompareOperator.EQUAL, col(0, 3), lit("a")),
-      cmp(CompareOperator.EQUAL, col(1, 3), lit("b")))));
+    Expression e = AndExpression
+      .create(new ArrayList<>(Arrays.asList(cmp(CompareOperator.EQUAL, col(0, 3), lit("a")),
+        cmp(CompareOperator.EQUAL, col(1, 3), lit("b")))));
     KeySpaceList list = visit(t, e);
     assertEquals(1, list.size());
     KeySpace ks = list.spaces().get(0);
@@ -159,8 +158,7 @@ public class KeySpaceExpressionVisitorTest {
   @Test
   public void orOnSamePkYieldsMultipleSpaces() throws Exception {
     PTable t = tableWith(2, PVarchar.INSTANCE);
-    Expression e = new OrExpression(Arrays.asList(
-      cmp(CompareOperator.EQUAL, col(0, 2), lit("a")),
+    Expression e = new OrExpression(Arrays.asList(cmp(CompareOperator.EQUAL, col(0, 2), lit("a")),
       cmp(CompareOperator.EQUAL, col(0, 2), lit("b"))));
     KeySpaceList list = visit(t, e);
     assertEquals(2, list.size());
@@ -170,8 +168,7 @@ public class KeySpaceExpressionVisitorTest {
   public void orMergesAdjacentRanges() throws Exception {
     PTable t = tableWith(2, PVarchar.INSTANCE);
     // pk0 < "m" OR pk0 >= "m" => everything on dim0
-    Expression e = new OrExpression(Arrays.asList(
-      cmp(CompareOperator.LESS, col(0, 2), lit("m")),
+    Expression e = new OrExpression(Arrays.asList(cmp(CompareOperator.LESS, col(0, 2), lit("m")),
       cmp(CompareOperator.GREATER_OR_EQUAL, col(0, 2), lit("m"))));
     KeySpaceList list = visit(t, e);
     // Should merge into one space with dim0 == EVERYTHING (or a single contiguous range).
@@ -184,9 +181,9 @@ public class KeySpaceExpressionVisitorTest {
   public void degenerateAndOnSamePkYieldsUnsatisfiable() throws Exception {
     PTable t = tableWith(3, PVarchar.INSTANCE);
     // pk2 = 'x' AND pk2 = 'y' — PHOENIX-6669 shape, on non-leading PK.
-    Expression e = AndExpression.create(new ArrayList<>(Arrays.asList(
-      cmp(CompareOperator.EQUAL, col(2, 3), lit("x")),
-      cmp(CompareOperator.EQUAL, col(2, 3), lit("y")))));
+    Expression e = AndExpression
+      .create(new ArrayList<>(Arrays.asList(cmp(CompareOperator.EQUAL, col(2, 3), lit("x")),
+        cmp(CompareOperator.EQUAL, col(2, 3), lit("y")))));
     KeySpaceList list = visit(t, e);
     assertTrue("degenerate AND must collapse to UNSAT", list.isUnsatisfiable());
   }
@@ -229,7 +226,7 @@ public class KeySpaceExpressionVisitorTest {
   public void consumedSetPopulatedForScalarComparison() throws Exception {
     PTable t = tableWith(2, PVarchar.INSTANCE);
     ComparisonExpression cmpNode = new ComparisonExpression(
-      Arrays.<Expression>asList(col(0, 2), lit("a")), CompareOperator.EQUAL);
+      Arrays.<Expression> asList(col(0, 2), lit("a")), CompareOperator.EQUAL);
     KeySpaceExpressionVisitor v = new KeySpaceExpressionVisitor(t);
     Result r = cmpNode.accept(v);
     assertTrue(r.consumed().contains(cmpNode));
@@ -242,14 +239,14 @@ public class KeySpaceExpressionVisitorTest {
     // each with per-dim point-equality ranges. This matches the design's N-dim key-space
     // model: each PK column is a distinct dimension.
     RowValueConstructorExpression lhs =
-      new RowValueConstructorExpression(Arrays.<Expression>asList(col(0, 2), col(1, 2)), false);
-    RowValueConstructorExpression row1 = new RowValueConstructorExpression(
-      Arrays.<Expression>asList(lit("a"), lit("1")), true);
-    RowValueConstructorExpression row2 = new RowValueConstructorExpression(
-      Arrays.<Expression>asList(lit("b"), lit("2")), true);
+      new RowValueConstructorExpression(Arrays.<Expression> asList(col(0, 2), col(1, 2)), false);
+    RowValueConstructorExpression row1 =
+      new RowValueConstructorExpression(Arrays.<Expression> asList(lit("a"), lit("1")), true);
+    RowValueConstructorExpression row2 =
+      new RowValueConstructorExpression(Arrays.<Expression> asList(lit("b"), lit("2")), true);
     org.apache.phoenix.expression.InListExpression in =
       new org.apache.phoenix.expression.InListExpression(
-        Arrays.<Expression>asList(lhs, row1, row2), true);
+        Arrays.<Expression> asList(lhs, row1, row2), true);
     KeySpaceList list = visit(t, in);
     assertEquals(2, list.size());
     for (KeySpace ks : list.spaces()) {

@@ -19,7 +19,6 @@ package org.apache.phoenix.compile.keyspace.algebra;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.query.KeyRange;
@@ -30,21 +29,20 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 
 /**
- * Converts V2's {@link ScanRanges} output (byte-level {@link KeyRange}s per slot) back into
- * an {@link AbstractKeySpaceList} with typed values, so we can diff it against the oracle's
- * output in the same domain.
+ * Converts V2's {@link ScanRanges} output (byte-level {@link KeyRange}s per slot) back into an
+ * {@link AbstractKeySpaceList} with typed values, so we can diff it against the oracle's output in
+ * the same domain.
  * <p>
  * Limitations:
  * <ul>
  * <li>Assumes no salted / multi-tenant / view-index prefix (harness skips those tables).</li>
  * <li>Assumes {@code slotSpan[i] == 0} for every slot (V2's current emission).
- * {@code slotSpan[i] > 0} would mean a single range spans multiple PK cols in byte-space
- * and cannot be decoded per-column without reversing the concatenation.</li>
- * <li>Ignores the {@code scanRange} (the pre-computed start/stop row) and works from the
- * per-slot {@code ranges} instead — that's the representation the oracle compares against.</li>
+ * {@code slotSpan[i] > 0} would mean a single range spans multiple PK cols in byte-space and cannot
+ * be decoded per-column without reversing the concatenation.</li>
+ * <li>Ignores the {@code scanRange} (the pre-computed start/stop row) and works from the per-slot
+ * {@code ranges} instead — that's the representation the oracle compares against.</li>
  * </ul>
- * If any of these preconditions are violated the decoder throws
- * {@link UnsupportedEncodingShape}.
+ * If any of these preconditions are violated the decoder throws {@link UnsupportedEncodingShape}.
  */
 public final class ScanRangesDecoder {
 
@@ -54,7 +52,8 @@ public final class ScanRangesDecoder {
     }
   }
 
-  private ScanRangesDecoder() {}
+  private ScanRangesDecoder() {
+  }
 
   /**
    * Decode {@code sr} against {@code table}'s PK columns and return one
@@ -65,9 +64,9 @@ public final class ScanRangesDecoder {
    * <li>{@code ScanRanges.EVERYTHING} → {@link AbstractKeySpaceList#everything(int)}.</li>
    * <li>{@code ScanRanges.NOTHING} → {@link AbstractKeySpaceList#unsatisfiable(int)}.</li>
    * <li>Otherwise: for each slot {@code i}, decode each {@link KeyRange} to an
-   * {@link AbstractRange} over the column's Java type; collapse to one
-   * {@link AbstractKeySpace} per combination (cartesian product across slots — what the
-   * per-slot emission shape describes semantically).</li>
+   * {@link AbstractRange} over the column's Java type; collapse to one {@link AbstractKeySpace} per
+   * combination (cartesian product across slots — what the per-slot emission shape describes
+   * semantically).</li>
    * </ul>
    */
   public static AbstractKeySpaceList decode(ScanRanges sr, PTable table) {
@@ -113,8 +112,7 @@ public final class ScanRangesDecoder {
       int firstCol = pkCursor;
       int lastCol = pkCursor + span;
       if (lastCol >= nPk) {
-        throw new UnsupportedEncodingShape(
-          "slot " + i + " span " + span + " exceeds PK arity");
+        throw new UnsupportedEncodingShape("slot " + i + " span " + span + " exceeds PK arity");
       }
       if (ranges.size() == 1 && ranges.get(0) == KeyRange.EMPTY_RANGE) {
         return AbstractKeySpaceList.unsatisfiable(nPk);
@@ -140,14 +138,14 @@ public final class ScanRangesDecoder {
     }
     // Trailing PK cols past the last slot get EVERYTHING.
     for (int i = pkCursor; i < nPk; i++) {
-      perCol.set(i, java.util.Collections.<AbstractRange<?>>singletonList(
-        AbstractRange.everything()));
+      perCol.set(i,
+        java.util.Collections.<AbstractRange<?>> singletonList(AbstractRange.everything()));
     }
     // Defensive: any slot we didn't fill (shouldn't happen, but handle anyway).
     for (int i = 0; i < nPk; i++) {
       if (perCol.get(i) == null) {
-        perCol.set(i, java.util.Collections.<AbstractRange<?>>singletonList(
-          AbstractRange.everything()));
+        perCol.set(i,
+          java.util.Collections.<AbstractRange<?>> singletonList(AbstractRange.everything()));
       }
     }
 
@@ -160,10 +158,9 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * Decode a general ScanRanges shape that mixes per-column slots and compound slots
-   * (slotSpan &gt; 0 with multiple ranges). Each slot contributes a disjunction of tuples
-   * over its covered PK columns; the final KeySpaceList is the cartesian product of the
-   * per-slot disjunctions.
+   * Decode a general ScanRanges shape that mixes per-column slots and compound slots (slotSpan &gt;
+   * 0 with multiple ranges). Each slot contributes a disjunction of tuples over its covered PK
+   * columns; the final KeySpaceList is the cartesian product of the per-slot disjunctions.
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
   private static AbstractKeySpaceList decodeWithCompoundSlots(List<List<KeyRange>> slots,
@@ -239,9 +236,9 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * Decode a point-lookup {@link ScanRanges}: one slot containing one or more compound
-   * point-key byte ranges, each of which represents a full N-column PK tuple. Each
-   * compound key becomes an {@link AbstractKeySpace} with per-column point values.
+   * Decode a point-lookup {@link ScanRanges}: one slot containing one or more compound point-key
+   * byte ranges, each of which represents a full N-column PK tuple. Each compound key becomes an
+   * {@link AbstractKeySpace} with per-column point values.
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
   private static AbstractKeySpaceList decodePointLookup(List<KeyRange> keys, RowKeySchema schema,
@@ -283,16 +280,16 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * Expand a compound lex-interval {@link KeyRange} into one or more {@link AbstractRange}
-   * tuples, each representing a box in the lex decomposition. The disjunction of the
-   * returned tuples equals the original lex interval exactly.
+   * Expand a compound lex-interval {@link KeyRange} into one or more {@link AbstractRange} tuples,
+   * each representing a box in the lex decomposition. The disjunction of the returned tuples equals
+   * the original lex interval exactly.
    * <p>
-   * For a compound range with lower {@code L = (l0, ..., l_{p-1})} and upper
-   * {@code U = (u0, ..., u_{q-1})}, sharing a common prefix of length {@code k}:
+   * For a compound range with lower {@code L = (l0, ..., l_{p-1})} and upper {@code U = (u0, ...,
+   * u_{q-1})}, sharing a common prefix of length {@code k}:
    * <ul>
    * <li>Dims {@code [0, k)} are pinned to the prefix (point ranges).</li>
-   * <li>At dim {@code k}: either L and U span the same column with a byte-range, or
-   * we split into one "lower tail" step + one "open middle" box + one "upper tail" step.</li>
+   * <li>At dim {@code k}: either L and U span the same column with a byte-range, or we split into
+   * one "lower tail" step + one "open middle" box + one "upper tail" step.</li>
    * <li>Trailing dims depend on the step chosen at dim {@code k}.</li>
    * </ul>
    * Returns a list of {@code AbstractRange[colCount]} tuples.
@@ -319,8 +316,9 @@ public final class ScanRangesDecoder {
 
     // Find common prefix length.
     int k = 0;
-    while (k < colCount && lo[k] != null && hi[k] != null
-      && java.util.Objects.equals(lo[k], hi[k])) {
+    while (
+      k < colCount && lo[k] != null && hi[k] != null && java.util.Objects.equals(lo[k], hi[k])
+    ) {
       k++;
     }
 
@@ -329,8 +327,8 @@ public final class ScanRangesDecoder {
       if (!loInc || !hiInc) return result; // empty
       AbstractRange<?>[] tuple = new AbstractRange<?>[colCount];
       for (int i = 0; i < colCount; i++) {
-        tuple[i] = lo[i] != null ? AbstractRange.point((Comparable) lo[i])
-          : AbstractRange.everything();
+        tuple[i] =
+          lo[i] != null ? AbstractRange.point((Comparable) lo[i]) : AbstractRange.everything();
       }
       result.add(tuple);
       return result;
@@ -339,8 +337,8 @@ public final class ScanRangesDecoder {
     // Common prefix dims [0, k) are points. From dim k onward we build the lex steps.
     AbstractRange<?>[] prefix = new AbstractRange<?>[k];
     for (int i = 0; i < k; i++) {
-      prefix[i] = lo[i] != null ? AbstractRange.point((Comparable) lo[i])
-        : AbstractRange.everything();
+      prefix[i] =
+        lo[i] != null ? AbstractRange.point((Comparable) lo[i]) : AbstractRange.everything();
     }
 
     Object loK = k < lo.length ? lo[k] : null;
@@ -366,8 +364,8 @@ public final class ScanRangesDecoder {
     if (loK == null && hiK == null) {
       middleTuple[k] = AbstractRange.everything();
     } else {
-      middleTuple[k] = AbstractRange.of((Comparable) loK, middleLoInc, (Comparable) hiK,
-        middleHiInc);
+      middleTuple[k] =
+        AbstractRange.of((Comparable) loK, middleLoInc, (Comparable) hiK, middleHiInc);
     }
     for (int i = k + 1; i < colCount; i++) {
       middleTuple[i] = AbstractRange.everything();
@@ -393,12 +391,12 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * Expand the "dim k == lo[k] AND dims [k+1..] >= lo-tail" step into a disjunction of
-   * lex-boxes. Recurses on the tail.
+   * Expand the "dim k == lo[k] AND dims [k+1..] >= lo-tail" step into a disjunction of lex-boxes.
+   * Recurses on the tail.
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
-  private static List<AbstractRange<?>[]> expandLowerTail(AbstractRange<?>[] prefix,
-    Object loK, Object[] lo, boolean loInc, int k, int colCount) {
+  private static List<AbstractRange<?>[]> expandLowerTail(AbstractRange<?>[] prefix, Object loK,
+    Object[] lo, boolean loInc, int k, int colCount) {
     // Pin dim k to lo[k].
     AbstractRange<?>[] withPin = new AbstractRange<?>[colCount];
     System.arraycopy(prefix, 0, withPin, 0, k);
@@ -420,8 +418,8 @@ public final class ScanRangesDecoder {
    * Expand the "dim k == hi[k] AND dims [k+1..] < hi-tail" step into a disjunction.
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
-  private static List<AbstractRange<?>[]> expandUpperTail(AbstractRange<?>[] prefix,
-    Object hiK, Object[] hi, boolean hiInc, int k, int colCount) {
+  private static List<AbstractRange<?>[]> expandUpperTail(AbstractRange<?>[] prefix, Object hiK,
+    Object[] hi, boolean hiInc, int k, int colCount) {
     AbstractRange<?>[] withPin = new AbstractRange<?>[colCount];
     System.arraycopy(prefix, 0, withPin, 0, k);
     withPin[k] = AbstractRange.point((Comparable) hiK);
@@ -438,18 +436,18 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * One-sided lex expansion: rows whose dim tuple is {@code >= tail[from..end)} (strict
-   * or inclusive based on {@code inclusive}), expressed over a dim array of length
+   * One-sided lex expansion: rows whose dim tuple is {@code >= tail[from..end)} (strict or
+   * inclusive based on {@code inclusive}), expressed over a dim array of length
    * {@code colCount - from}. Returns a list of box-tuples.
    */
   @SuppressWarnings({ "unchecked", "rawtypes" })
-  private static List<AbstractRange<?>[]> expandOneSidedLower(Object[] tail, int from,
-    int colCount, boolean inclusive) {
+  private static List<AbstractRange<?>[]> expandOneSidedLower(Object[] tail, int from, int colCount,
+    boolean inclusive) {
     int tailLen = colCount - from;
     List<AbstractRange<?>[]> out = new ArrayList<>();
     if (tailLen <= 0) return out;
     // Step i (i in [from, colCount)): dims [from..i-1] = tail[..], dim i > tail[i]
-    //   (or for the last step, if inclusive, dim i >= tail[i]).
+    // (or for the last step, if inclusive, dim i >= tail[i]).
     for (int i = from; i < colCount; i++) {
       AbstractRange<?>[] tuple = new AbstractRange<?>[tailLen];
       // Pin [from..i-1] to tail[from..i-1].
@@ -481,8 +479,8 @@ public final class ScanRangesDecoder {
 
   /** Mirror of {@link #expandOneSidedLower} for upper-bounded lex. */
   @SuppressWarnings({ "unchecked", "rawtypes" })
-  private static List<AbstractRange<?>[]> expandOneSidedUpper(Object[] tail, int from,
-    int colCount, boolean inclusive) {
+  private static List<AbstractRange<?>[]> expandOneSidedUpper(Object[] tail, int from, int colCount,
+    boolean inclusive) {
     int tailLen = colCount - from;
     List<AbstractRange<?>[]> out = new ArrayList<>();
     if (tailLen <= 0) return out;
@@ -526,13 +524,15 @@ public final class ScanRangesDecoder {
     return widened;
   }
 
-  private enum Bound { LOWER, UPPER }
+  private enum Bound {
+    LOWER,
+    UPPER
+  }
 
   /**
-   * Decode the lower or upper bound of a compound KeyRange into an {@code Object[]} of
-   * per-column typed values, one entry per PK column in the compound span.
-   * {@code null} at a position means "unbounded" at that column (the bound bytes ran out
-   * before reaching this column).
+   * Decode the lower or upper bound of a compound KeyRange into an {@code Object[]} of per-column
+   * typed values, one entry per PK column in the compound span. {@code null} at a position means
+   * "unbounded" at that column (the bound bytes ran out before reaching this column).
    */
   private static Object[] decodeCompoundTuple(KeyRange compound, Bound bound, RowKeySchema schema,
     PTable table, int firstCol, int colCount) {
@@ -589,10 +589,10 @@ public final class ScanRangesDecoder {
   }
 
   /**
-   * Cartesian product of per-slot ranges → list of {@link AbstractKeySpace}. Each element of
-   * the result combines one range from each slot into an N-dim tuple. For typical queries
-   * the product is small (each slot has 1 range); for IN-list-on-single-dim queries the
-   * product equals the IN list size.
+   * Cartesian product of per-slot ranges → list of {@link AbstractKeySpace}. Each element of the
+   * result combines one range from each slot into an N-dim tuple. For typical queries the product
+   * is small (each slot has 1 range); for IN-list-on-single-dim queries the product equals the IN
+   * list size.
    */
   private static List<AbstractKeySpace> cartesian(List<List<AbstractRange<?>>> perSlot, int nPk) {
     List<AbstractKeySpace> out = new ArrayList<>();

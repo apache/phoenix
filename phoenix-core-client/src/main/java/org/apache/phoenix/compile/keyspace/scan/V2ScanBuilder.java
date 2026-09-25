@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.keyspace.KeyRangeExtractor;
 import org.apache.phoenix.compile.keyspace.KeySpace;
@@ -56,15 +55,14 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
  * <li>Class 2 EVERYTHING → {@link ScanRanges#EVERYTHING}</li>
  * <li>Class 3 POINT_LOOKUP_LIST → natively emitted via {@link CompoundByteEncoder}</li>
  * <li>Classes 4a–4e (RANGE_SCAN subcases) and 5 (SKIP_SCAN_LIST) → route through the
- *     {@link KeyRangeExtractor} adapter to produce V1-shaped CNF; scan start/stop bytes
- *     are then sourced from {@link CompoundByteEncoder} (via
- *     {@link CompoundByteEncoderEmitter} in {@code WhereOptimizerV2.run}) for shapes in
- *     the encoder's proven envelope.</li>
+ * {@link KeyRangeExtractor} adapter to produce V1-shaped CNF; scan start/stop bytes are then
+ * sourced from {@link CompoundByteEncoder} (via {@link CompoundByteEncoderEmitter} in
+ * {@code WhereOptimizerV2.run}) for shapes in the encoder's proven envelope.</li>
  * </ul>
- * Downstream consumers (SkipScanFilter, ScanRanges.isPointLookup, explain-plan
- * formatter, local-index pruning) read from the ScanRanges this builder produces.
- * V2-owned metadata is attached via {@link V2ScanArtifact} so the explain-plan formatter
- * renders from the pre-encoding {@link KeySpaceList} rather than the post-encoding bytes.
+ * Downstream consumers (SkipScanFilter, ScanRanges.isPointLookup, explain-plan formatter,
+ * local-index pruning) read from the ScanRanges this builder produces. V2-owned metadata is
+ * attached via {@link V2ScanArtifact} so the explain-plan formatter renders from the pre-encoding
+ * {@link KeySpaceList} rather than the post-encoding bytes.
  */
 public final class V2ScanBuilder {
 
@@ -72,8 +70,8 @@ public final class V2ScanBuilder {
   }
 
   /**
-   * Inputs gathered at {@code WhereOptimizerV2.run} and passed to the scan builder.
-   * All fields are read-only.
+   * Inputs gathered at {@code WhereOptimizerV2.run} and passed to the scan builder. All fields are
+   * read-only.
    */
   public static final class Inputs {
     public final KeySpaceList list;
@@ -111,23 +109,23 @@ public final class V2ScanBuilder {
   }
 
   /**
-   * Output of the scan builder. For now this is a thin wrapper around
-   * {@link ScanRanges} (the existing type), leaving room to grow into a richer V2-owned
-   * adapter as more responsibilities move into this class.
+   * Output of the scan builder. For now this is a thin wrapper around {@link ScanRanges} (the
+   * existing type), leaving room to grow into a richer V2-owned adapter as more responsibilities
+   * move into this class.
    */
   public static final class Result {
     public final ScanRanges scanRanges;
     /**
-     * {@code true} iff the builder's classification of the emitted key space is "matches
-     * nothing" — the caller short-circuits the residual and returns {@code null}. Distinct
-     * from {@code scanRanges.isDegenerate()} only insofar as it's set by the builder's
-     * own classification path (not always derivable from {@code scanRanges}).
+     * {@code true} iff the builder's classification of the emitted key space is "matches nothing" —
+     * the caller short-circuits the residual and returns {@code null}. Distinct from
+     * {@code scanRanges.isDegenerate()} only insofar as it's set by the builder's own
+     * classification path (not always derivable from {@code scanRanges}).
      */
     public final boolean isNothing;
     /**
-     * True when the emitted scan is a sound over-approximation of the {@link KeySpaceList}
-     * (algebra widening and/or extractor cartesian truncation). Callers must retain
-     * visitor-consumed predicates in the residual filter.
+     * True when the emitted scan is a sound over-approximation of the {@link KeySpaceList} (algebra
+     * widening and/or extractor cartesian truncation). Callers must retain visitor-consumed
+     * predicates in the residual filter.
      */
     public final boolean approximated;
 
@@ -154,27 +152,27 @@ public final class V2ScanBuilder {
    * Build a {@link ScanRanges} from the given {@link KeySpaceList} and context.
    * <p>
    * Follows the classification tree in {@code docs/where-optimizer-v2-scan-construction.md}
-   * §"Classification tree". Shapes with a native V2 emission path are handled directly;
-   * shapes routed through the {@link KeyRangeExtractor} adapter produce the V1-projected
-   * per-slot CNF shape that {@link org.apache.phoenix.compile.ScanRanges#create} + the
-   * downstream {@code ScanUtil.setKey} consume.
+   * §"Classification tree". Shapes with a native V2 emission path are handled directly; shapes
+   * routed through the {@link KeyRangeExtractor} adapter produce the V1-projected per-slot CNF
+   * shape that {@link org.apache.phoenix.compile.ScanRanges#create} + the downstream
+   * {@code ScanUtil.setKey} consume.
    * <p>
    * Currently native classes:
    * <ul>
    * <li><b>1 DEGENERATE</b> — {@code list.isUnsatisfiable()} → {@link ScanRanges#NOTHING}.</li>
-   * <li><b>2 EVERYTHING</b> — {@code list.isEverything() && !prefixSlots && !minOffset}
-   *     → {@link ScanRanges#EVERYTHING}.</li>
-   * <li><b>3 POINT_LOOKUP_LIST</b> — every space all-single-key across every productive
-   *     dim past prefix, {@code list.size() ≥ 2} (single-space single-tuple routes through
-   *     adapter to preserve DESC var-width byte shape). Emitted directly via
-   *     {@link CompoundByteEncoder}, preserving cross-dim tuple correlation.</li>
+   * <li><b>2 EVERYTHING</b> — {@code list.isEverything() && !prefixSlots && !minOffset} →
+   * {@link ScanRanges#EVERYTHING}.</li>
+   * <li><b>3 POINT_LOOKUP_LIST</b> — every space all-single-key across every productive dim past
+   * prefix, {@code list.size() ≥ 2} (single-space single-tuple routes through adapter to preserve
+   * DESC var-width byte shape). Emitted directly via {@link CompoundByteEncoder}, preserving
+   * cross-dim tuple correlation.</li>
    * </ul>
    * Classes 4 (RANGE_SCAN subcases) and 5 (SKIP_SCAN_LIST) currently route through the
-   * {@link KeyRangeExtractor} adapter to produce the V1-shaped CNF that
-   * {@link SkipScanFilter} consumes. {@link CompoundByteEncoderEmitter} then overrides
-   * {@code scan.startRow}/{@code stopRow} with encoder-sourced bytes for in-envelope
-   * shapes (see {@code docs/where-optimizer-v2-scan-construction.md} §"Byte emission
-   * envelope"). Native emission for classes 4 and 5 is PHOENIX-6791 follow-up work.
+   * {@link KeyRangeExtractor} adapter to produce the V1-shaped CNF that {@link SkipScanFilter}
+   * consumes. {@link CompoundByteEncoderEmitter} then overrides
+   * {@code scan.startRow}/{@code stopRow} with encoder-sourced bytes for in-envelope shapes (see
+   * {@code docs/where-optimizer-v2-scan-construction.md} §"Byte emission envelope"). Native
+   * emission for classes 4 and 5 is PHOENIX-6791 follow-up work.
    */
   public static Result build(Inputs in) {
     // Class 1: DEGENERATE.
@@ -200,8 +198,8 @@ public final class V2ScanBuilder {
 
     // Classes 4 (RANGE_SCAN subcases) and 5 (SKIP_SCAN_LIST): adapter.
 
-    KeyRangeExtractor.Result extract = KeyRangeExtractor.extract(
-      in.list, in.nPkColumns, in.cartesianBound, in.prefixSlots, in.schema);
+    KeyRangeExtractor.Result extract = KeyRangeExtractor.extract(in.list, in.nPkColumns,
+      in.cartesianBound, in.prefixSlots, in.schema);
     if (extract.isNothing()) {
       return Result.nothing();
     }
@@ -249,13 +247,13 @@ public final class V2ScanBuilder {
   }
 
   /**
-   * Classifier: is every space in the list all-single-key across every productive dim,
-   * with no IS_NULL / IS_NOT_NULL sentinels? This is the RVC-IN / RVC-equality OR shape.
+   * Classifier: is every space in the list all-single-key across every productive dim, with no
+   * IS_NULL / IS_NOT_NULL sentinels? This is the RVC-IN / RVC-equality OR shape.
    * <p>
-   * Restricted to multi-space lists (size ≥ 2). Single-space all-pinned shapes flow
-   * through the classical path which is already byte-identical to V1 (proven by parity
-   * harness across 142 tests); routing them through the native path would change byte
-   * output unnecessarily and break byte-shape assertions on point lookups.
+   * Restricted to multi-space lists (size ≥ 2). Single-space all-pinned shapes flow through the
+   * classical path which is already byte-identical to V1 (proven by parity harness across 142
+   * tests); routing them through the native path would change byte output unnecessarily and break
+   * byte-shape assertions on point lookups.
    */
   private static boolean isPointLookupList(Inputs in) {
     if (in.list.isUnsatisfiable() || in.list.isEverything()) {
@@ -311,18 +309,17 @@ public final class V2ScanBuilder {
 
   /**
    * Build a {@link ScanRanges} for a POINT_LOOKUP_LIST shape directly via
-   * {@link CompoundByteEncoder}. Each space becomes one full-rowkey byte[] (including
-   * prefix bytes); these are fed to {@code ScanRanges.create} with VAR_BINARY_SCHEMA so
-   * downstream {@code isPointLookup} classification succeeds and the scan is dispatched
-   * as a SkipScan of point keys.
+   * {@link CompoundByteEncoder}. Each space becomes one full-rowkey byte[] (including prefix
+   * bytes); these are fed to {@code ScanRanges.create} with VAR_BINARY_SCHEMA so downstream
+   * {@code isPointLookup} classification succeeds and the scan is dispatched as a SkipScan of point
+   * keys.
    * <p>
-   * Returns {@code null} if any space's encoded lower bytes are UNBOUND (would collapse
-   * the list) — the caller falls back to the adapter.
+   * Returns {@code null} if any space's encoded lower bytes are UNBOUND (would collapse the list) —
+   * the caller falls back to the adapter.
    */
   private static Result buildPointLookupList(Inputs in) {
     byte[] prefixBytes = buildPrefixBytes(in);
-    java.util.List<KeyRange> pointKeys =
-      new java.util.ArrayList<>(in.list.spaces().size());
+    java.util.List<KeyRange> pointKeys = new java.util.ArrayList<>(in.list.spaces().size());
     for (KeySpace s : in.list.spaces()) {
       byte[] tail = CompoundByteEncoder.encodeLower(in.schema, s, in.prefixSlots);
       if (tail == null || tail.length == 0) {
@@ -342,23 +339,21 @@ public final class V2ScanBuilder {
     if (pointKeys.isEmpty()) {
       return Result.nothing();
     }
-    java.util.List<java.util.List<KeyRange>> cnf =
-      java.util.Collections.singletonList(pointKeys);
+    java.util.List<java.util.List<KeyRange>> cnf = java.util.Collections.singletonList(pointKeys);
     int[] slotSpan = org.apache.phoenix.util.ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
     // Use VAR_BINARY_SCHEMA so ScanRanges.create treats this as raw bytes — isPointLookup
     // succeeds, and SkipScanFilter navigates the N point keys individually without trying
     // to decode them against the original schema's per-field comparators.
-    ScanRanges scanRanges = ScanRanges.create(
-      org.apache.phoenix.util.SchemaUtil.VAR_BINARY_SCHEMA,
-      cnf, slotSpan, in.nBuckets, pointKeys.size() > 1,
-      in.table.getRowTimestampColPos(), in.minOffset);
+    ScanRanges scanRanges =
+      ScanRanges.create(org.apache.phoenix.util.SchemaUtil.VAR_BINARY_SCHEMA, cnf, slotSpan,
+        in.nBuckets, pointKeys.size() > 1, in.table.getRowTimestampColPos(), in.minOffset);
     return new Result(scanRanges, false, in.list.isApproximated());
   }
 
   /**
    * Prefix bytes for salt / viewIndexId / tenantId — mirror of {@code WhereOptimizerV2
-   * .buildPrefixBytes}. Duplicated here to keep {@link V2ScanBuilder} self-contained on
-   * the native emission path.
+   * .buildPrefixBytes}. Duplicated here to keep {@link V2ScanBuilder} self-contained on the native
+   * emission path.
    */
   private static byte[] buildPrefixBytes(Inputs in) {
     java.util.List<byte[]> parts = new java.util.ArrayList<>(3);
@@ -377,7 +372,8 @@ public final class V2ScanBuilder {
       }
     }
     int total = 0;
-    for (byte[] p : parts) total += p.length;
+    for (byte[] p : parts)
+      total += p.length;
     byte[] out = new byte[total];
     int off = 0;
     for (byte[] p : parts) {

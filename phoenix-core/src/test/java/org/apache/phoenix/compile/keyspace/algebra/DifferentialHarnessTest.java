@@ -35,7 +35,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
-
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -62,14 +61,14 @@ import org.junit.Test;
  * <li>Decodes {@link ScanRanges} → {@link AbstractKeySpaceList} (V2 view).</li>
  * <li>Runs {@link Reference#extract} on the hand-authored expression → oracle view.</li>
  * <li>Enumerates every row in the candidate grid and checks:
- *   <ul>
- *   <li><b>Oracle soundness</b>: every row the expression matches is in the oracle's
- *   list (oracle bug if violated).</li>
- *   <li><b>V2 soundness</b>: every row the expression matches is in V2's list
- *   (production bug if violated).</li>
- *   <li><b>Widening</b>: every row in V2's list is also in the oracle's list. The
- *   harness reports if V2 is wider than the oracle (not a bug, but noteworthy).</li>
- *   </ul>
+ * <ul>
+ * <li><b>Oracle soundness</b>: every row the expression matches is in the oracle's list (oracle bug
+ * if violated).</li>
+ * <li><b>V2 soundness</b>: every row the expression matches is in V2's list (production bug if
+ * violated).</li>
+ * <li><b>Widening</b>: every row in V2's list is also in the oracle's list. The harness reports if
+ * V2 is wider than the oracle (not a bug, but noteworthy).</li>
+ * </ul>
  * </li>
  * </ol>
  */
@@ -77,10 +76,10 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
 
   /**
    * The differential harness decodes V2's compound-byte ScanRanges shape via
-   * {@link ScanRangesDecoder} and compares it to the abstract algebra reference. V1's
-   * per-slot byte form isn't compatible with the V2 decoder (which expects per-tuple
-   * compound bytes), so under V1 the harness throws on byte-decode. Skip the suite
-   * when V2 is disabled — this is V2-only test infrastructure.
+   * {@link ScanRangesDecoder} and compares it to the abstract algebra reference. V1's per-slot byte
+   * form isn't compatible with the V2 decoder (which expects per-tuple compound bytes), so under V1
+   * the harness throws on byte-decode. Skip the suite when V2 is disabled — this is V2-only test
+   * infrastructure.
    */
   @Before
   public void requireV2Optimizer() {
@@ -90,52 +89,45 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
   private static boolean isV2Enabled() {
     try (Connection conn = DriverManager.getConnection(getUrl(),
       PropertiesUtil.deepCopy(org.apache.phoenix.util.TestUtil.TEST_PROPERTIES))) {
-      return conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration()
-        .getBoolean(QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
-          QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
+      return conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration().getBoolean(
+        QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+        QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
     } catch (SQLException e) {
       return false;
     }
   }
 
   /**
-   * testRVCScanBoundaries1's first case, run through the harness.
-   * Query: {@code category = 'category_0' AND score <= 5000
+   * testRVCScanBoundaries1's first case, run through the harness. Query:
+   * {@code category = 'category_0' AND score <= 5000
    * AND (score, pk, sk) > (4990, 'pk_90', 4990)}.
    */
   @Test
   public void rvcScanBoundaries1_firstCase() throws SQLException {
     String tableName = "T_RVC1";
-    String ddl = "CREATE TABLE " + tableName + " ("
-      + "category VARCHAR NOT NULL, score DECIMAL NOT NULL, "
-      + "pk VARCHAR NOT NULL, sk BIGINT NOT NULL, val VARCHAR, "
-      + "CONSTRAINT pk PRIMARY KEY (category, score, pk, sk))";
-    String query = "SELECT * FROM " + tableName
-      + " WHERE category = 'category_0' AND score <= 5000"
+    String ddl =
+      "CREATE TABLE " + tableName + " (" + "category VARCHAR NOT NULL, score DECIMAL NOT NULL, "
+        + "pk VARCHAR NOT NULL, sk BIGINT NOT NULL, val VARCHAR, "
+        + "CONSTRAINT pk PRIMARY KEY (category, score, pk, sk))";
+    String query = "SELECT * FROM " + tableName + " WHERE category = 'category_0' AND score <= 5000"
       + " AND (score, pk, sk) > (4990, 'pk_90', 4990)";
 
     // Hand-authored equivalent. Values use Java types that match PDataType.toObject
     // outputs for DECIMAL (BigDecimal), VARCHAR (String), BIGINT (Long).
-    AbstractExpression expr = and(
-      pred(0, EQ, "category_0"),
-      pred(1, LE, new java.math.BigDecimal("5000")),
-      or(
-        pred(1, GT, new java.math.BigDecimal("4990")),
-        and(pred(1, EQ, new java.math.BigDecimal("4990")), pred(2, GT, "pk_90")),
-        and(pred(1, EQ, new java.math.BigDecimal("4990")), pred(2, EQ, "pk_90"),
-          pred(3, GT, 4990L))
-      ));
+    AbstractExpression expr =
+      and(pred(0, EQ, "category_0"), pred(1, LE, new java.math.BigDecimal("5000")),
+        or(pred(1, GT, new java.math.BigDecimal("4990")),
+          and(pred(1, EQ, new java.math.BigDecimal("4990")), pred(2, GT, "pk_90")),
+          and(pred(1, EQ, new java.math.BigDecimal("4990")), pred(2, EQ, "pk_90"),
+            pred(3, GT, 4990L))));
 
     // Enumeration domain: 3 categories × 4 scores × 3 pk × 3 sk = 108 rows.
-    List<List<Object>> perDim = Arrays.asList(
-      Arrays.<Object>asList("category_0", "category_1", "category_2"),
-      Arrays.<Object>asList(
-        new java.math.BigDecimal("4989"),
-        new java.math.BigDecimal("4990"),
-        new java.math.BigDecimal("4991"),
-        new java.math.BigDecimal("5001")),
-      Arrays.<Object>asList("pk_89", "pk_90", "pk_91"),
-      Arrays.<Object>asList(4989L, 4990L, 4991L));
+    List<List<Object>> perDim =
+      Arrays.asList(Arrays.<Object> asList("category_0", "category_1", "category_2"),
+        Arrays.<Object> asList(new java.math.BigDecimal("4989"), new java.math.BigDecimal("4990"),
+          new java.math.BigDecimal("4991"), new java.math.BigDecimal("5001")),
+        Arrays.<Object> asList("pk_89", "pk_90", "pk_91"),
+        Arrays.<Object> asList(4989L, 4990L, 4991L));
 
     run(ddl, tableName, query, expr, perDim);
   }
@@ -148,9 +140,7 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
       + " (a BIGINT NOT NULL, b BIGINT NOT NULL, CONSTRAINT pk PRIMARY KEY (a, b))";
     String query = "SELECT * FROM " + tableName + " WHERE a >= 5 AND a < 10";
     AbstractExpression expr = and(pred(0, GE, 5L), pred(0, LT, 10L));
-    List<List<Object>> perDim = Arrays.asList(
-      longs(0L, 3L, 5L, 7L, 10L, 15L),
-      longs(0L, 1L, 2L));
+    List<List<Object>> perDim = Arrays.asList(longs(0L, 3L, 5L, 7L, 10L, 15L), longs(0L, 1L, 2L));
     run(ddl, tableName, query, expr, perDim);
   }
 
@@ -162,9 +152,7 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
       + " (a BIGINT NOT NULL, b BIGINT NOT NULL, CONSTRAINT pk PRIMARY KEY (a, b))";
     String query = "SELECT * FROM " + tableName + " WHERE a = 3 OR a = 7";
     AbstractExpression expr = or(pred(0, EQ, 3L), pred(0, EQ, 7L));
-    List<List<Object>> perDim = Arrays.asList(
-      longs(0L, 3L, 5L, 7L, 10L),
-      longs(0L, 1L, 2L));
+    List<List<Object>> perDim = Arrays.asList(longs(0L, 3L, 5L, 7L, 10L), longs(0L, 1L, 2L));
     run(ddl, tableName, query, expr, perDim);
   }
 
@@ -172,19 +160,13 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
   @Test
   public void degeneracyOnNonLeadingPk() throws SQLException {
     String tableName = "T_DEGEN";
-    String ddl = "CREATE TABLE " + tableName
-      + " (a BIGINT NOT NULL, b BIGINT NOT NULL, c BIGINT NOT NULL, "
-      + "CONSTRAINT pk PRIMARY KEY (a, b, c))";
-    String query = "SELECT * FROM " + tableName
-      + " WHERE a = 1 AND b >= 10 AND b < 5";
-    AbstractExpression expr = and(
-      pred(0, EQ, 1L),
-      pred(1, GE, 10L),
-      pred(1, LT, 5L));
-    List<List<Object>> perDim = Arrays.asList(
-      longs(0L, 1L, 2L),
-      longs(0L, 3L, 7L, 10L, 15L),
-      longs(0L, 5L));
+    String ddl =
+      "CREATE TABLE " + tableName + " (a BIGINT NOT NULL, b BIGINT NOT NULL, c BIGINT NOT NULL, "
+        + "CONSTRAINT pk PRIMARY KEY (a, b, c))";
+    String query = "SELECT * FROM " + tableName + " WHERE a = 1 AND b >= 10 AND b < 5";
+    AbstractExpression expr = and(pred(0, EQ, 1L), pred(1, GE, 10L), pred(1, LT, 5L));
+    List<List<Object>> perDim =
+      Arrays.asList(longs(0L, 1L, 2L), longs(0L, 3L, 7L, 10L, 15L), longs(0L, 5L));
     // Expression is unsatisfiable by construction (testing PHOENIX-6669).
     run(ddl, tableName, query, expr, perDim, false);
   }
@@ -197,9 +179,7 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
       + " (a BIGINT NOT NULL, b BIGINT NOT NULL, CONSTRAINT pk PRIMARY KEY (a, b))";
     String query = "SELECT * FROM " + tableName + " WHERE a = 5 AND b >= 10 AND b <= 20";
     AbstractExpression expr = and(pred(0, EQ, 5L), pred(1, GE, 10L), pred(1, LE, 20L));
-    List<List<Object>> perDim = Arrays.asList(
-      longs(0L, 5L, 7L),
-      longs(5L, 10L, 15L, 20L, 25L));
+    List<List<Object>> perDim = Arrays.asList(longs(0L, 5L, 7L), longs(5L, 10L, 15L, 20L, 25L));
     run(ddl, tableName, query, expr, perDim);
   }
 
@@ -217,7 +197,8 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
       // Drop if table already exists from a prior run, then create.
       try {
         conn.createStatement().executeUpdate("DROP TABLE " + tableName);
-      } catch (SQLException ignore) { /* table didn't exist */ }
+      } catch (SQLException ignore) {
+        /* table didn't exist */ }
       conn.createStatement().execute(ddl);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -239,17 +220,16 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
       AbstractKeySpaceList oracleView = Reference.extract(expr, perDim.size());
 
       List<HarnessAssertions.Row> rows = HarnessAssertions.enumerateRows(perDim);
-      HarnessAssertions.Report report =
-        HarnessAssertions.evaluate(expr, oracleView, v2View, rows);
+      HarnessAssertions.Report report = HarnessAssertions.evaluate(expr, oracleView, v2View, rows);
 
       System.err.println(tableName + " " + report);
       if (!report.oracleSound()) {
-        fail("Oracle soundness violated for " + tableName
-          + "; missing rows: " + report.oracleMissesExprMatch);
+        fail("Oracle soundness violated for " + tableName + "; missing rows: "
+          + report.oracleMissesExprMatch);
       }
       if (!report.v2Sound()) {
-        fail("V2 soundness violated for " + tableName
-          + "; missing rows: " + report.soundnessViolations);
+        fail("V2 soundness violated for " + tableName + "; missing rows: "
+          + report.soundnessViolations);
       }
       // Widening is informational, not a failure.
       if (!report.v2SubsetOfOracle()) {
@@ -262,6 +242,6 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
   }
 
   private static List<Object> longs(Long... vs) {
-    return Collections.<Object>unmodifiableList(Arrays.<Object>asList(vs));
+    return Collections.<Object> unmodifiableList(Arrays.<Object> asList(vs));
   }
 }

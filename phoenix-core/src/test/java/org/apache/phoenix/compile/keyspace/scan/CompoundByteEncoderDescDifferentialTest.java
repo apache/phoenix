@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.phoenix.compile.keyspace.KeySpace;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PDatum;
@@ -37,29 +36,27 @@ import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 
 /**
- * Differential validation of {@link CompoundByteEncoder} for DESC field shapes against
- * V1's {@link ScanUtil#getMinKey} / {@link ScanUtil#getMaxKey}.
+ * Differential validation of {@link CompoundByteEncoder} for DESC field shapes against V1's
+ * {@link ScanUtil#getMinKey} / {@link ScanUtil#getMaxKey}.
  * <p>
- * Pins down V1's byte output for DESC-column queries so the encoder can match, shape by
- * shape. The parity harness previously excluded DESC fields because
- * {@link WhereOptimizerV2EncoderParityTest} surfaced a divergence on
- * {@code testDescDecimalRange}: V1 appends a trailing {@code 0xff} DESC separator for an
- * UNBOUND-lower range on a fixed-width DESC column, which the encoder doesn't.
+ * Pins down V1's byte output for DESC-column queries so the encoder can match, shape by shape. The
+ * parity harness previously excluded DESC fields because {@link WhereOptimizerV2EncoderParityTest}
+ * surfaced a divergence on {@code testDescDecimalRange}: V1 appends a trailing {@code 0xff} DESC
+ * separator for an UNBOUND-lower range on a fixed-width DESC column, which the encoder doesn't.
  * <p>
- * These tests are the proof obligations the encoder must satisfy before the DESC
- * exclusion can be lifted.
+ * These tests are the proof obligations the encoder must satisfy before the DESC exclusion can be
+ * lifted.
  */
 public class CompoundByteEncoderDescDifferentialTest {
 
   /**
-   * Point lookup on an ASC fixed-width leading column followed by an exclusive-upper range
-   * on a DESC fixed-width trailing column. Mirrors the shape from
-   * {@code testDescDecimalRange}'s {@code k1=1 AND k2>1.0} branch.
+   * Point lookup on an ASC fixed-width leading column followed by an exclusive-upper range on a
+   * DESC fixed-width trailing column. Mirrors the shape from {@code testDescDecimalRange}'s
+   * {@code k1=1 AND k2>1.0} branch.
    */
   @Test
   public void pointOnAscPlusExclusiveUpperRangeOnDescFixed() {
-    RowKeySchema sch = schema(
-      field(PLong.INSTANCE, 8, SortOrder.ASC),
+    RowKeySchema sch = schema(field(PLong.INSTANCE, 8, SortOrder.ASC),
       field(PDecimal.INSTANCE, null, SortOrder.DESC));
     byte[] one = PLong.INSTANCE.toBytes(1L);
     // DESC-encoded "k2 > 1.0" means lower bound is UNBOUND, upper is exclusive "DESC(1.0)".
@@ -78,9 +75,8 @@ public class CompoundByteEncoderDescDifferentialTest {
    */
   @Test
   public void pinnedDescLeadingColumn() {
-    RowKeySchema sch = schema(
-      field(PInteger.INSTANCE, 4, SortOrder.DESC),
-      field(PLong.INSTANCE, 8, SortOrder.ASC));
+    RowKeySchema sch =
+      schema(field(PInteger.INSTANCE, 4, SortOrder.DESC), field(PLong.INSTANCE, 8, SortOrder.ASC));
     byte[] fiveAsc = PInteger.INSTANCE.toBytes(5);
     byte[] fiveDesc = invert(fiveAsc);
     KeyRange point = KeyRange.getKeyRange(fiveDesc, true, fiveDesc, true);
@@ -90,21 +86,20 @@ public class CompoundByteEncoderDescDifferentialTest {
 
   /**
    * Reproduces the exact shape the parity harness surfaced as a divergence on
-   * {@code WhereOptimizerTest.testDescDecimalRange}: point lookup on a fixed-width ASC
-   * leading column + an exclusive-upper range with UNBOUND lower on a DESC variable-width
-   * DECIMAL trailing column, where the DESC upper is encoded as a single-byte inverted
-   * value.
+   * {@code WhereOptimizerTest.testDescDecimalRange}: point lookup on a fixed-width ASC leading
+   * column + an exclusive-upper range with UNBOUND lower on a DESC variable-width DECIMAL trailing
+   * column, where the DESC upper is encoded as a single-byte inverted value.
    * <p>
-   * V1 appends a trailing {@code 0xff} DESC separator on the LOWER output; the encoder
-   * (in its pre-fix state) would not. The live KeySpace as captured from the parity check:
+   * V1 appends a trailing {@code 0xff} DESC separator on the LOWER output; the encoder (in its
+   * pre-fix state) would not. The live KeySpace as captured from the parity check:
+   *
    * <pre>
    * KeySpace[\x80\x00\x00\x00\x00\x00\x00\x01, (* - &gt;\xFD)]
    * </pre>
    */
   @Test
   public void liveShapeAscPointPlusDescVarWidthExclusiveUpper() {
-    RowKeySchema sch = schema(
-      field(PLong.INSTANCE, 8, SortOrder.ASC),
+    RowKeySchema sch = schema(field(PLong.INSTANCE, 8, SortOrder.ASC),
       field(PDecimal.INSTANCE, null, SortOrder.DESC));
     byte[] k1One = PLong.INSTANCE.toBytes(1L);
     // Matches the KeySpace captured from the live failure: single-byte upper 0xFD.
@@ -116,14 +111,13 @@ public class CompoundByteEncoderDescDifferentialTest {
   }
 
   /**
-   * Multi-space variant of the live-shape case: {@code k1 IN (1, 2) AND k2 > 1.0} with
-   * {@code k2} DESC var-width. Two spaces — one per k1 value. Exercises the list-level
-   * encoder path against per-space V1 byte-lex-min/max reference.
+   * Multi-space variant of the live-shape case: {@code k1 IN (1, 2) AND k2 > 1.0} with {@code k2}
+   * DESC var-width. Two spaces — one per k1 value. Exercises the list-level encoder path against
+   * per-space V1 byte-lex-min/max reference.
    */
   @Test
   public void liveShapeMultiSpaceAscInPlusDescVarWidthExclusiveUpper() {
-    RowKeySchema sch = schema(
-      field(PLong.INSTANCE, 8, SortOrder.ASC),
+    RowKeySchema sch = schema(field(PLong.INSTANCE, 8, SortOrder.ASC),
       field(PDecimal.INSTANCE, null, SortOrder.DESC));
     byte[] k1One = PLong.INSTANCE.toBytes(1L);
     byte[] k1Two = PLong.INSTANCE.toBytes(2L);
@@ -144,23 +138,27 @@ public class CompoundByteEncoderDescDifferentialTest {
       byte[] hi = ScanUtil.getMaxKey(sch, slots, slotSpan);
       if (lo == KeyRange.UNBOUND || lo.length == 0) {
         refLower = KeyRange.UNBOUND;
-      } else if (refLower == null || (refLower != KeyRange.UNBOUND
-        && org.apache.hadoop.hbase.util.Bytes.compareTo(lo, refLower) < 0)) {
+      } else if (
+        refLower == null || (refLower != KeyRange.UNBOUND
+          && org.apache.hadoop.hbase.util.Bytes.compareTo(lo, refLower) < 0)
+      ) {
         refLower = lo;
       }
       if (hi == KeyRange.UNBOUND || hi.length == 0) {
         refUpper = KeyRange.UNBOUND;
-      } else if (refUpper == null || (refUpper != KeyRange.UNBOUND
-        && org.apache.hadoop.hbase.util.Bytes.compareTo(hi, refUpper) > 0)) {
+      } else if (
+        refUpper == null || (refUpper != KeyRange.UNBOUND
+          && org.apache.hadoop.hbase.util.Bytes.compareTo(hi, refUpper) > 0)
+      ) {
         refUpper = hi;
       }
     }
     byte[] encLower = CompoundByteEncoder.encodeListLower(sch, list, 0);
     byte[] encUpper = CompoundByteEncoder.encodeListUpper(sch, list, 0);
-    assertArrayEquals("list lower bytes must match per-space min of V1 getMinKey",
-      refLower, encLower);
-    assertArrayEquals("list upper bytes must match per-space max of V1 getMaxKey",
-      refUpper, encUpper);
+    assertArrayEquals("list lower bytes must match per-space min of V1 getMinKey", refLower,
+      encLower);
+    assertArrayEquals("list upper bytes must match per-space max of V1 getMaxKey", refUpper,
+      encUpper);
   }
 
   /**
@@ -168,9 +166,8 @@ public class CompoundByteEncoderDescDifferentialTest {
    */
   @Test
   public void boundedRangeOnDescLeading() {
-    RowKeySchema sch = schema(
-      field(PLong.INSTANCE, 8, SortOrder.DESC),
-      field(PInteger.INSTANCE, 4, SortOrder.ASC));
+    RowKeySchema sch =
+      schema(field(PLong.INSTANCE, 8, SortOrder.DESC), field(PInteger.INSTANCE, 4, SortOrder.ASC));
     byte[] tenDesc = invert(PLong.INSTANCE.toBytes(10L));
     byte[] fiveDesc = invert(PLong.INSTANCE.toBytes(5L));
     // DESC-ordered range: "lower" bytes are the larger original value.
@@ -224,16 +221,38 @@ public class CompoundByteEncoderDescDifferentialTest {
 
   private static final class FieldDatum {
     final PDatum datum;
-    FieldDatum(PDatum datum) { this.datum = datum; }
+
+    FieldDatum(PDatum datum) {
+      this.datum = datum;
+    }
   }
 
   private static FieldDatum field(PDataType type, Integer maxLen, SortOrder order) {
     return new FieldDatum(new PDatum() {
-      @Override public boolean isNullable() { return false; }
-      @Override public PDataType getDataType() { return type; }
-      @Override public Integer getMaxLength() { return maxLen; }
-      @Override public Integer getScale() { return null; }
-      @Override public SortOrder getSortOrder() { return order; }
+      @Override
+      public boolean isNullable() {
+        return false;
+      }
+
+      @Override
+      public PDataType getDataType() {
+        return type;
+      }
+
+      @Override
+      public Integer getMaxLength() {
+        return maxLen;
+      }
+
+      @Override
+      public Integer getScale() {
+        return null;
+      }
+
+      @Override
+      public SortOrder getSortOrder() {
+        return order;
+      }
     });
   }
 

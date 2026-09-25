@@ -35,16 +35,16 @@ import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 
 /**
- * Golden tests for {@link CompoundByteEncoder}. Each test constructs a {@link KeySpace}
- * against a hand-built {@link RowKeySchema} and asserts the encoder's lower/upper byte
- * output matches the V1-equivalent shape produced by {@code ScanUtil.setKey}.
+ * Golden tests for {@link CompoundByteEncoder}. Each test constructs a {@link KeySpace} against a
+ * hand-built {@link RowKeySchema} and asserts the encoder's lower/upper byte output matches the
+ * V1-equivalent shape produced by {@code ScanUtil.setKey}.
  * <p>
  * These serve two purposes:
  * <ol>
- * <li>Reference documentation — each test is a small worked example of what V1's byte
- *     encoding rules produce for a specific shape.</li>
+ * <li>Reference documentation — each test is a small worked example of what V1's byte encoding
+ * rules produce for a specific shape.</li>
  * <li>Regression pin — when V2 shifts to calling {@link CompoundByteEncoder} from its
- *     scan-construction path, these tests are the oracle for correctness.</li>
+ * scan-construction path, these tests are the oracle for correctness.</li>
  * </ol>
  */
 public class CompoundByteEncoderTest {
@@ -72,11 +72,30 @@ public class CompoundByteEncoderTest {
 
   private static Field field(PDataType type, Integer maxLen, SortOrder order, boolean nullable) {
     return new Field(new PDatum() {
-      @Override public boolean isNullable() { return nullable; }
-      @Override public PDataType getDataType() { return type; }
-      @Override public Integer getMaxLength() { return maxLen; }
-      @Override public Integer getScale() { return null; }
-      @Override public SortOrder getSortOrder() { return order; }
+      @Override
+      public boolean isNullable() {
+        return nullable;
+      }
+
+      @Override
+      public PDataType getDataType() {
+        return type;
+      }
+
+      @Override
+      public Integer getMaxLength() {
+        return maxLen;
+      }
+
+      @Override
+      public Integer getScale() {
+        return null;
+      }
+
+      @Override
+      public SortOrder getSortOrder() {
+        return order;
+      }
     }, nullable);
   }
 
@@ -93,19 +112,18 @@ public class CompoundByteEncoderTest {
   }
 
   /**
-   * Two pinned var-width leading columns + inclusive-upper range on a fixed-width
-   * trailing column, with an unconstrained trailing PK column.
+   * Two pinned var-width leading columns + inclusive-upper range on a fixed-width trailing column,
+   * with an unconstrained trailing PK column.
    * <p>
-   * Shape: {@code cat='c0' AND journey='j0' AND datasource=0 AND match_status <= 1} on
-   * PK {@code (cat VARCHAR, journey VARCHAR, datasource SMALLINT, match_status TINYINT, extra VARCHAR)}.
-   * Lower row: {@code c0·SEP·j0·SEP·\x80\x00·\x81} (byte of match_status=1).
-   * Upper row: {@code nextKey(c0·SEP·j0·SEP·\x80\x00·\x81)} — the inclusive-upper bump
-   *   converts `<= 1` to byte-exclusive form.
+   * Shape: {@code cat='c0' AND journey='j0' AND datasource=0 AND match_status <= 1} on PK
+   * {@code (cat VARCHAR, journey VARCHAR, datasource SMALLINT, match_status TINYINT, extra VARCHAR)}.
+   * Lower row: {@code c0·SEP·j0·SEP·\x80\x00·\x81} (byte of match_status=1). Upper row:
+   * {@code nextKey(c0·SEP·j0·SEP·\x80\x00·\x81)} — the inclusive-upper bump converts `<= 1` to
+   * byte-exclusive form.
    */
   @Test
   public void pinnedPrefixPlusInclusiveUpperRangeOnFixedWidthTail() {
-    RowKeySchema sch = schema(
-      field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
+    RowKeySchema sch = schema(field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
       field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
       field(org.apache.phoenix.schema.types.PSmallint.INSTANCE, null, SortOrder.ASC, false),
       field(org.apache.phoenix.schema.types.PTinyint.INSTANCE, null, SortOrder.ASC, false),
@@ -132,17 +150,17 @@ public class CompoundByteEncoderTest {
   }
 
   /**
-   * Inclusive-upper range on a var-width PK column followed by unconstrained PK columns.
-   * V1's scan stop includes a trailing SEP after the var-width column because the tail
-   * has trailing PK columns; the inclusive-upper bump then applies at the SEP.
+   * Inclusive-upper range on a var-width PK column followed by unconstrained PK columns. V1's scan
+   * stop includes a trailing SEP after the var-width column because the tail has trailing PK
+   * columns; the inclusive-upper bump then applies at the SEP.
    * <p>
-   * Shape: {@code cat='c0' AND score >= 4980}, PK {@code (cat VARCHAR, score DECIMAL, pk VARCHAR, sk BIGINT)}.
-   * Lower row: {@code c0·SEP·score_bytes·SEP}.
+   * Shape: {@code cat='c0' AND score >= 4980}, PK
+   * {@code (cat VARCHAR, score DECIMAL, pk VARCHAR, sk BIGINT)}. Lower row:
+   * {@code c0·SEP·score_bytes·SEP}.
    */
   @Test
   public void inclusiveLowerRangeOnVarWidthWithTrailingColumns() {
-    RowKeySchema sch = schema(
-      field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
+    RowKeySchema sch = schema(field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
       field(org.apache.phoenix.schema.types.PDecimal.INSTANCE, null, SortOrder.ASC, false),
       field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
       field(PLong.INSTANCE, null, SortOrder.ASC, false));
@@ -165,8 +183,7 @@ public class CompoundByteEncoderTest {
    */
   @Test
   public void pointLookupOnFixedWidthLeadingColumn() {
-    RowKeySchema sch = schema(
-      field(PChar.INSTANCE, 3, SortOrder.ASC, false),
+    RowKeySchema sch = schema(field(PChar.INSTANCE, 3, SortOrder.ASC, false),
       field(PInteger.INSTANCE, null, SortOrder.ASC, false));
 
     byte[] abc = PChar.INSTANCE.toBytes("abc");
@@ -183,8 +200,7 @@ public class CompoundByteEncoderTest {
    */
   @Test
   public void allEverythingReturnsUnbound() {
-    RowKeySchema sch = schema(
-      field(PChar.INSTANCE, 3, SortOrder.ASC, false),
+    RowKeySchema sch = schema(field(PChar.INSTANCE, 3, SortOrder.ASC, false),
       field(PChar.INSTANCE, 3, SortOrder.ASC, false));
     KeySpace space = space(2);
     assertArrayEquals(KeyRange.UNBOUND, CompoundByteEncoder.encodeLower(sch, space, 0));
@@ -192,13 +208,12 @@ public class CompoundByteEncoderTest {
   }
 
   /**
-   * Range with exclusive upper on a var-width column followed by unconstrained PK
-   * columns. Exclusive-upper stops encoding — no trailing SEP, no bump.
+   * Range with exclusive upper on a var-width column followed by unconstrained PK columns.
+   * Exclusive-upper stops encoding — no trailing SEP, no bump.
    */
   @Test
   public void exclusiveUpperRangeStopsAtTheBoundary() {
-    RowKeySchema sch = schema(
-      field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
+    RowKeySchema sch = schema(field(PVarchar.INSTANCE, null, SortOrder.ASC, false),
       field(org.apache.phoenix.schema.types.PDecimal.INSTANCE, null, SortOrder.ASC, false),
       field(PVarchar.INSTANCE, null, SortOrder.ASC, false));
 

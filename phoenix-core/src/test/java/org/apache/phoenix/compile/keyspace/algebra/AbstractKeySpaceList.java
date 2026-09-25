@@ -22,22 +22,21 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The closure of {@link AbstractKeySpace} under OR — a list of N-dim boxes representing
- * the union of those boxes' rows. One box per non-mergeable OR branch.
+ * The closure of {@link AbstractKeySpace} under OR — a list of N-dim boxes representing the union
+ * of those boxes' rows. One box per non-mergeable OR branch.
  * <p>
  * The algebra:
  * <ul>
- * <li>{@link #and(AbstractKeySpaceList)} distributes AND over OR, then merges to a fixpoint
- * under {@link AbstractKeySpace#unionIfMergeable}.</li>
- * <li>{@link #or(AbstractKeySpaceList)} concatenates the two lists, then merges to a
- * fixpoint.</li>
+ * <li>{@link #and(AbstractKeySpaceList)} distributes AND over OR, then merges to a fixpoint under
+ * {@link AbstractKeySpace#unionIfMergeable}.</li>
+ * <li>{@link #or(AbstractKeySpaceList)} concatenates the two lists, then merges to a fixpoint.</li>
  * </ul>
  * <p>
  * Two sentinel values:
  * <ul>
  * <li>{@link #unsatisfiable(int)} — empty list. No row satisfies it. Identity for OR.</li>
- * <li>{@link #everything(int)} — singleton {@link AbstractKeySpace#everything(int)}.
- * Every row satisfies it. Identity for AND.</li>
+ * <li>{@link #everything(int)} — singleton {@link AbstractKeySpace#everything(int)}. Every row
+ * satisfies it. Identity for AND.</li>
  * </ul>
  */
 public final class AbstractKeySpaceList {
@@ -51,7 +50,7 @@ public final class AbstractKeySpaceList {
   }
 
   public static AbstractKeySpaceList unsatisfiable(int n) {
-    return new AbstractKeySpaceList(n, Collections.<AbstractKeySpace>emptyList());
+    return new AbstractKeySpaceList(n, Collections.<AbstractKeySpace> emptyList());
   }
 
   public static AbstractKeySpaceList everything(int n) {
@@ -69,17 +68,29 @@ public final class AbstractKeySpaceList {
     return new AbstractKeySpaceList(n, list);
   }
 
-  public int nDims() { return nDims; }
-  public int size() { return spaces.size(); }
-  public List<AbstractKeySpace> spaces() { return spaces; }
-  public boolean isUnsatisfiable() { return spaces.isEmpty(); }
+  public int nDims() {
+    return nDims;
+  }
+
+  public int size() {
+    return spaces.size();
+  }
+
+  public List<AbstractKeySpace> spaces() {
+    return spaces;
+  }
+
+  public boolean isUnsatisfiable() {
+    return spaces.isEmpty();
+  }
+
   public boolean isEverything() {
     return spaces.size() == 1 && spaces.get(0).isEverything();
   }
 
   /**
-   * AND distributes over OR: cross-product each pair of spaces, drop empties, merge to
-   * fixpoint. Output size is bounded by {@code this.size() × other.size()}.
+   * AND distributes over OR: cross-product each pair of spaces, drop empties, merge to fixpoint.
+   * Output size is bounded by {@code this.size() × other.size()}.
    */
   public AbstractKeySpaceList and(AbstractKeySpaceList other) {
     requireSameArity(other);
@@ -99,8 +110,8 @@ public final class AbstractKeySpaceList {
   }
 
   /**
-   * OR concatenates and merges. {@link AbstractKeySpace#unionIfMergeable} handles the
-   * two merge rules; spaces that can't be combined stay as separate entries.
+   * OR concatenates and merges. {@link AbstractKeySpace#unionIfMergeable} handles the two merge
+   * rules; spaces that can't be combined stay as separate entries.
    */
   public AbstractKeySpaceList or(AbstractKeySpaceList other) {
     requireSameArity(other);
@@ -115,16 +126,15 @@ public final class AbstractKeySpaceList {
   }
 
   /**
-   * Folds pairwise {@code unionIfMergeable} in-place until no merge succeeds. O(K²·N) per
-   * round; rounds converge because each successful merge strictly reduces list size. No
-   * fast paths, no hash buckets — this is the reference, clarity beats speed.
+   * Folds pairwise {@code unionIfMergeable} in-place until no merge succeeds. O(K²·N) per round;
+   * rounds converge because each successful merge strictly reduces list size. No fast paths, no
+   * hash buckets — this is the reference, clarity beats speed.
    */
   private static void mergeToFixpoint(List<AbstractKeySpace> list) {
     boolean progress = true;
     while (progress) {
       progress = false;
-      outer:
-      for (int i = 0; i < list.size(); i++) {
+      outer: for (int i = 0; i < list.size(); i++) {
         for (int j = i + 1; j < list.size(); j++) {
           AbstractKeySpace merged = list.get(i).unionIfMergeable(list.get(j));
           if (merged != null) {
@@ -149,10 +159,9 @@ public final class AbstractKeySpaceList {
   }
 
   /**
-   * Drop the highest-indexed constrained dim across all spaces (replace with EVERYTHING
-   * on every space, then re-merge). Implements the "drop trailing dimensions" rule for
-   * cartesian-explosion mitigation. Returns {@link #everything(int)} when nothing is
-   * left to drop.
+   * Drop the highest-indexed constrained dim across all spaces (replace with EVERYTHING on every
+   * space, then re-merge). Implements the "drop trailing dimensions" rule for cartesian-explosion
+   * mitigation. Returns {@link #everything(int)} when nothing is left to drop.
    */
   public AbstractKeySpaceList dropTrailingDim() {
     if (spaces.isEmpty()) return this;

@@ -23,7 +23,6 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.AndExpression;
@@ -47,12 +46,11 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
 /**
- * Walks a WHERE {@link Expression} tree bottom-up and produces the
- * {@link KeySpaceList} contribution of each node. The expression tree is expected to have
- * been pre-processed by {@link ExpressionNormalizer}, so RVC inequalities and scalar IN
- * lists have already been expanded into equivalent AND/OR trees over scalar comparisons.
- * The visitor therefore operates exclusively on the primitive shapes in the design doc's
- * model:
+ * Walks a WHERE {@link Expression} tree bottom-up and produces the {@link KeySpaceList}
+ * contribution of each node. The expression tree is expected to have been pre-processed by
+ * {@link ExpressionNormalizer}, so RVC inequalities and scalar IN lists have already been expanded
+ * into equivalent AND/OR trees over scalar comparisons. The visitor therefore operates exclusively
+ * on the primitive shapes in the design doc's model:
  * <ul>
  * <li>Scalar comparison on a PK column &rarr; one {@link KeySpace} with one non-EVERYTHING
  * dim.</li>
@@ -64,8 +62,8 @@ import org.apache.phoenix.util.ByteUtil;
  * <li>AND/OR &rarr; the list-level algebra on {@link KeySpaceList}.</li>
  * </ul>
  * Nodes that cannot be translated (non-PK columns, unsupported shapes) contribute
- * {@link KeySpaceList#everything(int)} — the identity for AND and the absorbing element for
- * OR — and are retained in the residual filter for correctness.
+ * {@link KeySpaceList#everything(int)} — the identity for AND and the absorbing element for OR —
+ * and are retained in the residual filter for correctness.
  */
 public class KeySpaceExpressionVisitor
   extends StatelessTraverseNoExpressionVisitor<KeySpaceExpressionVisitor.Result> {
@@ -93,12 +91,12 @@ public class KeySpaceExpressionVisitor
 
     static Result everything(int nPk) {
       return new Result(KeySpaceList.everything(nPk),
-        java.util.Collections.<Expression>emptySet());
+        java.util.Collections.<Expression> emptySet());
     }
 
     static Result unsatisfiable(int nPk) {
       return new Result(KeySpaceList.unsatisfiable(nPk),
-        java.util.Collections.<Expression>emptySet());
+        java.util.Collections.<Expression> emptySet());
     }
   }
 
@@ -142,9 +140,10 @@ public class KeySpaceExpressionVisitor
 
   @Override
   public Iterator<Expression> visitEnter(LikeExpression node) {
-    if (node.getLikeType() == LikeType.CASE_INSENSITIVE
-      || !(node.getChildren().get(1) instanceof LiteralExpression)
-      || node.startsWithWildcard()) {
+    if (
+      node.getLikeType() == LikeType.CASE_INSENSITIVE
+        || !(node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()
+    ) {
       return java.util.Collections.emptyIterator();
     }
     return java.util.Collections.singleton(node.getChildren().get(0)).iterator();
@@ -161,8 +160,8 @@ public class KeySpaceExpressionVisitor
   }
 
   @Override
-  public Iterator<Expression> visitEnter(
-    org.apache.phoenix.expression.function.ArrayAnyComparisonExpression node) {
+  public Iterator<Expression>
+    visitEnter(org.apache.phoenix.expression.function.ArrayAnyComparisonExpression node) {
     // Don't descend into children — the ArrayElemRefExpression and its wrapper
     // ComparisonExpression don't correspond to extractable leaves on their own.
     // visitLeave handles the whole ArrayAny shape directly.
@@ -177,10 +176,10 @@ public class KeySpaceExpressionVisitor
   }
 
   /**
-   * {@code children} is filtered by {@code BaseExpression.acceptChildren}: null returns are
-   * dropped and the order can differ from the declared AST order (PHOENIX-6669 sorts RVC
-   * children first). Since AND is associative/commutative, index alignment is irrelevant
-   * and branches that produced nothing are treated as the AND identity (everything).
+   * {@code children} is filtered by {@code BaseExpression.acceptChildren}: null returns are dropped
+   * and the order can differ from the declared AST order (PHOENIX-6669 sorts RVC children first).
+   * Since AND is associative/commutative, index alignment is irrelevant and branches that produced
+   * nothing are treated as the AND identity (everything).
    */
   @Override
   public Result visitLeave(AndExpression node, List<Result> children) {
@@ -229,23 +228,27 @@ public class KeySpaceExpressionVisitor
   /**
    * OR semantics with a provable consumed rule.
    * <p>
-   * <b>Invariant.</b> A node can be marked {@code consumed} — equivalently, stripped from
-   * the residual filter — iff the emitted scan range matches exactly the same rows as the
-   * original predicate:
-   * <pre>rows(emit(node)) = rows(node)</pre>
+   * <b>Invariant.</b> A node can be marked {@code consumed} — equivalently, stripped from the
+   * residual filter — iff the emitted scan range matches exactly the same rows as the original
+   * predicate:
+   *
+   * <pre>
+   * rows(emit(node)) = rows(node)
+   * </pre>
+   *
    * For OR this holds only in specific shapes:
    * <ol>
-   * <li><b>Singleton</b>: {@code acc.size() == 1}. The merged list is a single N-dim box.
-   *     The per-slot extraction emits exactly that box; no information loss.</li>
-   * <li><b>Single-dim</b>: every space in {@code acc} constrains only one dim (the same
-   *     dim for every space), others being EVERYTHING. The per-slot projection on that
-   *     dim carries the full union; other dims project to EVERYTHING.</li>
-   * <li><b>Tautology</b>: {@code acc.isEverything()}. Emission matches all rows, predicate
-   *     matches all rows.</li>
+   * <li><b>Singleton</b>: {@code acc.size() == 1}. The merged list is a single N-dim box. The
+   * per-slot extraction emits exactly that box; no information loss.</li>
+   * <li><b>Single-dim</b>: every space in {@code acc} constrains only one dim (the same dim for
+   * every space), others being EVERYTHING. The per-slot projection on that dim carries the full
+   * union; other dims project to EVERYTHING.</li>
+   * <li><b>Tautology</b>: {@code acc.isEverything()}. Emission matches all rows, predicate matches
+   * all rows.</li>
    * </ol>
-   * In every other case — multi-space lists that constrain multiple dims, per-slot
-   * projection loses the per-space correlation between dims. The OR node stays in the
-   * residual filter so it gets re-evaluated server-side. No heuristics, no guesses.
+   * In every other case — multi-space lists that constrain multiple dims, per-slot projection loses
+   * the per-space correlation between dims. The OR node stays in the residual filter so it gets
+   * re-evaluated server-side. No heuristics, no guesses.
    */
   @Override
   public Result visitLeave(OrExpression node, List<Result> children) {
@@ -317,7 +320,7 @@ public class KeySpaceExpressionVisitor
 
     if (!allBranchesFullyExtracted) {
       // Can't consume the OR; emit the narrowed scan range but leave OR in residual.
-      return new Result(acc, java.util.Collections.<Expression>emptySet());
+      return new Result(acc, java.util.Collections.<Expression> emptySet());
     }
 
     // Case 3 again (tautology via merging).
@@ -344,13 +347,13 @@ public class KeySpaceExpressionVisitor
     // Multi-space, multi-dim OR: per-slot projection loses per-space dim correlation.
     // Emit narrowing, but the residual must re-evaluate the OR. This is the provably
     // correct handling of RVC lex-cascades and similar shapes.
-    return new Result(acc, java.util.Collections.<Expression>emptySet());
+    return new Result(acc, java.util.Collections.<Expression> emptySet());
   }
 
   /**
-   * True iff every space in the list constrains exactly one dim, all spaces agreeing on
-   * which dim that is. In that case the per-slot projection is exact — no information
-   * loss when emitting {@link KeySpaceList} as per-slot ranges.
+   * True iff every space in the list constrains exactly one dim, all spaces agreeing on which dim
+   * that is. In that case the per-slot projection is exact — no information loss when emitting
+   * {@link KeySpaceList} as per-slot ranges.
    */
   private static boolean isSingleDimList(KeySpaceList list) {
     int sharedDim = -1;
@@ -390,9 +393,8 @@ public class KeySpaceExpressionVisitor
         return Result.everything(nPkColumns);
       }
       KeySpace ks = KeySpace.single(pkPos, range, nPkColumns);
-      KeySpaceList list = ks.isEmpty()
-        ? KeySpaceList.unsatisfiable(nPkColumns)
-        : KeySpaceList.of(ks);
+      KeySpaceList list =
+        ks.isEmpty() ? KeySpaceList.unsatisfiable(nPkColumns) : KeySpaceList.of(ks);
       Set<Expression> consumed = new HashSet<>();
       consumed.add(node);
       return new Result(list, consumed);
@@ -421,16 +423,14 @@ public class KeySpaceExpressionVisitor
       range = range.invert();
     }
     KeySpace ks = KeySpace.single(chain.pkPos, range, nPkColumns);
-    KeySpaceList list = ks.isEmpty()
-      ? KeySpaceList.unsatisfiable(nPkColumns)
-      : KeySpaceList.of(ks);
+    KeySpaceList list = ks.isEmpty() ? KeySpaceList.unsatisfiable(nPkColumns) : KeySpaceList.of(ks);
     Set<Expression> consumed = new HashSet<>();
     Set<Expression> partExtracts = chain.keyPart.getExtractNodes();
     // Only mark the comparison node as extracted when the scalar-function KeyPart signals
     // that the emitted range is semantically exact (getExtractNodes returns a non-empty
     // set containing the node it can safely extract). KeyParts that return an empty set
     // (e.g. RTrimFunction, which produces an over-permissive byte range that admits false
-    // positives like 'b  a' for `rtrim(k) = 'b'`) require the residual filter to enforce
+    // positives like 'b a' for `rtrim(k) = 'b'`) require the residual filter to enforce
     // the original predicate per-row. Extracting the node in that case would drop the
     // residual and return wrong rows. See RTrimFunctionIT.testWithFixedLengthDescPK.
     if (partExtracts != null && !partExtracts.isEmpty()) {
@@ -471,9 +471,10 @@ public class KeySpaceExpressionVisitor
     if (pkPos == null) {
       return Result.everything(nPkColumns);
     }
-    if (node.getLikeType() == LikeType.CASE_INSENSITIVE
-      || !(node.getChildren().get(1) instanceof LiteralExpression)
-      || node.startsWithWildcard()) {
+    if (
+      node.getLikeType() == LikeType.CASE_INSENSITIVE
+        || !(node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()
+    ) {
       return Result.everything(nPkColumns);
     }
     PColumn column = table.getPKColumns().get(pkPos);
@@ -507,10 +508,10 @@ public class KeySpaceExpressionVisitor
   }
 
   /**
-   * RVC IN: {@code (c1,...,cK) IN ((v1a,...,vKa), (v1b,...,vKb), ...)}. Each row value
-   * becomes a {@link KeySpace} with per-dim point equalities; the ORed list is the union of
-   * those spaces. This faithfully represents the design's N-dimensional key-space model:
-   * the LHS columns are distinct dimensions and each row value pins all of them.
+   * RVC IN: {@code (c1,...,cK) IN ((v1a,...,vKa), (v1b,...,vKb), ...)}. Each row value becomes a
+   * {@link KeySpace} with per-dim point equalities; the ORed list is the union of those spaces.
+   * This faithfully represents the design's N-dimensional key-space model: the LHS columns are
+   * distinct dimensions and each row value pins all of them.
    */
   @Override
   public Result visitLeave(InListExpression node, List<Result> children) {
@@ -532,8 +533,7 @@ public class KeySpaceExpressionVisitor
         return scalarInViaKeyPart(node, chain);
       }
       PColumn column = table.getPKColumns().get(pkPos);
-      List<KeySpaceList> perValueLists =
-        new java.util.ArrayList<>(node.getKeyExpressions().size());
+      List<KeySpaceList> perValueLists = new java.util.ArrayList<>(node.getKeyExpressions().size());
       for (Expression v : node.getKeyExpressions()) {
         KeyRange range = evalToKeyRange(CompareOperator.EQUAL, v, column);
         if (range == null) {
@@ -622,22 +622,21 @@ public class KeySpaceExpressionVisitor
   }
 
   /**
-   * ARRAY_ANY: {@code pk = ANY(array)} — semantically equivalent to {@code pk IN (...)}.
-   * Mirrors V1's {@link org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor
-   * #visitLeave(ArrayAnyComparisonExpression, List)}: iterate each array element and emit
-   * a point {@link KeySpace} per element on the LHS PK column, then union via
-   * {@link KeySpaceList#orAll}. Only the {@code col = ANY(literal-array)} shape is
-   * handled; other shapes (non-PK LHS, non-EQUAL op, non-literal array, scalar-function
-   * wrappers) fall through to EVERYTHING and keep the residual filter intact.
+   * ARRAY_ANY: {@code pk = ANY(array)} — semantically equivalent to {@code pk IN (...)}. Mirrors
+   * V1's {@link org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor
+   * #visitLeave(ArrayAnyComparisonExpression, List)}: iterate each array element and emit a point
+   * {@link KeySpace} per element on the LHS PK column, then union via {@link KeySpaceList#orAll}.
+   * Only the {@code col = ANY(literal-array)} shape is handled; other shapes (non-PK LHS, non-EQUAL
+   * op, non-literal array, scalar-function wrappers) fall through to EVERYTHING and keep the
+   * residual filter intact.
    * <p>
    * Without this, V2's visitor relied on the default no-op traversal for
-   * {@code ArrayAnyComparisonExpression} — no KeySpace was produced, the scan was left as
-   * full scan, and the query paid the cost of scanning every row to apply the residual.
-   * See WhereOptimizerForArrayAnyIT tests.
+   * {@code ArrayAnyComparisonExpression} — no KeySpace was produced, the scan was left as full
+   * scan, and the query paid the cost of scanning every row to apply the residual. See
+   * WhereOptimizerForArrayAnyIT tests.
    */
   @Override
-  public Result visitLeave(
-    org.apache.phoenix.expression.function.ArrayAnyComparisonExpression node,
+  public Result visitLeave(org.apache.phoenix.expression.function.ArrayAnyComparisonExpression node,
     List<Result> children) {
     if (node.getChildren().size() != 2) {
       return Result.everything(nPkColumns);
@@ -658,19 +657,25 @@ public class KeySpaceExpressionVisitor
     Expression cmpRhs = cmp.getChildren().get(1);
     Expression pkRef = null;
     org.apache.phoenix.expression.function.ArrayElemRefExpression elemRef = null;
-    if (cmpLhs instanceof RowKeyColumnExpression
-      && cmpRhs instanceof org.apache.phoenix.expression.function.ArrayElemRefExpression) {
+    if (
+      cmpLhs instanceof RowKeyColumnExpression
+        && cmpRhs instanceof org.apache.phoenix.expression.function.ArrayElemRefExpression
+    ) {
       pkRef = cmpLhs;
       elemRef = (org.apache.phoenix.expression.function.ArrayElemRefExpression) cmpRhs;
-    } else if (cmpRhs instanceof RowKeyColumnExpression
-      && cmpLhs instanceof org.apache.phoenix.expression.function.ArrayElemRefExpression) {
+    } else if (
+      cmpRhs instanceof RowKeyColumnExpression
+        && cmpLhs instanceof org.apache.phoenix.expression.function.ArrayElemRefExpression
+    ) {
       pkRef = cmpRhs;
       elemRef = (org.apache.phoenix.expression.function.ArrayElemRefExpression) cmpLhs;
     } else {
       return Result.everything(nPkColumns);
     }
-    if (elemRef.getChildren().isEmpty()
-      || !(elemRef.getChildren().get(0) instanceof LiteralExpression)) {
+    if (
+      elemRef.getChildren().isEmpty()
+        || !(elemRef.getChildren().get(0) instanceof LiteralExpression)
+    ) {
       return Result.everything(nPkColumns);
     }
     Integer pkPos = pkPositionOf(pkRef);
@@ -716,8 +721,8 @@ public class KeySpaceExpressionVisitor
         continue;
       }
       byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
-      KeyRange range = ByteUtil.getKeyRange(key, coerceExpr.getSortOrder(),
-        CompareOperator.EQUAL, type);
+      KeyRange range =
+        ByteUtil.getKeyRange(key, coerceExpr.getSortOrder(), CompareOperator.EQUAL, type);
       if (coerceExpr.getSortOrder() == SortOrder.DESC) {
         range = range.invert();
       }
@@ -744,13 +749,13 @@ public class KeySpaceExpressionVisitor
   /**
    * Build a per-dim equality {@link KeySpace} for an IN-list row value. The value may be a
    * {@link RowValueConstructorExpression} of literals, or (after Phoenix's
-   * {@code InListExpression.create} sort-and-coerce pass) a {@link LiteralExpression}
-   * wrapping a packed compound byte array.
+   * {@code InListExpression.create} sort-and-coerce pass) a {@link LiteralExpression} wrapping a
+   * packed compound byte array.
    * <p>
-   * In the packed-literal case we split the bytes back into per-column pieces using the
-   * column's fixed width or variable-length separator and assign each piece to the matching
-   * PK dim. If the byte layout doesn't cleanly split (non-fixed-width with no separator),
-   * we fall back to "everything" for that row.
+   * In the packed-literal case we split the bytes back into per-column pieces using the column's
+   * fixed width or variable-length separator and assign each piece to the matching PK dim. If the
+   * byte layout doesn't cleanly split (non-fixed-width with no separator), we fall back to
+   * "everything" for that row.
    */
   private KeySpace buildRvcEqualitySpace(RowValueConstructorExpression lhs, Expression value,
     int[] pkPositions, ScalarFunctionChain[] chains) {
@@ -808,9 +813,11 @@ public class KeySpaceExpressionVisitor
         // DESC columns pack with DESC_SEPARATOR_BYTE (0xFF); only checking 0x00 would
         // over-consume into subsequent columns for DESC var-width RVC-IN literals.
         int end = offset;
-        while (end < packed.length
+        while (
+          end < packed.length
             && packed[end] != org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE
-            && packed[end] != org.apache.phoenix.query.QueryConstants.DESC_SEPARATOR_BYTE) {
+            && packed[end] != org.apache.phoenix.query.QueryConstants.DESC_SEPARATOR_BYTE
+        ) {
           end++;
         }
         len = end - offset;
@@ -824,8 +831,8 @@ public class KeySpaceExpressionVisitor
       if (chains != null && chains[i] != null) {
         LiteralExpression lit;
         try {
-          lit = LiteralExpression.newConstant(
-            sliceType == null ? colBytes : sliceType.toObject(colBytes), sliceType);
+          lit = LiteralExpression
+            .newConstant(sliceType == null ? colBytes : sliceType.toObject(colBytes), sliceType);
         } catch (java.sql.SQLException sqe) {
           return null;
         }
@@ -872,15 +879,13 @@ public class KeySpaceExpressionVisitor
   /**
    * Evaluates {@code rhs} into a per-column {@link KeyRange} for the given PK column.
    * <p>
-   * If the PK column is stored DESC, the emitted range is DESC-inverted so the scan
-   * machinery in {@link KeyRangeExtractor} / {@link org.apache.phoenix.compile.ScanRanges}
-   * sees bytes in the physical storage order. Without this, a query like
-   * {@code OBJECT_VERSION IN ('1111', '2222')} on a DESC PK would produce ASC-encoded
-   * ranges that don't match the DESC-sorted HBase rows — the scan would either miss
-   * rows or over-scan. V1 applies the same inversion in
-   * {@code WhereOptimizer.pushKeyExpressionsToScan} after visitor collection; we bake
-   * it into the visitor so downstream list-merging operates on the physical-order
-   * bytes throughout.
+   * If the PK column is stored DESC, the emitted range is DESC-inverted so the scan machinery in
+   * {@link KeyRangeExtractor} / {@link org.apache.phoenix.compile.ScanRanges} sees bytes in the
+   * physical storage order. Without this, a query like {@code OBJECT_VERSION IN ('1111', '2222')}
+   * on a DESC PK would produce ASC-encoded ranges that don't match the DESC-sorted HBase rows — the
+   * scan would either miss rows or over-scan. V1 applies the same inversion in
+   * {@code WhereOptimizer.pushKeyExpressionsToScan} after visitor collection; we bake it into the
+   * visitor so downstream list-merging operates on the physical-order bytes throughout.
    */
   private KeyRange evalToKeyRange(CompareOperator op, Expression rhs, PColumn column) {
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -906,9 +911,9 @@ public class KeySpaceExpressionVisitor
   }
 
   /**
-   * Scalar {@code IN (v1, v2, ...)} with a scalar-function wrapper on the LHS
-   * (e.g. {@code SUBSTR(pk_col, 1, 3) IN ('foo', 'bar')}). Each value becomes a
-   * point range on the inner PK column via the function's key-part chain.
+   * Scalar {@code IN (v1, v2, ...)} with a scalar-function wrapper on the LHS (e.g.
+   * {@code SUBSTR(pk_col, 1, 3) IN ('foo', 'bar')}). Each value becomes a point range on the inner
+   * PK column via the function's key-part chain.
    */
   private Result scalarInViaKeyPart(InListExpression node, ScalarFunctionChain chain) {
     List<KeySpaceList> perValueLists = new java.util.ArrayList<>(node.getKeyExpressions().size());
@@ -966,21 +971,20 @@ public class KeySpaceExpressionVisitor
   }
 
   /**
-   * Walks a chain of {@link org.apache.phoenix.expression.function.ScalarFunction} nodes
-   * down to an inner {@link RowKeyColumnExpression}, composing a
-   * {@link org.apache.phoenix.compile.KeyPart} at each level.
+   * Walks a chain of {@link org.apache.phoenix.expression.function.ScalarFunction} nodes down to an
+   * inner {@link RowKeyColumnExpression}, composing a {@link org.apache.phoenix.compile.KeyPart} at
+   * each level.
    * <p>
    * Bare {@link org.apache.phoenix.expression.CoerceExpression} wrappers (no enclosing
-   * ScalarFunction) are also handled: Phoenix inserts these when an index PK column's
-   * stored type differs from the column's logical type (e.g. {@code INT_COL1} on an
-   * index where the leading PK is stored as VARBINARY). The resulting
-   * {@link CoerceKeyPart} reverse-translates the RHS bytes through the coerce's inner
-   * type before emitting the scan bounds, matching V1's
+   * ScalarFunction) are also handled: Phoenix inserts these when an index PK column's stored type
+   * differs from the column's logical type (e.g. {@code INT_COL1} on an index where the leading PK
+   * is stored as VARBINARY). The resulting {@link CoerceKeyPart} reverse-translates the RHS bytes
+   * through the coerce's inner type before emitting the scan bounds, matching V1's
    * {@code WhereOptimizer.KeyExpressionVisitor.newCoerceKeyPart} behavior.
    * <p>
    * CoerceExpression <b>inside</b> a ScalarFunction chain (e.g.
-   * {@code TO_CHAR(CoerceExpression(col))}) is NOT unwrapped here — V1's ScalarFunction
-   * KeyParts operate on the outer, post-coerce form and V2 matches that.
+   * {@code TO_CHAR(CoerceExpression(col))}) is NOT unwrapped here — V1's ScalarFunction KeyParts
+   * operate on the outer, post-coerce form and V2 matches that.
    */
   private ScalarFunctionChain resolveScalarFunctionChain(Expression node) {
     // Bare CoerceExpression wrapping a PK column: handle specifically. This is the
@@ -991,9 +995,11 @@ public class KeySpaceExpressionVisitor
     // For DESC PK columns, the post-extraction invert in {@link #visitLeave(
     // ComparisonExpression, List)} flips the ASC-encoded bytes the CoerceKeyPart emits
     // into the DESC-encoded form ScanRanges expects.
-    if (node instanceof org.apache.phoenix.expression.CoerceExpression
-      && !node.getChildren().isEmpty()
-      && node.getChildren().get(0) instanceof RowKeyColumnExpression) {
+    if (
+      node instanceof org.apache.phoenix.expression.CoerceExpression
+        && !node.getChildren().isEmpty()
+        && node.getChildren().get(0) instanceof RowKeyColumnExpression
+    ) {
       org.apache.phoenix.expression.CoerceExpression coerce =
         (org.apache.phoenix.expression.CoerceExpression) node;
       Expression inner = coerce.getChildren().get(0);
@@ -1004,8 +1010,8 @@ public class KeySpaceExpressionVisitor
       PColumn column = table.getPKColumns().get(pkPos);
       org.apache.phoenix.compile.KeyPart base =
         new org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(table,
-          column, new LinkedHashSet<Expression>(
-            java.util.Collections.<Expression>singletonList(inner)));
+          column,
+          new LinkedHashSet<Expression>(java.util.Collections.<Expression> singletonList(inner)));
       return new ScalarFunctionChain(pkPos, new CoerceKeyPart(base, coerce));
     }
     if (!(node instanceof org.apache.phoenix.expression.function.ScalarFunction)) {
@@ -1030,9 +1036,8 @@ public class KeySpaceExpressionVisitor
     }
     PColumn column = table.getPKColumns().get(pkPos);
     org.apache.phoenix.compile.KeyPart part =
-      new org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(table,
-        column, new LinkedHashSet<Expression>(
-          java.util.Collections.<Expression>singletonList(cur)));
+      new org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(table, column,
+        new LinkedHashSet<Expression>(java.util.Collections.<Expression> singletonList(cur)));
     while (!stack.isEmpty()) {
       org.apache.phoenix.expression.function.ScalarFunction fn = stack.pop();
       org.apache.phoenix.compile.KeyPart wrapped = fn.newKeyPart(part);
@@ -1046,9 +1051,8 @@ public class KeySpaceExpressionVisitor
 
   /**
    * V2 replica of {@code WhereOptimizer.KeyExpressionVisitor.CoerceKeySlot} (which is
-   * package-private and can't be reached from here). Wraps an inner {@link KeyPart} with
-   * a reverse byte-coercion so the scan's key range is in the inner column's stored byte
-   * form.
+   * package-private and can't be reached from here). Wraps an inner {@link KeyPart} with a reverse
+   * byte-coercion so the scan's key range is in the inner column's stored byte form.
    */
   private static final class CoerceKeyPart implements org.apache.phoenix.compile.KeyPart {
     private final org.apache.phoenix.compile.KeyPart childPart;
@@ -1059,8 +1063,8 @@ public class KeySpaceExpressionVisitor
       org.apache.phoenix.expression.CoerceExpression node) {
       this.childPart = childPart;
       this.node = node;
-      this.extractNodes = new LinkedHashSet<Expression>(
-        java.util.Collections.<Expression>singletonList(node));
+      this.extractNodes =
+        new LinkedHashSet<Expression>(java.util.Collections.<Expression> singletonList(node));
     }
 
     @Override
@@ -1084,8 +1088,7 @@ public class KeySpaceExpressionVisitor
           SortOrder.ASC);
         upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
       }
-      return KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper,
-        range.isUpperInclusive());
+      return KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
     }
 
     @Override

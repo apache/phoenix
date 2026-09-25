@@ -25,16 +25,16 @@ import java.util.Objects;
 /**
  * Abstract WHERE-expression tree over PK columns. Three node kinds:
  * <ul>
- * <li>{@link Pred} — leaf predicate: {@code (dim, op, value)}. Only PK-column predicates
- * are modeled; non-PK predicates reach the oracle as {@code TRUE} leaves or simply aren't
- * part of the input.</li>
+ * <li>{@link Pred} — leaf predicate: {@code (dim, op, value)}. Only PK-column predicates are
+ * modeled; non-PK predicates reach the oracle as {@code TRUE} leaves or simply aren't part of the
+ * input.</li>
  * <li>{@link And} — children are AND'd.</li>
  * <li>{@link Or} — children are OR'd.</li>
  * </ul>
- * This is intentionally narrower than Phoenix's {@code Expression} hierarchy. The oracle's
- * job is the key-range extraction algorithm, not expression normalization — so RVC
- * inequalities should be lex-expanded by the caller (or by a small utility) before being
- * handed to the oracle, matching how production's {@code ExpressionNormalizer} behaves.
+ * This is intentionally narrower than Phoenix's {@code Expression} hierarchy. The oracle's job is
+ * the key-range extraction algorithm, not expression normalization — so RVC inequalities should be
+ * lex-expanded by the caller (or by a small utility) before being handed to the oracle, matching
+ * how production's {@code ExpressionNormalizer} behaves.
  */
 public abstract class AbstractExpression {
 
@@ -57,23 +57,28 @@ public abstract class AbstractExpression {
   }
 
   /** Comparison operators on a PK-column leaf. NOT_EQUAL is deliberately omitted — not keyable. */
-  public enum Op { EQ, LT, LE, GT, GE }
+  public enum Op {
+    EQ,
+    LT,
+    LE,
+    GT,
+    GE
+  }
 
   /**
-   * A leaf we can't analyze precisely (non-PK predicate, scalar function, NOT_EQUAL, etc).
-   * Treated as a sound over-approximation: {@code evaluate} returns {@code true} for every
-   * row, and the oracle's translation step maps {@code Unknown} to {@code everything(n)} —
-   * i.e. an Unknown contributes no narrowing to the scan range.
+   * A leaf we can't analyze precisely (non-PK predicate, scalar function, NOT_EQUAL, etc). Treated
+   * as a sound over-approximation: {@code evaluate} returns {@code true} for every row, and the
+   * oracle's translation step maps {@code Unknown} to {@code everything(n)} — i.e. an Unknown
+   * contributes no narrowing to the scan range.
    * <p>
-   * Why over-approximation is safe: soundness check is
-   * {@code rows(expr) ⊆ rows(emit)}. If Unknown is treated as {@code true}, we're replacing
-   * the real predicate {@code P} with {@code true}, which widens {@code rows(expr)}. That
-   * widening matters when we assert {@code rows(expr) ⊆ rows(V2.emit)} — a larger
-   * {@code rows(expr)} makes the soundness check stricter on V2, not looser. So Unknown
-   * handling is a safe over-approximation for finding V2 bugs: if V2 drops a predicate to
-   * its residual filter, the oracle (via Unknown) also treats it as "all rows match," and
-   * they agree. If V2 wrongly narrows based on something it can't actually enforce, the
-   * oracle will catch that because the oracle's wider view includes rows V2 excluded.
+   * Why over-approximation is safe: soundness check is {@code rows(expr) ⊆ rows(emit)}. If Unknown
+   * is treated as {@code true}, we're replacing the real predicate {@code P} with {@code true},
+   * which widens {@code rows(expr)}. That widening matters when we assert
+   * {@code rows(expr) ⊆ rows(V2.emit)} — a larger {@code rows(expr)} makes the soundness check
+   * stricter on V2, not looser. So Unknown handling is a safe over-approximation for finding V2
+   * bugs: if V2 drops a predicate to its residual filter, the oracle (via Unknown) also treats it
+   * as "all rows match," and they agree. If V2 wrongly narrows based on something it can't actually
+   * enforce, the oracle will catch that because the oracle's wider view includes rows V2 excluded.
    */
   public static final class Unknown extends AbstractExpression {
     public final String reason;
@@ -112,12 +117,18 @@ public abstract class AbstractExpression {
       if (lhs == null) return false;
       int c = ((Comparable) lhs).compareTo(value);
       switch (op) {
-        case EQ: return c == 0;
-        case LT: return c < 0;
-        case LE: return c <= 0;
-        case GT: return c > 0;
-        case GE: return c >= 0;
-        default: throw new IllegalStateException();
+        case EQ:
+          return c == 0;
+        case LT:
+          return c < 0;
+        case LE:
+          return c <= 0;
+        case GT:
+          return c > 0;
+        case GE:
+          return c >= 0;
+        default:
+          throw new IllegalStateException();
       }
     }
 

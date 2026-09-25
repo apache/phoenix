@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -290,10 +289,5 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     return returnResult != null
       && (Arrays.equals(returnResult, PhoenixIndexBuilderHelper.RETURN_RESULT_ROW)
         || Arrays.equals(returnResult, PhoenixIndexBuilderHelper.RETURN_RESULT_OLD_ROW));
-  }
-
-  @Override
-  public boolean hasConditionalTTL(Mutation m) {
-    return m.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
   }
 }

@@ -18,11 +18,13 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -31,6 +33,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -86,7 +89,7 @@ public class ClientScanPlan extends ClientProcessingPlan {
   public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
     ResultIterator iterator = delegate.iterator(scanGrouper, scan);
     if (where != null) {
-      iterator = new FilterResultIterator(iterator, where);
+      iterator = new FilterResultIterator(iterator, where, context);
     }
 
     if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
@@ -116,6 +119,9 @@ public class ClientScanPlan extends ClientProcessingPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
+    // Carry the requested EXPLAIN options down to the delegate so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    delegate.getContext().setExplainOptions(context.getExplainOptions());
     ExplainPlan explainPlan = delegate.getExplainPlan();
     List<String> currentPlanSteps = explainPlan.getPlanSteps();
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
@@ -123,36 +129,63 @@ public class ClientScanPlan extends ClientProcessingPlan {
     ExplainPlanAttributesBuilder newBuilder =
       new ExplainPlanAttributesBuilder(explainPlanAttributes);
     if (where != null) {
-      planSteps.add("CLIENT FILTER BY " + where.toString());
-      newBuilder.setClientFilterBy(where.toString());
+      if (context.isVerbose()) {
+        List<String> filterLines = new ArrayList<>();
+        List<ExplainFilter> clientFilters = ExplainTable.renderVerboseFilters(context, where,
+          where.toString(), "CLIENT FILTER BY", filterLines);
+        for (String filterLine : filterLines) {
+          planSteps.add(filterLine);
+          newBuilder.addClientStep(filterLine);
+        }
+        newBuilder.setClientFilters(clientFilters);
+      } else {
+        String step = "CLIENT FILTER BY " + where.toString();
+        planSteps.add(step);
+        newBuilder.setClientFilterBy(where.toString());
+        newBuilder.addClientStep(step);
+      }
     }
     if (!orderBy.getOrderByExpressions().isEmpty()) {
       if (offset != null) {
-        planSteps.add("CLIENT OFFSET " + offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
         newBuilder.setClientOffset(offset);
+        newBuilder.addClientStep(step);
       }
-      planSteps
-        .add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-          + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+      String step =
+        "CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+          + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      planSteps.add(step);
       newBuilder.setClientRowLimit(limit);
       newBuilder.setClientSortedBy(orderBy.getOrderByExpressions().toString());
+      newBuilder.addClientStep(step);
     } else {
       if (offset != null) {
-        planSteps.add("CLIENT OFFSET " + offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
         newBuilder.setClientOffset(offset);
+        newBuilder.addClientStep(step);
       }
       if (limit != null) {
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+        String step = "CLIENT " + limit + " ROW LIMIT";
+        planSteps.add(step);
         newBuilder.setClientRowLimit(limit);
+        newBuilder.addClientStep(step);
       }
     }
     if (context.getSequenceManager().getSequenceCount() > 0) {
       int nSequences = context.getSequenceManager().getSequenceCount();
-      planSteps.add(
-        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+      String step =
+        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S");
+      planSteps.add(step);
       newBuilder.setClientSequenceCount(nSequences);
+      newBuilder.addClientStep(step);
     }
 
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
+    }
     return new ExplainPlan(planSteps, newBuilder.build());
   }
 

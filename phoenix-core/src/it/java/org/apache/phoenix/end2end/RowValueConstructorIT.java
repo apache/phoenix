@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID1;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID7;
@@ -54,8 +55,6 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.DateUtil;
@@ -1349,23 +1348,9 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 4-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("SKIP SCAN ON 12 KEYS ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tempTableWithCompositePK, explainPlanAttributes.getTableName());
-      // V1 and V2 produce equivalent scan plans (salt=0..3, col0 ∈ [2, 4]) but format the
-      // explain string differently: V1 shows only the leading constrained PK column (col0)
-      // while V2's compound emission also surfaces col1. Both are semantically identical.
-      String expectedKeyRanges = conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class)
-        .getQueryServices().getConfiguration().getBoolean(
-          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
-          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)
-        ? " [X'00',2,3] - [X'03',4,5]"
-        : " [X'00',2] - [X'03',4]";
-      assertEquals(expectedKeyRanges, explainPlanAttributes.getKeyRanges());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+      assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("SKIP SCAN ON 12 KEYS")
+        .table(tempTableWithCompositePK).keyRanges("[X'00',2] - [X'03',4]")
+        .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
       conn.close();
     }
