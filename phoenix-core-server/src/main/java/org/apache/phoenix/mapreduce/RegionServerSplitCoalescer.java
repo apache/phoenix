@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,7 @@ final class RegionServerSplitCoalescer {
   /**
    * Coalesces the given splits by RegionServer, guarding correctness. Since coalescing must never
    * change which rows are processed, this returns the original splits unchanged when there is
-   * nothing to coalesce ({@code <= 1} split or {@code null}), when the scan count is not preserved,
+   * nothing to coalesce ({@code <= 1} split or {@code null}), when the scan set is not preserved,
    * or when coalescing throws. {@link InterruptedException} is propagated (interrupt flag
    * restored).
    * @param splits region-granular splits to coalesce; may be {@code null}
@@ -66,10 +67,10 @@ final class RegionServerSplitCoalescer {
     }
     try {
       List<InputSplit> coalesced = coalesce(splits);
-      if (!scanCountPreserved(splits, coalesced)) {
+      if (!scansPreserved(splits, coalesced)) {
         LOGGER.error(
-          "Split coalescing changed the scan count ({} -> {}); falling back to base splits to "
-            + "preserve correctness",
+          "Split coalescing changed the set of scans ({} base scans -> {} coalesced scans); "
+            + "falling back to base splits to preserve correctness",
           countScans(splits), countScans(coalesced));
         return splits;
       }
@@ -163,15 +164,32 @@ final class RegionServerSplitCoalescer {
   }
 
   /**
-   * Whether coalescing preserved every region scan (none dropped or duplicated). The guard
-   * {@link #coalesceWithGuard(List)} uses to decide whether the coalesced result is safe.
+   * Whether coalescing preserved the exact multiset of scan {@code [startRow, stopRow)} ranges (the
+   * safety check {@link #coalesceWithGuard(List)} relies on). A count-only check is insufficient: a
+   * result that drops one scan and duplicates another keeps the total but covers different rows.
    */
-  static boolean scanCountPreserved(List<InputSplit> base, List<InputSplit> coalesced) {
-    return countScans(base) == countScans(coalesced);
+  static boolean scansPreserved(List<InputSplit> base, List<InputSplit> coalesced) {
+    return scanRangeMultiset(base).equals(scanRangeMultiset(coalesced));
   }
 
   /**
-   * Total number of scans across all splits.
+   * Multiset (fingerprint -> occurrence count) of every scan's {@code [startRow, stopRow)} range
+   * across all splits. Two split lists cover exactly the same rows iff their multisets are equal.
+   */
+  private static Map<String, Integer> scanRangeMultiset(List<InputSplit> splits) {
+    Map<String, Integer> multiset = new HashMap<>();
+    for (InputSplit split : splits) {
+      for (Scan scan : ((PhoenixInputSplit) split).getScans()) {
+        String fingerprint = Bytes.toStringBinary(scan.getStartRow()) + '\u0000'
+          + Bytes.toStringBinary(scan.getStopRow());
+        multiset.merge(fingerprint, 1, Integer::sum);
+      }
+    }
+    return multiset;
+  }
+
+  /**
+   * Total number of scans across all splits. Used only for the fallback log message.
    */
   private static int countScans(List<InputSplit> splits) {
     int count = 0;

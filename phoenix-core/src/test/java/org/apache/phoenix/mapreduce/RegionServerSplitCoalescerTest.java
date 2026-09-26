@@ -264,22 +264,33 @@ public class RegionServerSplitCoalescerTest {
   }
 
   @Test
-  public void testScanCountPreservedGuardDecision() throws Exception {
-    // The guard that coalesceWithGuard uses to reject a coalesced result that lost or gained a
-    // scan.
-    // Dropping a scan would silently skip rows in a delete job, so a mismatch must be rejected.
+  public void testScansPreservedGuardDecision() throws Exception {
+    // The guard that coalesceWithGuard uses to reject a coalesced result whose scan set differs
+    // from the base. Dropping a scan would silently skip rows in a delete job, so any mismatch
+    // must be rejected.
     List<InputSplit> base = new ArrayList<>();
     base.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d"), "server1"));
     base.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g"), "server1"));
 
     List<InputSplit> faithful = RegionServerSplitCoalescer.coalesce(base);
-    assertTrue("A correct coalesce preserves the scan count",
-      RegionServerSplitCoalescer.scanCountPreserved(base, faithful));
+    assertTrue("A correct coalesce preserves the exact scan set",
+      RegionServerSplitCoalescer.scansPreserved(base, faithful));
 
     // A "coalesced" result that dropped a scan (only the first region) must be rejected.
     List<InputSplit> dropped = new ArrayList<>(Collections.singletonList(base.get(0)));
     assertFalse("A coalesce that drops a scan must be rejected",
-      RegionServerSplitCoalescer.scanCountPreserved(base, dropped));
+      RegionServerSplitCoalescer.scansPreserved(base, dropped));
+
+    // A drop-and-duplicate result has the SAME scan count as the base but covers different rows:
+    // it drops [d,g) and processes [a,d) twice. A count-only guard would accept this; the multiset
+    // guard must reject it, since a delete job would skip every row in [d,g).
+    List<InputSplit> dropAndDup = new ArrayList<>();
+    dropAndDup.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d"), "server1"));
+    dropAndDup.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d"), "server1"));
+    assertEquals("Precondition: drop-and-dup keeps the same scan count", totalScans(base),
+      totalScans(dropAndDup));
+    assertFalse("A coalesce that drops one scan and duplicates another must be rejected",
+      RegionServerSplitCoalescer.scansPreserved(base, dropAndDup));
   }
 
   @Test

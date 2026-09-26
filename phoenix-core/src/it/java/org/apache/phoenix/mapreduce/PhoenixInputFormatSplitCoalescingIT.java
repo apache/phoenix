@@ -119,9 +119,8 @@ public class PhoenixInputFormatSplitCoalescingIT extends BaseTest {
     assertTrue("Coalescing must reduce the split count (coalesced " + coalesced.size()
       + " < baseline " + baseline.size() + ")", coalesced.size() < baseline.size());
 
-    // Directly assert coalescing happened, not just that the count dropped: with stats-splitting
-    // forced off each region is one scan, so a coalesced split carrying more than one scan means
-    // multiple regions were actually merged into a single mapper.
+    // With stats-splitting off each region is one scan, so a coalesced split holding more than one
+    // scan proves multiple regions were actually merged (not just that the split count dropped).
     boolean merged =
       coalesced.stream().anyMatch(s -> ((PhoenixInputSplit) s).getScans().size() > 1);
     assertTrue("At least one coalesced split must merge multiple regions' scans", merged);
@@ -156,18 +155,16 @@ public class PhoenixInputFormatSplitCoalescingIT extends BaseTest {
   }
 
   /**
-   * Runs {@link PhoenixInputFormat#getSplits} against the live cluster with coalescing on/off. A
-   * {@link Job} is a {@link org.apache.hadoop.mapreduce.JobContext}, which is what
-   * {@code getSplits} takes. Stats-based splitting is forced off on both paths so the baseline and
-   * coalesced runs share the same region-granular starting point; otherwise the coalescing-off
-   * baseline would default to stats splitting ({@code DEFAULT_SPLIT_BY_STATS} is true) and the
-   * scan-set comparison would measure that difference rather than coalescing.
+   * Runs {@link PhoenixInputFormat#getSplits} against the live cluster with coalescing on/off.
+   * Stats splitting is set to track {@code coalescingEnabled}: off for the baseline (so it yields
+   * raw one-scan-per-region splits to compare against), on for the coalescing path (so
+   * {@code getSplits}'s own auto-disable of stats splitting is exercised).
    */
   private List<InputSplit> getSplits(boolean coalescingEnabled) throws Exception {
     Configuration conf = new Configuration(getUtility().getConfiguration());
     Job job = Job.getInstance(conf);
     PhoenixMapReduceUtil.setInput(job, DummyDBWritable.class, tableName, null, "PK");
-    PhoenixConfigurationUtil.setSplitByStats(job.getConfiguration(), false);
+    PhoenixConfigurationUtil.setSplitByStats(job.getConfiguration(), coalescingEnabled);
     job.getConfiguration().setBoolean(PhoenixInputFormat.SPLIT_COALESCING_ENABLED,
       coalescingEnabled);
     return new PhoenixInputFormat<DummyDBWritable>().getSplits(job);
