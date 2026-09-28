@@ -19,6 +19,7 @@ package org.apache.phoenix.index;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +53,12 @@ import org.slf4j.LoggerFactory;
 public class PhoenixIndexMetaDataBuilder {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexMetaDataBuilder.class);
+
+  /**
+   * Lazily-computed, cached JDBC URL used to open server-side connections for index metadata
+   * lookups.
+   */
+  private static volatile String serverConnectionUrl;
 
   private final RegionCoprocessorEnvironment env;
 
@@ -154,7 +161,8 @@ public class PhoenixIndexMetaDataBuilder {
       if (tenantId != null) {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
       }
-      try (Connection conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration())) {
+      QueryUtil.setServerConnection(props);
+      try (Connection conn = DriverManager.getConnection(getServerConnectionUrl(env), props)) {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable dataTable = pconn.getTable(tenantId, fullTableName);
         final List<IndexMaintainer> indexMaintainers =
@@ -212,5 +220,21 @@ public class PhoenixIndexMetaDataBuilder {
       }
     }
     return indexMaintainers;
+  }
+
+  private static String getServerConnectionUrl(RegionCoprocessorEnvironment env)
+    throws SQLException {
+    String url = serverConnectionUrl;
+    if (url == null) {
+      synchronized (PhoenixIndexMetaDataBuilder.class) {
+        url = serverConnectionUrl;
+        if (url == null) {
+          url = QueryUtil.getConnectionUrl(new Properties(), env.getConfiguration());
+          LOGGER.info("Cached server-side JDBC url for index metadata lookups: {}", url);
+          serverConnectionUrl = url;
+        }
+      }
+    }
+    return url;
   }
 }
