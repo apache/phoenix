@@ -389,9 +389,16 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     // offset. However, if the region moves after valid row was returned, we do need to
     // set row count to offset because we return valid row only after offset num of rows
     // are skipped.
+    // prevScanStartRowKey is null on the very first scan RPC for scans that do not go
+    // through ScanRanges.intersectScan(), e.g. the point-lookup fast path in
+    // BaseResultIterators. Such scans are single-RPC and never a mid-scan continuation,
+    // so no row-count recovery is needed. Guarding against null also avoids a NPE from
+    // ByteUtil.concat(null, ...) below (see PHOENIX-8010).
     if (
-      Bytes.compareTo(prevScanStartRowKey, initStartRowKey) != 0 && Bytes
-        .compareTo(ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE), initStartRowKey) != 0
+      prevScanStartRowKey != null
+        && Bytes.compareTo(prevScanStartRowKey, initStartRowKey) != 0
+        && Bytes.compareTo(ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE),
+          initStartRowKey) != 0
     ) {
       iterator.setRowCountToOffset();
     }
