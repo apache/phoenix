@@ -65,6 +65,7 @@ import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.ClusterType;
@@ -205,11 +206,18 @@ public class ReplicationLogGroup {
    * stamps an empty UUID onto the envelope (see {@code IndexRegionObserver}). Keying off the
    * client-set attribute here would make the standby's index regeneration depend on client behavior
    * rather than on whether the table actually has indexes.
+   * <p>
+   * {@code HA_GROUP_NAME_ATTRIB} ({@code _HAGroupName}) IS in this list: it is a batch-uniform,
+   * client-set attribute that identifies the originating HA group, so it belongs with the other
+   * origin-metadata keys. Carrying it through the single envelope makes both the log record and the
+   * WAL key (for the WAL-restore path) self-describing, and lets the WAL-append path stamp it
+   * uniformly rather than as a special case.
    */
   public static final List<String> REPLICATION_ATTR_KEYS = Collections
     .unmodifiableList(Arrays.asList(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
       MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
-      MutationState.MutationMetadataType.TENANT_ID.toString()));
+      MutationState.MutationMetadataType.TENANT_ID.toString(),
+      BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB));
 
   public static final String STANDBY_DIR = "in";
   public static final String FALLBACK_DIR = "out";

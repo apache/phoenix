@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -760,6 +761,8 @@ public class LogFileCodecTest {
       Bytes.toBytes("MY_TABLE"));
     put.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
       Bytes.toBytes("tenant1"));
+    put.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
+      Bytes.toBytes("MY_HA_GROUP"));
     put.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, HConstants.EMPTY_BYTE_ARRAY);
 
     LogFile.Record original =

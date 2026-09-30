@@ -197,6 +197,11 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
+  // Tables already warned about for a CLIENT_NON_HA write on a replication-eligible table (a writer
+  // not attaching the _HAGroupName attribute). Each table is logged at most once per RegionServer
+  // lifetime so a high-volume untagged writer cannot flood the log. Shared across all per-region
+  // instances; bounded in practice by the finite set of tables on the RegionServer.
+  private static final Set<String> BYPASS_WARNED_TABLES = ConcurrentHashMap.newKeySet();
   private static final OperationStatus IGNORE = new OperationStatus(SUCCESS);
   private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
   public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
@@ -911,6 +916,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           MetricsHaBypassSourceFactory.getInstance().incrementBypassedMutationBlockCount();
         } catch (Throwable t) {
           LOG.warn("Failed to increment bypassed mutation block count metric; continuing", t);
+        }
+        // Per-table breadcrumb for triage: identify which table has a writer not attaching
+        // _HAGroupName. Logged once per table per RegionServer lifetime (add() is true only on
+        // first insertion) so it names the offender without flooding on sustained writes.
+        if (BYPASS_WARNED_TABLES.add(dataTableName)) {
+          LOG.warn(
+            "Table {} received a mutation batch without an _HAGroupName attribute while sync "
+              + "replication is enabled (origin CLIENT_NON_HA); a writer to this table is not "
+              + "attaching the HA group attribute. Investigate and fix that write path.",
+            dataTableName);
         }
       }
 
@@ -2984,21 +2999,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the HA group name it
-   * keys on ({@link #getHAGroupFromWALKey}) plus the replication attribute envelope
-   * (schema/table/tenant, and an empty INDEX_UUID for indexed tables) it reads back in
-   * {@link #replicateEditOnWALRestore}. Gated on {@link #isReplicatedBatch} — the same predicate
-   * that gates pre-image capture — so the WAL carries this stamp exactly when it carries the
-   * pre-images the re-ship needs. On a standby replay the log group is absent, so the standby's WAL
-   * never carries replication metadata it could never re-ship.
+   * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the replication
+   * attribute envelope (schema/table/tenant, the HA group name it keys on via
+   * {@link #getHAGroupFromWALKey}, and an empty INDEX_UUID for indexed tables) it reads back in
+   * {@link #replicateEditOnWALRestore}. The HA group name rides the envelope like the other origin
+   * keys (it is in {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}), so it needs no separate
+   * stamp. Gated on {@link #isReplicatedBatch} — the same predicate that gates pre-image capture —
+   * so the WAL carries this stamp exactly when it carries the pre-images the re-ship needs. On a
+   * standby replay the log group is absent, so the standby's WAL never carries replication metadata
+   * it could never re-ship.
    */
   private void appendReplicationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
     if (context == null || !isReplicatedBatch(context)) {
       return;
     }
-    IndexRegionObserver.appendToWALKey(key, BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
-      Bytes.toBytes(context.logGroup.get().getHAGroupName()));
     for (Map.Entry<String, byte[]> e : buildReplicationAttributes(context).entrySet()) {
       IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
     }

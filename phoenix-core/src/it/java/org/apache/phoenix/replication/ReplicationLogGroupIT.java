@@ -308,7 +308,7 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
   }
 
   /**
-   * Negative counter case for PHOENIX-XXXX: standby replay batches (origin {@code PHX_REPLAY})
+   * Negative counter case for PHOENIX-8011: standby replay batches (origin {@code PHX_REPLAY})
    * carry no {@code _HAGroupName} and previously inflated {@code bypassedMutationBlockCount}, which
    * is meant to flag only live client writes that forgot the attribute. This drives an HA write on
    * cluster 1, then replays its log onto cluster 2 and asserts the counter does not move across the
