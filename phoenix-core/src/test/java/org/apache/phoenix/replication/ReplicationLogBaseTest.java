@@ -36,6 +36,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.replication.log.LogFileWriter;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
 import org.junit.Before;
@@ -176,6 +177,16 @@ public class ReplicationLogBaseTest {
       return spy(new TestableLog(this, shardManager, useAlignedRotation));
     }
 
+    /**
+     * Wrap the real metrics source in a spy so tests can assert on the values passed to
+     * {@code update*} at emit time. Asserting on the source's live histograms is racy: they are
+     * registered with the JVM-global metrics2 system, whose periodic sampler resets each histogram
+     * via {@code snapshotAndReset()} and can zero it between emit and read.
+     */
+    @Override
+    protected MetricsReplicationLogGroupSource createMetricsSource() {
+      return spy(super.createMetricsSource());
+    }
   }
 
   /**

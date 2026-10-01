@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -2906,26 +2907,50 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // before we read. close() is idempotent, so tearDown's close() is a no-op.
     logGroup.close();
 
-    // getCurrentMetricValues() snapshots and resets the histogram bins, so call it exactly once.
-    ReplicationLogMetricValues values = logGroup.getMetrics().getCurrentMetricValues();
+    // Assert on the values passed to the metrics source at emit time, captured from the spy. The
+    // source's histograms are registered with the JVM-global metrics2 system, whose periodic
+    // sampler resets them via snapshotAndReset() and can zero getMax() between emit and read -- so
+    // reading the live histogram (getCurrentMetricValues()) is racy and flaked on "batchSize == 0".
+    MetricsReplicationLogGroupSource metrics = logGroup.getMetrics();
+    ArgumentCaptor<Long> appendTime = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> ringBufferTime = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> pendingSyncWaitTime = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> pendingSyncCount = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> syncTime = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> fsSyncTime = ArgumentCaptor.forClass(Long.class);
+    verify(metrics, atLeastOnce()).updateAppendTime(appendTime.capture());
+    verify(metrics, atLeastOnce()).updateRingBufferTime(ringBufferTime.capture());
+    verify(metrics, atLeastOnce()).updatePendingSyncWaitTime(pendingSyncWaitTime.capture());
+    verify(metrics, atLeastOnce()).updatePendingSyncCount(pendingSyncCount.capture());
+    verify(metrics, atLeastOnce()).updateSyncTime(syncTime.capture());
+    verify(metrics, atLeastOnce()).updateFsSyncTime(fsSyncTime.capture());
 
     // appendTime brackets only the uncontended ring-buffer publish -- the shortest interval of all
     // these metrics. Nanosecond units are not nanosecond resolution: on a fast machine every
     // publish can floor to a 0ns delta, so assert presence (>= 0) rather than strict positivity.
-    assertTrue("appendTime should be >= 0, got " + values.getAppendTimeMax(),
-      values.getAppendTimeMax() >= 0);
-    assertTrue("ringBufferTime should be >= 0, got " + values.getRingBufferTimeMax(),
-      values.getRingBufferTimeMax() >= 0);
-    assertTrue("pendingSyncWaitTime should be >= 0, got " + values.getPendingSyncWaitTimeMax(),
-      values.getPendingSyncWaitTimeMax() >= 0);
-    // Counts.
-    assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCountMax(),
-      values.getPendingSyncCountMax() > 0);
-    // Millisecond-resolution timers: the injected fsync delay clears the truncation floor.
-    assertTrue("syncTime should be > 0, got " + values.getSyncTimeMax(),
-      values.getSyncTimeMax() > 0);
-    assertTrue("fsSyncTime should be > 0, got " + values.getFsSyncTimeMax(),
-      values.getFsSyncTimeMax() > 0);
+    assertTrue("appendTime should be >= 0, got " + max(appendTime.getAllValues()),
+      max(appendTime.getAllValues()) >= 0);
+    assertTrue("ringBufferTime should be >= 0, got " + max(ringBufferTime.getAllValues()),
+      max(ringBufferTime.getAllValues()) >= 0);
+    assertTrue("pendingSyncWaitTime should be >= 0, got " + max(pendingSyncWaitTime.getAllValues()),
+      max(pendingSyncWaitTime.getAllValues()) >= 0);
+    assertTrue("pendingSyncCount should be > 0, got " + max(pendingSyncCount.getAllValues()),
+      max(pendingSyncCount.getAllValues()) > 0);
+    // Millisecond-resolution timers: the injected fsync delay clears the truncation floor. syncTime
+    // and fsSyncTime are recorded in ns here; the source truncates to ms internally, but we assert
+    // on the raw ns argument, which the 2ms injected delay keeps comfortably positive.
+    assertTrue("syncTime should be > 0, got " + max(syncTime.getAllValues()),
+      max(syncTime.getAllValues()) > 0);
+    assertTrue("fsSyncTime should be > 0, got " + max(fsSyncTime.getAllValues()),
+      max(fsSyncTime.getAllValues()) > 0);
+  }
+
+  private static long max(List<Long> values) {
+    long result = Long.MIN_VALUE;
+    for (Long v : values) {
+      result = Math.max(result, v);
+    }
+    return result;
   }
 
   /**

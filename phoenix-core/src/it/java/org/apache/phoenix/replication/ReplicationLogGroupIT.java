@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -61,13 +62,13 @@ import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceImpl;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.replication.reader.ReplicationLogProcessor;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -1024,20 +1025,213 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
       indexName);
   }
 
-  @Ignore("Mutations on SYSTEM.CATALOG and SYSTEM.CHILD_LINK are generated on the server side and don't have the HAGroup attribute set")
+  /**
+   * End-to-end replication of the tenant-owned SYSTEM.CATALOG and SYSTEM.CHILD_LINK rows that back
+   * a tenant view. Models the intended HA topology: the base table and the global view are global
+   * objects created independently on both clusters (their catalog/child-link rows are non-tenant
+   * and never replicate), while the tenant view is created only on the active over an HA connection
+   * so its tenant-owned metadata and data replicate to the standby. After replaying the log onto
+   * cluster 2, the tenant view must materialize there purely from the replicated metadata, and the
+   * base physical table must match cluster 1 cell-for-cell.
+   * <p>
+   * This exercises the production path in {@code IndexRegionObserver} that ships tenant-owned
+   * SYSTEM.CATALOG / SYSTEM.CHILD_LINK rows -- the DDL mutations carry {@code _HAGroupName} because
+   * they are built through the client {@code MutationState} of a FailoverPhoenix (HA) connection.
+   */
+  @Test
   public void testSystemTables() throws Exception {
-    createViewHierarchy();
+    final String baseTable = "T_" + generateUniqueName();
+    final String globalView = "GV_" + generateUniqueName();
+    final String tenantView = "TV_" + generateUniqueName();
+    final String tenantIndex = "TVI_" + generateUniqueName();
+    final String tenantId = "TENANT_" + name.getMethodName();
+    final int rowCount = 5;
+
+    final String baseTableDdl = "CREATE TABLE IF NOT EXISTS " + baseTable
+      + " (TENANT_ID VARCHAR NOT NULL, KP CHAR(3) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT "
+      + "CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP, ID)) MULTI_TENANT=true";
+    // Equality predicate keeps the view (and the tenant view derived from it) updatable.
+    final String globalViewDdl = "CREATE VIEW IF NOT EXISTS " + globalView
+      + " (COL1 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE KP = 'abc'";
+    final String tenantViewDdl = "CREATE VIEW " + tenantView + " AS SELECT * FROM " + globalView;
+
+    // Global objects on the active: base table + global view. Created over the HA connection, but
+    // their catalog / child-link rows are non-tenant and are filtered out of replication.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(baseTableDdl);
+      conn.createStatement().execute(globalViewDdl);
+      conn.commit();
+    }
+
+    // Tenant view + tenant data on the active over a tenant-scoped HA connection: these carry
+    // _HAGroupName and are the only rows that replicate.
+    Properties tenantProps = (Properties) clientProps.clone();
+    tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    try (
+      Connection tenantConn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), tenantProps)) {
+      tenantConn.createStatement().execute(tenantViewDdl);
+      tenantConn.createStatement()
+        .execute("CREATE INDEX " + tenantIndex + " ON " + tenantView + " (COL1)");
+      tenantConn.commit();
+      PreparedStatement stmt = tenantConn
+        .prepareStatement("UPSERT INTO " + tenantView + " (ID, NUM, COL1) VALUES (?, ?, ?)");
+      for (int i = 0; i < rowCount; i++) {
+        stmt.setString(1, "row" + i);
+        stmt.setLong(2, i + 1);
+        stmt.setString(3, "val_" + i);
+        stmt.executeUpdate();
+      }
+      tenantConn.commit();
+    }
+
+    // The only SYSTEM.* rows shipped are the tenant view's catalog rows and its single child link.
+    logGroup.close();
     Map<String, List<Mutation>> logsByTable = groupLogsByTable();
     dumpTableLogCount(logsByTable);
-    // find all the log entries for system tables
     Map<String,
       List<Mutation>> systemTables = logsByTable.entrySet().stream()
         .filter(entry -> entry.getKey().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME))
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    // there should be only 2 entries CATALOG, CHILD_LINK
-    assertEquals(2, systemTables.size());
-    assertEquals(1, getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
-    assertTrue(getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);
+    assertEquals("Only SYSTEM.CATALOG and SYSTEM.CHILD_LINK should replicate", 2,
+      systemTables.size());
+    assertEquals("One tenant view => one tenant-owned child link", 1,
+      getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
+    assertTrue("Tenant view catalog rows should replicate",
+      getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);
+    assertTrue("Tenant data written through the base physical table should replicate",
+      getCountForTable(logsByTable, baseTable) > 0);
+
+    // Recreate the global objects on the standby and replay. The MULTI_TENANT base table auto-
+    // creates the shared view-index physical table, so the standby IRO regenerates the tenant view
+    // index entries from the replayed base data; both the base table and that index physical table
+    // must match cluster 1 cell-for-cell.
+    String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(baseTable);
+    replayAndVerifyAcrossClusters(Arrays.asList(baseTableDdl, globalViewDdl), baseTable,
+      viewIndexPhysicalName);
+
+    // The tenant view materializes on the standby from the replayed metadata alone, and the
+    // COUNT(*) is served by the (regenerated) tenant view index -- the optimizer prefers it over a
+    // full base-table scan.
+    Properties tenantProps2 = new Properties();
+    tenantProps2.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    try (
+      Connection tenantConn2 =
+        DriverManager.getConnection(CLUSTERS.getJdbcUrl2(haGroup), tenantProps2);
+      Statement stmt = tenantConn2.createStatement();
+      ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView)) {
+      String explainPlan =
+        QueryUtil.getExplainPlan(rs.unwrap(PhoenixResultSet.class).getUnderlyingIterator());
+      assertTrue("COUNT(*) on the tenant view should be served by the tenant view index, plan was: "
+        + explainPlan, explainPlan.contains(viewIndexPhysicalName));
+      assertTrue(rs.next());
+      assertEquals("Tenant view should be queryable on the standby after replay", rowCount,
+        rs.getInt(1));
+    }
+  }
+
+  /**
+   * Production variant of {@link #testSystemTables()} where the index lives on the GLOBAL view and
+   * there is no tenant view index: base table, global view, and a global view index are global
+   * objects created independently on both clusters (none of their metadata replicates), while only
+   * the tenant view and its upserts are created on the active over an HA connection. Tenant upserts
+   * still populate the shared view-index physical table with tenant-scoped entries, so on the
+   * standby the IRO regenerates those global-view-index entries from the replayed base data even
+   * though no index metadata was replicated. Both the base table and the shared index physical
+   * table must match cluster 1, and the tenant view COUNT(*) on the standby must be served by the
+   * global view index.
+   */
+  @Test
+  public void testSystemTablesWithGlobalViewIndex() throws Exception {
+    final String baseTable = "T_" + generateUniqueName();
+    final String globalView = "GV_" + generateUniqueName();
+    final String globalIndex = "GVI_" + generateUniqueName();
+    final String tenantView = "TV_" + generateUniqueName();
+    final String tenantId = "TENANT_" + name.getMethodName();
+    final int rowCount = 5;
+
+    final String baseTableDdl = "CREATE TABLE IF NOT EXISTS " + baseTable
+      + " (TENANT_ID VARCHAR NOT NULL, KP CHAR(3) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT "
+      + "CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP, ID)) MULTI_TENANT=true";
+    // Equality predicate keeps the view (and the tenant view derived from it) updatable.
+    final String globalViewDdl = "CREATE VIEW IF NOT EXISTS " + globalView
+      + " (COL1 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE KP = 'abc'";
+    final String globalIndexDdl =
+      "CREATE INDEX IF NOT EXISTS " + globalIndex + " ON " + globalView + " (COL1)";
+    final String tenantViewDdl = "CREATE VIEW " + tenantView + " AS SELECT * FROM " + globalView;
+
+    // Global objects on the active: base table + global view + global view index. All are
+    // non-tenant
+    // and their catalog / child-link rows are filtered out of replication.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(baseTableDdl);
+      conn.createStatement().execute(globalViewDdl);
+      conn.createStatement().execute(globalIndexDdl);
+      conn.commit();
+    }
+
+    // Tenant view + tenant data on the active over a tenant-scoped HA connection: these carry
+    // _HAGroupName and are the only rows that replicate. No tenant view index here.
+    Properties tenantProps = (Properties) clientProps.clone();
+    tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    try (
+      Connection tenantConn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), tenantProps)) {
+      tenantConn.createStatement().execute(tenantViewDdl);
+      tenantConn.commit();
+      PreparedStatement stmt = tenantConn
+        .prepareStatement("UPSERT INTO " + tenantView + " (ID, NUM, COL1) VALUES (?, ?, ?)");
+      for (int i = 0; i < rowCount; i++) {
+        stmt.setString(1, "row" + i);
+        stmt.setLong(2, i + 1);
+        stmt.setString(3, "val_" + i);
+        stmt.executeUpdate();
+      }
+      tenantConn.commit();
+    }
+
+    // The only SYSTEM.* rows shipped are the tenant view's catalog rows and its single child link;
+    // the global view index contributes no replicated metadata.
+    logGroup.close();
+    Map<String, List<Mutation>> logsByTable = groupLogsByTable();
+    dumpTableLogCount(logsByTable);
+    Map<String,
+      List<Mutation>> systemTables = logsByTable.entrySet().stream()
+        .filter(entry -> entry.getKey().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME))
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    assertEquals("Only SYSTEM.CATALOG and SYSTEM.CHILD_LINK should replicate", 2,
+      systemTables.size());
+    assertEquals("One tenant view => one tenant-owned child link", 1,
+      getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
+    assertTrue("Tenant view catalog rows should replicate",
+      getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);
+    assertTrue("Tenant data written through the base physical table should replicate",
+      getCountForTable(logsByTable, baseTable) > 0);
+
+    // Recreate the global objects (including the global view index) on the standby and replay. The
+    // standby IRO regenerates the global-view-index entries for the tenant rows from the replayed
+    // base data; both the base table and the shared index physical table must match cluster 1.
+    String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(baseTable);
+    replayAndVerifyAcrossClusters(Arrays.asList(baseTableDdl, globalViewDdl, globalIndexDdl),
+      baseTable, viewIndexPhysicalName);
+
+    // The tenant view materializes on the standby from the replayed metadata alone, and the
+    // COUNT(*) is served by the (regenerated) global view index.
+    Properties tenantProps2 = new Properties();
+    tenantProps2.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    try (
+      Connection tenantConn2 =
+        DriverManager.getConnection(CLUSTERS.getJdbcUrl2(haGroup), tenantProps2);
+      Statement stmt = tenantConn2.createStatement();
+      ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView)) {
+      String explainPlan =
+        QueryUtil.getExplainPlan(rs.unwrap(PhoenixResultSet.class).getUnderlyingIterator());
+      assertTrue("COUNT(*) on the tenant view should be served by the global view index, plan was: "
+        + explainPlan, explainPlan.contains(viewIndexPhysicalName));
+      assertTrue(rs.next());
+      assertEquals("Tenant view should be queryable on the standby after replay", rowCount,
+        rs.getInt(1));
+    }
   }
 
   /**
@@ -1429,29 +1623,5 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     }
     assertTrue("Rotation must resume after the abort clears failover-pending",
       findLogFiles(peerDir, peerFs).size() > filesAtCutover);
-  }
-
-  private PhoenixTestBuilder.SchemaBuilder createViewHierarchy() throws Exception {
-    // Define the test schema.
-    // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
-    // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
-    // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
-    final PhoenixTestBuilder.SchemaBuilder schemaBuilder =
-      new PhoenixTestBuilder.SchemaBuilder(CLUSTERS.getJdbcHAUrl());
-    PhoenixTestBuilder.SchemaBuilder.ConnectOptions connectOptions =
-      new PhoenixTestBuilder.SchemaBuilder.ConnectOptions();
-    connectOptions.setConnectProps(clientProps);
-    PhoenixTestBuilder.SchemaBuilder.TableOptions tableOptions =
-      PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
-    PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions globalViewOptions =
-      PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions.withDefaults();
-    PhoenixTestBuilder.SchemaBuilder.TenantViewOptions tenantViewWithOverrideOptions =
-      PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
-    PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions tenantViewIndexOverrideOptions =
-      PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions.withDefaults();
-    schemaBuilder.withConnectOptions(connectOptions).withTableOptions(tableOptions)
-      .withGlobalViewOptions(globalViewOptions).withTenantViewOptions(tenantViewWithOverrideOptions)
-      .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildWithNewTenant();
-    return schemaBuilder;
   }
 }
