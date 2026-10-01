@@ -219,7 +219,7 @@ public class ReplicationLogProcessor implements Closeable {
     // Map from Table Name to List of Mutations
     Map<TableName, List<Mutation>> tableToMutationsMap = new HashMap<>();
 
-    // Track the total number of processed records from input log file
+    // Track the total number of mutations replayed from the input log file
     long totalProcessed = 0;
 
     // Track the current batch size as records will be processed in batch size of
@@ -275,8 +275,9 @@ public class ReplicationLogProcessor implements Closeable {
         totalProcessed += currentBatchSize;
       }
 
-      LOG.info("Completed processing log file {}. Total mutations processed: {}",
-        logFileReader.getContext().getFilePath(), totalProcessed);
+      LOG.info("Completed processing log file {}. Records read: {}, mutations replayed: {}",
+        logFileReader.getContext().getFilePath(), logFileReader.getContext().getRecordsRead(),
+        totalProcessed);
       getMetrics().incrementLogFileReplaySuccessCount();
       // Replay throughput for files that completed successfully. This runs only after the whole
       // file replayed without error (before the catch), so mutations already applied by a file that

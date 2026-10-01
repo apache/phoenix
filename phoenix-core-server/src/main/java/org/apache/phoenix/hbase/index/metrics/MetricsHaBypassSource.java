@@ -20,19 +20,21 @@ package org.apache.phoenix.hbase.index.metrics;
 import org.apache.hadoop.hbase.metrics.BaseSource;
 
 /**
- * Server-side JMX metrics source that counts how many mutation batches pass through
- * {@code IndexRegionObserver.preBatchMutate} <em>without</em> a resolvable HA group attribute, so
- * the cluster-role-based mutation-block gate has no haGroupName to evaluate against and is skipped
- * for that batch.
+ * Server-side JMX metrics source that counts how many client-originated mutation batches pass
+ * through {@code IndexRegionObserver.preBatchMutate} <em>without</em> an {@code _HAGroupName}
+ * attribute, so the cluster-role-based mutation-block gate has no haGroupName to evaluate against
+ * and is skipped for that batch.
  * <p>
  * This is a <strong>path-coverage detector</strong>, not a safety violation alarm. The counter is
- * incremented in {@code IndexRegionObserver.preBatchMutate} for <em>every</em> mutation batch whose
- * {@code _HAGroupName} attribute cannot be resolved — regardless of whether the cluster-role-based
- * mutation-block feature is enabled, regardless of whether a mutation-block window is currently
- * active for any HA group, and regardless of whether the table being written to is HA-replicated.
- * The "bypass" terminology refers strictly to the gate-evaluation code path being short-circuited;
- * it does <strong>not</strong> imply that any safety property was breached — when the block feature
- * is disabled or no block window is active, there is no property to breach in the first place.
+ * incremented in {@code IndexRegionObserver.preBatchMutate} only for a genuine client write that
+ * reached the write path without attaching {@code _HAGroupName} (batch origin
+ * {@code CLIENT_NON_HA}) on a replication-eligible table (the sync-replication master switch is on
+ * AND the table is eligible). Standby replay ({@code PHX_REPLAY}) and native-replicated-in
+ * ({@code NATIVE_IN}) batches also lack {@code _HAGroupName} but are distinct origins and are
+ * <em>excluded</em>, as are system-HA-group state writes (which carry a haGroup, i.e.
+ * {@code CLIENT_HA}). The "bypass" terminology refers strictly to the gate-evaluation code path
+ * being short-circuited; it does <strong>not</strong> imply that any safety property was breached —
+ * the signal is simply "a client missed attaching {@code _HAGroupName}."
  * <p>
  * Intended operator use:
  * <ul>
@@ -58,20 +60,22 @@ public interface MetricsHaBypassSource extends BaseSource {
 
   String BYPASSED_MUTATION_BLOCK_COUNT = "bypassedMutationBlockCount";
   String BYPASSED_MUTATION_BLOCK_COUNT_DESC =
-    "Path-coverage counter: number of mutation batches that reached preBatchMutate without a "
-      + "resolvable _HAGroupName attribute (so the cluster-role-based mutation-block gate had "
-      + "nothing to evaluate against and was skipped). Counts the code path being skipped, not "
-      + "a safety breach — when the block feature is disabled or no block window is active, "
-      + "there is no property to breach. Actionable signal is delta-against-baseline (e.g., a "
-      + "spike after a deploy introducing a new mutation path), not absolute value";
+    "Path-coverage counter: number of client-originated mutation batches that reached "
+      + "preBatchMutate on a replication-eligible table without an _HAGroupName attribute "
+      + "(origin CLIENT_NON_HA), so the cluster-role-based mutation-block gate had nothing to "
+      + "evaluate against and was skipped. Standby-replay and native-replicated-in batches are "
+      + "excluded. Counts the code path being skipped, not a safety breach — the signal is that "
+      + "a client missed attaching _HAGroupName. Actionable signal is delta-against-baseline "
+      + "(e.g., a spike after a deploy introducing a new mutation path), not absolute value";
 
   /**
-   * Increments the gate-skipped-path counter. Called unconditionally from
-   * {@code IndexRegionObserver.preBatchMutate} whenever the resolved
-   * {@code Optional<ReplicationLogGroup>} is empty — i.e., the mutation batch carries no
-   * {@code _HAGroupName} attribute and the cluster-role-based mutation-block gate cannot be
-   * evaluated for it. Independent of whether the mutation-block feature is enabled or any block
-   * window is active.
+   * Increments the gate-skipped-path counter. Called from
+   * {@code IndexRegionObserver.preBatchMutate} only for a {@code CLIENT_NON_HA} batch on a
+   * replication-eligible table — i.e., a genuine client write that reached the write path without
+   * an {@code _HAGroupName} attribute while the sync-replication master switch is on and the table
+   * is eligible, so the cluster-role-based mutation-block gate cannot be evaluated for it.
+   * Standby-replay ({@code PHX_REPLAY}), native-replicated-in ({@code NATIVE_IN}), and
+   * {@code CLIENT_HA} batches are excluded.
    */
   void incrementBypassedMutationBlockCount();
 }

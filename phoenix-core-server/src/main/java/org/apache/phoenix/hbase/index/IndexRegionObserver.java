@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -196,6 +197,11 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
+  // Tables already warned about for a CLIENT_NON_HA write on a replication-eligible table (a writer
+  // not attaching the _HAGroupName attribute). Each table is logged at most once per RegionServer
+  // lifetime so a high-volume untagged writer cannot flood the log. Shared across all per-region
+  // instances; bounded in practice by the finite set of tables on the RegionServer.
+  private static final Set<String> BYPASS_WARNED_TABLES = ConcurrentHashMap.newKeySet();
   private static final OperationStatus IGNORE = new OperationStatus(SUCCESS);
   private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
   public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
@@ -263,9 +269,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE = false;
   // Generic marker attribute set on every mutation produced by the standby reader from a
   // replication-log record. Value is opaque (presence is the signal). Detected in
-  // preBatchMutateWithExceptions to set context.isReplication, which gates the primary-side clock
-  // work (getBatchTimestamp/setTimestamps) off so the cell timestamps shipped from the active
-  // cluster are preserved. Never set on primary-side mutations.
+  // preBatchMutateWithExceptions to classify the batch as PHX_REPLAY (see context.isReplay()),
+  // which
+  // gates the primary-side clock work (getBatchTimestamp/setTimestamps) off so the cell timestamps
+  // shipped from the active cluster are preserved. Never set on primary-side mutations.
   public static final String REPLICATED_MUTATION = "_ReplicatedMutation";
   // Per-row mutation attribute that the standby reader synthesizes from the pre-image cell and
   // attaches to each reconstructed mutation when its row had a pre-image entry. Value is the
@@ -491,19 +498,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean returnOldRow;
     private boolean hasConditionalTTL; // table has Conditional TTL
     private boolean immutableRows;
-    // True when this batch was produced by the standby reader from a replication-log record (i.e.
-    // every mutation carries the {@link IndexRegionObserver#REPLICATED_MUTATION} marker). Batch-
-    // uniform by construction: the standby reader stamps every reconstructed mutation, so checking
-    // the first one is sufficient. The standby uses this to skip the data-table scan in the PRE
-    // phase (pre-image cells are carried as the per-row {@link IndexRegionObserver#PRE_IMAGE}
-    // attribute when the table has a global/uncovered/transform index — same schema on both
-    // clusters, so when we're inside that branch on the standby we always have pre-images).
-    private boolean isReplication;
+    // Where this batch came from, classified once from the first mutation and carried as the single
+    // source of truth for this batch's HA disposition. The counter, the cluster-role gate, and
+    // log-group resolution key off it in preBatchMutate; the replay predicate {@link #isReplay()}
+    // is
+    // derived from it. Defaults to CLIENT_NON_HA (benign: no HA handling).
+    private BatchOrigin origin = BatchOrigin.CLIENT_NON_HA;
     // HAGroup associated with the batch
     private Optional<ReplicationLogGroup> logGroup = Optional.empty();
     // Per-(row, ts) groups folded from this replicated batch, computed once and shared by the
     // global-index path (prepareReplicatedIndexMutations) and the local-index path. Null until
-    // first built; only populated on the standby replay path (isReplication).
+    // first built; only populated on the standby replay path (isReplay).
     private List<ReplicatedRowGroup> replicatedRowGroups;
 
     public BatchMutateContext() {
@@ -512,6 +517,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     public BatchMutateContext(int clientVersion) {
       this.clientVersion = clientVersion;
+    }
+
+    /**
+     * True when this batch was produced by the standby reader from a replication-log record (batch
+     * origin {@link BatchOrigin#PHX_REPLAY} — every mutation carries the
+     * {@link IndexRegionObserver#REPLICATED_MUTATION} marker). Batch-uniform by construction: the
+     * standby reader stamps every reconstructed mutation, so the origin classified from the first
+     * one holds for the whole batch. The standby uses this to skip the data-table scan in the PRE
+     * phase (pre-image cells are carried as the per-row {@link IndexRegionObserver#PRE_IMAGE}
+     * attribute when the table has a global/uncovered/transform index — same schema on both
+     * clusters, so when we're inside that branch on the standby we always have pre-images).
+     */
+    boolean isReplay() {
+      return origin == BatchOrigin.PHX_REPLAY;
     }
 
     public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
@@ -622,7 +641,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
-  private boolean shouldReplicate;
+  // Raw SYNCHRONOUS_REPLICATION_ENABLED value: the master switch for all HA semantics. Unlike
+  // replicateTable it is not narrowed by per-table replication eligibility, so the cluster-role
+  // gates key off this — applying across all tables when the feature is on, and fully skipped when
+  // it is off (e.g. the rollout window before the HA group exists).
+  private boolean syncReplicationEnabled;
+  // Sync replication is enabled AND this table is replication-eligible: i.e. this table's writes
+  // should ride the replication log on this cluster. Set once per coproc load.
+  private boolean replicateTable;
   private Abortable abortable;
 
   // Don't replicate the mutation if this attribute is set
@@ -732,13 +758,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // when the table descriptor changes, the coproc is reloaded
       this.useBloomFilter = bloomFilterType == BloomType.ROW;
       byte[] tableName = env.getRegionInfo().getTable().getName();
-      this.shouldReplicate = env.getConfiguration().getBoolean(SYNCHRONOUS_REPLICATION_ENABLED,
-        DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
-      if (this.shouldReplicate) {
-        // replication feature is enabled, check if it is enabled for the table
-        this.shouldReplicate = SchemaUtil.shouldReplicateTable(tableName);
-      }
-      if (this.shouldReplicate) {
+      this.syncReplicationEnabled = env.getConfiguration()
+        .getBoolean(SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
+      // replication feature is enabled, check if it is enabled for the table
+      this.replicateTable =
+        this.syncReplicationEnabled && SchemaUtil.shouldReplicateTable(tableName);
+      if (this.replicateTable) {
         this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
       }
       // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
@@ -839,6 +864,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
+  /**
+   * Where a mutation batch reaching the write path originated. Classified once (see
+   * {@link #classifyBatch}) and then used by every HA decision instead of re-deriving from raw
+   * attributes.
+   */
+  enum BatchOrigin {
+    /** Originating client write carrying the {@code _HAGroupName} attribute. */
+    CLIENT_HA,
+    /** Originating write with no {@code _HAGroupName} (non-HA client, or one that omitted it). */
+    CLIENT_NON_HA,
+    /** Standby replay: reconstructed by the log reader, carries {@link #REPLICATED_MUTATION}. */
+    PHX_REPLAY,
+    /**
+     * Arrived via HBase-native replication: carries source cluster ids, not {@code _HAGroupName}.
+     */
+    NATIVE_IN
+  }
+
   /*
    * Also checks for mutationBlockEnabled if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled.
    */
@@ -859,41 +902,54 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // gates below key off this name, not off writer presence, so they apply on a standby or
       // demoted cluster too — not only where this cluster is active.
       Optional<String> haGroupName = getHAGroupNameFromBatch(miniBatchOp);
+      BatchOrigin origin = classifyBatch(miniBatchOp, haGroupName);
 
-      // Path-coverage counter: increments whenever a mutation batch reaches preBatchMutate
-      // without a resolvable HA group attribute, so the cluster-role-based mutation-block gate
-      // has no haGroupName to evaluate against and is skipped. This counts the code path being
-      // short-circuited — it does NOT imply any safety property was breached (when the block
-      // feature is disabled or no block window is active, there is no property to breach).
-      // Tracked globally rather than per-table so operators can compare baseline vs.
-      // post-deploy delta to spot new write paths that forgot to attach _HAGroupName.
-      // Intentionally scoped to !haGroupName.isPresent() regardless of dataTableName —
-      // system-HA-group writes WITH a haGroup are an intended gate exemption (state writes
-      // must proceed during a block window) and are not counted here.
-      if (shouldReplicate && !haGroupName.isPresent()) {
+      // Path-coverage counter: increments only for a genuine client write that reached the write
+      // path without attaching _HAGroupName (CLIENT_NON_HA), on a replication-eligible table. The
+      // signal is "a client missed attaching _HAGroupName" — it does NOT imply any safety property
+      // was breached. Tracked globally rather than per-table so operators can compare baseline vs.
+      // post-deploy delta to spot new write paths that forgot the attribute. Standby replay
+      // (PHX_REPLAY) and native-replicated-in (NATIVE_IN) batches are distinct origins and so are
+      // excluded, as are system-HA-group state writes (which carry a haGroup, i.e. CLIENT_HA).
+      if (replicateTable && origin == BatchOrigin.CLIENT_NON_HA) {
         try {
           MetricsHaBypassSourceFactory.getInstance().incrementBypassedMutationBlockCount();
         } catch (Throwable t) {
           LOG.warn("Failed to increment bypassed mutation block count metric; continuing", t);
         }
+        // Per-table breadcrumb for triage: identify which table has a writer not attaching
+        // _HAGroupName. Logged once per table per RegionServer lifetime (add() is true only on
+        // first insertion) so it names the offender without flooding on sustained writes.
+        if (BYPASS_WARNED_TABLES.add(dataTableName)) {
+          LOG.warn(
+            "Table {} received a mutation batch without an _HAGroupName attribute while sync "
+              + "replication is enabled (origin CLIENT_NON_HA); a writer to this table is not "
+              + "attaching the HA group attribute. Investigate and fix that write path.",
+            dataTableName);
+        }
       }
 
-      // We don't want to check for mutation blocking for the system ha group table
-      if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && haGroupName.isPresent()) {
+      // Cluster-role mutation-block / staleness gate. All HA semantics are gated on the master
+      // switch (syncReplicationEnabled): with the feature off this never runs — including the
+      // rollout window where clients already send _HAGroupName but the HA group does not exist yet.
+      // The system ha group table is exempt so its state writes proceed during a block window.
+      if (
+        syncReplicationEnabled && origin == BatchOrigin.CLIENT_HA
+          && !dataTableName.equals(SYSTEM_HA_GROUP_NAME)
+      ) {
         String name = haGroupName.get();
         // TODO: Below approach might be slow need to figure out faster way,
         // slower part is getting haGroupStoreClient We can also cache
         // roleRecord (I tried it and still it's slow due to haGroupStoreClient
         // initialization) and caching will give us old result in case one cluster
         // is unreachable instead of UNKNOWN.
-
+        // Check if mutation's haGroup is stale
         boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(name);
         if (StringUtils.isNotBlank(name) && isHAGroupOnClientStale) {
           throw new StaleClusterRoleRecordException(
             String.format("HAGroupStoreRecord is stale for haGroup %s on " + "client", name));
         }
 
-        // Check if mutation's haGroup is stale
         if (StringUtils.isNotBlank(name) && haGroupStoreManager.isMutationBlocked(name)) {
           throw new MutationBlockedIOException(
             "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
@@ -901,13 +957,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
       }
 
-      // Resolve the replication writer for this batch (present only where this cluster is active
-      // for the HA group). This also enforces the split-brain guard for non-PARALLEL live writes
-      // to a non-active cluster.
-      Optional<ReplicationLogGroup> logGroup = haGroupName.isPresent()
-        ? getReplicationLogGroup(c.getEnvironment(), haGroupStoreManager, haGroupName.get())
-        : Optional.empty();
-      preBatchMutateWithExceptions(c, miniBatchOp, logGroup);
+      // Resolve the replication writer for this batch (empty if none should be used). This also
+      // enforces the split-brain guard for non-PARALLEL live writes to a non-active cluster.
+      Optional<ReplicationLogGroup> logGroup =
+        getReplicationLogGroup(c.getEnvironment(), haGroupStoreManager, origin, haGroupName);
+      preBatchMutateWithExceptions(c, miniBatchOp, logGroup, origin);
       return;
     } catch (Throwable t) {
       rethrowIndexingException(t);
@@ -917,17 +971,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Resolve the replication writer for the named HA group. Returns the writer when this cluster is
-   * active for the group, empty when replication is disabled or a non-active PARALLEL cluster
-   * legitimately receives a double-write, and throws for a non-active non-PARALLEL (split-brain)
-   * live write.
+   * Resolve the replication writer for this batch, or empty when none should be used. Returns empty
+   * unless this is a CLIENT_HA write on a replication-eligible cluster ({@code replicateTable} =
+   * feature on AND table eligible) — which covers the feature-off rollout window and non-eligible
+   * tables. For such a write it then answers the role/policy question: the writer when this cluster
+   * is active for the group, empty for a non-active PARALLEL cluster (legitimate double-write, skip
+   * re-ship), and throws for a non-active non-PARALLEL (split-brain) live write.
    * @return the HA group writer, or empty if none should be used
    */
   private Optional<ReplicationLogGroup> getReplicationLogGroup(RegionCoprocessorEnvironment env,
-    HAGroupStoreManager haGroupStoreManager, String haGroup) throws IOException {
-    if (!shouldReplicate) {
+    HAGroupStoreManager haGroupStoreManager, BatchOrigin origin, Optional<String> haGroupName)
+    throws IOException {
+    if (!replicateTable || origin != BatchOrigin.CLIENT_HA) {
       return Optional.empty();
     }
+    // origin == CLIENT_HA guarantees the HA group name is present.
+    String haGroup = haGroupName.get();
     Optional<ReplicationLogGroup> logGroup = ReplicationLogGroup.get(env.getConfiguration(),
       env.getServerName(), haGroup, haGroupStoreManager, abortable);
     if (logGroup.isPresent()) {
@@ -945,8 +1004,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (isParallelPolicy(haGroupStoreManager, haGroup)) {
       return Optional.empty();
     }
-    throw new IOException(String
-      .format("HAGroup %s cannot accept a sync-path write: this cluster is not active", haGroup));
+    throw new IOException(
+      String.format("HAGroup %s cannot accept a HA write on %s: this cluster is not active",
+        haGroup, dataTableName));
   }
 
   /**
@@ -965,6 +1025,40 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * A replay batch is one the standby reader reconstructed; every mutation carries the
+   * {@link #REPLICATED_MUTATION} marker. The marker is batch-uniform by construction, so the first
+   * mutation is authoritative.
+   * @return true if the batch is a standby replay batch
+   */
+  boolean isReplayBatch(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    return miniBatchOp.size() > 0
+      && miniBatchOp.getOperation(0).getAttribute(REPLICATED_MUTATION) != null;
+  }
+
+  /**
+   * Classify where a batch originated, from the first mutation (all mutations in a batch are
+   * uniform by construction). The order is significant: the standby-replay marker and the
+   * native-replication cluster ids are authoritative and mutually exclusive with an originating
+   * client write, so they are checked before falling back to {@code _HAGroupName} presence.
+   * @param haGroupName the batch's HA group name as already extracted by
+   *                    {@link #getHAGroupNameFromBatch}
+   * @return the batch origin
+   */
+  BatchOrigin classifyBatch(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    Optional<String> haGroupName) {
+    if (isReplayBatch(miniBatchOp)) {
+      return BatchOrigin.PHX_REPLAY;
+    }
+    if (miniBatchOp.size() > 0) {
+      List<UUID> clusterIds = miniBatchOp.getOperation(0).getClusterIds();
+      if (clusterIds != null && !clusterIds.isEmpty()) {
+        return BatchOrigin.NATIVE_IN;
+      }
+    }
+    return haGroupName.isPresent() ? BatchOrigin.CLIENT_HA : BatchOrigin.CLIENT_NON_HA;
   }
 
   /**
@@ -1012,7 +1106,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (this.disabled) {
       return;
     }
-    if (!shouldReplicate) {
+    if (!replicateTable) {
       return;
     }
     Map<String, byte[]> walKeyAttrs = getAttributeValuesFromWALKey(logKey);
@@ -1063,7 +1157,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The stamped value is always empty, so re-stamping empty is equivalent to copying it through.
     Map<String, byte[]> replicationAttrs = MutationCellGrouper.buildReplicationAttributes(
       walKeyAttrs, walKeyAttrs.containsKey(PhoenixIndexCodec.INDEX_UUID));
-    logGroup.append(tableName, -1, replicable, replicationAttrs);
+    // Cold restore path: all cells in a WAL edit share one sequence id, so use the WAL key's
+    // sequence id as the per-record commit id.
+    logGroup.append(tableName, logKey.getSequenceId(), replicable, replicationAttrs);
     logGroup.sync();
   }
 
@@ -1144,7 +1240,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           miniBatchOp.setOperationStatus(i, new OperationStatus(SUCCESS, result));
           // since this mutation is ignored by setting it's status to success in the coproc
           // it shouldn't be synchronously replicated
-          if (this.shouldReplicate) {
+          if (this.replicateTable) {
             m.setAttribute(IGNORE_REPLICATION_ATTRIB, IGNORE_REPLICATION_ATTRIB_VAL);
           }
         }
@@ -1729,8 +1825,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * True when this batch is replicated on an active, replication-configured cluster: replication is
-   * on and an HA log group is present. Gates the active-side pre-image capture — the pre-image
+   * True when this batch must be replicated from this cluster: a resolved HA log group is present,
+   * which (per its sole resolution site) already means a CLIENT_HA write on a replication-eligible
+   * cluster that is active for the group. Gates the active-side pre-image capture — the pre-image
    * exists only so the standby can regenerate its index, so capturing it on a non-replicated batch
    * would be wasted work (and an unnecessary region scan on the local path) — and the WAL-key
    * replication stamp. It intentionally does NOT gate on {@code ignoreSyncReplicationForTesting}:
@@ -1739,7 +1836,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * WAL stamp, and the replay path intact so crash-recovery re-ship is faithfully exercised.
    */
   private boolean isReplicatedBatch(BatchMutateContext context) {
-    return shouldReplicate && context.logGroup.isPresent();
+    // The log group is resolved (in preBatchMutate) only for a CLIENT_HA write on a
+    // replication-eligible cluster that is active for the group, and that resolution site is its
+    // sole assignment — so its presence alone is the full predicate for "ship this batch". The
+    // "present implies CLIENT_HA" half of that is asserted at context setup in
+    // preBatchMutateWithExceptions.
+    return context.logGroup.isPresent();
   }
 
   /**
@@ -2187,7 +2289,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // The rest of this method is for handling global index updates
       context.indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
-      if (context.isReplication) {
+      if (context.isReplay()) {
         // Replicated batches carry per-row pre-images and per-cell timestamps from the active.
         // Group by (row, ts) so each active-side batch's mutations are processed against their own
         // pre-image — recovers the active-batch boundary the reader's coalescing can erase.
@@ -2381,7 +2483,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * read it from the mutation.
    */
   private static long indexMutationTimestamp(BatchMutateContext context, Mutation m) {
-    return context.isReplication ? IndexUtil.getMaxTimestamp(m) : context.batchTimestamp;
+    return context.isReplay() ? IndexUtil.getMaxTimestamp(m) : context.batchTimestamp;
   }
 
   private void preparePostIndexMutations(BatchMutateContext context,
@@ -2621,23 +2723,27 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, Optional<ReplicationLogGroup> logGroup)
-    throws Throwable {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, Optional<ReplicationLogGroup> logGroup,
+    BatchOrigin origin) throws Throwable {
     PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
     BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
+    context.origin = origin;
     context.logGroup = logGroup;
+    // A resolved log group is produced (in preBatchMutate) only for a CLIENT_HA write on a
+    // replication-eligible cluster active for the group, so its presence must imply CLIENT_HA. This
+    // is the invariant isReplicatedBatch() relies on to key "ship this batch" off log-group
+    // presence
+    // alone; assert it here so a future resolution change can't silently break the ship predicate.
+    Preconditions.checkState(!logGroup.isPresent() || origin == BatchOrigin.CLIENT_HA,
+      "log group present but batch origin is %s, not CLIENT_HA", origin);
     setBatchMutateContext(c, context);
     identifyIndexMaintainerTypes(indexMetaData, context);
     identifyMutationTypes(miniBatchOp, context);
     context.populateOriginalMutations(miniBatchOp);
-    // The standby reader stamps every reconstructed mutation with REPLICATED_MUTATION; checking
-    // the first one is sufficient since the marker is batch-uniform by construction.
-    context.isReplication = !context.getOriginalMutations().isEmpty()
-      && context.getOriginalMutations().get(0).getAttribute(REPLICATED_MUTATION) != null;
     // Replicated batches must not carry active-side resolution flags. These are resolved on the
     // active cluster before replication, so cells reach the standby already in their final form.
     Preconditions.checkState(
-      !context.isReplication
+      !context.isReplay()
         || (!context.hasAtomic && !context.returnResult && !context.hasConditionalTTL),
       "replicated batch must not carry active-side resolution flags");
 
@@ -2662,7 +2768,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // per-row PRE_IMAGE the active shipped, never reading prior state from the data-table region.
     // Routing it here keeps every active-only step (row-state scans, timestamp assignment, atomic
     // resolution, replication capture) out of a batch that must not run any of them.
-    if (context.isReplication) {
+    if (context.isReplay()) {
       preBatchMutateReplication(c, miniBatchOp, context, indexMetaData);
       return;
     }
@@ -2893,21 +2999,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the HA group name it
-   * keys on ({@link #getHAGroupFromWALKey}) plus the replication attribute envelope
-   * (schema/table/tenant, and an empty INDEX_UUID for indexed tables) it reads back in
-   * {@link #replicateEditOnWALRestore}. Gated on {@link #isReplicatedBatch} — the same predicate
-   * that gates pre-image capture — so the WAL carries this stamp exactly when it carries the
-   * pre-images the re-ship needs. On a standby replay the log group is absent, so the standby's WAL
-   * never carries replication metadata it could never re-ship.
+   * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the replication
+   * attribute envelope (schema/table/tenant, the HA group name it keys on via
+   * {@link #getHAGroupFromWALKey}, and an empty INDEX_UUID for indexed tables) it reads back in
+   * {@link #replicateEditOnWALRestore}. The HA group name rides the envelope like the other origin
+   * keys (it is in {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}), so it needs no separate
+   * stamp. Gated on {@link #isReplicatedBatch} — the same predicate that gates pre-image capture —
+   * so the WAL carries this stamp exactly when it carries the pre-images the re-ship needs. On a
+   * standby replay the log group is absent, so the standby's WAL never carries replication metadata
+   * it could never re-ship.
    */
   private void appendReplicationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
     if (context == null || !isReplicatedBatch(context)) {
       return;
     }
-    IndexRegionObserver.appendToWALKey(key, BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
-      Bytes.toBytes(context.logGroup.get().getHAGroupName()));
     for (Map.Entry<String, byte[]> e : buildReplicationAttributes(context).entrySet()) {
       IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
     }
@@ -3574,8 +3680,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void replicateMutations(ReplicationLogGroup logGroup,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
-    // Replicated batches on the standby never re-replicate.
-    if (context.isReplication) {
+    // Replicated batches on the standby never re-replicate. Unreachable in practice — the only
+    // caller gates on isReplicatedBatch (origin == CLIENT_HA), which excludes PHX_REPLAY — but kept
+    // as a defensive invariant.
+    if (context.isReplay()) {
       return;
     }
     if (context.getOriginalMutations().isEmpty()) {
@@ -3615,9 +3723,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (flattened.isEmpty()) {
       return;
     }
+    // All cells in a miniBatch share one WAL sequence id; capture it from the first contributing
+    // data cell (data cells precede any appended pre-image cell) as the per-record commit id.
+    long commitId = flattened.get(0).getSequenceId();
     Map<String, byte[]> replicationAttributes = buildReplicationAttributes(context);
     try {
-      logGroup.append(dataTableName, -1, flattened, replicationAttributes);
+      logGroup.append(dataTableName, commitId, flattened, replicationAttributes);
       logGroup.sync();
     } finally {
       metricSource.updateReplicationSyncTime(dataTableName,

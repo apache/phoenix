@@ -51,9 +51,6 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   String FS_SYNC_TIME_DESC =
     "Histogram of time taken for the underlying filesystem sync (fsync) in milliseconds";
 
-  String BATCH_SIZE = "phoenixWALBatchSize";
-  String BATCH_SIZE_DESC = "Histogram of number of events drained per Disruptor batch";
-
   String PENDING_SYNC_COUNT = "phoenixWALPendingSyncCount";
   String PENDING_SYNC_COUNT_DESC = "Histogram of pending sync futures coalesced into one fsync";
 
@@ -101,12 +98,6 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
    * @param timeNs Time taken in nanoseconds
    */
   void updateFsSyncTime(long timeNs);
-
-  /**
-   * Update the number of events drained in a single Disruptor batch.
-   * @param size Number of events in the batch
-   */
-  void updateBatchSize(long size);
 
   /**
    * Update the number of pending sync futures coalesced into one fsync.

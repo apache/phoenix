@@ -56,6 +56,8 @@ import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceFactory;
+import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceImpl;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -303,6 +305,85 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
       replayAndVerifyAcrossClusters(Arrays.asList(createTableDdl, createIndexDdl), tableName,
         indexName);
     }
+  }
+
+  /**
+   * Negative counter case for PHOENIX-8011: standby replay batches (origin {@code PHX_REPLAY})
+   * carry no {@code _HAGroupName} and previously inflated {@code bypassedMutationBlockCount}, which
+   * is meant to flag only live client writes that forgot the attribute. This drives an HA write on
+   * cluster 1, then replays its log onto cluster 2 and asserts the counter does not move across the
+   * replay -- snapshotting tightly around the replay loop only, since the cluster-2 schema DDL runs
+   * on a non-HA connection ({@code CLIENT_NON_HA}) and would itself tick the counter. Cross-cluster
+   * equality proves the replay actually pushed batches through the standby IRO, so the assertion is
+   * not vacuous. Complements {@code BypassedMutationBlockMetricsIT}, which covers the positive
+   * ({@code CLIENT_NON_HA} increments) case.
+   */
+  @Test
+  public void testReplayBatchDoesNotIncrementBypassCounter() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    final String indexName = "I_" + generateUniqueName();
+    final String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val1 varchar, val2 varchar)",
+      tableName);
+    final String createIndexDdl =
+      String.format("create index if not exists %s on %s (val1)", indexName, tableName);
+
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      conn.createStatement().execute(createIndexDdl);
+      conn.commit();
+      PreparedStatement stmt =
+        conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?, ?)");
+      for (int i = 0; i < 10; ++i) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "val1_" + i);
+        stmt.setString(3, "val2_" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+
+    // Quiesce the group so every log file has a durable trailer before the reader recovers its
+    // lease (see replayAndVerifyAcrossClusters).
+    Path standByLogDir = logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();
+    logGroup.close();
+
+    // Create the same schema on cluster 2 before replay. This uses a non-HA connection, so its
+    // catalog writes are CLIENT_NON_HA and may tick the counter -- hence the snapshot is taken
+    // after this step, not before.
+    try (Connection conn2 = CLUSTERS.getCluster2Connection(haGroup)) {
+      conn2.createStatement().execute(createTableDdl);
+      conn2.createStatement().execute(createIndexDdl);
+      conn2.commit();
+    }
+
+    FileSystem fs = standByLogDir.getFileSystem(conf2);
+    List<Path> logFiles = findLogFiles(standByLogDir, fs);
+    assertFalse("Should have at least one log file", logFiles.isEmpty());
+
+    MetricsHaBypassSourceImpl source =
+      (MetricsHaBypassSourceImpl) MetricsHaBypassSourceFactory.getInstance();
+    long before = source.getBypassedMutationBlockCountForTesting();
+
+    ReplicationLogProcessor processor = ReplicationLogProcessor.get(conf2, haGroupName);
+    try {
+      for (Path logFile : logFiles) {
+        processor.processLogFile(fs, logFile);
+      }
+    } finally {
+      processor.close();
+    }
+
+    long after = source.getBypassedMutationBlockCountForTesting();
+    assertEquals(
+      "standby replay (PHX_REPLAY) batches must not increment bypassedMutationBlockCount", before,
+      after);
+
+    // Prove the replay actually drove batches through the standby IRO, so the counter assertion is
+    // meaningful and not passing on a no-op replay.
+    assertTablesEqualAcrossClusters(tableName);
+    assertTablesEqualAcrossClusters(indexName);
   }
 
   /**

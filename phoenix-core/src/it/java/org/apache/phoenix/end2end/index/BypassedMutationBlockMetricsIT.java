@@ -35,9 +35,12 @@ import org.junit.experimental.categories.Category;
 
 /**
  * Integration test for the server-side {@code bypassedMutationBlockCount} JMX counter. A "bypass"
- * is a mutation batch that reaches {@code IndexRegionObserver.preBatchMutate} without an associated
- * HA group attribute, causing the cluster-role-based mutation-block gate to be skipped. This IT
- * drives a write that does not carry {@code _HAGroupName} and asserts the counter increments.
+ * is a client-originated mutation batch (origin {@code CLIENT_NON_HA}) that reaches
+ * {@code IndexRegionObserver.preBatchMutate} on a replication-eligible table without an
+ * {@code _HAGroupName} attribute, causing the cluster-role-based mutation-block gate to be skipped;
+ * standby-replay and native-replicated-in batches are excluded. This IT relies on {@link HABaseIT}
+ * enabling the sync-replication master switch on both clusters, then drives a write that does not
+ * carry {@code _HAGroupName} and asserts the counter increments.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class BypassedMutationBlockMetricsIT extends HABaseIT {

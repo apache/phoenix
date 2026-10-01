@@ -44,7 +44,6 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   private final MutableTimeHistogram rotationTimeMs;
   private final MutableHistogram ringBufferTimeNs;
   private final MutableTimeHistogram fsSyncTimeMs;
-  private final MutableSizeHistogram batchSize;
   private final MutableSizeHistogram pendingSyncCount;
   private final MutableHistogram pendingSyncWaitTimeNs;
 
@@ -67,7 +66,6 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     rotationTimeMs = getMetricsRegistry().newTimeHistogram(ROTATION_TIME, ROTATION_TIME_DESC);
     ringBufferTimeNs = getMetricsRegistry().newHistogram(RING_BUFFER_TIME, RING_BUFFER_TIME_DESC);
     fsSyncTimeMs = getMetricsRegistry().newTimeHistogram(FS_SYNC_TIME, FS_SYNC_TIME_DESC);
-    batchSize = getMetricsRegistry().newSizeHistogram(BATCH_SIZE, BATCH_SIZE_DESC);
     pendingSyncCount =
       getMetricsRegistry().newSizeHistogram(PENDING_SYNC_COUNT, PENDING_SYNC_COUNT_DESC);
     pendingSyncWaitTimeNs =
@@ -120,11 +118,6 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   }
 
   @Override
-  public void updateBatchSize(long size) {
-    batchSize.add(size);
-  }
-
-  @Override
   public void updatePendingSyncCount(long count) {
     pendingSyncCount.add(count);
   }
@@ -156,8 +149,8 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
       .ringBufferTimeMax(ringSnap.getMax()).ringBufferTimeP50(ringSnap.getMedian())
       .ringBufferTimeP99(ringSnap.get99thPercentile()).fsSyncTimeMax(fsSnap.getMax())
       .fsSyncTimeP50(fsSnap.getMedian()).fsSyncTimeP99(fsSnap.get99thPercentile())
-      .batchSizeMax(batchSize.getMax()).pendingSyncCountMax(pendingSyncCount.getMax())
-      .pendingSyncWaitTimeMax(pendSnap.getMax()).pendingSyncWaitTimeP50(pendSnap.getMedian())
+      .pendingSyncCountMax(pendingSyncCount.getMax()).pendingSyncWaitTimeMax(pendSnap.getMax())
+      .pendingSyncWaitTimeP50(pendSnap.getMedian())
       .pendingSyncWaitTimeP99(pendSnap.get99thPercentile()).build();
   }
 

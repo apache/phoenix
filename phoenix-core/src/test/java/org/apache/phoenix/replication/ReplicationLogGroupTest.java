@@ -2844,12 +2844,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       long componentSumNs = ringBufferTimeNs + pendingSyncWaitTimeNs + fsSyncTimeNs;
       long truncationToleranceNs = TimeUnit.MILLISECONDS.toNanos(1);
       LOG.info(
-        "Metrics snapshot: maxBatchSize={} maxPendingSyncCount={}"
-          + " syncTime[p50={}ms p99={}ms max={}ms]" + " ringBuffer[p50={}ns p99={}ns max={}ns]"
-          + " fsSync[p50={}ms p99={}ms max={}ms]" + " pendingSyncWait[p50={}ns p99={}ns max={}ns]"
+        "Metrics snapshot: maxPendingSyncCount={}" + " syncTime[p50={}ms p99={}ms max={}ms]"
+          + " ringBuffer[p50={}ns p99={}ns max={}ns]" + " fsSync[p50={}ms p99={}ms max={}ms]"
+          + " pendingSyncWait[p50={}ns p99={}ns max={}ns]"
           + " maxComponentSumNs={} syncTimeWithinBound={}",
-        metricValues.getBatchSizeMax(), metricValues.getPendingSyncCountMax(),
-        metricValues.getSyncTimeP50(), metricValues.getSyncTimeP99(), metricValues.getSyncTimeMax(),
+        metricValues.getPendingSyncCountMax(), metricValues.getSyncTimeP50(),
+        metricValues.getSyncTimeP99(), metricValues.getSyncTimeMax(),
         metricValues.getRingBufferTimeP50(), metricValues.getRingBufferTimeP99(),
         metricValues.getRingBufferTimeMax(), metricValues.getFsSyncTimeP50(),
         metricValues.getFsSyncTimeP99(), metricValues.getFsSyncTimeMax(),
@@ -2919,8 +2919,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("pendingSyncWaitTime should be >= 0, got " + values.getPendingSyncWaitTimeMax(),
       values.getPendingSyncWaitTimeMax() >= 0);
     // Counts.
-    assertTrue("batchSize should be > 0, got " + values.getBatchSizeMax(),
-      values.getBatchSizeMax() > 0);
     assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCountMax(),
       values.getPendingSyncCountMax() > 0);
     // Millisecond-resolution timers: the injected fsync delay clears the truncation floor.

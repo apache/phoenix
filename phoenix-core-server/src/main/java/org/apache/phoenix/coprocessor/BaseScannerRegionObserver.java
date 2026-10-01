@@ -190,10 +190,19 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     }
     byte[] haGroupNameBytes =
       scan.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
-    // Check if scan's HAGroup is stale on client. If yes, throw an exception.
+    // Check if scan's HAGroup is stale on client. If yes, throw an exception. Gated on the
+    // sync-replication master switch (mirrors IndexRegionObserver's write-path gate) so the check
+    // never runs while the feature is off — including the rollout window where clients already send
+    // _HAGroupName but the HA group does not exist yet.
     if (haGroupNameBytes != null) {
       String haGroupName = Bytes.toString(haGroupNameBytes);
       final Configuration conf = c.getEnvironment().getConfiguration();
+      if (
+        !conf.getBoolean(QueryServices.SYNCHRONOUS_REPLICATION_ENABLED,
+          QueryServicesOptions.DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED)
+      ) {
+        return;
+      }
       final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
       if (haGroupStoreManager == null) {
         throw new IOException(

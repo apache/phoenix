@@ -19,6 +19,7 @@ package org.apache.phoenix.hbase.index;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -27,13 +28,18 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.junit.Test;
 
 /**
@@ -70,6 +76,114 @@ public class IndexRegionObserverReplayTest {
   private static <M extends Mutation> M withPreImage(M m, Put preImage) throws IOException {
     m.setAttribute(IndexRegionObserver.PRE_IMAGE, IndexRegionObserver.encodePreImage(preImage));
     return m;
+  }
+
+  /** Wraps the given mutations in a MiniBatchOperationInProgress spanning the whole array. */
+  private static MiniBatchOperationInProgress<Mutation> batchOf(Mutation... mutations) {
+    return new MiniBatchOperationInProgress<>(mutations, new OperationStatus[mutations.length],
+      new WALEdit[mutations.length], 0, mutations.length, mutations.length);
+  }
+
+  // ---- isReplayBatch ----
+
+  @Test
+  public void testIsReplayBatchTrueWhenFirstMutationCarriesMarker() {
+    Put replayed = putRowTs(ROW, TS, Q1);
+    replayed.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, Bytes.toBytes(true));
+    assertTrue("a batch whose first mutation carries REPLICATED_MUTATION is a replay batch",
+      iro.isReplayBatch(batchOf(replayed)));
+  }
+
+  @Test
+  public void testIsReplayBatchFalseForLiveWrite() {
+    // A live client write with no REPLICATED_MUTATION marker (and, as here, no _HAGroupName)
+    // must not be treated as replay -- this is exactly the case the bypass counter must count.
+    assertFalse("a batch without the marker is not a replay batch",
+      iro.isReplayBatch(batchOf(putRowTs(ROW, TS, Q1))));
+  }
+
+  @Test
+  public void testIsReplayBatchFalseForEmptyBatch() {
+    assertFalse("an empty batch is not a replay batch", iro.isReplayBatch(batchOf()));
+  }
+
+  // ---- classifyBatch ----
+
+  @Test
+  public void testClassifyBatchClientHaWhenHAGroupPresent() {
+    assertEquals(IndexRegionObserver.BatchOrigin.CLIENT_HA,
+      iro.classifyBatch(batchOf(putRowTs(ROW, TS, Q1)), Optional.of("g")));
+  }
+
+  @Test
+  public void testClassifyBatchClientNonHaWhenNoHAGroup() {
+    assertEquals(IndexRegionObserver.BatchOrigin.CLIENT_NON_HA,
+      iro.classifyBatch(batchOf(putRowTs(ROW, TS, Q1)), Optional.empty()));
+  }
+
+  @Test
+  public void testClassifyBatchNativeInWhenClusterIdsPresent() {
+    // A write replicated in via HBase-native replication carries source cluster ids and no
+    // _HAGroupName -- it must not be mistaken for a client write that forgot the attribute.
+    Put p = putRowTs(ROW, TS, Q1);
+    p.setClusterIds(Collections.singletonList(UUID.randomUUID()));
+    assertEquals(IndexRegionObserver.BatchOrigin.NATIVE_IN,
+      iro.classifyBatch(batchOf(p), Optional.empty()));
+  }
+
+  @Test
+  public void testClassifyBatchReplayMarkerWinsOverClusterIds() {
+    // The replay marker is authoritative and checked first.
+    Put p = putRowTs(ROW, TS, Q1);
+    p.setClusterIds(Collections.singletonList(UUID.randomUUID()));
+    p.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, Bytes.toBytes(true));
+    assertEquals(IndexRegionObserver.BatchOrigin.PHX_REPLAY,
+      iro.classifyBatch(batchOf(p), Optional.empty()));
+  }
+
+  @Test
+  public void testClassifyBatchClusterIdsWinOverHAGroup() {
+    // Origin precedence: native-replicated-in (cluster ids) before _HAGroupName presence.
+    Put p = putRowTs(ROW, TS, Q1);
+    p.setClusterIds(Collections.singletonList(UUID.randomUUID()));
+    assertEquals(IndexRegionObserver.BatchOrigin.NATIVE_IN,
+      iro.classifyBatch(batchOf(p), Optional.of("g")));
+  }
+
+  @Test
+  public void testClassifyBatchEmptyIsClientNonHa() {
+    assertEquals(IndexRegionObserver.BatchOrigin.CLIENT_NON_HA,
+      iro.classifyBatch(batchOf(), Optional.empty()));
+  }
+
+  @Test
+  public void testClassifyBatchFirstMutationIsAuthoritativeForMultiMutationBatch() {
+    // A batch is uniform in origin by construction (the standby reader stamps every reconstructed
+    // mutation), so classifyBatch/isReplayBatch inspect only the first mutation. Prove that
+    // contract holds for a multi-mutation batch: the replay marker on the FIRST mutation classifies
+    // the whole batch as PHX_REPLAY even though the trailing mutations carry no marker.
+    Put replayed = putRowTs(ROW, TS, Q1);
+    replayed.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, Bytes.toBytes(true));
+    Put unmarked = putRowTs(R2, TS, Q2);
+    assertEquals("first mutation's marker classifies the whole batch",
+      IndexRegionObserver.BatchOrigin.PHX_REPLAY,
+      iro.classifyBatch(batchOf(replayed, unmarked), Optional.empty()));
+    assertTrue("isReplayBatch keys off the first mutation for a multi-mutation batch",
+      iro.isReplayBatch(batchOf(replayed, unmarked)));
+  }
+
+  @Test
+  public void testReplayBatchIsNotBypassCounterCandidate() {
+    // The bypassedMutationBlockCount gate fires only for CLIENT_NON_HA. A standby replay batch
+    // carries REPLICATED_MUTATION and classifies as PHX_REPLAY -- never CLIENT_NON_HA -- so the
+    // counter is not incremented for replayed mutations.
+    Put replayed = putRowTs(ROW, TS, Q1);
+    replayed.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, Bytes.toBytes(true));
+    IndexRegionObserver.BatchOrigin origin = iro.classifyBatch(batchOf(replayed), Optional.empty());
+    assertEquals("a replay batch classifies as PHX_REPLAY",
+      IndexRegionObserver.BatchOrigin.PHX_REPLAY, origin);
+    assertNotEquals("a replay batch must not be the counter-triggering origin",
+      IndexRegionObserver.BatchOrigin.CLIENT_NON_HA, origin);
   }
 
   // ---- decodePreImage ----
