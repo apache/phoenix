@@ -107,7 +107,13 @@ public class SequenceManager {
       Long scn = statement.getConnection().getSCN();
       long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
       ConnectionQueryServices services = statement.getConnection().getQueryServices();
-      services.incrementSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions);
+      // Resolve the HA group name (null for a non-HA connection) and pass it down so the INCREMENT
+      // mutations can be tagged for replication when the connection is part of an HA group.
+      String haGroupName = statement.getConnection().getHAGroup() != null
+        ? statement.getConnection().getHAGroup().getName()
+        : null;
+      services.incrementSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions,
+        haGroupName);
       setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
       int offset = nextSequences.size();
       for (int i = 0; i < currentSequences.size(); i++) {

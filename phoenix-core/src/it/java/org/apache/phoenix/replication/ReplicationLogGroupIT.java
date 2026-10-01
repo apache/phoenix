@@ -20,6 +20,7 @@ package org.apache.phoenix.replication;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.replication.CrossClusterReplicationTestUtil.findLogFiles;
 import static org.junit.Assert.assertEquals;
@@ -1231,6 +1232,151 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
       assertTrue(rs.next());
       assertEquals("Tenant view should be queryable on the standby after replay", rowCount,
         rs.getInt(1));
+    }
+  }
+
+  /**
+   * End-to-end replication of SYSTEM.SEQUENCE. A sequence created and advanced on the active over
+   * an HA connection replicates its CREATE and INCREMENT writes; the standby never runs CREATE
+   * SEQUENCE, so its SYSTEM.SEQUENCE row must materialize purely from replay. After replaying the
+   * log onto cluster 2, NEXT VALUE FOR on the standby must resume from the replicated value rather
+   * than restart from START -- i.e. no duplicate sequence values after failover.
+   * <p>
+   * This is the bare-minimum verbatim path (see {@code SchemaUtil.shouldReplicateTable}), which
+   * assumes ordered replay: because every sequence cell shares one constant timestamp, the
+   * last-applied CURRENT_VALUE Put wins, and sequential replay applies them in log order.
+   */
+  @Test
+  public void testSystemSequence() throws Exception {
+    final String sequenceName = "SEQ_" + generateUniqueName();
+    final int nextCount = 5;
+    final String createSeqDdl =
+      "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 1 CACHE 1";
+
+    long lastActiveValue = -1;
+    // Create + advance the sequence on the active over an HA connection so the CREATE Append and
+    // the INCREMENT mutations carry _HAGroupName and replicate. The sequence is NOT created on
+    // cluster 2; its SYSTEM.SEQUENCE row must materialize purely from replay.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createSeqDdl);
+      conn.commit();
+      for (int i = 0; i < nextCount; i++) {
+        try (ResultSet rs =
+          conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+          assertTrue(rs.next());
+          lastActiveValue = rs.getLong(1);
+        }
+      }
+    }
+
+    // The CREATE and INCREMENT writes to SYSTEM.SEQUENCE must have been shipped.
+    logGroup.close();
+    Map<String, List<Mutation>> logsByTable = groupLogsByTable();
+    dumpTableLogCount(logsByTable);
+    assertTrue("SYSTEM.SEQUENCE writes should replicate",
+      getCountForTable(logsByTable, SYSTEM_SEQUENCE_NAME) > 0);
+
+    // Replay onto cluster 2 without creating the sequence there; the row is built from replay.
+    replayAndVerifyAcrossClusters(Collections.emptyList());
+
+    // On the standby, NEXT VALUE FOR resumes from the replicated value: the next value is one past
+    // the last value handed out on the active, not START (which would collide with 1..lastActive).
+    try (Connection conn2 = CLUSTERS.getCluster2Connection(haGroup); ResultSet rs =
+      conn2.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+      assertTrue(rs.next());
+      assertEquals("Standby must resume from the replicated sequence value, not restart from START",
+        lastActiveValue + 1, rs.getLong(1));
+    }
+  }
+
+  /**
+   * Same as {@link #testSystemSequence} but with CACHE &gt; 1, the realistic production path. The
+   * server reserves a whole block per round trip, so the replicated CURRENT_VALUE jumps ahead of
+   * the last value handed out on the active. The standby therefore resumes strictly past
+   * lastActiveValue (a benign gap), never duplicating a value -- so the invariant is {@code
+   * standbyNext > lastActiveValue}, not the exact {@code lastActiveValue + 1} that only holds for
+   * CACHE 1.
+   */
+  @Test
+  public void testSystemSequenceWithCache() throws Exception {
+    final String sequenceName = "SEQ_" + generateUniqueName();
+    final int nextCount = 5;
+    final String createSeqDdl =
+      "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 1 CACHE 100";
+
+    long lastActiveValue = -1;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createSeqDdl);
+      conn.commit();
+      for (int i = 0; i < nextCount; i++) {
+        try (ResultSet rs =
+          conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+          assertTrue(rs.next());
+          lastActiveValue = rs.getLong(1);
+        }
+      }
+    }
+
+    logGroup.close();
+    Map<String, List<Mutation>> logsByTable = groupLogsByTable();
+    dumpTableLogCount(logsByTable);
+    assertTrue("SYSTEM.SEQUENCE writes should replicate",
+      getCountForTable(logsByTable, SYSTEM_SEQUENCE_NAME) > 0);
+
+    replayAndVerifyAcrossClusters(Collections.emptyList());
+
+    try (Connection conn2 = CLUSTERS.getCluster2Connection(haGroup); ResultSet rs =
+      conn2.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+      assertTrue(rs.next());
+      assertTrue("Standby must resume past the last active value (gap allowed, never a duplicate)",
+        rs.getLong(1) > lastActiveValue);
+    }
+  }
+
+  /**
+   * DROP SEQUENCE must NOT replicate: the drop's Delete is left untagged (see
+   * SequenceRegionObserver.preAppend), so only the CREATE and INCREMENT writes ship. After dropping
+   * on the active and replaying onto cluster 2, the standby's SYSTEM.SEQUENCE row must survive --
+   * NEXT VALUE FOR there still resumes from the replicated value. A regression that shipped the
+   * drop would wipe the standby row and this NEXT VALUE FOR would fail.
+   */
+  @Test
+  public void testSystemSequenceDropNotReplicated() throws Exception {
+    final String sequenceName = "SEQ_" + generateUniqueName();
+    final int nextCount = 5;
+    final String createSeqDdl =
+      "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 1 CACHE 1";
+
+    long lastActiveValue = -1;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createSeqDdl);
+      conn.commit();
+      for (int i = 0; i < nextCount; i++) {
+        try (ResultSet rs =
+          conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+          assertTrue(rs.next());
+          lastActiveValue = rs.getLong(1);
+        }
+      }
+      // Drop on the active. The Delete is untagged, so it must not ship.
+      conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
+      conn.commit();
+    }
+
+    logGroup.close();
+    replayAndVerifyAcrossClusters(Collections.emptyList());
+
+    // The standby row survived replay: NEXT VALUE FOR resumes from the replicated value rather than
+    // failing (which it would if the drop's Delete had been shipped and wiped the row).
+    try (Connection conn2 = CLUSTERS.getCluster2Connection(haGroup); ResultSet rs =
+      conn2.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName)) {
+      assertTrue(rs.next());
+      assertEquals(
+        "Standby row must survive a non-replicated DROP and resume from replicated value",
+        lastActiveValue + 1, rs.getLong(1));
     }
   }
 
