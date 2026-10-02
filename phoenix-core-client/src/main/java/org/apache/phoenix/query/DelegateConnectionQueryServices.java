@@ -265,6 +265,14 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
+  public long createSequence(String tenantId, String schemaName, String sequenceName,
+    long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle,
+    long timestamp, String haGroupName) throws SQLException {
+    return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy,
+      cacheSize, minValue, maxValue, cycle, timestamp, haGroupName);
+  }
+
+  @Override
   public long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp)
     throws SQLException {
     return getDelegate().dropSequence(tenantId, schemaName, sequenceName, timestamp);
@@ -280,6 +288,13 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
     long[] values, SQLException[] exceptions) throws SQLException {
     getDelegate().incrementSequences(sequenceAllocations, timestamp, values, exceptions);
+  }
+
+  @Override
+  public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+    long[] values, SQLException[] exceptions, String haGroupName) throws SQLException {
+    getDelegate().incrementSequences(sequenceAllocations, timestamp, values, exceptions,
+      haGroupName);
   }
 
   @Override

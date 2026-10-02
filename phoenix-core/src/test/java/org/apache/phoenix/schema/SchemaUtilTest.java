@@ -18,9 +18,12 @@
 package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -77,5 +80,20 @@ public class SchemaUtilTest {
   public void testGetTableNameFromFullName() {
     String tableDisplayName = SchemaUtil.getTableNameFromFullName("schemaName.tableName");
     assertEquals(tableDisplayName, "tableName");
+  }
+
+  @Test
+  public void testShouldReplicateTable() {
+    // Non-system tables always replicate.
+    assertTrue(SchemaUtil.shouldReplicateTable(Bytes.toBytes("schemaName.tableName")));
+    // SYSTEM.CATALOG, SYSTEM.CHILD_LINK and SYSTEM.SEQUENCE replicate.
+    assertTrue(SchemaUtil.shouldReplicateTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+    assertTrue(
+      SchemaUtil.shouldReplicateTable(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES));
+    assertTrue(SchemaUtil.shouldReplicateTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
+    // Other system tables do not replicate.
+    assertFalse(SchemaUtil.shouldReplicateTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+    assertFalse(
+      SchemaUtil.shouldReplicateTable(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES));
   }
 }

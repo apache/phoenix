@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.SequenceRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -292,6 +293,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
             PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
           put.add(newLimitReachedKV);
         }
+        copyHAGroupNameAttribute(increment, put);
         // update the KeyValues on the server
         Mutation[] mutations = new Mutation[] { put };
         region.batchMutate(mutations);
@@ -305,6 +307,19 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
       return null; // Impossible
     } finally {
       region.closeRegionOperation();
+    }
+  }
+
+  /**
+   * Copies the {@code _HAGroupName} attribute (when present) from the client sequence operation
+   * onto the Put applied server-side. The client only sets it for HA connections, so a non-HA write
+   * leaves the Put untagged and IndexRegionObserver does not ship it.
+   */
+  private static void copyHAGroupNameAttribute(Mutation source, Mutation target) {
+    byte[] haGroupName =
+      source.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+    if (haGroupName != null) {
+      target.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, haGroupName);
     }
   }
 
@@ -437,6 +452,11 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
           case CREATE_SEQUENCE:
             m = new Put(row, clientTimestamp);
             m.getFamilyCellMap().putAll(append.getFamilyCellMap());
+            // Propagate the HA group name from the client Append onto the Put so that
+            // IndexRegionObserver ships the sequence creation to the HA replication log. Only
+            // CREATE is replicated; RETURN_SEQUENCE and DROP_SEQUENCE are intentionally left
+            // untagged so they are not shipped.
+            copyHAGroupNameAttribute(append, m);
             break;
         }
         if (!hadClientTimestamp) {

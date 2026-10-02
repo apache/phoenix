@@ -1523,7 +1523,8 @@ public class SchemaUtil {
    * because this data is very specific to the cluster except for SYSTEM.CATALOG and
    * SYSTEM.CHILD_LINK where we only replicate rows with tenant information. Non tenant (Global)
    * rows are assumed to be executed by an admin or an admin process in each cluster separately and
-   * thus not replicated.
+   * thus not replicated. SYSTEM.SEQUENCE replicates all rows (not just tenant rows) so that
+   * sequence values consumed on the active are known on the standby after failover.
    * @param tableName full name of the table
    * @return true if the table data should be replicated, else false
    */
@@ -1531,7 +1532,7 @@ public class SchemaUtil {
     if (!isSystemTable(tableName)) {
       return true;
     }
-    if (isMetaTable(tableName) || isChildLinkTable(tableName)) {
+    if (isMetaTable(tableName) || isChildLinkTable(tableName) || isSequenceTable(tableName)) {
       return true;
     }
     return false;

@@ -2193,9 +2193,12 @@ public class MetaDataClient {
   private MutationState createSequence(String tenantId, String schemaName, String sequenceName,
     boolean ifNotExists, long startWith, long incrementBy, long cacheSize, boolean cycle,
     long minValue, long maxValue, long timestamp) throws SQLException {
+    // Resolve the HA group name (null for a non-HA connection) and pass it down so the CREATE
+    // SEQUENCE mutation can be tagged for replication when the connection is part of an HA group.
+    String haGroupName = connection.getHAGroup() != null ? connection.getHAGroup().getName() : null;
     try {
       connection.getQueryServices().createSequence(tenantId, schemaName, sequenceName, startWith,
-        incrementBy, cacheSize, minValue, maxValue, cycle, timestamp);
+        incrementBy, cacheSize, minValue, maxValue, cycle, timestamp, haGroupName);
     } catch (SequenceAlreadyExistsException e) {
       if (ifNotExists) {
         return new MutationState(0, 0, connection);

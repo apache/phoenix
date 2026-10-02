@@ -227,6 +227,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
@@ -6026,6 +6027,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   public long createSequence(String tenantId, String schemaName, String sequenceName,
     long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle,
     long timestamp) throws SQLException {
+    return createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize,
+      minValue, maxValue, cycle, timestamp, null);
+  }
+
+  @Override
+  public long createSequence(String tenantId, String schemaName, String sequenceName,
+    long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle,
+    long timestamp, String haGroupName) throws SQLException {
     SequenceKey sequenceKey =
       new SequenceKey(tenantId, schemaName, sequenceName, nSequenceSaltBuckets);
     Sequence newSequences = new Sequence(sequenceKey);
@@ -6038,6 +6047,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // Now that we have the lock we need, create the sequence
       Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp,
         minValue, maxValue, cycle);
+      annotateSequenceMutationWithHAGroup(append, haGroupName);
       Table htable = this.getTable(SchemaUtil
         .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps())
         .getName());
@@ -6114,7 +6124,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   @Override
   public void validateSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
     long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
-    incrementSequenceValues(sequenceAllocations, timestamp, values, exceptions, action);
+    // VALIDATE_SEQUENCE only reads (never persists a value), so it has nothing to replicate.
+    incrementSequenceValues(sequenceAllocations, timestamp, values, exceptions, action, null);
   }
 
   /**
@@ -6127,12 +6138,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   @Override
   public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
     long[] values, SQLException[] exceptions) throws SQLException {
+    incrementSequences(sequenceAllocations, timestamp, values, exceptions, null);
+  }
+
+  @Override
+  public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+    long[] values, SQLException[] exceptions, String haGroupName) throws SQLException {
     incrementSequenceValues(sequenceAllocations, timestamp, values, exceptions,
-      Sequence.ValueOp.INCREMENT_SEQUENCE);
+      Sequence.ValueOp.INCREMENT_SEQUENCE, haGroupName);
+  }
+
+  /**
+   * Tag a sequence CREATE/INCREMENT mutation with the HA group name so that, server-side,
+   * {@code SequenceRegionObserver} can copy it onto the Put it applies and {@code
+   * IndexRegionObserver} ships the write to the HA replication log. A null name (non-HA connection)
+   * leaves the mutation untagged, so it is not replicated.
+   */
+  private void annotateSequenceMutationWithHAGroup(Mutation mutation, String haGroupName) {
+    if (haGroupName != null) {
+      mutation.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
+        Bytes.toBytes(haGroupName));
+    }
   }
 
   private void incrementSequenceValues(List<SequenceAllocation> sequenceAllocations, long timestamp,
-    long[] values, SQLException[] exceptions, Sequence.ValueOp op) throws SQLException {
+    long[] values, SQLException[] exceptions, Sequence.ValueOp op, String haGroupName)
+    throws SQLException {
     List<Sequence> sequences = Lists.newArrayListWithExpectedSize(sequenceAllocations.size());
     for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
       SequenceKey key = sequenceAllocation.getSequenceKey();
@@ -6161,6 +6192,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           toIncrementList.add(sequence);
           Increment inc =
             sequence.newIncrement(timestamp, op, sequenceAllocations.get(i).getNumAllocations());
+          annotateSequenceMutationWithHAGroup(inc, haGroupName);
           incrementBatch.add(inc);
         } catch (SQLException e) {
           exceptions[i] = e;

@@ -212,6 +212,20 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle, long timestamp)
     throws SQLException;
 
+  /**
+   * Overload of
+   * {@link #createSequence(String, String, String, long, long, long, long, long, boolean, long)}
+   * that carries the HA group name so the CREATE mutation can be replicated when the connection is
+   * part of an HA group. The default ignores the name and preserves the non-replicating behavior;
+   * implementations that support HA replication override it.
+   */
+  default long createSequence(String tenantId, String schemaName, String sequenceName,
+    long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle,
+    long timestamp, String haGroupName) throws SQLException {
+    return createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize,
+      minValue, maxValue, cycle, timestamp);
+  }
+
   long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp)
     throws SQLException;
 
@@ -220,6 +234,17 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   void incrementSequences(List<SequenceAllocation> sequenceAllocation, long timestamp,
     long[] values, SQLException[] exceptions) throws SQLException;
+
+  /**
+   * Overload of {@link #incrementSequences(List, long, long[], SQLException[])} that carries the HA
+   * group name so the INCREMENT mutations can be replicated when the connection is part of an HA
+   * group. The default ignores the name and preserves the non-replicating behavior; implementations
+   * that support HA replication override it.
+   */
+  default void incrementSequences(List<SequenceAllocation> sequenceAllocation, long timestamp,
+    long[] values, SQLException[] exceptions, String haGroupName) throws SQLException {
+    incrementSequences(sequenceAllocation, timestamp, values, exceptions);
+  }
 
   long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException;
 
