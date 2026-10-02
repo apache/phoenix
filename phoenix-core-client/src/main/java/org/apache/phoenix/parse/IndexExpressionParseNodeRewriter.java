@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.parse;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -86,8 +88,12 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
     int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (index.isMultiTenant() ? 1 : 0)
       + (index.getViewIndexId() == null ? 0 : 1);
     List<PColumn> pkColumns = index.getPKColumns();
+    String centroidColName = IndexUtil.getIndexColumnName(null, CENTROID_ID);
     for (int i = indexPosOffset; i < pkColumns.size(); ++i) {
       PColumn column = pkColumns.get(i);
+      if (index.isVectorIndex() && centroidColName.equals(column.getName().getString())) {
+        continue;
+      }
       String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
       ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
       String colName = "\"" + column.getName().getString() + "\"";
@@ -109,6 +115,25 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
         // Trim leading/trailing whitespace
         indexedParseNodeToFunctionalColumn.put(indexedParseNode,
           new String[] { colName, expressionStr.trim() });
+      }
+    }
+    if (index.isVectorIndex()) {
+      PColumn vectorCol = IndexUtil.findVectorColumn(index);
+      if (vectorCol != null && vectorCol.getExpressionStr() != null) {
+        String expressionStr = IndexUtil.getIndexColumnExpressionStr(vectorCol);
+        ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
+        String colName = "\"" + vectorCol.getName().getString() + "\"";
+        Expression dataExpression = expressionParseNode.accept(expressionCompiler);
+        PDataType expressionDataType = dataExpression.getDataType();
+        ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
+        PDataType indexColType =
+          IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
+        ParseNode columnParseNode =
+          new ColumnParseNode(alias != null ? TableName.create(null, alias) : null, colName, null);
+        if (indexColType != expressionDataType) {
+          columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
+        }
+        indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
       }
     }
   }

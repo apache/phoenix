@@ -174,7 +174,7 @@ public class IndexUtil {
   // row key was already done, so here we just need to convert from one built-in type to
   // another.
   public static PDataType getIndexColumnDataType(boolean isNullable, PDataType dataType) {
-    if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
+    if (dataType == null || !isNullable || !dataType.isFixedWidth() || dataType.isVectorType()) {
       return dataType;
     }
     // for fixed length numeric types and boolean
@@ -848,18 +848,21 @@ public class IndexUtil {
   }
 
   public static boolean isCoveredGlobalIndex(final PTable table) {
-    return table.getIndexType() == PTable.IndexType.GLOBAL;
+    return table.getIndexType() == PTable.IndexType.GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean isGlobalIndex(final PTable table) {
     return table.getIndexType() == PTable.IndexType.GLOBAL
-      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL;
+      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean shouldIndexBeUsedForUncoveredQuery(final TableRef tableRef) {
     PTable table = tableRef.getTable();
     return table.getType() == PTableType.INDEX && (table.getIndexType() == PTable.IndexType.LOCAL
-      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL || tableRef.isHinted());
+      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL || tableRef.isHinted());
   }
 
   public static long getMaxTimestamp(Mutation m) {
@@ -1094,5 +1097,48 @@ public class IndexUtil {
         cell.getValueArray()[cell.getValueOffset()] = QueryConstants.VERIFIED_BYTE;
       }
     }
+  }
+
+  /**
+   * Returns the primary indexed vector column for a vector index, distinguishing the indexed
+   * expression column from any covered vector columns.
+   * @param index index table
+   * @return indexed vector column, or null if not found
+   */
+  public static PColumn findVectorColumn(PTable index) {
+    if (index == null) {
+      return null;
+    }
+    List<PColumn> candidates = new ArrayList<>();
+    for (PColumnFamily family : index.getColumnFamilies()) {
+      candidates.addAll(family.getColumns());
+    }
+    return selectVectorColumn(candidates);
+  }
+
+  /**
+   * Selects the indexed vector column from candidates, prioritizing indexed expressions over
+   * covered columns and resolving ties by ordinal position.
+   */
+  static PColumn selectVectorColumn(Iterable<PColumn> candidates) {
+    PColumn vectorColumn = null;
+    for (PColumn col : candidates) {
+      if (col == null || col.getDataType() == null || !col.getDataType().isVectorType()) {
+        continue;
+      }
+      if (vectorColumn == null || isBetterVectorColumn(col, vectorColumn)) {
+        vectorColumn = col;
+      }
+    }
+    return vectorColumn;
+  }
+
+  private static boolean isBetterVectorColumn(PColumn candidate, PColumn current) {
+    boolean candidateIsIndexed = candidate.getExpressionStr() != null;
+    boolean currentIsIndexed = current.getExpressionStr() != null;
+    if (candidateIsIndexed != currentIsIndexed) {
+      return candidateIsIndexed;
+    }
+    return candidate.getPosition() < current.getPosition();
   }
 }

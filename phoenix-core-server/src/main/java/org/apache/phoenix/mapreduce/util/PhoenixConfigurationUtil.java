@@ -43,6 +43,7 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -133,6 +134,17 @@ public final class PhoenixConfigurationUtil {
   public static final String SHOULD_FIX_UNVERIFIED_TRANSFORM =
     "phoenix.mr.fix.unverified.transform";
 
+  public static final String IS_VECTOR_INDEX = "phoenix.index.is.vector.index";
+
+  public static final String VECTOR_CENTROID_GENERATION = "phoenix.vector.centroid.generation";
+
+  public static final String VECTOR_DISTANCE_METRIC = "phoenix.vector.distance.metric";
+
+  public static final String VECTOR_INDEX_IN_SELECTED = "phoenix.vector.index.in.selected";
+
+  public static final String VECTOR_NON_CENTROID_COL_COUNT =
+    "phoenix.vector.non.centroid.col.count";
+
   public static final boolean DEFAULT_SHOULD_FIX_UNVERIFIED_TRANSFORM = false;
 
   public static final String SCRUTINY_OUTPUT_FORMAT = "phoenix.mr.scrutiny.output.format";
@@ -196,6 +208,31 @@ public final class PhoenixConfigurationUtil {
 
   // non-index jobs benefit less from this
   public static final boolean DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = false;
+
+  public static final String KMEANS_TABLE_NAME = "phoenix.vector.kmeans.table";
+  public static final String KMEANS_VECTOR_COLUMN = "phoenix.vector.kmeans.vector.column";
+  public static final String KMEANS_DIMENSION = "phoenix.vector.kmeans.dimension";
+  public static final String KMEANS_K = "phoenix.vector.kmeans.k";
+  public static final String KMEANS_SAMPLE_SIZE = "phoenix.vector.kmeans.sample.size";
+  public static final int DEFAULT_KMEANS_SAMPLE_SIZE = 10000;
+  public static final String KMEANS_DISTANCE_METRIC = "phoenix.vector.kmeans.metric";
+  public static final String DEFAULT_KMEANS_DISTANCE_METRIC = "L2";
+  public static final String KMEANS_MAX_ITERATIONS = "phoenix.vector.kmeans.max.iterations";
+  public static final int DEFAULT_KMEANS_MAX_ITERATIONS = 100;
+  public static final String KMEANS_CONVERGENCE_THRESHOLD =
+    "phoenix.vector.kmeans.convergence.threshold";
+  public static final double DEFAULT_KMEANS_CONVERGENCE_THRESHOLD = 1e-4;
+  public static final String KMEANS_RANDOM_SEED = "phoenix.vector.kmeans.random.seed";
+  public static final String KMEANS_PARALLEL_INIT_THRESHOLD =
+    "phoenix.vector.kmeans.parallel.init.threshold";
+  public static final int DEFAULT_KMEANS_PARALLEL_INIT_THRESHOLD = 1024;
+  public static final String KMEANS_MAX_RETRIES = "phoenix.vector.kmeans.max.retries";
+  public static final int DEFAULT_KMEANS_MAX_RETRIES = 3;
+  public static final String KMEANS_HDFS_WORK_DIR = "phoenix.vector.kmeans.hdfs.work.dir";
+  /** Key for vector kmeans local execution. */
+  public static final String KMEANS_LOCAL = QueryServices.VECTOR_KMEANS_LOCAL_ATTRIB;
+  public static final boolean DEFAULT_KMEANS_LOCAL =
+    QueryServicesOptions.DEFAULT_VECTOR_KMEANS_LOCAL;
 
   /**
    * Determines type of Phoenix Map Reduce job. 1. QUERY allows running arbitrary queries without
@@ -736,6 +773,48 @@ public final class PhoenixConfigurationUtil {
     return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
   }
 
+  public static void setIsVectorIndex(Configuration configuration, boolean isVectorIndex) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setBoolean(IS_VECTOR_INDEX, isVectorIndex);
+  }
+
+  public static boolean getIsVectorIndex(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getBoolean(IS_VECTOR_INDEX, false);
+  }
+
+  public static void setVectorCentroidGeneration(Configuration configuration, long generation) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setLong(VECTOR_CENTROID_GENERATION, generation);
+  }
+
+  public static long getVectorCentroidGeneration(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getLong(VECTOR_CENTROID_GENERATION, 1L);
+  }
+
+  public static void setVectorDistanceMetric(Configuration configuration, String metric) {
+    Preconditions.checkNotNull(configuration);
+    if (metric != null) {
+      configuration.set(VECTOR_DISTANCE_METRIC, metric);
+    }
+  }
+
+  public static String getVectorDistanceMetric(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(VECTOR_DISTANCE_METRIC, "L2");
+  }
+
+  public static void setVectorIndexInSelected(Configuration configuration, int index) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(VECTOR_INDEX_IN_SELECTED, index);
+  }
+
+  public static int getVectorIndexInSelected(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(VECTOR_INDEX_IN_SELECTED, -1);
+  }
+
   public static void setIndexToolSourceTable(Configuration configuration,
     IndexScrutinyTool.SourceTable sourceTable) {
     Preconditions.checkNotNull(configuration);
@@ -894,5 +973,146 @@ public final class PhoenixConfigurationUtil {
     Preconditions.checkNotNull(configuration);
     return configuration.getBoolean(MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER,
       DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
+  }
+
+  public static void setKMeansTableName(Configuration configuration, String tableName) {
+    Preconditions.checkNotNull(configuration);
+    Preconditions.checkNotNull(tableName);
+    configuration.set(KMEANS_TABLE_NAME, tableName);
+  }
+
+  public static String getKMeansTableName(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(KMEANS_TABLE_NAME);
+  }
+
+  public static void setKMeansVectorColumn(Configuration configuration, String vectorColumn) {
+    Preconditions.checkNotNull(configuration);
+    Preconditions.checkNotNull(vectorColumn);
+    configuration.set(KMEANS_VECTOR_COLUMN, vectorColumn);
+  }
+
+  public static String getKMeansVectorColumn(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(KMEANS_VECTOR_COLUMN);
+  }
+
+  public static void setKMeansDimension(Configuration configuration, int dimension) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_DIMENSION, dimension);
+  }
+
+  public static int getKMeansDimension(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_DIMENSION, 0);
+  }
+
+  public static void setKMeansK(Configuration configuration, int k) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_K, k);
+  }
+
+  public static int getKMeansK(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_K, 0);
+  }
+
+  public static void setKMeansSampleSize(Configuration configuration, int sampleSize) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_SAMPLE_SIZE, sampleSize);
+  }
+
+  public static int getKMeansSampleSize(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_SAMPLE_SIZE, DEFAULT_KMEANS_SAMPLE_SIZE);
+  }
+
+  public static void setKMeansDistanceMetric(Configuration configuration, String metric) {
+    Preconditions.checkNotNull(configuration);
+    Preconditions.checkNotNull(metric);
+    configuration.set(KMEANS_DISTANCE_METRIC, metric);
+  }
+
+  public static String getKMeansDistanceMetric(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(KMEANS_DISTANCE_METRIC, DEFAULT_KMEANS_DISTANCE_METRIC);
+  }
+
+  public static void setKMeansMaxIterations(Configuration configuration, int maxIterations) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_MAX_ITERATIONS, maxIterations);
+  }
+
+  public static int getKMeansMaxIterations(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_MAX_ITERATIONS, DEFAULT_KMEANS_MAX_ITERATIONS);
+  }
+
+  public static void setKMeansConvergenceThreshold(Configuration configuration, double threshold) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setDouble(KMEANS_CONVERGENCE_THRESHOLD, threshold);
+  }
+
+  public static double getKMeansConvergenceThreshold(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getDouble(KMEANS_CONVERGENCE_THRESHOLD,
+      DEFAULT_KMEANS_CONVERGENCE_THRESHOLD);
+  }
+
+  public static void setKMeansRandomSeed(Configuration configuration, Long seed) {
+    Preconditions.checkNotNull(configuration);
+    if (seed != null) {
+      configuration.setLong(KMEANS_RANDOM_SEED, seed);
+    } else {
+      configuration.unset(KMEANS_RANDOM_SEED);
+    }
+  }
+
+  public static Long getKMeansRandomSeed(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    String val = configuration.get(KMEANS_RANDOM_SEED);
+    return val != null ? Long.parseLong(val) : null;
+  }
+
+  public static void setKMeansParallelInitThreshold(Configuration configuration, int threshold) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_PARALLEL_INIT_THRESHOLD, threshold);
+  }
+
+  public static int getKMeansParallelInitThreshold(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_PARALLEL_INIT_THRESHOLD,
+      DEFAULT_KMEANS_PARALLEL_INIT_THRESHOLD);
+  }
+
+  public static void setKMeansMaxRetries(Configuration configuration, int maxRetries) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(KMEANS_MAX_RETRIES, maxRetries);
+  }
+
+  public static int getKMeansMaxRetries(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(KMEANS_MAX_RETRIES, DEFAULT_KMEANS_MAX_RETRIES);
+  }
+
+  public static void setKMeansHdfsWorkDir(Configuration configuration, String workDir) {
+    Preconditions.checkNotNull(configuration);
+    Preconditions.checkNotNull(workDir);
+    configuration.set(KMEANS_HDFS_WORK_DIR, workDir);
+  }
+
+  public static String getKMeansHdfsWorkDir(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(KMEANS_HDFS_WORK_DIR);
+  }
+
+  public static void setKMeansLocal(Configuration configuration, boolean local) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setBoolean(KMEANS_LOCAL, local);
+  }
+
+  public static boolean isKMeansLocal(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getBoolean(KMEANS_LOCAL, DEFAULT_KMEANS_LOCAL);
   }
 }

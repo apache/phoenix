@@ -265,6 +265,19 @@ public class MetaDataUtil {
     return (version & 0xF) == 0;
   }
 
+  // Bit 1 of the low byte (distinct from the WAL codec bit at bit 0) is always set by servers
+  // whose coprocessor jar includes the vector index write-path guard. Older jars, built before
+  // this bit was introduced, never set it, so decoding it against a live GetVersionResponse
+  // reveals the responding server's actual running code, as opposed to the SYSTEM.CATALOG schema
+  // state, which reflects only whether metadata was migrated.
+  public static long encodeHasVectorIndexSupport(long version) {
+    return version | 0x2;
+  }
+
+  public static boolean decodeHasVectorIndexSupport(long version) {
+    return (version & 0x2) != 0;
+  }
+
   // Given the encoded integer representing the client hbase version in the encoded version value.
   // The second byte in int would be the major version, 3rd byte minor version, and 4th byte
   // patch version.
@@ -317,7 +330,9 @@ public class MetaDataUtil {
         // Encode whether or not non transactional, mutable secondary indexing was configured
         // properly.
         | walCodec;
-    return version;
+    // Any server running this method's code has the vector index write-path guard, regardless
+    // of config, so always set the capability bit.
+    return encodeHasVectorIndexSupport(version);
   }
 
   public static byte[] getTenantIdAndSchemaAndTableName(Mutation someRow) {

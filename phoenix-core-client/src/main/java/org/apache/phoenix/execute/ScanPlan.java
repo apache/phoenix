@@ -90,7 +90,7 @@ public class ScanPlan extends BaseQueryPlan {
   private List<KeyRange> splits;
   private List<List<Scan>> scans;
   private boolean allowPageFilter;
-  private boolean isSerial;
+  protected boolean isSerial;
   private boolean isDataToScanWithinThreshold;
   private Long serialRowsEstimate;
   private Long serialBytesEstimate;
@@ -273,6 +273,19 @@ public class ScanPlan extends BaseQueryPlan {
         && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context));
   }
 
+  /**
+   * Records iterator statistics, splits, and scans from the given iterators. Subclasses overriding
+   * {@link #newIterator(ParallelScanGrouper, Scan, Map)} should invoke this to populate plan
+   * estimates.
+   */
+  protected void recordIteratorStats(BaseResultIterators iterators) {
+    estimatedRows = iterators.getEstimatedRowCount();
+    estimatedSize = iterators.getEstimatedByteCount();
+    estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();
+    splits = iterators.getSplits();
+    scans = iterators.getScans();
+  }
+
   @Override
   protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan,
     Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
@@ -310,11 +323,7 @@ public class ScanPlan extends BaseQueryPlan {
       iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper,
         scan, initFirstScanOnly, caches, dataPlan);
     }
-    estimatedRows = iterators.getEstimatedRowCount();
-    estimatedSize = iterators.getEstimatedByteCount();
-    estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();
-    splits = iterators.getSplits();
-    scans = iterators.getScans();
+    recordIteratorStats(iterators);
     if (isOffsetOnServer) {
       scanner = new ConcatResultIterator(iterators);
       if (limit != null) {

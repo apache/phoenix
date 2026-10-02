@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 
 /**
  * Utilities for computing costs. Some of the methods here should eventually be replaced by a
@@ -86,5 +87,20 @@ public class CostUtil {
   public static int estimateParallelLevel(boolean runningOnServer, QueryServices services) {
     // TODO currently return constants for simplicity, should derive from cluster config.
     return runningOnServer ? 10 : 1;
+  }
+
+  /**
+   * Estimate the lookup cost for deferred (projection-time) or filter-time lookups into the data
+   * table.
+   * @param lookupRows the number of rows to look up
+   * @param dataTable  the base data table
+   * @return the cost of the point lookups (IO only)
+   */
+  public static Cost estimateVectorLookupCost(long lookupRows, PTable dataTable) {
+    if (dataTable == null || lookupRows <= 0) {
+      return Cost.ZERO;
+    }
+    double io = (double) lookupRows * SchemaUtil.estimateRowSize(dataTable);
+    return new Cost(0, 0, io);
   }
 }

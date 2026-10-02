@@ -40,6 +40,11 @@ public class CreateIndexStatement extends SingleTableStatement {
   private final Map<String, UDFParseNode> udfParseNodes;
   private final ParseNode where;
   private final IndexConsistency indexConsistency;
+  private final String vectorAlgorithm;
+  private final String vectorMetric;
+  private final Integer vectorLists;
+  private final Integer vectorSampleSize;
+  private final Integer vectorDimension;
 
   public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
     IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -54,6 +59,27 @@ public class CreateIndexStatement extends SingleTableStatement {
     ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
     boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
     IndexConsistency indexConsistency) {
+    this(indexTableName, dataTable, indexKeyConstraint, includeColumns, splits, props, ifNotExists,
+      indexType, async, bindCount, udfParseNodes, where, indexConsistency, null, null, null, null,
+      null);
+  }
+
+  public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
+    IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+    ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
+    boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
+    String vectorAlgorithm, String vectorMetric, Integer vectorLists, Integer vectorSampleSize) {
+    this(indexTableName, dataTable, indexKeyConstraint, includeColumns, splits, props, ifNotExists,
+      indexType, async, bindCount, udfParseNodes, where, getIndexConsistency(props),
+      vectorAlgorithm, vectorMetric, vectorLists, vectorSampleSize, null);
+  }
+
+  private CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
+    IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+    ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
+    boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
+    IndexConsistency indexConsistency, String vectorAlgorithm, String vectorMetric,
+    Integer vectorLists, Integer vectorSampleSize, Integer vectorDimension) {
     super(dataTable, bindCount);
     this.indexTableName =
       TableName.create(dataTable.getName().getSchemaName(), indexTableName.getName());
@@ -69,6 +95,14 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.udfParseNodes = udfParseNodes;
     this.where = where;
     this.indexConsistency = indexConsistency;
+    this.vectorAlgorithm =
+      vectorAlgorithm != null ? vectorAlgorithm : getVectorAlgorithm(this.props);
+    this.vectorMetric = vectorMetric != null ? vectorMetric : getVectorMetric(this.props);
+    this.vectorLists = vectorLists != null ? vectorLists : getVectorLists(this.props);
+    this.vectorSampleSize =
+      vectorSampleSize != null ? vectorSampleSize : getVectorSampleSize(this.props);
+    this.vectorDimension =
+      vectorDimension != null ? vectorDimension : getVectorDimension(this.props);
   }
 
   public CreateIndexStatement(CreateIndexStatement createStmt,
@@ -85,6 +119,42 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.udfParseNodes = createStmt.getUdfParseNodes();
     this.where = createStmt.where;
     this.indexConsistency = createStmt.getIndexConsistency();
+    this.vectorAlgorithm = createStmt.getVectorAlgorithm() != null
+      ? createStmt.getVectorAlgorithm()
+      : getVectorAlgorithm(finalProps);
+    this.vectorMetric = createStmt.getVectorMetric() != null
+      ? createStmt.getVectorMetric()
+      : getVectorMetric(finalProps);
+    this.vectorLists = createStmt.getVectorLists() != null
+      ? createStmt.getVectorLists()
+      : getVectorLists(finalProps);
+    this.vectorSampleSize = createStmt.getVectorSampleSize() != null
+      ? createStmt.getVectorSampleSize()
+      : getVectorSampleSize(finalProps);
+    this.vectorDimension = createStmt.getVectorDimension() != null
+      ? createStmt.getVectorDimension()
+      : getVectorDimension(finalProps);
+  }
+
+  public CreateIndexStatement(CreateIndexStatement createStmt, Integer vectorDimension) {
+    super(createStmt.getTable(), createStmt.getBindCount());
+    this.indexTableName = createStmt.getIndexTableName();
+    this.indexKeyConstraint = createStmt.getIndexConstraint();
+    this.includeColumns = createStmt.getIncludeColumns();
+    this.splitNodes = createStmt.getSplitNodes();
+    this.props = createStmt.getProps();
+    this.ifNotExists = createStmt.ifNotExists();
+    this.indexType = createStmt.getIndexType();
+    this.async = createStmt.isAsync();
+    this.udfParseNodes = createStmt.getUdfParseNodes();
+    this.where = createStmt.where;
+    this.indexConsistency = createStmt.getIndexConsistency();
+    this.vectorAlgorithm = createStmt.getVectorAlgorithm();
+    this.vectorMetric = createStmt.getVectorMetric();
+    this.vectorLists = createStmt.getVectorLists();
+    this.vectorSampleSize = createStmt.getVectorSampleSize();
+    this.vectorDimension =
+      vectorDimension != null ? vectorDimension : createStmt.getVectorDimension();
   }
 
   public static IndexConsistency
@@ -101,6 +171,103 @@ public class CreateIndexStatement extends SingleTableStatement {
       }
     }
     return indexConsistency;
+  }
+
+  public static String getVectorAlgorithm(ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (
+          prop != null && ("ALGORITHM".equalsIgnoreCase(prop.getFirst())
+            || "VECTOR_INDEX_ALGORITHM".equalsIgnoreCase(prop.getFirst()))
+        ) {
+          return prop.getSecond() == null ? null : prop.getSecond().toString();
+        }
+      }
+    }
+    return null;
+  }
+
+  public static String getVectorMetric(ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (
+          prop != null && ("METRIC".equalsIgnoreCase(prop.getFirst())
+            || "VECTOR_DISTANCE_METRIC".equalsIgnoreCase(prop.getFirst())
+            || "DISTANCE_METRIC".equalsIgnoreCase(prop.getFirst()))
+        ) {
+          return prop.getSecond() == null ? null : prop.getSecond().toString();
+        }
+      }
+    }
+    return null;
+  }
+
+  public static Integer getVectorLists(ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (
+          prop != null && ("LISTS".equalsIgnoreCase(prop.getFirst())
+            || "VECTOR_IVF_LISTS".equalsIgnoreCase(prop.getFirst())
+            || "IVF_LISTS".equalsIgnoreCase(prop.getFirst()))
+        ) {
+          Object val = prop.getSecond();
+          if (val instanceof Number) {
+            return ((Number) val).intValue();
+          } else if (val != null) {
+            try {
+              return Integer.parseInt(val.toString());
+            } catch (NumberFormatException ignored) {
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  public static Integer getVectorSampleSize(ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (
+          prop != null && ("SAMPLE_SIZE".equalsIgnoreCase(prop.getFirst())
+            || "VECTOR_IVF_SAMPLE_SIZE".equalsIgnoreCase(prop.getFirst())
+            || "IVF_SAMPLE_SIZE".equalsIgnoreCase(prop.getFirst()))
+        ) {
+          Object val = prop.getSecond();
+          if (val instanceof Number) {
+            return ((Number) val).intValue();
+          } else if (val != null) {
+            try {
+              return Integer.parseInt(val.toString());
+            } catch (NumberFormatException ignored) {
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  public static Integer getVectorDimension(ListMultimap<String, Pair<String, Object>> props) {
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (
+          prop != null && ("DIMENSION".equalsIgnoreCase(prop.getFirst())
+            || "VECTOR_DIMENSION".equalsIgnoreCase(prop.getFirst()))
+        ) {
+          Object val = prop.getSecond();
+          if (val instanceof Number) {
+            return ((Number) val).intValue();
+          } else if (val != null) {
+            try {
+              return Integer.parseInt(val.toString());
+            } catch (NumberFormatException ignored) {
+            }
+          }
+        }
+      }
+    }
+    return null;
   }
 
   public IndexKeyConstraint getIndexConstraint() {
@@ -145,5 +312,25 @@ public class CreateIndexStatement extends SingleTableStatement {
 
   public IndexConsistency getIndexConsistency() {
     return indexConsistency;
+  }
+
+  public String getVectorAlgorithm() {
+    return vectorAlgorithm;
+  }
+
+  public String getVectorMetric() {
+    return vectorMetric;
+  }
+
+  public Integer getVectorLists() {
+    return vectorLists;
+  }
+
+  public Integer getVectorSampleSize() {
+    return vectorSampleSize;
+  }
+
+  public Integer getVectorDimension() {
+    return vectorDimension;
   }
 }

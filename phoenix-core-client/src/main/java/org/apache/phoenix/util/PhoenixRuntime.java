@@ -601,7 +601,9 @@ public class PhoenixRuntime {
       throw new SQLException("columnName must not be null.");
     }
     PColumn pColumn = null;
-    if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
+    if (columnName.startsWith(QueryConstants.NAME_SEPARATOR)) {
+      pColumn = table.getColumnForColumnName(columnName);
+    } else if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
       String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
       if (tokens.length != 2) {
         throw new SQLException(String
@@ -1035,9 +1037,20 @@ public class PhoenixRuntime {
   }
 
   public static String getSqlTypeName(PDataType dataType, Integer maxLength, Integer scale) {
+    if (dataType != null && dataType.isVectorType()) {
+      return getVectorSqlTypeName(maxLength, dataType);
+    }
     return dataType.isArrayType()
       ? getArraySqlTypeName(maxLength, scale, dataType)
       : appendMaxLengthAndScale(maxLength, scale, dataType.getSqlTypeName());
+  }
+
+  public static String getVectorSqlTypeName(@Nullable Integer maxLength, PDataType vectorType) {
+    String typeName = vectorType.getSqlTypeName();
+    if (maxLength != null && typeName.endsWith(")")) {
+      return typeName.substring(0, typeName.length() - 1) + ", " + maxLength + ")";
+    }
+    return typeName;
   }
 
   public static String getArraySqlTypeName(@Nullable Integer maxLength, @Nullable Integer scale,

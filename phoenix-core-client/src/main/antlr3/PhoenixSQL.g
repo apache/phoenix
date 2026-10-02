@@ -169,6 +169,11 @@ tokens
     CONSISTENCY = 'consistency';
     EVENTUAL = 'eventual';
     STRONG = 'strong';
+    VECTOR = 'vector';
+    // Infix distance operator tokens emitted during disambiguation in the LT lexer rule.
+    DIST_L2;
+    DIST_COSINE;
+    DIST_INNER;
 }
 
 
@@ -224,6 +229,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -509,6 +515,7 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=create_vector_index_node
     |   s=create_cdc_node
     |   s=cursor_open_node
     |   s=cursor_close_node
@@ -663,6 +670,21 @@ create_index_node returns [CreateIndexStatement ret]
         }
     ;
 
+// Parse a create vector index statement.
+create_vector_index_node returns [CreateIndexStatement ret]
+    :   CREATE VECTOR INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+        (LPAREN ik=ik_constraint RPAREN)
+        (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        ( (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties) (async=ASYNC)?)
+        | (async=ASYNC (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties))?)
+        )?
+        {
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, null, p, ex!=null,
+                    IndexType.VECTOR_GLOBAL, async != null, getBindCount(), new HashMap<String,
+                    UDFParseNode>(udfParseNodes), null);
+        }
+    ;
+
 create_cdc_node returns [CreateCDCStatement ret]
     :   CREATE CDC (IF NOT ex=EXISTS)? o=cdc_name ON t=from_table_name
         (INCLUDE LPAREN v=cdc_change_scopes RPAREN)?
@@ -795,7 +817,7 @@ drop_cdc_node returns [DropCDCStatement ret]
 
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
-    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
+    : ALTER (VECTOR)? INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
       ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)? | (CONSISTENCY EQ c=(STRONG | EVENTUAL)))
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, s!=null ? PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())) : null, isRebuildAll!=null, async!=null, p, c!=null ? IndexConsistency.valueOf(SchemaUtil.normalizeIdentifier(c.getText())) : null); }
     ;
@@ -885,8 +907,30 @@ indexes returns [List<NamedNode> ret]
     :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
+vector_component_type returns [PDataType ret]
+    :   ct=identifier
+        {
+            $ret = PDataTypeFactory.getInstance().typeForVector(ct);
+            if ($ret == null) {
+                throw new ParseException("Unsupported vector component type: " + ct);
+            }
+        }
+    ;
+
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+        { $ret = factory.columnDef(
+            c,
+            vt,
+            nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
+            Integer.parseInt( dim.getText() ),
+            null,
+            pk != null, 
+            order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
+            df == null ? null : df.toString(),
+            eq == null ? null : Integer.parseInt( eq.getText() ),
+            rr != null); }
+    |   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
             dt,
@@ -908,7 +952,14 @@ dyn_column_defs returns [List<ColumnDef> ret]
 ;
 
 dyn_column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN
+        {$ret = factory.columnDef(c, vt, Boolean.TRUE,
+            Integer.parseInt( dim.getText() ),
+            null,
+            false, 
+            SortOrder.getDefault(),
+            false); }
+    |   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
@@ -918,7 +969,14 @@ dyn_column_def returns [ColumnDef ret]
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
-    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN
+        {$ret = factory.columnDef(c, vt, Boolean.TRUE,
+            Integer.parseInt( dim.getText() ),
+            null,
+            false, 
+            SortOrder.getDefault(),
+            false); }
+    |   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
@@ -1176,7 +1234,20 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }
+    :   i=distance_expression { $ret = i; }
+    ;
+
+distance_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=add_expression {lhs = i;}
+        (op=(DIST_L2 | DIST_COSINE | DIST_INNER) rhs=add_expression {
+            l = Arrays.asList(lhs, rhs);
+            lhs = op.getType() == DIST_L2 ? factory.l2Distance(l)
+                : op.getType() == DIST_COSINE ? factory.cosineDistance(l)
+                : factory.innerProductDistance(l);
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 add_expression returns [ParseNode ret]
@@ -1494,8 +1565,14 @@ EQ
     :   '='
     ;
 
+// Disambiguate infix distance operators (<=>, <->, <#>) from less-than comparisons via syntactic predicates.
 LT
     :   '<'
+        (   ('=' '>') => '=' '>'  { $type = DIST_COSINE; }
+        |   ('-' '>') => '-' '>'  { $type = DIST_L2; }
+        |   ('#' '>') => '#' '>'  { $type = DIST_INNER; }
+        |                         { $type = LT; }
+        )
     ;
 
 GT

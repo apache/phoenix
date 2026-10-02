@@ -47,6 +47,7 @@ import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -555,13 +556,15 @@ public class ProjectionCompiler {
         new String[] { BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX,
           BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
           BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION,
-          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION };
+          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION,
+          BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION };
       Map<String, Class> attributeToFunctionMap = new HashMap<String, Class>() {
         {
           put(scanAttributes[0], ArrayIndexFunction.class);
           put(scanAttributes[1], JsonValueFunction.class);
           put(scanAttributes[2], JsonQueryFunction.class);
           put(scanAttributes[3], BsonValueFunction.class);
+          put(scanAttributes[4], BsonVectorValueFunction.class);
         }
       };
       // This map is to keep track of the positions that get swapped with rearranging
@@ -933,6 +936,7 @@ public class ProjectionCompiler {
   }
 
   private static boolean isBsonFunction(FunctionParseNode node) {
-    return BsonValueFunction.NAME.equals(node.getName());
+    return BsonValueFunction.NAME.equals(node.getName())
+      || BsonVectorValueFunction.NAME.equals(node.getName());
   }
 }

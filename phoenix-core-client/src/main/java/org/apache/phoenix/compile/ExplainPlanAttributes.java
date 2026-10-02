@@ -49,12 +49,13 @@ import org.apache.phoenix.schema.PColumn;
   "serverDistinctFilter", "serverMergeColumns", "serverParsedProjections", "serverProject",
   "serverFilters", "ignoredHints", "serverFirstKeyOnlyProjection",
   "serverEmptyColumnOnlyProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
-  "serverOffset", "serverRowLimit", "clientFilterBy", "clientFilters", "clientAggregate",
-  "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo", "clientSortedBy",
-  "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName", "clientSteps",
-  "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter",
-  "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge", "regionLocations",
-  "regionLocationsTotalSize", "numRegionLocationLookups" })
+  "serverSortAlgo", "vectorSearch", "serverRescoreInfo", "vectorProbeCount", "vectorCentroidCount",
+  "vectorDistanceMetric", "serverOffset", "serverRowLimit", "clientFilterBy", "clientFilters",
+  "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
+  "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
+  "clientMergeColumns", "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan",
+  "subPlans", "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
+  "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Top-of-plan disclosures (populated only on the root plan)
@@ -111,6 +112,13 @@ public class ExplainPlanAttributes {
   private final String serverAggregate;
   private final Integer serverGroupByLimit;
   private final String serverSortedBy;
+  // Server-side sort algorithm label, and whether this plan is a vector top-K search.
+  private final String serverSortAlgo;
+  private final boolean isVectorSearch;
+  private final String serverRescoreInfo;
+  private final Integer vectorProbeCount;
+  private final Integer vectorCentroidCount;
+  private final String vectorDistanceMetric;
   private final Integer serverOffset;
   private final Long serverRowLimit;
 
@@ -126,6 +134,8 @@ public class ExplainPlanAttributes {
   private final Integer clientRowLimit;
   private final Integer clientSequenceCount;
   private final String clientCursorName;
+  // Data table columns joined back client-side for an uncovered vector index top-K lookup.
+  private final Set<PColumn> clientMergeColumns;
   // Ordered client-side pipeline (CLIENT* lines in emission order).
   private final List<String> clientSteps;
 
@@ -208,6 +218,12 @@ public class ExplainPlanAttributes {
     this.serverAggregate = b.serverAggregate;
     this.serverGroupByLimit = b.serverGroupByLimit;
     this.serverSortedBy = b.serverSortedBy;
+    this.serverSortAlgo = b.serverSortAlgo;
+    this.isVectorSearch = b.isVectorSearch;
+    this.serverRescoreInfo = b.serverRescoreInfo;
+    this.vectorProbeCount = b.vectorProbeCount;
+    this.vectorCentroidCount = b.vectorCentroidCount;
+    this.vectorDistanceMetric = b.vectorDistanceMetric;
     this.serverOffset = b.serverOffset;
     this.serverRowLimit = b.serverRowLimit;
     this.clientFilterBy = b.clientFilterBy;
@@ -223,6 +239,9 @@ public class ExplainPlanAttributes {
     this.clientRowLimit = b.clientRowLimit;
     this.clientSequenceCount = b.clientSequenceCount;
     this.clientCursorName = b.clientCursorName;
+    this.clientMergeColumns = (b.clientMergeColumns == null || b.clientMergeColumns.isEmpty())
+      ? null
+      : Collections.unmodifiableSet(new LinkedHashSet<>(b.clientMergeColumns));
     this.clientSteps = (b.clientSteps == null || b.clientSteps.isEmpty())
       ? null
       : Collections.unmodifiableList(new ArrayList<>(b.clientSteps));
@@ -441,6 +460,30 @@ public class ExplainPlanAttributes {
     return serverSortedBy;
   }
 
+  public String getServerSortAlgo() {
+    return serverSortAlgo;
+  }
+
+  public boolean isVectorSearch() {
+    return isVectorSearch;
+  }
+
+  public String getServerRescoreInfo() {
+    return serverRescoreInfo;
+  }
+
+  public Integer getVectorProbeCount() {
+    return vectorProbeCount;
+  }
+
+  public Integer getVectorCentroidCount() {
+    return vectorCentroidCount;
+  }
+
+  public String getVectorDistanceMetric() {
+    return vectorDistanceMetric;
+  }
+
   public Integer getServerOffset() {
     return serverOffset;
   }
@@ -491,6 +534,11 @@ public class ExplainPlanAttributes {
 
   public String getClientCursorName() {
     return clientCursorName;
+  }
+
+  @JsonSerialize(using = ServerMergeColumnsSerializer.class)
+  public Set<PColumn> getClientMergeColumns() {
+    return clientMergeColumns;
   }
 
   public List<String> getClientSteps() {
@@ -642,6 +690,12 @@ public class ExplainPlanAttributes {
     private String serverAggregate;
     private Integer serverGroupByLimit;
     private String serverSortedBy;
+    private String serverSortAlgo;
+    private boolean isVectorSearch;
+    private String serverRescoreInfo;
+    private Integer vectorProbeCount;
+    private Integer vectorCentroidCount;
+    private String vectorDistanceMetric;
     private Integer serverOffset;
     private Long serverRowLimit;
     private String clientFilterBy;
@@ -655,6 +709,7 @@ public class ExplainPlanAttributes {
     private Integer clientRowLimit;
     private Integer clientSequenceCount;
     private String clientCursorName;
+    private Set<PColumn> clientMergeColumns;
     private List<String> clientSteps;
     private ExplainPlanAttributes lhsJoinQueryExplainPlan;
     private ExplainPlanAttributes rhsJoinQueryExplainPlan;
@@ -729,6 +784,12 @@ public class ExplainPlanAttributes {
       this.serverAggregate = explainPlanAttributes.getServerAggregate();
       this.serverGroupByLimit = explainPlanAttributes.getServerGroupByLimit();
       this.serverSortedBy = explainPlanAttributes.getServerSortedBy();
+      this.serverSortAlgo = explainPlanAttributes.getServerSortAlgo();
+      this.isVectorSearch = explainPlanAttributes.isVectorSearch();
+      this.serverRescoreInfo = explainPlanAttributes.getServerRescoreInfo();
+      this.vectorProbeCount = explainPlanAttributes.getVectorProbeCount();
+      this.vectorCentroidCount = explainPlanAttributes.getVectorCentroidCount();
+      this.vectorDistanceMetric = explainPlanAttributes.getVectorDistanceMetric();
       this.serverOffset = explainPlanAttributes.getServerOffset();
       this.serverRowLimit = explainPlanAttributes.getServerRowLimit();
       this.clientFilterBy = explainPlanAttributes.getClientFilterBy();
@@ -743,6 +804,9 @@ public class ExplainPlanAttributes {
       this.clientRowLimit = explainPlanAttributes.getClientRowLimit();
       this.clientSequenceCount = explainPlanAttributes.getClientSequenceCount();
       this.clientCursorName = explainPlanAttributes.getClientCursorName();
+      Set<PColumn> srcClientMergeColumns = explainPlanAttributes.getClientMergeColumns();
+      this.clientMergeColumns =
+        srcClientMergeColumns == null ? null : new LinkedHashSet<>(srcClientMergeColumns);
       List<String> srcClientSteps = explainPlanAttributes.getClientSteps();
       this.clientSteps = srcClientSteps == null ? null : new ArrayList<>(srcClientSteps);
       this.lhsJoinQueryExplainPlan = explainPlanAttributes.getLhsJoinQueryExplainPlan();
@@ -1026,6 +1090,36 @@ public class ExplainPlanAttributes {
       return this;
     }
 
+    public ExplainPlanAttributesBuilder setServerSortAlgo(String serverSortAlgo) {
+      this.serverSortAlgo = serverSortAlgo;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setVectorSearch(boolean isVectorSearch) {
+      this.isVectorSearch = isVectorSearch;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerRescoreInfo(String serverRescoreInfo) {
+      this.serverRescoreInfo = serverRescoreInfo;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setVectorProbeCount(Integer vectorProbeCount) {
+      this.vectorProbeCount = vectorProbeCount;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setVectorCentroidCount(Integer vectorCentroidCount) {
+      this.vectorCentroidCount = vectorCentroidCount;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setVectorDistanceMetric(String vectorDistanceMetric) {
+      this.vectorDistanceMetric = vectorDistanceMetric;
+      return this;
+    }
+
     public ExplainPlanAttributesBuilder setServerOffset(Integer serverOffset) {
       this.serverOffset = serverOffset;
       return this;
@@ -1096,6 +1190,11 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setClientCursorName(String clientCursorName) {
       this.clientCursorName = clientCursorName;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setClientMergeColumns(Set<PColumn> columns) {
+      this.clientMergeColumns = columns == null ? null : new LinkedHashSet<>(columns);
       return this;
     }
 

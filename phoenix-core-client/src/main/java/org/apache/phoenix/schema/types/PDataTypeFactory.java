@@ -36,6 +36,8 @@ public class PDataTypeFactory {
   private final Map<Class, PDataType> javaClassToInstance;
   private final Map<Class, PDataType> javaClassToUnsignedInstance;
   private final SortedSet<PDataType> unsignedtypes;
+  private final Map<Integer, PDataType> sqlTypeToInstance;
+  private final Map<String, PDataType> sqlTypeNameToInstance;
 
   public static PDataTypeFactory getInstance() {
     if (INSTANCE == null) {
@@ -126,6 +128,8 @@ public class PDataTypeFactory {
     types.add(PJson.INSTANCE);
     types.add(PBson.INSTANCE);
     types.add(PVarbinaryEncoded.INSTANCE);
+    types.add(PVectorFloat.INSTANCE);
+    types.add(PVectorDouble.INSTANCE);
 
     classToInstance = new HashMap<>(types.size());
     for (PDataType t : types) {
@@ -144,6 +148,17 @@ public class PDataTypeFactory {
       javaClassToInstance.putIfAbsent(javaClass, t);
     }
     orderedTypes = types.toArray(new PDataType[types.size()]);
+
+    sqlTypeToInstance = new HashMap<>(types.size());
+    for (PDataType t : types) {
+      sqlTypeToInstance.put(t.getSqlType(), t);
+    }
+    sqlTypeNameToInstance = new HashMap<>(types.size());
+    for (PDataType t : types) {
+      sqlTypeNameToInstance.put(t.getSqlTypeName().toUpperCase(), t);
+    }
+    // Unqualified VECTOR type name defaults to VECTOR(FLOAT).
+    sqlTypeNameToInstance.putIfAbsent("VECTOR", PVectorFloat.INSTANCE);
   }
 
   public Set<PDataType> getTypes() {
@@ -164,5 +179,57 @@ public class PDataTypeFactory {
     } else {
       return javaClassToInstance.get(clazz);
     }
+  }
+
+  public PDataType typeForSqlType(int sqlType) {
+    return sqlTypeToInstance.get(sqlType);
+  }
+
+  public PDataType typeForSqlTypeName(String sqlTypeName) {
+    if (sqlTypeName == null) {
+      return null;
+    }
+    String normalized = sqlTypeName.trim().toUpperCase();
+    PDataType type = sqlTypeNameToInstance.get(normalized);
+    if (type != null) {
+      return type;
+    }
+    if (normalized.startsWith("VECTOR(") && normalized.endsWith(")")) {
+      String component = normalized.substring(7, normalized.length() - 1).trim();
+      if (component.contains(",")) {
+        component = component.substring(0, component.indexOf(',')).trim();
+      }
+      return typeForVector(component);
+    }
+    return null;
+  }
+
+  public PDataType typeForSqlTypeName(String sqlTypeName, String componentType) {
+    if (sqlTypeName != null && "VECTOR".equalsIgnoreCase(sqlTypeName.trim())) {
+      return typeForVector(componentType);
+    }
+    return typeForSqlTypeName(sqlTypeName);
+  }
+
+  public PDataType typeForVector(String componentType) {
+    if (componentType == null) {
+      return PVectorFloat.INSTANCE;
+    }
+    String normalized = componentType.trim().toUpperCase();
+    if ("FLOAT".equals(normalized)) {
+      return PVectorFloat.INSTANCE;
+    } else if ("DOUBLE".equals(normalized)) {
+      return PVectorDouble.INSTANCE;
+    }
+    return null;
+  }
+
+  public PDataType typeForVector(PDataType componentType) {
+    if (componentType == null || componentType.equals(PFloat.INSTANCE)) {
+      return PVectorFloat.INSTANCE;
+    } else if (componentType.equals(PDouble.INSTANCE)) {
+      return PVectorDouble.INSTANCE;
+    }
+    return null;
   }
 }

@@ -133,7 +133,12 @@ public class ColumnRef {
           table.getImmutableStorageScheme())
         : new KeyValueColumnExpression(column, displayName);
 
-    if (column.getExpressionStr() != null) {
+    // For vector indexes, expressionStr stores the indexed data expression rather than a column
+    // default value. Avoid compiling it as a default expression to prevent resolving data table
+    // column references against the index table.
+    boolean isVectorIndexExpression =
+      table.isVectorIndex() && column.getDataType() != null && column.getDataType().isVectorType();
+    if (!isVectorIndexExpression && column.getExpressionStr() != null) {
       String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
         + PhoenixRuntime.CONNECTIONLESS;
       PhoenixConnection conn = DriverManager.getConnection(url).unwrap(PhoenixConnection.class);

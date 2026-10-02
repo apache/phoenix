@@ -74,6 +74,13 @@ message IndexMaintainer {
   optional bool isCDCIndex = 31;
   optional int32 dataTableSaltBuckets = 32;
   optional string indexConsistency = 33;
+  optional string vectorAlgorithm = 34;
+  optional string distanceMetric = 35;
+  repeated ColumnReference coveredVectorColumns = 36;
+  repeated int32 coveredVectorColumnTypeOrdinal = 37;
+  optional int32 vectorDimension = 38;
+  optional int64 centroidGeneration = 39;
+  optional ColumnReference functionalVectorColRef = 40;
 }
 
 message TransformMaintainer {

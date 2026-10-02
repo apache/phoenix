@@ -1836,6 +1836,12 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("consistency");
     n.putNull("hint");
     n.putNull("serverSortedBy");
+    n.putNull("serverSortAlgo");
+    n.put("vectorSearch", false);
+    n.putNull("serverRescoreInfo");
+    n.putNull("vectorProbeCount");
+    n.putNull("vectorCentroidCount");
+    n.putNull("vectorDistanceMetric");
     n.putNull("explainScanType");
     n.putNull("tableName");
     n.putNull("keyRanges");
@@ -1869,6 +1875,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("clientRowLimit");
     n.putNull("clientSequenceCount");
     n.putNull("clientCursorName");
+    n.putNull("clientMergeColumns");
     n.putNull("clientSortAlgo");
     n.putNull("clientSteps");
     n.putNull("lhsJoinQueryExplainPlan");

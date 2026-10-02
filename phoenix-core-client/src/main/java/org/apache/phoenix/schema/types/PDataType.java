@@ -165,6 +165,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return false;
   }
 
+  public boolean isVectorType() {
+    return false;
+  }
+
   public final int compareTo(byte[] lhs, int lhsOffset, int lhsLength, SortOrder lhsSortOrder,
     byte[] rhs, int rhsOffset, int rhsLength, SortOrder rhsSortOrder, PDataType rhsType) {
     Preconditions.checkNotNull(lhsSortOrder);
@@ -564,6 +568,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final static Integer DOUBLE_PRECISION = 15;
 
   public static final int ARRAY_TYPE_BASE = 3000;
+  public static final int VECTOR_FLOAT_TYPE = 4001;
+  public static final int VECTOR_DOUBLE_TYPE = 4002;
   public static final int JSON_TYPE = 5000;
   public static final int BSON_TYPE = 7000;
   public static final int VARBINARY_ENCODED_TYPE = 9000;
@@ -1118,10 +1124,20 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   }
 
   public static PDataType fromSqlTypeName(String sqlTypeName) {
-    for (PDataType t : PDataTypeFactory.getInstance().getTypes()) {
-      if (t.getSqlTypeName().equalsIgnoreCase(sqlTypeName)) return t;
+    PDataType type = PDataTypeFactory.getInstance().typeForSqlTypeName(sqlTypeName);
+    if (type != null) {
+      return type;
     }
     throw newIllegalDataException("Unsupported sql type: " + sqlTypeName);
+  }
+
+  public static PDataType fromSqlTypeName(String sqlTypeName, String componentType) {
+    PDataType type = PDataTypeFactory.getInstance().typeForSqlTypeName(sqlTypeName, componentType);
+    if (type != null) {
+      return type;
+    }
+    throw newIllegalDataException(
+      "Unsupported sql type: " + sqlTypeName + "(" + componentType + ")");
   }
 
   public static int sqlArrayType(String sqlTypeName) {
@@ -1134,8 +1150,9 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   }
 
   public static PDataType fromTypeId(int typeId) {
-    for (PDataType t : PDataTypeFactory.getInstance().getTypes()) {
-      if (t.getSqlType() == typeId) return t;
+    PDataType type = PDataTypeFactory.getInstance().typeForSqlType(typeId);
+    if (type != null) {
+      return type;
     }
     throw newIllegalDataException("Unsupported sql type: " + typeId);
   }

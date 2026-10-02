@@ -278,6 +278,7 @@ public class MetaDataUtilTest {
     int expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
       MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
     assertEquals(expectedPhoenixVersion, phoenixVersion);
+    assertTrue(MetaDataUtil.decodeHasVectorIndexSupport(version));
 
     config.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true);
 
@@ -291,6 +292,35 @@ public class MetaDataUtilTest {
     expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
       MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
     assertEquals(expectedPhoenixVersion, phoenixVersion);
+    assertTrue(MetaDataUtil.decodeHasVectorIndexSupport(version));
+  }
+
+  /**
+   * Regression test for a rolling-upgrade compatibility gap: a live version handshake with a
+   * region server still running old coprocessor code (built before the vector index write-path
+   * guard existed) must decode as unsupported, even though such a server never explicitly clears
+   * the bit -- it simply never set it, since the encoding logic for it didn't exist yet.
+   */
+  @Test
+  public void testDecodeHasVectorIndexSupport() {
+    String hbaseVersionStr = "0.98.14";
+    Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+    config.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, false);
+    config.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, false);
+
+    long currentServerVersion = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
+    assertTrue("A server built with vector index support must report the capability bit",
+      MetaDataUtil.decodeHasVectorIndexSupport(currentServerVersion));
+
+    // Simulate a GetVersionResponse from an old coprocessor jar, built before this bit was
+    // introduced: it encodes the same HBase/Phoenix version fields but never sets bit 1.
+    long oldServerVersion = currentServerVersion & ~0x2L;
+    assertFalse(
+      "An old server jar that predates the vector index guard must decode as unsupported",
+      MetaDataUtil.decodeHasVectorIndexSupport(oldServerVersion));
+    // Clearing the vector index support bit must not disturb the independent WAL codec bit.
+    assertEquals(MetaDataUtil.decodeHasIndexWALCodec(currentServerVersion),
+      MetaDataUtil.decodeHasIndexWALCodec(oldServerVersion));
   }
 
   private Put generateOriginalPut() {

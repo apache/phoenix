@@ -223,6 +223,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
   }
 
+  protected String getVectorCentroidDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_VECTOR_CENTROID_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -504,6 +508,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
           metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
         } catch (TableAlreadyExistsException ignore) {
         }
+        try {
+          metaConnection.createStatement().executeUpdate(getVectorCentroidDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
       } catch (SQLException e) {
         sqlE = e;
       } finally {
@@ -597,6 +605,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
 
   @Override
   public boolean hasIndexWALCodec() {
+    return true;
+  }
+
+  @Override
+  public boolean hasVectorIndexSupport() {
     return true;
   }
 

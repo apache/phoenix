@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -130,6 +131,23 @@ public class ColumnDef {
           // ignored. All decimal are stored with as much decimal points as possible.
           scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale;
         }
+      } else if (baseType != null && baseType.isVectorType()) {
+        if (maxLength == null) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_MAX_LENGTH)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        if (maxLength < 1) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        // Enforce the maximum supported vector dimension to bound cell storage overhead.
+        if (maxLength > PVectorFloat.MAX_VECTOR_DIMENSION) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_DIMENSION_EXCEEDED)
+            .setColumnName(columnDefName.getColumnName()).setMessage("Vector dimension " + maxLength
+              + " exceeds maximum of " + PVectorFloat.MAX_VECTOR_DIMENSION)
+            .build().buildException();
+        }
+        scale = null;
       } else {
         if (maxLength != null && maxLength < 1) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH)
@@ -166,6 +184,93 @@ public class ColumnDef {
     } catch (SQLException e) {
       throw new ParseException(e);
     }
+  }
+
+  ColumnDef(ColumnName columnDefName, PDataType dataType, Boolean isNull, Integer maxLength,
+    Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr,
+    Integer encodedQualifier, boolean isRowTimestamp) {
+    try {
+      Preconditions.checkNotNull(sortOrder);
+      this.columnDefName = columnDefName;
+      this.dataType = dataType;
+      this.isArray = false;
+      this.arrSize = null;
+      this.isNull = isNull;
+      if (dataType != null && dataType.isVectorType()) {
+        if (maxLength == null) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_MAX_LENGTH)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        if (maxLength < 1) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        // Enforce the maximum supported vector dimension to bound cell storage overhead.
+        if (maxLength > PVectorFloat.MAX_VECTOR_DIMENSION) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_DIMENSION_EXCEEDED)
+            .setColumnName(columnDefName.getColumnName()).setMessage("Vector dimension " + maxLength
+              + " exceeds maximum of " + PVectorFloat.MAX_VECTOR_DIMENSION)
+            .build().buildException();
+        }
+        scale = null;
+      } else if (dataType == PDecimal.INSTANCE) {
+        if (maxLength == null) {
+          scale = null;
+        } else {
+          if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DECIMAL_PRECISION_OUT_OF_RANGE)
+              .setColumnName(columnDefName.getColumnName()).build().buildException();
+          }
+          scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale;
+        }
+      } else {
+        if (maxLength != null && maxLength < 1) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        scale = null;
+        if (dataType == null) {
+          maxLength = null;
+        } else if (dataType.isFixedWidth()) {
+          if (dataType.getByteSize() == null) {
+            if (maxLength == null) {
+              throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_MAX_LENGTH)
+                .setColumnName(columnDefName.getColumnName()).build().buildException();
+            }
+          } else {
+            maxLength = null;
+          }
+        }
+      }
+      if (dataType != null && !dataType.canBePrimaryKey() && isPK) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_PRIMARY_KEY_CONSTRAINT)
+          .setColumnName(columnDefName.getColumnName())
+          .setMessage("," + dataType.toString() + " is not supported as primary key,").build()
+          .buildException();
+      }
+      this.maxLength = maxLength;
+      this.scale = scale;
+      this.isPK = isPK;
+      this.sortOrder = sortOrder;
+      this.expressionStr = expressionStr;
+      this.encodedQualifier = encodedQualifier;
+      this.isRowTimestamp = isRowTimestamp;
+    } catch (SQLException e) {
+      throw new ParseException(e);
+    }
+  }
+
+  ColumnDef(ColumnName columnDefName, PDataType dataType, Boolean isNull, Integer maxLength,
+    Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr,
+    boolean isRowTimestamp) {
+    this(columnDefName, dataType, isNull, maxLength, scale, isPK, sortOrder, expressionStr, null,
+      isRowTimestamp);
+  }
+
+  ColumnDef(ColumnName columnDefName, PDataType dataType, Boolean isNull, Integer maxLength,
+    Integer scale, boolean isPK, SortOrder sortOrder, boolean isRowTimestamp) {
+    this(columnDefName, dataType, isNull, maxLength, scale, isPK, sortOrder, null, null,
+      isRowTimestamp);
   }
 
   ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
@@ -244,15 +349,34 @@ public class ColumnDef {
   public String toString() {
     StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());
     buf.append(' ');
-    buf.append(dataType.getSqlTypeName());
-    if (maxLength != null) {
-      buf.append('(');
-      buf.append(maxLength);
-      if (scale != null) {
-        buf.append(',');
-        buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+    if (dataType != null && dataType.isVectorType()) {
+      String typeName = dataType.getSqlTypeName();
+      if (typeName.endsWith(")")) {
+        buf.append(typeName.substring(0, typeName.length() - 1));
+        if (maxLength != null) {
+          buf.append(", ");
+          buf.append(maxLength);
+        }
+        buf.append(')');
+      } else {
+        buf.append(typeName);
+        if (maxLength != null) {
+          buf.append('(');
+          buf.append(maxLength);
+          buf.append(')');
+        }
       }
-      buf.append(')');
+    } else {
+      buf.append(dataType == null ? null : dataType.getSqlTypeName());
+      if (maxLength != null) {
+        buf.append('(');
+        buf.append(maxLength);
+        if (scale != null) {
+          buf.append(',');
+          buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+        }
+        buf.append(')');
+      }
     }
     if (isArray) {
       buf.append(' ');

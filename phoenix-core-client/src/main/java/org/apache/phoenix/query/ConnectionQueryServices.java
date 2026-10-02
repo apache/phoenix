@@ -202,6 +202,16 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   boolean hasIndexWALCodec();
 
+  /**
+   * Returns whether every server that has responded to a live version handshake (see
+   * {@link #getVersion}-style connection compatibility checks) reports a coprocessor jar that
+   * recognizes the vector index write-path guard. Unlike checking for the presence of vector
+   * index columns in the cached SYSTEM.CATALOG schema, this reflects the actual code running on
+   * the servers observed so far, so it can detect a rolling upgrade in progress where the schema
+   * has already been migrated but some region servers are still serving old coprocessor code.
+   */
+  boolean hasVectorIndexSupport();
+
   long createSequence(String tenantId, String schemaName, String sequenceName, long startWith,
     long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle, long timestamp)
     throws SQLException;
@@ -234,7 +244,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   public enum Feature {
     LOCAL_INDEX,
-    RENEW_LEASE
+    RENEW_LEASE,
+    VECTOR_INDEX
   };
 
   public boolean supportsFeature(Feature feature);

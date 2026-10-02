@@ -145,11 +145,40 @@ public class ColumnInfo {
       throw new IllegalArgumentException("Unparseable string: " + stringRepresentation);
     }
 
-    String[] typeParts = components.get(0).split(" ");
+    String typeString = components.get(0).trim();
     String columnName = components.get(1);
 
     Integer maxLength = null;
     Integer scale = null;
+    PDataType dataType;
+
+    if (typeString.toUpperCase().startsWith("VECTOR(") && typeString.endsWith(")")) {
+      String inner = typeString.substring(7, typeString.length() - 1).trim();
+      if (inner.contains(",")) {
+        String[] parts = inner.split(",");
+        String comp = parts[0].trim();
+        dataType = PDataTypeFactory.getInstance().typeForVector(comp);
+        if (parts.length > 1) {
+          maxLength = Integer.valueOf(parts[1].trim());
+        }
+      } else if (inner.contains(")(")) {
+        String[] parts = inner.split("\\)\\(");
+        String comp = parts[0].trim();
+        dataType = PDataTypeFactory.getInstance().typeForVector(comp);
+        if (parts.length > 1) {
+          maxLength = Integer.valueOf(parts[1].trim());
+        }
+      } else {
+        dataType = PDataTypeFactory.getInstance().typeForVector(inner);
+      }
+      if (dataType == null) {
+        throw new IllegalArgumentException("Unparseable type string: " + typeString);
+      }
+      return ColumnInfo.create(columnName, dataType.getSqlType(), maxLength, scale);
+    }
+
+    String[] typeParts = typeString.split(" ");
+
     if (typeParts[0].contains("(")) {
       Matcher matcher = Pattern.compile("([^\\(]+)\\((\\d+)(?:,(\\d+))?\\)").matcher(typeParts[0]);
       if (!matcher.matches() || matcher.groupCount() > 3) {
@@ -164,7 +193,6 @@ public class ColumnInfo {
     }
 
     // Create the PDataType from the sql type name, including the second 'ARRAY' part if present
-    PDataType dataType;
     if (typeParts.length < 2) {
       dataType = PDataType.fromSqlTypeName(typeParts[0]);
     } else {

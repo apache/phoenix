@@ -49,7 +49,9 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.BsonConditionExpressionFunction;
+import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.JsonExistsFunction;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -57,6 +59,7 @@ import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
+import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -71,6 +74,9 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -367,6 +373,9 @@ public abstract class ExplainTable {
         case UNCOVERED_GLOBAL:
           indexKind = "UNCOVERED GLOBAL";
           break;
+        case VECTOR_GLOBAL:
+          indexKind = "VECTOR GLOBAL";
+          break;
         default:
           indexKind = null;
       }
@@ -508,15 +517,46 @@ public abstract class ExplainTable {
     }
     if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort
                                                                            // happens client-side
-      String orderByExpressions =
-        "SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-          + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      boolean isVectorSearch = VectorSearchUtil.isVectorSearch(orderBy, limit);
+      String orderByExpressions;
+      if (isVectorSearch) {
+        Expression distanceExpr = orderBy.getOrderByExpressions().get(0).getExpression();
+        orderByExpressions =
+          "SERVER TOP-" + limit + " BY " + formatDistanceExpressionForExplain(distanceExpr);
+      } else {
+        orderByExpressions =
+          "SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+            + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      }
       planSteps.add("    " + orderByExpressions);
       if (explainPlanAttributesBuilder != null) {
         if (limit != null) {
           explainPlanAttributesBuilder.setServerRowLimit(limit.longValue());
         }
-        explainPlanAttributesBuilder.setServerSortedBy(orderBy.getOrderByExpressions().toString());
+        if (isVectorSearch) {
+          explainPlanAttributesBuilder.setVectorSearch(true);
+          explainPlanAttributesBuilder.setServerSortAlgo(orderByExpressions);
+          explainPlanAttributesBuilder.setServerSortedBy(orderByExpressions);
+        } else {
+          explainPlanAttributesBuilder
+            .setServerSortedBy(orderBy.getOrderByExpressions().toString());
+        }
+      }
+      if (isVectorSearch) {
+        byte[] oversampleBytes =
+          scan.getAttribute(BaseScannerRegionObserverConstants.VECTOR_OVERSAMPLE_FACTOR);
+        if (oversampleBytes != null) {
+          double oversampleFactor = Bytes.toDouble(oversampleBytes);
+          if (oversampleFactor > 1.0 && limit != null) {
+            int coarseLimit = (int) Math.ceil(limit * oversampleFactor);
+            String rescoreLine =
+              "SERVER RESCORE TOP-" + limit + " OF " + coarseLimit + " CANDIDATES";
+            planSteps.add("    " + rescoreLine);
+            if (explainPlanAttributesBuilder != null) {
+              explainPlanAttributesBuilder.setServerRescoreInfo(rescoreLine);
+            }
+          }
+        }
       }
     } else {
       if (offset != null) {
@@ -557,7 +597,8 @@ public abstract class ExplainTable {
       Arrays.asList(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
         BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION));
     emitServerProjection(planSteps, explainPlanAttributesBuilder, "BSON",
-      Collections.singletonList(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION));
+      Arrays.asList(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION,
+        BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION));
   }
 
   /**
@@ -1033,6 +1074,161 @@ public abstract class ExplainTable {
     }
     buf.setCharAt(buf.length() - 1, ']');
     return buf.toString();
+  }
+
+  private static String formatDistanceExpressionForExplain(Expression distanceExpr) {
+    if (!(distanceExpr instanceof FunctionExpression)) {
+      return distanceExpr.toString();
+    }
+    FunctionExpression func = (FunctionExpression) distanceExpr;
+    StringBuilder buf = new StringBuilder(func.getName()).append("(");
+    List<Expression> children = func.getChildren();
+    if (children == null || children.isEmpty()) {
+      return buf.append(")").toString();
+    }
+    for (int i = 0; i < children.size(); i++) {
+      if (i > 0) {
+        buf.append(", ");
+      }
+      Expression child = children.get(i);
+      buf.append(formatDistanceChildForExplain(child));
+    }
+    buf.append(")");
+    return buf.toString();
+  }
+
+  private static String formatDistanceChildForExplain(Expression child) {
+    if (
+      child instanceof org.apache.phoenix.expression.CoerceExpression
+        && !child.getChildren().isEmpty() && child.getChildren().get(0) instanceof LiteralExpression
+    ) {
+      PDataType targetType = child.getDataType();
+      if (targetType instanceof PVectorFloat || targetType instanceof PVectorDouble) {
+        String baseType = (targetType instanceof PVectorDouble) ? "DOUBLE" : "FLOAT";
+        LiteralExpression innerLit = (LiteralExpression) child.getChildren().get(0);
+        Object val = innerLit.getValue();
+        if (val instanceof float[]) {
+          float[] arr = (float[]) val;
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof double[]) {
+          double[] arr = (double[]) val;
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof Float[]) {
+          Float[] boxed = (Float[]) val;
+          float[] arr = new float[boxed.length];
+          for (int i = 0; i < boxed.length; i++) {
+            arr[i] = boxed[i] != null ? boxed[i] : 0.0f;
+          }
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof Double[]) {
+          Double[] boxed = (Double[]) val;
+          double[] arr = new double[boxed.length];
+          for (int i = 0; i < boxed.length; i++) {
+            arr[i] = boxed[i] != null ? boxed[i] : 0.0;
+          }
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        }
+      }
+    }
+    if (child instanceof LiteralExpression) {
+      LiteralExpression lit = (LiteralExpression) child;
+      PDataType type = lit.getDataType();
+      if (type instanceof PVectorFloat || type instanceof PVectorDouble) {
+        String baseType = (type instanceof PVectorDouble) ? "DOUBLE" : "FLOAT";
+        Object val = lit.getValue();
+        if (val instanceof float[]) {
+          float[] arr = (float[]) val;
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof double[]) {
+          double[] arr = (double[]) val;
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof Float[]) {
+          Float[] boxed = (Float[]) val;
+          float[] arr = new float[boxed.length];
+          for (int i = 0; i < boxed.length; i++) {
+            arr[i] = boxed[i] != null ? boxed[i] : 0.0f;
+          }
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof Double[]) {
+          Double[] boxed = (Double[]) val;
+          double[] arr = new double[boxed.length];
+          for (int i = 0; i < boxed.length; i++) {
+            arr[i] = boxed[i] != null ? boxed[i] : 0.0;
+          }
+          return formatVectorLiteralElements(baseType, arr.length, arr);
+        } else if (val instanceof PhoenixArray) {
+          try {
+            Object arrayObj = ((PhoenixArray) val).getArray();
+            if (arrayObj instanceof float[]) {
+              float[] arr = (float[]) arrayObj;
+              return formatVectorLiteralElements(baseType, arr.length, arr);
+            } else if (arrayObj instanceof Float[]) {
+              Float[] boxed = (Float[]) arrayObj;
+              float[] arr = new float[boxed.length];
+              for (int i = 0; i < boxed.length; i++) {
+                arr[i] = boxed[i] != null ? boxed[i] : 0.0f;
+              }
+              return formatVectorLiteralElements(baseType, arr.length, arr);
+            } else if (arrayObj instanceof double[]) {
+              double[] arr = (double[]) arrayObj;
+              return formatVectorLiteralElements(baseType, arr.length, arr);
+            } else if (arrayObj instanceof Double[]) {
+              Double[] boxed = (Double[]) arrayObj;
+              double[] arr = new double[boxed.length];
+              for (int i = 0; i < boxed.length; i++) {
+                arr[i] = boxed[i] != null ? boxed[i] : 0.0;
+              }
+              return formatVectorLiteralElements(baseType, arr.length, arr);
+            }
+          } catch (Exception e) {
+            // fall through
+          }
+        } else if (lit.getBytes() != null && lit.getBytes().length > 0) {
+          if (type instanceof PVectorFloat) {
+            float[] arr = PVectorFloat.readElements(lit.getBytes(), 0, lit.getBytes().length);
+            return formatVectorLiteralElements(baseType, arr.length, arr);
+          } else {
+            double[] arr = PVectorDouble.readElements(lit.getBytes(), 0, lit.getBytes().length);
+            return formatVectorLiteralElements(baseType, arr.length, arr);
+          }
+        }
+      }
+    }
+    return child.toString();
+  }
+
+  private static String formatVectorLiteralElements(String baseType, int dim, float[] elements) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("VECTOR(").append(baseType).append(", ").append(dim).append(")[");
+    int limit = Math.min(dim, 8);
+    for (int i = 0; i < limit; i++) {
+      if (i > 0) {
+        sb.append(", ");
+      }
+      sb.append(elements[i]);
+    }
+    if (dim > 8) {
+      sb.append(", ...");
+    }
+    sb.append("]");
+    return sb.toString();
+  }
+
+  private static String formatVectorLiteralElements(String baseType, int dim, double[] elements) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("VECTOR(").append(baseType).append(", ").append(dim).append(")[");
+    int limit = Math.min(dim, 8);
+    for (int i = 0; i < limit; i++) {
+      if (i > 0) {
+        sb.append(", ");
+      }
+      sb.append(elements[i]);
+    }
+    if (dim > 8) {
+      sb.append(", ...");
+    }
+    sb.append("]");
+    return sb.toString();
   }
 
 }

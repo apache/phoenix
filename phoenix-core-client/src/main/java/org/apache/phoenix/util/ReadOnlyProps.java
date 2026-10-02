@@ -275,6 +275,24 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
   }
 
   /**
+   * Get the value of the <code>name</code> property as a <code>double</code>. If no such property
+   * is specified, or if the specified value is not a valid <code>double</code>, then
+   * <code>defaultValue</code> is returned.
+   * @param name         property name.
+   * @param defaultValue default value.
+   * @return property value as a <code>double</code>, or <code>defaultValue</code>.
+   */
+  public double getDouble(String name, double defaultValue) {
+    String valueString = get(name);
+    if (valueString == null) return defaultValue;
+    try {
+      return Double.parseDouble(valueString);
+    } catch (NumberFormatException e) {
+      return defaultValue;
+    }
+  }
+
+  /**
    * Get the properties as a {@code Map<String,String>}
    * @return {@code Map<String,String>}
    */

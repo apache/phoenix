@@ -57,6 +57,8 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
+import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.function.ScalarFunction;
@@ -231,6 +233,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     if (serverParsedJsonQueryFuncRefs != null) {
       Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
     }
+    deserializeAndAddComplexDataTypeFunctions(scan,
+      BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION, serverParsedKVRefs,
+      resultList);
     return resultList;
   }
 
@@ -289,9 +294,20 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       // context is used when we are iterating over the top n rows before the first next() call
       PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
       inner.setRegionScannerContext(sc);
-      OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions,
-        spoolingEnabled, thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
-        getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+      byte[] oversampleBytes =
+        scan.getAttribute(BaseScannerRegionObserverConstants.VECTOR_OVERSAMPLE_FACTOR);
+      double oversampleFactor = oversampleBytes == null ? 1.0 : Bytes.toDouble(oversampleBytes);
+      boolean twoPhaseVectorScoring = oversampleFactor > 1.0 && orderByExpressions.size() == 1
+        && orderByExpressions.get(0).getExpression() instanceof DistanceFunction;
+      if (oversampleBytes != null && !twoPhaseVectorScoring) {
+        LOGGER.warn("VECTOR_OVERSAMPLE_FACTOR scan attribute present ({}) but query does not have"
+          + " exactly one DistanceFunction ORDER BY expression; "
+          + "falling back to single-phase scoring", oversampleFactor);
+      }
+      OrderedResultIterator iterator =
+        new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled, thresholdBytes,
+          limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan),
+          scan, s.getRegionInfo(), twoPhaseVectorScoring, oversampleFactor);
       return new OrderedResultIteratorWithScannerContext(sc, iterator);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -304,7 +320,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
   }
 
-  private static class OrderedResultIteratorWithScannerContext {
+  @VisibleForTesting
+  static class OrderedResultIteratorWithScannerContext {
     private PhoenixScannerContext scannerContext;
     private OrderedResultIterator iterator;
 
@@ -352,7 +369,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           func = new JsonQueryFunction();
         } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION)) {
           func = new BsonValueFunction();
-        }
+        } else
+          if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION)) {
+            func = new BsonVectorValueFunction();
+          }
         if (func != null) {
           func.readFields(input);
           funcRefs[i] = func;
