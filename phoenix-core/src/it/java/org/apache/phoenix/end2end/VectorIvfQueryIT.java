@@ -42,13 +42,20 @@ import java.util.Set;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.execute.VectorIndexScanPlan;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
+import org.apache.phoenix.optimize.VectorSearchUtil;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -1711,4 +1718,230 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
     }
   }
 
+  private static final List<float[]> STEP_50_CENTROIDS =
+    Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f }, new float[] { 50.0f, 0.0f, 0.0f, 0.0f },
+      new float[] { 100.0f, 0.0f, 0.0f, 0.0f }, new float[] { 150.0f, 0.0f, 0.0f, 0.0f });
+
+  @Test
+  public void testStaticOrderingPrefersCoveringVectorIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String t = generateUniqueName();
+      String idxCovering = generateUniqueName();
+      String idxNonCovering = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + t
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR, DESCRIPTION VARCHAR)");
+        // Define non-covering index first to verify static plan ranking rather than candidate
+        // creation order
+        stmt.execute("CREATE VECTOR INDEX " + idxNonCovering + " ON " + t + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+        stmt.execute("CREATE VECTOR INDEX " + idxCovering + " ON " + t + " (V) "
+          + "INCLUDE (DESCRIPTION) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, idxCovering, STEP_50_CENTROIDS);
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, idxNonCovering, STEP_50_CENTROIDS);
+
+      String query = "SELECT ID, DESCRIPTION FROM " + t + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        QueryPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        assertTrue("Expected the covering index to answer the query alone",
+          plan instanceof VectorIndexScanPlan);
+        assertEquals(idxCovering, plan.getTableRef().getTable().getTableName().getString());
+      }
+      assertEquals(OptimizerReasons.RULE_NEAREST_NEIGHBOR_INDEX,
+        ExplainPlanTestUtil.getExplainAttributes(conn, "SELECT ID, DESCRIPTION FROM " + t
+          + " ORDER BY L2_DISTANCE(V, ARRAY[1.0, 0.0, 0.0, 0.0]) LIMIT 5").getIndexRule());
+    }
+  }
+
+  @Test
+  public void testStaticOrderingPrefersVectorIndexOverRegularIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String t = generateUniqueName();
+      String regularIdx = generateUniqueName();
+      String vectorIdx = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + t
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR, DESCRIPTION VARCHAR)");
+        stmt.execute(
+          "CREATE INDEX " + regularIdx + " ON " + t + " (CATEGORY) INCLUDE (V, DESCRIPTION)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + t + " (V) "
+          + "INCLUDE (CATEGORY, DESCRIPTION) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, t, vectorIdx, STEP_50_CENTROIDS);
+
+      Map<String, float[]> scienceVectors = new LinkedHashMap<>();
+      String upsert = "UPSERT INTO " + t + " (ID, V, CATEGORY, DESCRIPTION) VALUES (?, ?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+        for (int i = 0; i < 20; i++) {
+          String id = "r" + i;
+          float[] v = new float[] { (float) i, 0.0f, 0.0f, 0.0f };
+          String cat = (i % 2 == 0) ? "science" : "art";
+          if ("science".equals(cat)) {
+            scienceVectors.put(id, v);
+          }
+          ps.setString(1, id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setString(3, cat);
+          ps.setString(4, "desc_" + id);
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      // Vector index plan takes precedence over standard index with bound prefix for nearest
+      // neighbor queries
+      String defaultQuery =
+        "SELECT ID FROM " + t + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(defaultQuery)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 0.0f }));
+        QueryPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        assertTrue("Default plan should be VectorIndexScanPlan",
+          plan instanceof VectorIndexScanPlan);
+        assertEquals(vectorIdx, plan.getTableRef().getTable().getTableName().getString());
+      }
+
+      // Explicit INDEX hint forces standard index selection and exact search
+      String hintedQuery = "SELECT /*+ INDEX(" + t + " " + regularIdx + ") */ ID FROM " + t
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      List<String> expected = VectorIndexTestUtil.bruteForceTopK(scienceVectors,
+        new float[] { 0.0f, 0.0f, 0.0f, 0.0f }, "L2", 5);
+      try (PreparedStatement ps = conn.prepareStatement(hintedQuery)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 0.0f }));
+        QueryPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        assertFalse(VectorSearchUtil.usesVectorIndex(plan));
+        assertEquals(regularIdx, plan.getTableRef().getTable().getTableName().getString());
+        List<String> results = new ArrayList<>();
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            results.add(rs.getString(1));
+          }
+        }
+        assertEquals(expected, results);
+      }
+
+      // USE_DATA_OVER_INDEX_TABLE hint demotes vector index plans below other candidates
+      String dataHinted = "SELECT /*+ USE_DATA_OVER_INDEX_TABLE */ ID FROM " + t
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PreparedStatement ps = conn.prepareStatement(dataHinted)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 0.0f }));
+        QueryPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        assertFalse(VectorSearchUtil.usesVectorIndex(plan));
+      }
+    }
+  }
+
+  @Test
+  public void testExplainDistinguishesLookupStrategies() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Float[] q = new Float[] { 50.2f, 0.1f, -0.1f, 0.05f };
+
+      // Fully covered: index execution without base table access
+      String covered = explain(conn, "SELECT ID, CATEGORY FROM " + fixL2Covered.tableName
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5", q);
+      assertTrue(covered, covered.contains("CLIENT PROBING 2 OF 4 CENTROIDS (L2)"));
+      assertFalse(covered, covered.contains("SERVER MERGE"));
+      assertFalse(covered, covered.contains("SKIP-SCAN-JOIN"));
+
+      // Deferred projection: index ranking followed by base table lookups for top-k rows
+      String projection = explain(conn, "SELECT ID, DESCRIPTION FROM " + fixL2Covered.tableName
+        + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5", q);
+      assertTrue(projection, projection.contains("CLIENT PROBING 2 OF 4 CENTROIDS (L2)"));
+      assertTrue(projection, projection.contains("SKIP-SCAN-JOIN"));
+      assertFalse(projection, projection.contains("SERVER MERGE"));
+
+      // Filter-time join: base table joins across candidate set prior to top-k ranking
+      String filter = explain(conn, "SELECT ID, DESCRIPTION FROM " + fixL2Uncovered.tableName
+        + " WHERE CATEGORY = 'science' ORDER BY L2_DISTANCE(V, ?) LIMIT 5", q);
+      assertTrue(filter, filter.contains("CLIENT PROBING 2 OF 4 CENTROIDS (L2)"));
+      assertTrue(filter, filter.contains("SERVER MERGE"));
+      assertFalse(filter, filter.contains("SKIP-SCAN-JOIN"));
+    }
+  }
+
+  private static String explain(Connection conn, String query, Float[] q) throws Exception {
+    try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + query)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", q));
+      try (ResultSet rs = ps.executeQuery()) {
+        return QueryUtil.getExplainPlan(rs);
+      }
+    }
+  }
+
+  @Test
+  public void testStructuredExplainAttributes() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Float[] q = new Float[] { 50.2f, 0.1f, -0.1f, 0.05f };
+      String query = "SELECT /*+ VECTOR_PROBE_COUNT(3) */ ID, CATEGORY FROM "
+        + fixL2Covered.tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", q));
+        ExplainPlanAttributes attrs =
+          pps.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
+        assertEquals(Integer.valueOf(3), attrs.getVectorProbeCount());
+        assertEquals(Integer.valueOf(4), attrs.getVectorCentroidCount());
+        assertEquals("L2", attrs.getVectorDistanceMetric());
+        assertTrue(attrs.isVectorSearch());
+      }
+
+      // Full scan plan omits vector probing explain attributes
+      String exact = "SELECT /*+ NO_INDEX */ ID FROM " + fixL2Covered.tableName
+        + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(exact).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", q));
+        ExplainPlanAttributes attrs =
+          pps.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
+        assertEquals(null, attrs.getVectorProbeCount());
+        assertEquals(null, attrs.getVectorDistanceMetric());
+      }
+    }
+  }
+
+  @Test
+  public void testVectorLiteralAbbreviationInExplain() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      String indexName = generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 128))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      List<float[]> centroids = new ArrayList<>();
+      for (int k = 0; k < 4; k++) {
+        float[] c = new float[128];
+        c[0] = k * 10.0f;
+        centroids.add(c);
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids);
+
+      float[] queryVector = new float[128];
+      queryVector[0] = 1.0f;
+      queryVector[99] = 77.125f;
+      Float[] boxedQ = new Float[128];
+      for (int i = 0; i < 128; i++) {
+        boxedQ[i] = queryVector[i];
+      }
+      String plan = explain(conn,
+        "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5", boxedQ);
+      String serverTopLine = null;
+      for (String line : plan.split("\\r?\\n")) {
+        if (line.contains("SERVER TOP-")) {
+          serverTopLine = line.trim();
+        }
+      }
+      assertNotNull(plan, serverTopLine);
+      assertTrue(serverTopLine, serverTopLine.length() < 256);
+      assertTrue(serverTopLine, serverTopLine.contains("VECTOR(FLOAT, 128)[1.0, 0.0"));
+      assertFalse(serverTopLine, serverTopLine.contains("77.125"));
+
+      // Verify expression string representation remains exact for persistence and DDL compatibility
+      assertTrue(LiteralExpression.newConstant(queryVector, PVectorFloat.INSTANCE).toString()
+        .contains("77.125"));
+    }
+  }
 }

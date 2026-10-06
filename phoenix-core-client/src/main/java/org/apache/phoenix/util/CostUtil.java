@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 
 /**
  * Utilities for computing costs. Some of the methods here should eventually be replaced by a
@@ -75,6 +76,19 @@ public class CostUtil {
     return new Cost(0, 0,
       (rhsBytes * Math.log(rhsBytes) + (hasKeyRangeExpression ? 0 : lhsBytes)) / parallelLevel
         + outputBytes);
+  }
+
+  /**
+   * Estimates the I/O cost of primary key point lookups against a data table for uncovered index
+   * columns.
+   * @param rows      the estimated number of rows to retrieve
+   * @param dataTable the target data table
+   * @return the estimated I/O cost
+   */
+  public static Cost estimateLookupCost(long rows, PTable dataTable) {
+    return rows <= 0
+      ? Cost.ZERO
+      : new Cost(0, 0, (double) rows * SchemaUtil.estimateRowSize(dataTable));
   }
 
   /**

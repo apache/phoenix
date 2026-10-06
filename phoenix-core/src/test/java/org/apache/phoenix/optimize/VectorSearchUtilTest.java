@@ -25,6 +25,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.DriverManager;
+import java.util.Arrays;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -32,6 +33,8 @@ import org.apache.phoenix.compile.OrderByCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.CosineDistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceFunction;
@@ -46,6 +49,8 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.junit.Test;
 
 /** Unit tests for vector search query pattern recognition and descriptor extraction. */
@@ -550,4 +555,21 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
     }
   }
 
+  @Test
+  public void testExplainAbbreviatesQueryVector() throws Exception {
+    float[] longVector = new float[10];
+    for (int i = 0; i < longVector.length; i++) {
+      longVector[i] = i + 0.5f;
+    }
+    Expression column = LiteralExpression.newConstant(null, PVectorFloat.INSTANCE);
+    String rendered = VectorSearchUtil.toExplainString(new L2DistanceFunction(
+      Arrays.asList(column, LiteralExpression.newConstant(longVector, PVectorFloat.INSTANCE))));
+    assertEquals(
+      "L2_DISTANCE(null, VECTOR(FLOAT, 10)[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, ...])",
+      rendered);
+    String shortVector =
+      VectorSearchUtil.toExplainString(new CosineDistanceFunction(Arrays.asList(column,
+        LiteralExpression.newConstant(new double[] { 1.0, 2.0 }, PVectorDouble.INSTANCE))));
+    assertEquals("COSINE_DISTANCE(null, VECTOR(DOUBLE, 2)[1.0, 2.0])", shortVector);
+  }
 }
