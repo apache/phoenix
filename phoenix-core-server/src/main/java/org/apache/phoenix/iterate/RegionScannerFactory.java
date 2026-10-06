@@ -61,6 +61,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -473,8 +474,24 @@ public abstract class RegionScannerFactory {
     };
   }
 
-  // PHOENIX-4791 Share position of array element cell
+  // PHOENIX-4791 Returns the position of the array element cell, which holds the server parsed
+  // projection values. An ordinary list has this cell at the end. An encoded qualifier list keeps
+  // the cell in its reserved qualifier range, after the empty column cell and before the other
+  // column cells. Thus this method finds the cell by its column. The method iterates because
+  // indexed access to an encoded list scans the list from the start.
   public static int getArrayCellPosition(List<Cell> result) {
+    if (result instanceof EncodedColumnQualiferCellsList) {
+      int i = 0;
+      for (Cell cell : result) {
+        if (
+          CellUtil.matchingColumn(cell, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY,
+            QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER)
+        ) {
+          return i;
+        }
+        i++;
+      }
+    }
     return result.size() - 1;
   }
 }

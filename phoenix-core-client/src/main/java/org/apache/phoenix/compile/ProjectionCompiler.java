@@ -27,9 +27,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -47,6 +49,7 @@ import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -58,10 +61,13 @@ import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
@@ -540,10 +546,13 @@ public class ProjectionCompiler {
       index++;
     }
 
+    // Do not evaluate a function on the server if ORDER BY references the column of the function.
+    // The ORDER BY evaluation must read the original column cell in the row.
+    Set<String> orderByColumnNames = getOrderByColumnNames(statement);
     for (int i = serverParsedProjectedColumnRefs.size() - 1; i >= 0; i--) {
-      Expression expression = serverParsedProjectedColumnRefs.get(i);
+      ProjectedColumnExpression expression = serverParsedProjectedColumnRefs.get(i);
       Integer count = serverParsedExpressionCounts.get(expression);
-      if (count != 0) {
+      if (count != 0 || orderByColumnNames.contains(expression.getColumn().getName().getString())) {
         serverParsedKVRefs.remove(i);
         serverParsedKVFuncs.remove(i);
         serverParsedOldFuncs.remove(i);
@@ -551,17 +560,21 @@ public class ProjectionCompiler {
     }
 
     if (serverParsedKVFuncs.size() > 0 && serverParsedKVRefs.size() > 0) {
+      // This order must match the order in which the server evaluates the server parsed functions.
+      // See NonAggregateRegionScannerFactory#getServerParsedExpressions.
       String[] scanAttributes =
         new String[] { BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX,
           BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
+          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION,
           BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION,
-          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION };
+          BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION };
       Map<String, Class> attributeToFunctionMap = new HashMap<String, Class>() {
         {
           put(scanAttributes[0], ArrayIndexFunction.class);
           put(scanAttributes[1], JsonValueFunction.class);
-          put(scanAttributes[2], JsonQueryFunction.class);
-          put(scanAttributes[3], BsonValueFunction.class);
+          put(scanAttributes[2], BsonValueFunction.class);
+          put(scanAttributes[3], JsonQueryFunction.class);
+          put(scanAttributes[4], BsonVectorValueFunction.class);
         }
       };
       // This map is to keep track of the positions that get swapped with rearranging
@@ -603,17 +616,17 @@ public class ProjectionCompiler {
       // Stash the per-type expression buckets on the context so EXPLAIN can render the per-type
       // SERVER ARRAY|JSON|BSON PROJECTION clauses (and their per-expression detail lines).
       context.setServerParsedProjections(serverAttributeToFuncExpressionMap);
-      KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-      for (Expression expression : serverParsedKVRefs) {
-        builder.addField(expression);
+      // Build the schema in the field order that the server uses to serialize the projected values
+      Expression[] shuffledFuncs = new Expression[serverParsedKVFuncs.size()];
+      for (int i = 0; i < serverParsedKVFuncs.size(); i++) {
+        shuffledFuncs[initialToShuffledPositionMap.get(i)] = serverParsedKVFuncs.get(i);
       }
-      KeyValueSchema kvSchema = builder.build();
-      ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
-      builder = new KeyValueSchemaBuilder(0);
-      for (Expression expression : serverParsedKVFuncs) {
+      KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+      for (Expression expression : shuffledFuncs) {
         builder.addField(expression);
       }
       KeyValueSchema arrayIndexesSchema = builder.build();
+      ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(arrayIndexesSchema);
 
       Map<Expression, Expression> replacementMap = new HashMap<>();
       for (int i = 0; i < serverParsedOldFuncs.size(); i++) {
@@ -925,12 +938,53 @@ public class ProjectionCompiler {
     }
   }
 
+  /**
+   * Returns the names of the columns that the ORDER BY clause references. A column alias or an
+   * ordinal position resolves to its select expression.
+   */
+  private static Set<String> getOrderByColumnNames(SelectStatement statement) throws SQLException {
+    Set<String> names = new HashSet<>();
+    if (statement.getOrderBy().isEmpty()) {
+      return names;
+    }
+    Map<String, ParseNode> aliases = new HashMap<>();
+    for (AliasedNode aliasedNode : statement.getSelect()) {
+      if (aliasedNode.getAlias() != null) {
+        aliases.put(aliasedNode.getAlias(), aliasedNode.getNode());
+      }
+    }
+    StatelessTraverseAllParseNodeVisitor visitor = new StatelessTraverseAllParseNodeVisitor() {
+      @Override
+      public Void visit(ColumnParseNode node) {
+        names.add(node.getName());
+        return null;
+      }
+    };
+    for (OrderByNode orderByNode : statement.getOrderBy()) {
+      ParseNode node = orderByNode.getNode();
+      if (node instanceof ColumnParseNode && ((ColumnParseNode) node).getTableName() == null) {
+        ParseNode aliased = aliases.get(((ColumnParseNode) node).getName());
+        node = aliased != null ? aliased : node;
+      } else if (
+        node instanceof LiteralParseNode && ((LiteralParseNode) node).getValue() instanceof Integer
+      ) {
+        int position = (Integer) ((LiteralParseNode) node).getValue();
+        if (position >= 1 && position <= statement.getSelect().size()) {
+          node = statement.getSelect().get(position - 1).getNode();
+        }
+      }
+      node.accept(visitor);
+    }
+    return names;
+  }
+
   private static boolean isJsonFunction(FunctionParseNode node) {
     return JsonValueFunction.NAME.equals(node.getName())
       || JsonQueryFunction.NAME.equals(node.getName());
   }
 
   private static boolean isBsonFunction(FunctionParseNode node) {
-    return BsonValueFunction.NAME.equals(node.getName());
+    return BsonValueFunction.NAME.equals(node.getName())
+      || BsonVectorValueFunction.NAME.equals(node.getName());
   }
 }

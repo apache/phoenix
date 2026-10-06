@@ -21,6 +21,10 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +51,39 @@ public class RegionScannerFactoryTest {
 
   private static Cell column(int qualifier) {
     return new KeyValue(ROW, CF, SCHEME.encode(qualifier), Bytes.toBytes(qualifier));
+  }
+
+  private static Cell arrayCell() {
+    return new KeyValue(ROW, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY,
+      QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, Bytes.toBytes("projected"));
+  }
+
+  @Test
+  public void testArrayCellFollowsColumnsInOrdinaryList() {
+    List<Cell> cells = new ArrayList<>();
+    cells.add(column(QueryConstants.ENCODED_EMPTY_COLUMN_NAME));
+    cells.add(column(11));
+    cells.add(arrayCell());
+    assertEquals(2, RegionScannerFactory.getArrayCellPosition(cells));
+  }
+
+  @Test
+  public void testArrayCellFoundWithoutIndexedAccessToEncodedList() {
+    List<Cell> cells =
+      spy(new EncodedColumnQualiferCellsList(QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE,
+        QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 40, SCHEME));
+    cells.add(column(QueryConstants.ENCODED_EMPTY_COLUMN_NAME));
+    for (int q = QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE; q <= 50; q++) {
+      cells.add(column(q));
+    }
+    // The reserved qualifier of the array cell sorts it after the empty column cell and before the
+    // other column cells
+    cells.add(arrayCell());
+    assertEquals(1, RegionScannerFactory.getArrayCellPosition(cells));
+    // The method must not use indexed access, because each indexed access scans the encoded list
+    // from the start
+    verify(cells, never()).get(anyInt());
+    assertEquals(arrayCell().getValueLength(), cells.get(1).getValueLength());
   }
 
   @Test

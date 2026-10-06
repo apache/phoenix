@@ -215,7 +215,8 @@ public enum ExpressionType {
   L2DistanceFunction(L2DistanceFunction.class),
   L2DistanceSquaredFunction(L2DistanceSquaredFunction.class),
   CosineDistanceFunction(CosineDistanceFunction.class),
-  InnerProductDistanceFunction(InnerProductDistanceFunction.class);
+  InnerProductDistanceFunction(InnerProductDistanceFunction.class),
+  BsonVectorValueFunction(BsonVectorValueFunction.class);
 
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;

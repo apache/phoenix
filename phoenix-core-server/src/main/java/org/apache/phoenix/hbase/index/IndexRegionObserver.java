@@ -1391,12 +1391,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
       IndexMaintainer indexMaintainer = pair.getFirst();
       HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
+      // Evaluate the indexed vector of each row state one time, because a BSON vector costs a
+      // document decode. The new state is strict, so a malformed vector makes the write fail. The
+      // current state is lenient, so a malformed stored vector does not block a delete or a
+      // correction.
+      ImmutableBytesWritable nextVector = indexMaintainer.getIndexedVector(nextDataRowState, true);
+      ImmutableBytesWritable currentVector =
+        indexMaintainer.getIndexedVector(currentDataRowState, false);
       if (
-        nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
+        nextDataRowState != null
+          && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState, nextVector)
       ) {
         ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName, nextVector);
         if (indexPut == null) {
           // No covered column. Just prepare an index row with the empty column
           byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
@@ -1422,12 +1430,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // and the index is not CDC. Skip centroid assignment when the indexed vector is unchanged.
         if (
           currentDataRowState != null
-            && !indexMaintainer.isVectorUnchanged(currentDataRowState, nextDataRowState)
+            && !indexMaintainer.isVectorUnchanged(currentVector, nextVector)
         ) {
           ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
           // Null if the current row has no index row, for example if its vector is null
           byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
-            rowKeyPtr, null, null, ts, encodedRegionName);
+            rowKeyPtr, ts, encodedRegionName, currentVector);
           if (
             indexRowKeyForCurrentDataRow != null && !indexMaintainer.isCDCIndex()
               && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
@@ -1439,7 +1447,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
       } else if (
         currentDataRowState != null
-          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)
+          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState, currentVector)
       ) {
         if (indexMaintainer.isCDCIndex()) {
           // CDC Index needs two a delete marker for referencing the data table
@@ -1451,8 +1459,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
             indexMaintainer, ts, rowKeyPtr, encodedRegionName));
         } else {
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          Mutation del = indexMaintainer.buildRowDeleteMutation(
+            indexMaintainer.buildRowKey(new IndexUtil.SimpleValueGetter(currentDataRowState),
+              rowKeyPtr, ts, encodedRegionName, currentVector),
+            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+          indexUpdates.put(hTableInterfaceReference, del);
         }
       }
     }
