@@ -153,6 +153,8 @@ public interface QueryServices extends SQLCloseable {
   // Maximum bytes of centroid vectors that each process caches, for all vector index generations
   public static final String VECTOR_CENTROID_CACHE_MAX_BYTES_ATTRIB =
     "phoenix.vector.centroid.cache.maxBytes";
+  // Centroids that a vector query probes in each generation; 0 selects sqrt(centroid count)
+  public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

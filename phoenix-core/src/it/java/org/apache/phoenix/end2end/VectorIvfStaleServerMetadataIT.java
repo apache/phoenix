@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.VectorIndexIT.assertIndexVerifies;
-import static org.apache.phoenix.end2end.VectorIndexIT.loadClusteredVectors;
+import static org.apache.phoenix.end2end.VectorIndexTestUtil.assertIndexVerifies;
+import static org.apache.phoenix.end2end.VectorIndexTestUtil.loadClusteredVectors;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;

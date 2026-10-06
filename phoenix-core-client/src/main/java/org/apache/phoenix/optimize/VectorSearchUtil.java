@@ -19,6 +19,12 @@ package org.apache.phoenix.optimize;
 
 import java.util.List;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.execute.DelegateQueryPlan;
+import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
+import org.apache.phoenix.execute.VectorIndexScanPlan;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.parse.BindParseNode;
@@ -209,5 +215,45 @@ public final class VectorSearchUtil {
     OrderByExpression orderByExpression = orderByExpressions.get(0);
     return orderByExpression.isAscending()
       && orderByExpression.getExpression() instanceof DistanceFunction;
+  }
+
+  /**
+   * Returns the distance metric of the ORDER BY distance function. Returns null if the ORDER BY is
+   * not a single distance function.
+   */
+  public static DistanceMetric getDistanceMetric(OrderBy orderBy) {
+    if (orderBy == null || orderBy.getOrderByExpressions().size() != 1) {
+      return null;
+    }
+    Expression expression = orderBy.getOrderByExpressions().get(0).getExpression();
+    return expression instanceof DistanceFunction
+      ? DistanceMetric.forFunction(((DistanceFunction) expression).getName())
+      : null;
+  }
+
+  /**
+   * Returns the {@link VectorIndexScanPlan} in a plan tree, or null if there is none. The search
+   * goes into the sub plans of a hash join and into the plan that a delegate plan wraps.
+   */
+  public static VectorIndexScanPlan getVectorIndexScan(QueryPlan plan) {
+    if (plan instanceof VectorIndexScanPlan) {
+      return (VectorIndexScanPlan) plan;
+    }
+    if (plan instanceof HashJoinPlan) {
+      for (SubPlan subPlan : ((HashJoinPlan) plan).getSubPlans()) {
+        VectorIndexScanPlan scan = getVectorIndexScan(subPlan.getInnerPlan());
+        if (scan != null) {
+          return scan;
+        }
+      }
+    }
+    return plan instanceof DelegateQueryPlan
+      ? getVectorIndexScan(((DelegateQueryPlan) plan).getDelegate())
+      : null;
+  }
+
+  /** Indicates whether the query execution plan incorporates a vector index scan. */
+  public static boolean usesVectorIndex(QueryPlan plan) {
+    return getVectorIndexScan(plan) != null;
   }
 }

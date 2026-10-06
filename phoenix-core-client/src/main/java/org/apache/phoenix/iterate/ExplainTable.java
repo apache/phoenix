@@ -368,6 +368,9 @@ public abstract class ExplainTable {
         case UNCOVERED_GLOBAL:
           indexKind = "UNCOVERED GLOBAL";
           break;
+        case VECTOR_GLOBAL:
+          indexKind = "VECTOR GLOBAL";
+          break;
         default:
           indexKind = null;
       }

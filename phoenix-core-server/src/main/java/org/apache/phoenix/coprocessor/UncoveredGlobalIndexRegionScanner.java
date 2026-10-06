@@ -196,6 +196,16 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     return hasMore;
   }
 
+  /**
+   * The constructor adds the data empty column to the data table scan for every index, not only for
+   * an uncovered index. A covered index in a server merge needs it too. A missing data row then
+   * means that the row does not exist, so the merge can skip its index row.
+   */
+  @Override
+  protected boolean scansDataEmptyColumn() {
+    return true;
+  }
+
   @Override
   public void close() throws IOException {
     innerScanner.close();
