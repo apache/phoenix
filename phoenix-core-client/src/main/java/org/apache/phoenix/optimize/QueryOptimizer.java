@@ -932,13 +932,16 @@ public class QueryOptimizer {
 
     final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
     final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
+    final Set<QueryPlan> filterFirst = VectorSearchUtil.getFilterFirstPlans(plans, dataPlan);
     if (this.costBased) {
       Collections.sort(plans, new Comparator<QueryPlan>() {
         @Override
         public int compare(QueryPlan plan1, QueryPlan plan2) {
           int c = VectorSearchUtil.getCost(plan1).compareTo(VectorSearchUtil.getCost(plan2));
           // If the costs are equal, the static precedence rules for vector plans set the order.
-          return c != 0 ? c : compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable);
+          return c != 0
+            ? c
+            : compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable, filterFirst);
         }
       });
       // Return ordered list based on cost if stats are available; otherwise fall
@@ -1010,7 +1013,7 @@ public class QueryOptimizer {
       public int compare(QueryPlan plan1, QueryPlan plan2) {
         PTable table1 = plan1.getTableRef().getTable();
         PTable table2 = plan2.getTableRef().getTable();
-        int c = compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable);
+        int c = compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable, filterFirst);
         if (c != 0) return c;
         int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
         int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
@@ -1080,30 +1083,45 @@ public class QueryOptimizer {
     QueryPlan runnerUp =
       bestCandidates.size() > 1 ? bestCandidates.get(1) : firstOther(plans, winner);
     tagComparatorRejections(winner, plans, boundRanges, state);
-    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges), state);
+    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges, filterFirst), state);
 
     return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
   }
 
-  /**
-   * Compares plans based on vector index precedence.
-   * <p>
-   * Prioritizes vector index plans over non-vector plans for nearest neighbor queries unless base
-   * table execution is hinted. Among competing vector index plans, preference is given to plans
-   * requiring fewer base table lookups (covering index, then deferred projection, then filter-time
-   * joins). Returns 0 when neither plan uses a vector index to preserve external ordering.
-   */
   static int compareVectorPlans(QueryPlan plan1, QueryPlan plan2,
     int comparisonOfDataVersusIndexTable) {
-    boolean vector1 = VectorSearchUtil.usesVectorIndex(plan1);
-    boolean vector2 = VectorSearchUtil.usesVectorIndex(plan2);
-    if (vector1 != vector2) {
-      return vector1 ? -comparisonOfDataVersusIndexTable : comparisonOfDataVersusIndexTable;
+    return compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable,
+      Collections.emptySet());
+  }
+
+  /**
+   * Orders candidate plans for a nearest neighbor vector search by access tier and index coverage.
+   * Without a data table hint, filter first plans ({@link VectorSearchUtil#getFilterFirstPlans})
+   * rank first, because they read few rows and give exact results. Vector index plans rank next,
+   * before all other plans. A data table hint removes both precedences: filter first plans rank
+   * with the other plans, and vector index plans rank last. Among vector index plans, a plan with
+   * fewer data table lookups ranks first: a covering index, then deferred projection, then an
+   * uncovered index scan. Two plans in the same tier that do not read a vector index compare as 0.
+   * The caller then orders them by other criteria, and the comparison stays transitive.
+   */
+  static int compareVectorPlans(QueryPlan plan1, QueryPlan plan2,
+    int comparisonOfDataVersusIndexTable, Set<QueryPlan> filterFirst) {
+    int c = Integer.compare(vectorTier(plan1, comparisonOfDataVersusIndexTable, filterFirst),
+      vectorTier(plan2, comparisonOfDataVersusIndexTable, filterFirst));
+    if (c != 0 || !VectorSearchUtil.usesVectorIndex(plan1)) {
+      return c;
     }
-    return vector1
-      ? Integer.compare(VectorSearchUtil.getLookupRank(plan1),
-        VectorSearchUtil.getLookupRank(plan2))
-      : 0;
+    return Integer.compare(VectorSearchUtil.getLookupRank(plan1),
+      VectorSearchUtil.getLookupRank(plan2));
+  }
+
+  private static int vectorTier(QueryPlan plan, int comparisonOfDataVersusIndexTable,
+    Set<QueryPlan> filterFirst) {
+    boolean dataHinted = comparisonOfDataVersusIndexTable < 0;
+    if (VectorSearchUtil.usesVectorIndex(plan)) {
+      return dataHinted ? 3 : 1;
+    }
+    return filterFirst.contains(plan) && !dataHinted ? 0 : 2;
   }
 
   /**
@@ -1291,12 +1309,18 @@ public class QueryOptimizer {
    * Returns the {@code RULE_*} label for the chosen plan by replaying the comparator ladder in
    * {@link #orderPlansBestToWorst} against the runner up and returning the first decisive branch.
    */
-  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges) {
+  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges,
+    Set<QueryPlan> filterFirst) {
     if (runnerUp == null) {
       return OptimizerReasons.RULE_ONLY_CANDIDATE;
     }
-    if (VectorSearchUtil.usesVectorIndex(winner) && compareVectorPlans(winner, runnerUp, 1) != 0) {
-      return OptimizerReasons.RULE_NEAREST_NEIGHBOR_INDEX;
+    if (compareVectorPlans(winner, runnerUp, 1, filterFirst) != 0) {
+      if (VectorSearchUtil.usesVectorIndex(winner)) {
+        return OptimizerReasons.RULE_NEAREST_NEIGHBOR_INDEX;
+      }
+      if (filterFirst.contains(winner)) {
+        return OptimizerReasons.RULE_SELECTIVE_FILTER_FIRST;
+      }
     }
     PTable winnerTable = winner.getTableRef().getTable();
     PTable runnerUpTable = runnerUp.getTableRef().getTable();
