@@ -48,6 +48,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -304,6 +305,15 @@ public class CreateIndexCompiler {
    */
   private void verifyVectorIndex(CreateIndexStatement create, StatementContext context)
     throws SQLException {
+    if (
+      !context.getConnection().getQueryServices()
+        .supportsFeature(ConnectionQueryServices.Feature.VECTOR_INDEX)
+    ) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR)
+        .setMessage("Cannot create a vector index: at least one server predates vector index "
+          + "support. A server upgrade is required.")
+        .build().buildException();
+    }
     PTable dataTable = context.getResolver().getTables().get(0).getTable();
     if (dataTable.getType() == PTableType.VIEW) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)

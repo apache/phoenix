@@ -264,7 +264,7 @@ public class MetaDataUtil {
   }
 
   public static boolean decodeHasIndexWALCodec(long version) {
-    return (version & 0xF) == 0;
+    return (version & 0x1) == 0;
   }
 
   // Given the encoded integer representing the client hbase version in the encoded version value.

@@ -51,6 +51,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
@@ -291,6 +292,27 @@ public class MetaDataUtilTest {
     expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
       MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
     assertEquals(expectedPhoenixVersion, phoenixVersion);
+  }
+
+  /**
+   * The WAL codec flag is bit 0 of the encoded server version. A server with the indexing WAL codec
+   * configured must decode as having it, whatever the other low bits hold, and the version this
+   * server encodes must also decode that way under the mask released clients apply (low nibble).
+   */
+  @Test
+  public void testDecodeHasIndexWALCodec() {
+    Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+    config.set(IndexManagementUtil.WAL_CELL_CODEC_CLASS_KEY,
+      IndexManagementUtil.INDEX_WAL_EDIT_CODEC_CLASS_NAME);
+    long withCodec = MetaDataUtil.encodeVersion("2.5.0", config);
+    assertTrue(MetaDataUtil.decodeHasIndexWALCodec(withCodec));
+    assertEquals("released clients decode with a low-nibble mask", 0, withCodec & 0xF);
+    assertTrue(MetaDataUtil.decodeHasIndexWALCodec(withCodec | 0xE));
+
+    config.unset(IndexManagementUtil.WAL_CELL_CODEC_CLASS_KEY);
+    long withoutCodec = MetaDataUtil.encodeVersion("2.5.0", config);
+    assertFalse(MetaDataUtil.decodeHasIndexWALCodec(withoutCodec));
+    assertFalse(MetaDataUtil.decodeHasIndexWALCodec(withoutCodec | 0xE));
   }
 
   private Put generateOriginalPut() {

@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
@@ -30,6 +31,8 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -47,6 +50,36 @@ public class VectorIndexCompilerTest extends BaseConnectionlessQueryTest {
       conn.createStatement()
         .execute("CREATE TABLE T_VEC (ID VARCHAR NOT NULL PRIMARY KEY, V1 VECTOR(FLOAT, 128), "
           + "V2 VECTOR(FLOAT, 128), S VARCHAR)");
+    }
+  }
+
+  /**
+   * A vector index cannot be created while any server predates vector index support, and the error
+   * directs the operator to upgrade the server.
+   */
+  @Test
+  public void testVectorIndexRequiresServerSupport() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+      ConnectionQueryServices oldServer =
+        new DelegateConnectionQueryServices(conn.getQueryServices()) {
+          @Override
+          public boolean supportsFeature(Feature feature) {
+            return feature != Feature.VECTOR_INDEX && super.supportsFeature(feature);
+          }
+        };
+      try (PhoenixConnection oldConn = new PhoenixConnection(conn, oldServer, props)) {
+        PhoenixStatement stmt = oldConn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.compileMutation("CREATE VECTOR INDEX idx ON T_VEC (V1) WITH (algorithm='IVF', "
+          + "metric='L2', lists=16, sample_size=500)");
+        fail("Expected CREATE VECTOR INDEX to be refused without server vector support");
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode(),
+          e.getErrorCode());
+        String msg = e.getMessage().toLowerCase();
+        assertTrue(e.getMessage(), msg.contains("server") && msg.contains("upgrade"));
+      }
     }
   }
 
