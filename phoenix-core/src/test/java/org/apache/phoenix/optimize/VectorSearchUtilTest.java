@@ -594,4 +594,61 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
         VectorSearchUtil.isVectorSearch(orderBy, 10));
     }
   }
+
+  @Test
+  public void testGetDistanceMetricFromOrderBy() throws Exception {
+    String ddl =
+      "CREATE TABLE t_metric_dist (pk INTEGER PRIMARY KEY, v1 VECTOR(FLOAT, 3), v2 VECTOR(FLOAT, 3), ts INTEGER)";
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+
+      // A null or empty ORDER BY has no metric
+      assertNull(VectorSearchUtil.getDistanceMetric(null));
+      assertNull(VectorSearchUtil.getDistanceMetric(OrderBy.EMPTY_ORDER_BY));
+
+      // Each supported distance function gives its metric
+      String[] sqls = { "SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE_SQUARED(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY COSINE_DISTANCE(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY INNER_PRODUCT(v1, v2) LIMIT 5" };
+      DistanceMetric[] expected = { DistanceMetric.L2, DistanceMetric.L2, DistanceMetric.COSINE,
+        DistanceMetric.INNER_PRODUCT };
+
+      for (int i = 0; i < sqls.length; i++) {
+        SelectStatement select = parse(sqls[i]);
+        PhoenixStatement stmt = new PhoenixStatement(conn);
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, conn);
+        StatementContext context = new StatementContext(stmt, resolver);
+        OrderBy orderBy = OrderByCompiler.compile(context, select, GroupBy.EMPTY_GROUP_BY, 5,
+          org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+          RowProjector.EMPTY_PROJECTOR, null, null);
+        assertEquals("Metric mismatch for " + sqls[i], expected[i],
+          VectorSearchUtil.getDistanceMetric(orderBy));
+      }
+
+      // An ORDER BY expression that is not a distance has no metric
+      SelectStatement nonDistSelect = parse("SELECT pk FROM t_metric_dist ORDER BY ts LIMIT 5");
+      PhoenixStatement stmt1 = new PhoenixStatement(conn);
+      ColumnResolver resolver1 = FromCompiler.getResolverForQuery(nonDistSelect, conn);
+      StatementContext context1 = new StatementContext(stmt1, resolver1);
+      OrderBy nonDistOrderBy = OrderByCompiler.compile(context1, nonDistSelect,
+        GroupBy.EMPTY_GROUP_BY, 5, org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+        RowProjector.EMPTY_PROJECTOR, null, null);
+      assertNull("Non-distance expression must return null metric",
+        VectorSearchUtil.getDistanceMetric(nonDistOrderBy));
+
+      // An ORDER BY with more than one expression has no metric
+      SelectStatement multiSelect =
+        parse("SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE(v1, v2), ts LIMIT 5");
+      PhoenixStatement stmt2 = new PhoenixStatement(conn);
+      ColumnResolver resolver2 = FromCompiler.getResolverForQuery(multiSelect, conn);
+      StatementContext context2 = new StatementContext(stmt2, resolver2);
+      OrderBy multiOrderBy = OrderByCompiler.compile(context2, multiSelect, GroupBy.EMPTY_GROUP_BY,
+        5, org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+        RowProjector.EMPTY_PROJECTOR, null, null);
+      assertNull("Multiple order by expressions must return null metric",
+        VectorSearchUtil.getDistanceMetric(multiOrderBy));
+    }
+  }
+
 }
