@@ -36,6 +36,7 @@ import java.util.TreeSet;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -95,6 +96,25 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
     final Scan scan, final RegionCoprocessorEnvironment env,
     final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
     super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
+    if (indexMaintainer.isMigrating()) {
+      // During a migration, a repair writes each rebuilt row under the building generation and
+      // deletes the index row of the same data row under the outgoing generation. The rebuilt
+      // row can be in a different index region, and this scanner cannot write there. Thus a
+      // repair from the index can delete rows that did not migrate yet. Close the scanner and do
+      // not log a verification result, because the scanner verified nothing.
+      try {
+        if (verificationResultRepository != null) {
+          verificationResultRepository.close();
+          verificationResultRepository = null;
+        }
+        close();
+      } catch (IOException e) {
+        LOGGER.warn("Failed to close the repair scanner of {}",
+          indexMaintainer.getLogicalIndexName(), e);
+      }
+      throw new DoNotRetryIOException("Vector index " + indexMaintainer.getLogicalIndexName()
+        + " is migrating to a new centroid generation and cannot be repaired from the index");
+    }
 
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));

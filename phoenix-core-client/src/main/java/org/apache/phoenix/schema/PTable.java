@@ -208,7 +208,9 @@ public interface PTable extends PMetaDataEntity {
     DROP_CHILD_VIEWS((byte) 1),
     INDEX_REBUILD((byte) 2),
     TRANSFORM_MONITOR((byte) 3),
-    CDC_STREAM_PARTITION((byte) 4);
+    CDC_STREAM_PARTITION((byte) 4),
+    VECTOR_SCORECARD_RECONCILE((byte) 5),
+    VECTOR_INDEX_REBUILD((byte) 6);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -1083,6 +1085,20 @@ public interface PTable extends PMetaDataEntity {
    * or if the index does not have an active generation yet.
    */
   Long getVectorCentroidGeneration();
+
+  /**
+   * Returns the centroid generation of the last rebuild migration, or null if the index had no
+   * migration. A migration is in progress only while this generation is newer than the active
+   * generation.
+   */
+  Long getVectorBuildingGeneration();
+
+  /** Returns true if a building generation is newer than the active generation. */
+  default boolean isVectorRebuildInProgress() {
+    Long building = getVectorBuildingGeneration();
+    Long active = getVectorCentroidGeneration();
+    return building != null && (active == null || building > active);
+  }
 
   /** Returns true if this table is a vector index. */
   default boolean isVectorIndex() {

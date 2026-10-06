@@ -20,15 +20,21 @@ package org.apache.phoenix.execute;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.Cell;
@@ -41,15 +47,24 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -60,15 +75,20 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.DelegateTable;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -245,6 +265,194 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
     assertEquals(7, VectorIndexScanPlan.getHintInt(bare, Hint.VECTOR_PROBE_COUNT, 7));
   }
 
+  @Test
+  public void testInterleaveAlternatesGenerationRankings() {
+    // Each prefix of length 2n holds the n nearest centroids of each generation. The longer
+    // ranking puts its extra centroids at the end.
+    assertArrayEquals(new int[] { 0, 4, 1, 5, 2, 6 },
+      VectorIndexScanPlan.interleave(new int[] { 0, 1, 2 }, new int[] { 4, 5, 6 }));
+    assertArrayEquals(new int[] { 3, 9, 1, 8, 7 },
+      VectorIndexScanPlan.interleave(new int[] { 3, 1 }, new int[] { 9, 8, 7 }));
+    assertArrayEquals(new int[] { 2, 0 },
+      VectorIndexScanPlan.interleave(new int[] { 2, 0 }, new int[0]));
+  }
+
+  private static Tuple indexRow(byte[] first, byte[]... rest) {
+    return new SingleKeyValueTuple(KeyValueUtil.createFirstOnRow(ByteUtil.concat(first, rest)));
+  }
+
+  private static ImmutableBytesPtr dataRowKey(PTable index, byte[] first, byte[]... rest) {
+    return VectorIndexScanPlan.getDataRowKey(indexRow(first, rest), index,
+      VectorIndexScanPlan.getCentroidPosition(index));
+  }
+
+  private static byte[] tenant(String id) {
+    return ByteUtil.concat(Bytes.toBytes(id), QueryConstants.SEPARATOR_BYTE_ARRAY);
+  }
+
+  /**
+   * Verifies that a row read under both generations during a migration gives one data row key. Rows
+   * of different tenants with the same primary key give different keys.
+   */
+  @Test
+  public void testDataRowKeyIgnoresGenerationPrefix() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE T_DK (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4)) SALT_BUCKETS=4");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_DK ON T_DK" + INDEX_OPTIONS);
+      PTable salted = index(conn, "I_DK");
+      byte[] row1 = Bytes.toBytes("row1");
+      ImmutableBytesPtr active = dataRowKey(salted, new byte[] { 1 }, centroid(3), row1);
+      assertEquals(active, dataRowKey(salted, new byte[] { 2 }, centroid(17), row1));
+      assertNotEquals(active,
+        dataRowKey(salted, new byte[] { 1 }, centroid(3), Bytes.toBytes("row2")));
+
+      conn.createStatement()
+        .execute("CREATE TABLE T_DKT (TENANT_ID VARCHAR NOT NULL, ID VARCHAR NOT NULL, "
+          + "V VECTOR(FLOAT, 4) CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true, "
+          + "SALT_BUCKETS=4");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_DKT ON T_DKT" + INDEX_OPTIONS);
+      PTable tenant = index(conn, "I_DKT");
+      byte[] salt = new byte[] { 0 };
+      ImmutableBytesPtr key = dataRowKey(tenant, salt, tenant("T1"), centroid(3), row1);
+      assertEquals(key, dataRowKey(tenant, new byte[] { 3 }, tenant("T1"), centroid(17), row1));
+      assertNotEquals(key, dataRowKey(tenant, salt, tenant("T2"), centroid(17), row1));
+      assertNotEquals(key, dataRowKey(tenant, salt, tenant("T2"), centroid(3), row1));
+      assertNotEquals(key, dataRowKey(tenant, salt, tenant("T1"), centroid(3), Bytes.toBytes("r")));
+    }
+  }
+
+  private static ResultIterators regions(List<Tuple>... regions) {
+    List<PeekingResultIterator> iterators = new ArrayList<>();
+    for (List<Tuple> region : regions) {
+      iterators.add(new MaterializedResultIterator(region));
+    }
+    return new ResultIterators() {
+      @Override
+      public int size() {
+        return iterators.size();
+      }
+
+      @Override
+      public List<KeyRange> getSplits() {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<List<Scan>> getScans() {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public void explain(List<String> planSteps) {
+      }
+
+      @Override
+      public List<PeekingResultIterator> getIterators() {
+        return iterators;
+      }
+
+      @Override
+      public void explain(List<String> planSteps,
+        ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+  }
+
+  /**
+   * Verifies that the next distinct row from the regions replaces a duplicate copy of a data row
+   * that the merge drops during a migration. The merge must not stop at the limit first.
+   */
+  @Test
+  public void testDuplicateRowLeavesRoomForNextDistinctRow() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE T_DD (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4))");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_DD ON T_DD" + INDEX_OPTIONS);
+      PTable index = index(conn, "I_DD");
+      int centroidPosition = VectorIndexScanPlan.getCentroidPosition(index);
+      // Order rows by data primary key in place of their distance to the query vector
+      RowKeyColumnExpression id =
+        new RowKeyColumnExpression(index.getPKColumns().get(centroidPosition + 1),
+          new RowKeyValueAccessor(index.getPKColumns(), centroidPosition + 1));
+      List<OrderByExpression> orderBy = Collections
+        .singletonList(OrderByExpression.createByCheckIfExpressionSortOrderDesc(id, true, true));
+      byte[] a = Bytes.toBytes("a");
+      Tuple aActive = indexRow(centroid(3), a);
+      Tuple b = indexRow(centroid(17), Bytes.toBytes("b"));
+      Tuple c = indexRow(centroid(3), Bytes.toBytes("c"));
+      Tuple d = indexRow(centroid(17), Bytes.toBytes("d"));
+      ResultIterators batch =
+        regions(Arrays.asList(aActive, c), Arrays.asList(indexRow(centroid(17), a), b, d));
+      List<Tuple> found = new ArrayList<>();
+      VectorIndexScanPlan.drain(batch, 3, orderBy, new HashSet<>(), index, centroidPosition, found);
+      assertEquals(Arrays.asList(aActive, b, c), found);
+
+      // Without a building generation, the merge stops at the limit
+      found.clear();
+      VectorIndexScanPlan.drain(regions(Arrays.asList(aActive, c), Arrays.asList(b)), 2, orderBy,
+        null, index, centroidPosition, found);
+      assertEquals(Arrays.asList(aActive, b), found);
+    }
+  }
+
+  private static int topN(Scan scan) throws Exception {
+    return WritableUtils.readVInt(new DataInputStream(
+      new ByteArrayInputStream(scan.getAttribute(BaseScannerRegionObserverConstants.TOPN))));
+  }
+
+  /**
+   * Verifies that during a migration each region returns twice the rows that the client keeps.
+   * Otherwise the two index rows of one data row can use two slots of a region, and the query
+   * returns fewer rows than its limit.
+   */
+  @Test
+  public void testServerTopNDoubledWhileBuildingGenerationIsProbed() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE T_TN (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 2))");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_TN ON T_TN" + INDEX_OPTIONS);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable index = index(conn, "I_TN");
+      VectorCentroidCache cache =
+        VectorCentroidCache.getInstance(pconn.getQueryServices().getConfiguration());
+      cache.put("I_TN", 1L, new CachedCentroids(
+        Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }), DistanceMetric.L2));
+      cache.put("I_TN", 2L, new CachedCentroids(
+        Arrays.asList(new float[] { 1, 1 }, new float[] { 9, 9 }), DistanceMetric.L2, 2));
+      String sql = "SELECT ID FROM T_TN ORDER BY L2_DISTANCE(V, ?) LIMIT 3 OFFSET 2";
+      for (Long building : new Long[] { null, 2L }) {
+        pconn.addTable(new DelegateTable(index) {
+          @Override
+          public PIndexState getIndexState() {
+            return PIndexState.ACTIVE;
+          }
+
+          @Override
+          public Long getVectorCentroidGeneration() {
+            return 1L;
+          }
+
+          @Override
+          public Long getVectorBuildingGeneration() {
+            return building;
+          }
+        }, index.getTimeStamp());
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+          ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.5f, 0.5f }));
+          VectorIndexScanPlan plan =
+            (VectorIndexScanPlan) ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+          assertEquals(building == null ? 2 : 4, plan.getCentroidCount());
+          assertEquals(building == null ? 5 : 10, topN(plan.getContext().getScan()));
+        }
+      }
+    }
+  }
+
   /** Returns a scan grouper that reports the given number of index regions. */
   private static ParallelScanGrouper regionGrouper(int regions) {
     return new DefaultParallelScanGrouper() {
@@ -289,15 +497,16 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
    */
   private static Connection trainedIndex(String table, String index, Long bound, Long indexBytes)
     throws Exception {
-    return trainedIndex(table, index, bound == null ? null : Long.toString(bound), indexBytes, "");
+    return trainedIndex(table, index, bound == null ? null : Long.toString(bound), indexBytes, "",
+      0);
   }
 
   /**
    * Makes a trained index as above, with the read type bound as text. The table gets the given
-   * options.
+   * options, and the centroid IDs start at {@code firstId}.
    */
   private static Connection trainedIndex(String table, String index, String bound, Long indexBytes,
-    String tableOptions) throws Exception {
+    String tableOptions, int firstId) throws Exception {
     Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
     if (bound != null) {
       props.setProperty(QueryServices.VECTOR_PREAD_MAX_BYTES_PER_REGION_ATTRIB, bound);
@@ -312,7 +521,7 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
       vectors.add(new float[] { i, i });
     }
     VectorCentroidCache.getInstance(pconn.getQueryServices().getConfiguration()).put(index, 1L,
-      new CachedCentroids(vectors, DistanceMetric.L2));
+      new CachedCentroids(vectors, DistanceMetric.L2, firstId));
     PTable indexTable = index(conn, index);
     pconn.addTable(new DelegateTable(indexTable) {
       @Override
@@ -719,20 +928,58 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
     }
   }
 
-  /** The region count does not include regions that hold no posting lists. */
+  /**
+   * During a migration, the estimate divides the index size over the centroids of both generations.
+   * The region count includes the regions of the building generation.
+   */
   @Test
-  public void testRegionCountSkipsRegionsWithoutPostingLists() throws Exception {
-    // Lists of 100 bytes and a bound of 200 bytes. The centroid IDs are 0 to 7
-    try (Connection conn = trainedIndex("T_PRO", "I_PRO", 200L, 800L)) {
+  public void testListEstimateCountsBothGenerations() throws Exception {
+    // 1600 bytes over 16 lists give lists of 100 bytes. The bound is 100 bytes
+    try (Connection conn = trainedIndex("T_PRG", "I_PRG", 100L, 1600L)) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      List<float[]> vectors = new ArrayList<>();
+      for (int i = 0; i < 8; i++) {
+        vectors.add(new float[] { i, i });
+      }
+      VectorCentroidCache.getInstance(pconn.getQueryServices().getConfiguration()).put("I_PRG", 2L,
+        new CachedCentroids(vectors, DistanceMetric.L2, 8));
+      PTable index = index(conn, "I_PRG");
+      pconn.addTable(new DelegateTable(index) {
+        @Override
+        public Long getVectorBuildingGeneration() {
+          return 2L;
+        }
+      }, index.getTimeStamp());
+      PreparedStatement ps = conn.prepareStatement("SELECT /*+ VECTOR_PROBE_COUNT(1) "
+        + "MAX_PROBE_LIMIT(1) */ ID FROM T_PRG ORDER BY L2_DISTANCE(V, ?) LIMIT 3");
+      ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.5f, 0.5f }));
+      VectorIndexScanPlan plan =
+        (VectorIndexScanPlan) ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      // One list of each generation
+      assertEquals(2, plan.getProbeCount());
+      assertEquals(16, plan.getCentroidCount());
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 1));
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 2));
+      // Regions of the building generation count, and a region after it does not
+      assertEquals(2, plan.getBoundedReadTypeRegions(
+        splitGrouper(centroid(0), centroid(8), centroid(16)), plan.getContext().getScan()));
+    }
+  }
+
+  /** The region count does not include regions that hold only rows of an older generation. */
+  @Test
+  public void testRegionCountSkipsOlderGenerations() throws Exception {
+    // Lists of 100 bytes and a bound of 200 bytes. The active centroid IDs are 8 to 15
+    try (Connection conn = trainedIndex("T_PRO", "I_PRO", "200", 800L, "", 8)) {
       VectorIndexScanPlan plan = plan(conn, "T_PRO", 6, 4, "");
       ParallelScanGrouper grouper =
-        splitGrouper(centroid(0), centroid(4), centroid(8), centroid(12));
+        splitGrouper(centroid(0), centroid(4), centroid(8), centroid(12), centroid(16));
       assertEquals(2, plan.getBoundedReadTypeRegions(grouper, plan.getContext().getScan()));
       // Six lists over two regions give 300 bytes for a region scan
       assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, grouper));
       // Six lists over three regions give 200 bytes for a region scan
-      assertEquals(Scan.ReadType.PREAD,
-        firstBatchReadType(plan, splitGrouper(centroid(3), centroid(6), centroid(8))));
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan,
+        splitGrouper(centroid(4), centroid(8), centroid(10), centroid(12))));
     }
   }
 
@@ -743,7 +990,7 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
   @Test
   public void testSaltedIndexSplitsListsOverBuckets() throws Exception {
     // Lists of 400 bytes, parts of 100 bytes in each of four buckets, and a bound of 200 bytes
-    try (Connection conn = trainedIndex("T_PRT", "I_PRT", "200", 3200L, " SALT_BUCKETS=4")) {
+    try (Connection conn = trainedIndex("T_PRT", "I_PRT", "200", 3200L, " SALT_BUCKETS=4", 0)) {
       assertEquals(Integer.valueOf(4), index(conn, "I_PRT").getBucketNum());
       VectorIndexScanPlan plan = plan(conn, "T_PRT", 1, 1, "");
       // Four parts over four regions give 100 bytes for a region scan
@@ -796,7 +1043,7 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
     // Lists of 2000 bytes are over a bound of 1 KB and under a bound of 4 KB
     for (String bound : new String[] { "1k", "4k" }) {
       String table = "T_PRQ" + bound.charAt(0);
-      try (Connection conn = trainedIndex(table, "I_PRQ" + bound.charAt(0), bound, 16000L, "")) {
+      try (Connection conn = trainedIndex(table, "I_PRQ" + bound.charAt(0), bound, 16000L, "", 0)) {
         assertEquals(bound.equals("1k") ? Scan.ReadType.DEFAULT : Scan.ReadType.PREAD,
           firstBatchReadType(plan(conn, table, 1, 1, ""), 1));
       }

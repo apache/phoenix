@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GENERATION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME;
@@ -46,6 +47,7 @@ import org.apache.hadoop.mapreduce.Counters;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.GenerationSummary;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters;
@@ -54,6 +56,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 
 /** Shared helpers and fixtures for vector index integration tests. */
@@ -68,12 +71,18 @@ class VectorIndexTestUtil {
 
   /**
    * Records the centroids as the next generation of the index and marks the index ACTIVE. Returns
-   * the new generation.
+   * the new generation. The generation gets a recent recount time, so a background recount is not
+   * due. A background recount can drop the deltas of the writes in a test.
    */
   static long activateWithKnownCentroids(Connection conn, String tableName, String indexName,
     List<float[]> centroids) throws SQLException {
     long generation = recordKnownCentroids(conn, indexName, centroids);
     PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
+      CentroidManager.persistGenerationSummary(internal, indexName, generation,
+        new GenerationSummary(null, null, null, null, null,
+          EnvironmentEdgeManager.currentTimeMillis()));
+    }
     IndexUtil.updateIndexState(pconn, indexName, PIndexState.ACTIVE, 0L);
     pconn.removeTable(pconn.getTenantId(), indexName, null, HConstants.LATEST_TIMESTAMP);
     pconn.removeTable(pconn.getTenantId(), tableName, null, HConstants.LATEST_TIMESTAMP);
@@ -132,7 +141,26 @@ class VectorIndexTestUtil {
       .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
   }
 
-  /** Populates uniform random vector data across optional tenant partitions. */
+  /**
+   * Runs {@link IndexTool} verification and asserts that no index rows are invalid or missing.
+   * Unlike {@link #assertIndexVerifies}, this method does not compare the valid row count with an
+   * expected count.
+   */
+  static void assertIndexConsistent(String tableName, String indexName) throws Exception {
+    IndexTool tool = IndexToolIT.runIndexTool(false, null, tableName, indexName, null, 0,
+      IndexTool.IndexVerifyType.ONLY);
+    Counters counters = tool.getJob().getCounters();
+    assertEquals("invalid index rows", 0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+    assertEquals("missing index rows", 0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+  }
+
+  /**
+   * Upserts and commits {@code rows} random vectors in [0, 10)^4 with ID {@code row_NNN} and a
+   * LABEL. If {@code tenantCol} is not null, the rows go to the {@code tenants} in turn. Returns
+   * the vectors in row order.
+   */
   static float[][] loadRandomVectors(Connection conn, String tableName, String tenantCol,
     String[] tenants, int rows, long seed) throws SQLException {
     Random rng = new Random(seed);
@@ -451,8 +479,9 @@ class VectorIndexTestUtil {
 
   static int countCentroids(Connection conn, String indexName, Long generation)
     throws SQLException {
-    String sql = "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME
-      + " = ?" + (generation == null ? "" : " AND " + GENERATION_ID + " = ?");
+    String sql =
+      "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME + " = ? AND "
+        + CENTROID_ID + " >= 0" + (generation == null ? "" : " AND " + GENERATION_ID + " = ?");
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, indexName);
       if (generation != null) {

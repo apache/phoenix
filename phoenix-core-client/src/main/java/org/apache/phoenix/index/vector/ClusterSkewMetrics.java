@@ -174,12 +174,15 @@ public class ClusterSkewMetrics {
     }
   }
 
+  /** Coefficient of variation of the cluster sizes above which the skew is severe. */
+  public static final double SEVERE_SKEW_CV_THRESHOLD = 1.0;
+
   /**
    * Returns true if the coefficient of variation is more than {@link #SEVERE_SKEW_CV_THRESHOLD}.
    * Training logs a warning for such a model.
    */
   public boolean isSevereSkew() {
-    return coefficientOfVariation > 1.0;
+    return coefficientOfVariation > SEVERE_SKEW_CV_THRESHOLD;
   }
 
   public int getMin() {

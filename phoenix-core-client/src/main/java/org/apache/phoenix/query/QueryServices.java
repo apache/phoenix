@@ -162,6 +162,36 @@ public interface QueryServices extends SQLCloseable {
   // no estimate, keeps the default read type. A value of 0 or less turns off PREAD
   public static final String VECTOR_PREAD_MAX_BYTES_PER_REGION_ATTRIB =
     "phoenix.vector.pread.max.bytes.per.region";
+  // Interval in milliseconds between periodic scorecard flushes of a region server.
+  // A value of 0 or less disables the periodic flush.
+  public static final String VECTOR_SCORECARD_FLUSH_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.flush.interval.ms";
+  // Interval in milliseconds between scorecard reconciles of a vector index
+  public static final String VECTOR_SCORECARD_RECONCILE_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.reconcile.interval.ms";
+  // Largest clock difference in milliseconds between two hosts. A scorecard recount adds it to
+  // its fence, so a delta that the recount counted cannot add to the count again. A rebuild adds
+  // it to the retire time of the outgoing generation, so no host deletes that generation early.
+  public static final String VECTOR_SCORECARD_CLOCK_SKEW_MS_ATTRIB =
+    "phoenix.vector.scorecard.clock.skew.ms";
+  // Time in milliseconds that a scorecard recount has to write its counts after it reads the
+  // server time. A recount that takes longer loses the deltas that flush during the extra time.
+  // The next recount repairs the count.
+  public static final String VECTOR_SCORECARD_COMPLETION_BUDGET_MS_ATTRIB =
+    "phoenix.vector.scorecard.completion.budget.ms";
+  // Drift threshold for the largest posting list size divided by the median size
+  public static final String VECTOR_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB =
+    "phoenix.vector.drift.skew.ratio.threshold";
+  // Smallest index population for which the drift assessment can find drift
+  public static final String VECTOR_DRIFT_MIN_POPULATION_ATTRIB =
+    "phoenix.vector.drift.min.population";
+  // If true, a drifted vector index gets an automatic background rebuild
+  public static final String VECTOR_REBUILD_AUTO_ENABLED_ATTRIB =
+    "phoenix.vector.rebuild.auto.enabled";
+  // Minimum time in milliseconds from the last rebuild of a vector index to the start of an
+  // automatic rebuild. Manual rebuilds do not use this value.
+  public static final String VECTOR_REBUILD_MIN_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.rebuild.min.interval.ms";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling
