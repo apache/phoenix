@@ -48,6 +48,8 @@ public final class VectorIndexTrainer {
    * Margin of the Bernoulli rate, so that the filter usually returns enough rows for the sample.
    */
   private static final double OVERSAMPLE = 1.2;
+  /** Trigger reason that the first generation of a new vector index records. */
+  public static final String CREATE_INDEX_REASON = "CREATE_INDEX";
 
   private VectorIndexTrainer() {
   }
@@ -74,7 +76,17 @@ public final class VectorIndexTrainer {
    */
   public static KMeansResult train(PhoenixConnection conn, PTable dataTable, PTable index)
     throws SQLException {
-    int lists = index.getVectorIvfLists();
+    return train(conn, dataTable, index, index.getVectorIvfLists());
+  }
+
+  /**
+   * Samples vectors from the base table and trains the requested number of centroids. The sample
+   * size and the distance metric come from the index.
+   * @return the trained k-means model, or null if there are fewer non-null vectors or sampled
+   *         vectors than the requested number of lists
+   */
+  public static KMeansResult train(PhoenixConnection conn, PTable dataTable, PTable index,
+    int lists) throws SQLException {
     int sampleSize = index.getVectorIvfSampleSize();
     DistanceMetric metric = DistanceMetric.fromString(index.getVectorDistanceMetric());
     PColumn vectorColumn = getIndexedVectorColumn(index);
@@ -124,10 +136,42 @@ public final class VectorIndexTrainer {
     String indexName = index.getName().getString();
     long generation = CentroidManager.nextGeneration(index.getVectorCentroidGeneration());
     CentroidManager.persistCentroids(conn, indexName, generation, result.getCentroids());
+    CentroidManager.persistGenerationSummary(conn, indexName, generation,
+      new GenerationSummary(GenerationSummary.ACTIVE, CREATE_INDEX_REASON, result.getRequestedK(),
+        result.getSkewMetrics(), null, null));
     CentroidManager.setGenerationAndLists(conn, index, generation, result.getEffectiveK());
     VectorCentroidCache.getInstance(conn.getQueryServices().getConfiguration()).put(indexName,
       generation, new CachedCentroids(result.getCentroids(), result.getDistanceMetric()));
     return generation;
+  }
+
+  /**
+   * Trains the first centroid generation of an index that has no generation. The training is the
+   * same as {@link #trainAndRecord}.
+   * <p>
+   * The caller must hold the rebuild claim of the index, from {@link CentroidManager#claim}. The
+   * caller must take the claim before this call and keep it until the index build after this call
+   * is complete, as ALTER INDEX ... REBUILD does. Without the claim, two trainers can mix their
+   * centroid rows, which both number from 0, or record different generations. Also, two builds can
+   * race with a rebuild of the index. If the index has a generation when this call reads it, this
+   * call does not train.
+   * @param conn connection of the caller, which this call uses to read the index
+   * @return {@link VectorIndexRebuilder.Outcome#REBUILT} if this call recorded the first
+   *         generation, {@link VectorIndexRebuilder.Outcome#UP_TO_DATE} if the index had a
+   *         generation before the claim, or {@link VectorIndexRebuilder.Outcome#UNTRAINED} if the
+   *         data table has too few vectors to train
+   */
+  public static VectorIndexRebuilder.Outcome trainFirstGeneration(PhoenixConnection conn,
+    PTable dataTable, PTable index) throws SQLException {
+    PTable current = conn.getTableNoCache(index.getName().getString());
+    if (current.getVectorCentroidGeneration() != null) {
+      return VectorIndexRebuilder.Outcome.UP_TO_DATE;
+    }
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(conn)) {
+      return trainAndRecord(internal, dataTable, current) != null
+        ? VectorIndexRebuilder.Outcome.REBUILT
+        : VectorIndexRebuilder.Outcome.UNTRAINED;
+    }
   }
 
   private static List<float[]> sample(PhoenixConnection conn, String sql, int sampleSize)

@@ -30,7 +30,9 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -38,11 +40,16 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.ClusterSkewMetrics;
+import org.apache.phoenix.index.vector.GenerationSummary;
+import org.apache.phoenix.index.vector.ScorecardRow;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -71,7 +78,8 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
       try (Statement stmt = conn.createStatement(); ResultSet rs =
         stmt.executeQuery("SELECT * FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE 1=0")) {
         ResultSetMetaData rsmd = rs.getMetaData();
-        assertEquals(4, rsmd.getColumnCount());
+        // Key columns, the centroid vector, scorecard columns and generation summary columns
+        assertEquals(12, rsmd.getColumnCount());
 
         assertEquals(INDEX_NAME, rsmd.getColumnName(1));
         assertEquals(Types.VARCHAR, rsmd.getColumnType(1));
@@ -216,6 +224,17 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
         assertEquals(CENTROID_VECTOR, rs.getString(COLUMN_NAME));
         assertEquals(Types.VARBINARY, rs.getInt(DATA_TYPE));
 
+        // Scorecard columns of each centroid and summary columns of each generation
+        String[] names = { "CLUSTER_SIZE", "REASSIGN_COUNT", "SKEW_METRICS", "REBUILD_STATE",
+          "TRIGGER_REASON", "REQUESTED_LISTS", "LAST_REBUILD_TIME", "LAST_SCORECARD_UPDATE" };
+        int[] types = { Types.BIGINT, Types.BIGINT, Types.VARBINARY, Types.CHAR, Types.VARCHAR,
+          Types.INTEGER, Types.BIGINT, Types.BIGINT };
+        for (int i = 0; i < names.length; i++) {
+          assertTrue("Expected " + names[i] + " column", rs.next());
+          assertEquals(names[i], rs.getString(COLUMN_NAME));
+          assertEquals(types[i], rs.getInt(DATA_TYPE));
+        }
+
         assertFalse("No additional columns expected", rs.next());
       }
     }
@@ -316,6 +335,124 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
       assertEquals(before.getIndexState(), after.getIndexState());
       assertTrue("The index DDL timestamp advances",
         after.getLastDDLTimestamp() > before.getLastDDLTimestamp());
+    }
+  }
+
+  /** Verifies that a generation summary persists, and that a partial update keeps other fields. */
+  @Test
+  public void testGenerationSummaryRoundTrip() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    ClusterSkewMetrics skew = ClusterSkewMetrics.compute(new int[] { 10, 20, 30 });
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      assertNull(CentroidManager.loadGenerationSummary(conn, indexName, 5L));
+      CentroidManager.persistGenerationSummary(conn, indexName, 5L,
+        new GenerationSummary(GenerationSummary.BUILDING, "SKEW", 4, skew, null, null));
+      CentroidManager.persistGenerationSummary(conn, indexName, 5L,
+        new GenerationSummary(GenerationSummary.ACTIVE, null, null, null, 123L, 456L));
+      GenerationSummary summary = CentroidManager.loadGenerationSummary(conn, indexName, 5L);
+      assertEquals(GenerationSummary.ACTIVE, summary.getRebuildState());
+      assertEquals("SKEW", summary.getTriggerReason());
+      assertEquals(Integer.valueOf(4), summary.getRequestedLists());
+      assertEquals(skew, summary.getSkewMetrics());
+      assertEquals(Long.valueOf(123L), summary.getLastRebuildTime());
+      assertEquals(Long.valueOf(456L), summary.getLastScorecardUpdate());
+      assertNull(CentroidManager.loadGenerationSummary(conn, indexName, 6L));
+    }
+  }
+
+  /**
+   * Verifies that each generation has its own scorecard, and that the retirement of a generation
+   * deletes its scorecard.
+   */
+  @Test
+  public void testScorecardIsGenerationScoped() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    List<float[]> centroids = Arrays.asList(new float[] { 1 }, new float[] { 2 });
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager.persistCentroids(conn, indexName, 1L, centroids);
+      CentroidManager.persistCentroids(conn, indexName, 2L, centroids);
+      CentroidManager.persistGenerationSummary(conn, indexName, 1L,
+        new GenerationSummary(GenerationSummary.ACTIVE, null, 2, null, null, 1L));
+      CentroidManager.adjustScorecard(conn, indexName, 1L,
+        Arrays.asList(new ScorecardRow(0, 7, 1), new ScorecardRow(1, 3, 0)));
+
+      List<ScorecardRow> gen1 = CentroidManager.loadScorecard(conn, indexName, 1L);
+      assertEquals(2, gen1.size());
+      assertEquals(7, gen1.get(0).getClusterSize());
+      assertEquals(1, gen1.get(0).getReassignCount());
+      assertEquals(3, gen1.get(1).getClusterSize());
+      List<ScorecardRow> gen2 = CentroidManager.loadScorecard(conn, indexName, 2L);
+      assertEquals(0, gen2.get(0).getClusterSize());
+      assertEquals(2, CentroidManager.loadCentroids(conn, indexName, 1L).size());
+      assertEquals(Arrays.asList(1L, 2L), CentroidManager.listGenerations(conn, indexName));
+
+      CentroidManager.deleteGeneration(conn, indexName, 1L);
+      assertTrue(CentroidManager.loadScorecard(conn, indexName, 1L).isEmpty());
+      assertNull(CentroidManager.loadGenerationSummary(conn, indexName, 1L));
+      assertEquals(2, CentroidManager.loadScorecard(conn, indexName, 2L).size());
+      assertEquals(Arrays.asList(2L), CentroidManager.listGenerations(conn, indexName));
+    }
+  }
+
+  /** Verifies that one holder at a time has the rebuild claim, and verifies renewal and expiry. */
+  @Test
+  public void testRebuildClaim() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      assertTrue(CentroidManager.claimRebuild(conn, indexName, "a", 60000));
+      assertFalse(CentroidManager.claimRebuild(conn, indexName, "b", 60000));
+      assertTrue(CentroidManager.listGenerations(conn, indexName).isEmpty());
+      CentroidManager.releaseRebuild(conn, indexName, "b");
+      assertFalse("Only the holder releases",
+        CentroidManager.claimRebuild(conn, indexName, "b", 60000));
+      CentroidManager.releaseRebuild(conn, indexName, "a");
+      assertTrue(CentroidManager.claimRebuild(conn, indexName, "b", 60000));
+      Thread.sleep(5);
+      assertTrue("An expired claim is taken over",
+        CentroidManager.claimRebuild(conn, indexName, "c", 1));
+      assertFalse(CentroidManager.claimRebuild(conn, indexName, "b", 60000));
+      Thread.sleep(2000);
+      assertTrue("The holder renews its claim",
+        CentroidManager.claimRebuild(conn, indexName, "c", 60000));
+      assertFalse("A claim renewed since the expiry is not taken over",
+        CentroidManager.claimRebuild(conn, indexName, "d", 1500));
+    }
+  }
+
+  /**
+   * Verifies that a renewal of a held claim extends its lease. Also verifies that a claim that
+   * expired and has a new holder stays lost after the new holder releases it.
+   */
+  @Test
+  public void testRebuildClaimRenewal() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+      try (CentroidManager.RebuildClaim claim = CentroidManager.claim(conn, indexName, "a")) {
+        assertNotNull(claim);
+        Thread.sleep(2000);
+        claim.renew();
+        assertFalse("A claim renewed since the expiry is not taken over",
+          CentroidManager.claimRebuild(conn, indexName, "b", 1500));
+        Thread.sleep(5);
+        assertTrue("A lapsed claim is taken over",
+          CentroidManager.claimRebuild(conn, indexName, "b", 1));
+        assertNotRenewed(claim);
+        CentroidManager.releaseRebuild(conn, indexName, "b");
+        assertNotRenewed(claim);
+        assertTrue("The lost claim does not take the index back",
+          CentroidManager.claimRebuild(conn, indexName, "c", 60000));
+      }
+    }
+  }
+
+  private static void assertNotRenewed(CentroidManager.RebuildClaim claim) {
+    try {
+      claim.renew();
+      fail("A lost claim must not renew");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode(),
+        e.getErrorCode());
     }
   }
 }

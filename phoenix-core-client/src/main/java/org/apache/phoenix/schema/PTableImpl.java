@@ -230,6 +230,7 @@ public class PTableImpl implements PTable {
   private final Integer vectorIvfLists;
   private final Integer vectorIvfSampleSize;
   private final Long vectorCentroidGeneration;
+  private final Long vectorBuildingGeneration;
 
   public static class Builder {
     private PTableKey key;
@@ -306,6 +307,7 @@ public class PTableImpl implements PTable {
     private Integer vectorIvfLists;
     private Integer vectorIvfSampleSize;
     private Long vectorCentroidGeneration;
+    private Long vectorBuildingGeneration;
 
     // Used to denote which properties a view has explicitly modified
     private BitSet viewModifiedPropSet = new BitSet(3);
@@ -787,6 +789,11 @@ public class PTableImpl implements PTable {
       return this;
     }
 
+    public Builder setVectorBuildingGeneration(Long vectorBuildingGeneration) {
+      this.vectorBuildingGeneration = vectorBuildingGeneration;
+      return this;
+    }
+
     /**
      * Populate derivable attributes of the PTable
      * @return PTableImpl.Builder object
@@ -1076,6 +1083,7 @@ public class PTableImpl implements PTable {
     this.vectorIvfLists = builder.vectorIvfLists;
     this.vectorIvfSampleSize = builder.vectorIvfSampleSize;
     this.vectorCentroidGeneration = builder.vectorCentroidGeneration;
+    this.vectorBuildingGeneration = builder.vectorBuildingGeneration;
   }
 
   // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1153,7 +1161,8 @@ public class PTableImpl implements PTable {
       .setVectorDistanceMetric(table.getVectorDistanceMetric())
       .setVectorDimension(table.getVectorDimension()).setVectorIvfLists(table.getVectorIvfLists())
       .setVectorIvfSampleSize(table.getVectorIvfSampleSize())
-      .setVectorCentroidGeneration(table.getVectorCentroidGeneration());
+      .setVectorCentroidGeneration(table.getVectorCentroidGeneration())
+      .setVectorBuildingGeneration(table.getVectorBuildingGeneration());
   }
 
   @Override
@@ -2188,6 +2197,10 @@ public class PTableImpl implements PTable {
     if (table.hasVectorCentroidGeneration()) {
       vectorCentroidGeneration = table.getVectorCentroidGeneration();
     }
+    Long vectorBuildingGeneration = null;
+    if (table.hasVectorBuildingGeneration()) {
+      vectorBuildingGeneration = table.getVectorBuildingGeneration();
+    }
     IndexConsistency indexConsistency = null;
     if (tableType == PTableType.INDEX) {
       if (table.hasIndexConsistency()) {
@@ -2235,7 +2248,8 @@ public class PTableImpl implements PTable {
         .setVectorIndexAlgorithm(vectorIndexAlgorithm).setVectorDistanceMetric(vectorDistanceMetric)
         .setVectorDimension(vectorDimension).setVectorIvfLists(vectorIvfLists)
         .setVectorIvfSampleSize(vectorIvfSampleSize)
-        .setVectorCentroidGeneration(vectorCentroidGeneration).build();
+        .setVectorCentroidGeneration(vectorCentroidGeneration)
+        .setVectorBuildingGeneration(vectorBuildingGeneration).build();
     } catch (SQLException e) {
       throw new RuntimeException(e); // Impossible
     }
@@ -2425,6 +2439,9 @@ public class PTableImpl implements PTable {
     }
     if (table.getVectorCentroidGeneration() != null) {
       builder.setVectorCentroidGeneration(table.getVectorCentroidGeneration());
+    }
+    if (table.getVectorBuildingGeneration() != null) {
+      builder.setVectorBuildingGeneration(table.getVectorBuildingGeneration());
     }
     return builder.build();
   }
@@ -2697,6 +2714,11 @@ public class PTableImpl implements PTable {
   @Override
   public Long getVectorCentroidGeneration() {
     return vectorCentroidGeneration;
+  }
+
+  @Override
+  public Long getVectorBuildingGeneration() {
+    return vectorBuildingGeneration;
   }
 
   private static final class KVColumnFamilyQualifier {

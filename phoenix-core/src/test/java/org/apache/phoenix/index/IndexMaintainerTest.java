@@ -63,6 +63,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.vector.ScorecardAccumulator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -648,7 +649,8 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       // A NaN element makes the vector malformed in the same way
       Put nan = bsonDataRow(pconn, tableName, "c", new BsonDocument("v",
         new BsonBinary(BinaryVector.floatVector(new float[] { 1, Float.NaN }))));
-      assertFalse(im.hasIndexRow(nan));
+      assertNull(im.getIndexedVector(nan, false));
+      assertFalse(im.shouldPrepareIndexMutations(nan, null));
       try {
         im.shouldPrepareIndexMutations(nan);
         fail("A vector with a NaN element being written must fail");
@@ -865,8 +867,9 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Verifies that a row write evaluates the indexed vector of each row state once, a document
-   * decode for a BSON vector, across every index mutation check of the write.
+   * Verifies that a row write evaluates the indexed vector of each row state only once, for all
+   * index mutations and scorecard checks of the write. For a BSON vector, each evaluation is one
+   * document decode.
    */
   @Test
   public void testIndexedVectorEvaluatedOncePerRowState() throws Exception {
@@ -903,12 +906,18 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       AtomicInteger nextReads = new AtomicInteger();
 
       // An unchanged vector writes the index row again at the same row key
-      List<Mutation> mutations = indexMutationsForRow(im, countingReads(near, doc, currentReads),
-        countingReads(near, doc, nextReads), ts);
+      Put current = countingReads(near, doc, currentReads);
+      List<Mutation> mutations =
+        indexMutationsForRow(im, current, countingReads(near, doc, nextReads), ts);
       assertEquals(1, mutations.size());
       assertArrayEquals(nearRowKey, mutations.get(0).getRow());
+      Map<ScorecardAccumulator.Key, long[]> deltas = Maps.newHashMap();
+      ScorecardAccumulator.collect(im, current, im.getIndexedVector(near, false), mutations,
+        deltas);
       assertEquals(1, currentReads.get());
       assertEquals(1, nextReads.get());
+      // The row stays in its posting list, so the scorecard gets no delta
+      assertTrue(deltas.isEmpty());
 
       // A changed vector moves the index row to its new centroid
       currentReads.set(0);
@@ -920,8 +929,13 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       assertArrayEquals(farRowKey, mutations.get(0).getRow());
       assertTrue(mutations.get(1) instanceof Delete);
       assertArrayEquals(nearRowKey, mutations.get(1).getRow());
+      ScorecardAccumulator.collect(im, near, im.getIndexedVector(near, false), mutations, deltas);
       assertEquals(1, currentReads.get());
       assertEquals(1, nextReads.get());
+      assertArrayEquals(new long[] { -1, 0, 0 },
+        deltas.get(new ScorecardAccumulator.Key(indexName, 3L, 1)));
+      assertArrayEquals(new long[] { 1, 1, 1 },
+        deltas.get(new ScorecardAccumulator.Key(indexName, 3L, 0)));
 
       // A data row delete also deletes the index row
       currentReads.set(0);
@@ -930,6 +944,31 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       assertTrue(mutations.get(0) instanceof Delete);
       assertArrayEquals(nearRowKey, mutations.get(0).getRow());
       assertEquals(1, currentReads.get());
+
+      // During a migration, an unchanged vector moves its index row to the building generation.
+      // The write uses the new row key as the current row key and does not assign the vector again.
+      PTable migrating = new DelegateTable(trained) {
+        @Override
+        public Long getVectorBuildingGeneration() {
+          return 4L;
+        }
+      };
+      VectorCentroidCache.getInstance(HBaseConfiguration.create()).put(indexName, 4L,
+        new CachedCentroids(Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }),
+          DistanceMetric.L2, 2));
+      IndexMaintainer migratingIm = IndexMaintainer.create(dataTable, migrating, pconn);
+      currentReads.set(0);
+      nextReads.set(0);
+      mutations = indexMutationsForRow(migratingIm, countingReads(near, doc, currentReads),
+        countingReads(near, doc, nextReads), ts);
+      assertEquals(2, mutations.size());
+      assertTrue(mutations.get(0) instanceof Put);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(3), Bytes.toBytes("a")),
+        mutations.get(0).getRow());
+      assertTrue(mutations.get(1) instanceof Delete);
+      assertArrayEquals(nearRowKey, mutations.get(1).getRow());
+      assertEquals(1, currentReads.get());
+      assertEquals(1, nextReads.get());
     }
   }
 }

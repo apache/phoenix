@@ -24,6 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
@@ -60,9 +61,9 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class VectorSystemCatalogIT extends ParallelStatsDisabledIT {
 
-  private static final List<String> VECTOR_METADATA_COLUMNS =
-    Arrays.asList(VECTOR_INDEX_ALGORITHM, VECTOR_DISTANCE_METRIC, VECTOR_DIMENSION,
-      VECTOR_IVF_LISTS, VECTOR_IVF_SAMPLE_SIZE, VECTOR_CENTROID_GENERATION);
+  private static final List<String> VECTOR_METADATA_COLUMNS = Arrays.asList(VECTOR_INDEX_ALGORITHM,
+    VECTOR_DISTANCE_METRIC, VECTOR_DIMENSION, VECTOR_IVF_LISTS, VECTOR_IVF_SAMPLE_SIZE,
+    VECTOR_CENTROID_GENERATION, VECTOR_BUILDING_GENERATION);
 
   private static final Map<String, PDataType<?>> EXPECTED_COLUMN_TYPES = new HashMap<>();
   static {
@@ -72,6 +73,7 @@ public class VectorSystemCatalogIT extends ParallelStatsDisabledIT {
     EXPECTED_COLUMN_TYPES.put(VECTOR_IVF_LISTS, PInteger.INSTANCE);
     EXPECTED_COLUMN_TYPES.put(VECTOR_IVF_SAMPLE_SIZE, PInteger.INSTANCE);
     EXPECTED_COLUMN_TYPES.put(VECTOR_CENTROID_GENERATION, PLong.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_BUILDING_GENERATION, PLong.INSTANCE);
   }
 
   /**

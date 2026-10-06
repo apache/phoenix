@@ -470,6 +470,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] VECTOR_CENTROID_GENERATION_BYTES =
     Bytes.toBytes(VECTOR_CENTROID_GENERATION);
 
+  public static final String VECTOR_BUILDING_GENERATION = "VECTOR_BUILDING_GENERATION";
+  public static final byte[] VECTOR_BUILDING_GENERATION_BYTES =
+    Bytes.toBytes(VECTOR_BUILDING_GENERATION);
+
   public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
   public static final String SYSTEM_CHILD_LINK_NAME =
     SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
@@ -544,6 +548,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] CENTROID_VECTOR_BYTES = Bytes.toBytes(CENTROID_VECTOR);
   public static final String GENERATION_ID = "GENERATION_ID";
   public static final byte[] GENERATION_ID_BYTES = Bytes.toBytes(GENERATION_ID);
+  public static final String CLUSTER_SIZE = "CLUSTER_SIZE";
+  public static final String REASSIGN_COUNT = "REASSIGN_COUNT";
+  public static final String SKEW_METRICS = "SKEW_METRICS";
+  public static final String REBUILD_STATE = "REBUILD_STATE";
+  public static final String TRIGGER_REASON = "TRIGGER_REASON";
+  public static final String REQUESTED_LISTS = "REQUESTED_LISTS";
+  public static final String LAST_REBUILD_TIME = "LAST_REBUILD_TIME";
+  public static final String LAST_SCORECARD_UPDATE = "LAST_SCORECARD_UPDATE";
 
   public static final String QUERY_ID = "QUERY_ID";
   public static final String USER = "USER";

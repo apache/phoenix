@@ -222,6 +222,7 @@ public class IndexTool extends Configured implements Tool {
   private PTable pDataTable;
   private String tenantId = null;
   private Job job;
+  private CentroidManager.RebuildClaim vectorIndexClaim;
   private Long startTime, endTime, lastVerifyTime;
   private IndexType indexType;
   private String basePath;
@@ -871,6 +872,17 @@ public class IndexTool extends Configured implements Tool {
       LOGGER.error("An exception occurred while performing the indexing job: "
         + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
       return -1;
+    } finally {
+      if (vectorIndexClaim != null) {
+        try {
+          vectorIndexClaim.close();
+        } catch (SQLException e) {
+          // The close stops the renewal first. Thus the claim expires within its lease.
+          LOGGER.warn("Could not release the rebuild claim of vector index {}",
+            pIndexTable.getName(), e);
+        }
+        vectorIndexClaim = null;
+      }
     }
   }
 
@@ -1012,12 +1024,18 @@ public class IndexTool extends Configured implements Tool {
       pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null
         && sourceTable == SourceTable.DATA_TABLE_SOURCE && indexVerifyType != IndexVerifyType.ONLY
     ) {
-      // Train initial centroid generation for ASYNC vector indexes prior to build. A run that only
-      // verifies builds no index rows and must not train.
+      // Train the first centroid generation of an ASYNC vector index before the build. The run
+      // holds the rebuild claim of the index until run() returns. A foreground run thus holds the
+      // claim through the build. A background run releases it after the job submit, so the claim
+      // covers only the training. A run that only verifies builds no index rows and must not train.
       PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
-      try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
-        VectorIndexTrainer.trainAndRecord(internal, pDataTable, pIndexTable);
+      vectorIndexClaim = CentroidManager.claim(pconn, pIndexTable.getName().getString(),
+        UUID.randomUUID().toString());
+      if (vectorIndexClaim == null) {
+        throw new IllegalStateException(String.format("Vector index %s is being trained or rebuilt"
+          + " by another process holding its rebuild claim", pIndexTable.getName()));
       }
+      VectorIndexTrainer.trainFirstGeneration(pconn, pDataTable, pIndexTable);
       pIndexTable = pconn.getTableNoCache(pIndexTable.getName().getString());
     }
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);

@@ -183,6 +183,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -229,6 +230,8 @@ import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexRebuilder;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -1543,6 +1546,13 @@ public class MetaDataClient {
             dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
       alterIndex(indexStatement);
 
+      if (index.isVectorIndex()) {
+        // Set the first scorecard counts from the built index. Inline index maintenance then
+        // changes them.
+        try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+          VectorIndexScorecard.reconcile(internal, index, index.getVectorCentroidGeneration());
+        }
+      }
       return state;
     } finally {
       connection.setAutoCommit(wasAutoCommit);
@@ -1988,6 +1998,10 @@ public class MetaDataClient {
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
 
+    if (table.isVectorIndex()) {
+      enqueueScorecardReconciliation(table);
+    }
+
     if (
       statement.getIndexConsistency() != null && statement.getIndexConsistency().isAsynchronous()
     ) {
@@ -2010,16 +2024,8 @@ public class MetaDataClient {
     // A vector index must have a trained centroid generation before the build. buildVectorIndex
     // trains the first generation and then builds the index rows. If another rebuild holds the
     // claim, or the training does not complete, it does not build the index rows.
-    // Indexes remain in BUILDING state if the data table has insufficient training vectors.
     if (table.isVectorIndex()) {
-      table = trainVectorIndex(table, dataTable);
-      if (table.getVectorCentroidGeneration() == null) {
-        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
-          connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
-            dataTable.getTimeStamp());
-        }
-        return new MutationState(0, 0, connection);
-      }
+      return buildVectorIndex(table, dataTable, tableRef, statement.getTable());
     }
 
     // If our connection is at a fixed point-in-time, we need to open a new
@@ -2039,17 +2045,54 @@ public class MetaDataClient {
   }
 
   /**
-   * Trains and persists the initial centroid generation for a newly created vector index. Training
-   * is deferred if non-null vector count is less than the requested list count.
-   * @return refreshed index metadata from catalog
+   * Enqueues the recurring task that reconciles the scorecard of a vector index. A failure only
+   * logs a warning and does not fail the DDL.
    */
-  private PTable trainVectorIndex(PTable index, PTable dataTable) throws SQLException {
+  private void enqueueScorecardReconciliation(PTable index) {
     try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
-      VectorIndexTrainer.trainAndRecord(internal, dataTable, index);
+      CentroidManager.enqueueTask(internal, index, PTable.TaskType.VECTOR_SCORECARD_RECONCILE,
+        null);
+    } catch (SQLException e) {
+      LOGGER.warn("Could not enqueue scorecard reconciliation for vector index {}",
+        index.getName().getString(), e);
     }
-    connection.removeTable(connection.getTenantId(), index.getName().getString(),
-      dataTable.getName().getString(), HConstants.LATEST_TIMESTAMP);
-    return connection.getTableNoCache(index.getName().getString());
+  }
+
+  /**
+   * Trains and persists the first centroid generation of a new vector index, then builds the index.
+   * As ALTER INDEX ... REBUILD does, this method holds the rebuild claim of the index from before
+   * the training until the build is complete. This method does not build the index if a concurrent
+   * ALTER INDEX ... REBUILD or IndexTool run holds the claim. It also does not build the index if
+   * such a run trained the index before this method took the claim. If the data table has too few
+   * vectors to train, the index stays in BUILDING state.
+   */
+  private MutationState buildVectorIndex(PTable index, PTable dataTable, TableRef dataTableRef,
+    NamedTableNode dataTableNode) throws SQLException {
+    String indexName = index.getName().getString();
+    try (CentroidManager.RebuildClaim claim =
+      CentroidManager.claim(connection, indexName, UUID.randomUUID().toString())) {
+      VectorIndexRebuilder.Outcome outcome = claim == null
+        ? VectorIndexRebuilder.Outcome.IN_PROGRESS
+        : VectorIndexTrainer.trainFirstGeneration(connection, dataTable, index);
+      MutationState state = new MutationState(0, 0, connection);
+      if (outcome != VectorIndexRebuilder.Outcome.REBUILT) {
+        LOGGER.info("Not building vector index {}, first generation training outcome {}", indexName,
+          outcome);
+      } else {
+        connection.removeTable(connection.getTenantId(), indexName, dataTable.getName().getString(),
+          HConstants.LATEST_TIMESTAMP);
+        index = connection.getTableNoCache(indexName);
+        if (connection.getSCN() != null) {
+          return buildIndexAtTimeStamp(index, dataTableNode);
+        }
+        state = buildIndex(index, dataTableRef);
+      }
+      if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+        connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
+          dataTable.getTimeStamp());
+      }
+      return state;
+    }
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
@@ -4649,8 +4692,34 @@ public class MetaDataClient {
   }
 
   /**
-   * Deletes SYSTEM.VECTOR_CENTROID entries for a dropped vector index using an isolated connection
-   * to preserve caller transaction state.
+   * Rebuilds a vector index and migrates it to a new generation. An asynchronous rebuild only
+   * enqueues a rebuild task. A synchronous rebuild throws an exception if it does not rebuild.
+   */
+  private MutationState rebuildVectorIndex(PTable index, boolean isAsync) throws SQLException {
+    String indexName = index.getName().getString();
+    if (isAsync) {
+      try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+        CentroidManager.enqueueTask(internal, index, PTable.TaskType.VECTOR_INDEX_REBUILD,
+          VectorIndexRebuilder.rebuildTaskData(true, VectorIndexRebuilder.MANUAL_REASON));
+      }
+      return new MutationState(0, 0, connection);
+    }
+    VectorIndexRebuilder.Outcome outcome =
+      VectorIndexRebuilder.rebuild(connection, indexName, true, VectorIndexRebuilder.MANUAL_REASON);
+    if (outcome != VectorIndexRebuilder.Outcome.REBUILT) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
+        .setMessage("Vector index " + indexName + " was not rebuilt: " + outcome)
+        .setSchemaName(index.getSchemaName().getString())
+        .setTableName(index.getTableName().getString()).build().buildException();
+    }
+    connection.removeTable(connection.getTenantId(), indexName, index.getParentName().getString(),
+      HConstants.LATEST_TIMESTAMP);
+    return new MutationState(0, 0, connection);
+  }
+
+  /**
+   * Deletes the centroids and tasks of a dropped vector index through an internal connection. A
+   * failure only logs a warning. The reconcile task of the index then removes the remaining rows.
    */
   private void deleteVectorCentroids(PTable index) {
     if (!index.isVectorIndex()) {
@@ -4661,9 +4730,10 @@ public class MetaDataClient {
       .invalidate(indexName);
     try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
       CentroidManager.deleteAllCentroids(internal, indexName);
+      CentroidManager.deleteTasks(internal, index);
     } catch (SQLException e) {
-      LOGGER.warn("Could not delete the centroids of dropped vector index {}; its "
-        + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME + " rows remain.", indexName, e);
+      LOGGER.warn("Could not delete the centroids and tasks of dropped vector index {}; its "
+        + "reconciliation task removes what remains.", indexName, e);
     }
   }
 
@@ -6206,6 +6276,9 @@ public class MetaDataClient {
           .setSchemaName(schemaName).setTableName(indexName).build().buildException();
       }
 
+      if (newIndexState == PIndexState.REBUILD && table.isVectorIndex()) {
+        return rebuildVectorIndex(table, isAsync);
+      }
       if (newIndexState == PIndexState.REBUILD) {
         newIndexState = PIndexState.BUILDING;
       }

@@ -510,4 +510,9 @@ public class DelegateTable implements PTable {
   public Long getVectorCentroidGeneration() {
     return delegate.getVectorCentroidGeneration();
   }
+
+  @Override
+  public Long getVectorBuildingGeneration() {
+    return delegate.getVectorBuildingGeneration();
+  }
 }
