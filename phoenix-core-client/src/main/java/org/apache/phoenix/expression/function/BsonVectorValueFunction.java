@@ -48,18 +48,20 @@ import org.bson.BsonValue;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * Function extracting a typed float vector from a BSON document field.
+ * Extracts a float vector from a field of a BSON document.
  * <p>
  * Arguments:
  * <ol>
- * <li>BSON document expression (PBson, PJson, or PVarbinary)</li>
- * <li>Target field path literal</li>
- * <li>Vector dimension literal</li>
+ * <li>The BSON document expression (PBson, PJson, or PVarbinary)</li>
+ * <li>The literal path of the target field</li>
+ * <li>The literal vector dimension</li>
  * </ol>
  * </p>
- * Transcodes BSON Binary subtype 9 (VECTOR) FLOAT32 payloads from little endian format into the big
- * endian packed representation of {@link PVectorFloat}. Missing paths or documents evaluate to SQL
- * NULL. Structural or dimension mismatches raise {@link IllegalDataException}.
+ * The field must hold a BSON Binary value of subtype 9 (VECTOR) with FLOAT32 elements. The
+ * little-endian FLOAT32 payload is the same as the {@link PVectorFloat} encoding, so the function
+ * returns the payload bytes with no element conversion. A missing document, a missing field, or a
+ * BSON null field gives SQL NULL. An incorrect structure, a NaN or infinite element, or an
+ * incorrect dimension causes an {@link IllegalDataException}.
  */
 @FunctionParseNode.BuiltInFunction(name = BsonVectorValueFunction.NAME,
     nodeClass = BsonVectorValueParseNode.class,
@@ -213,16 +215,8 @@ public class BsonVectorValueFunction extends ScalarFunction {
             + ", found " + payloadLength / (double) Bytes.SIZEOF_FLOAT)
           .build().buildException());
     }
-    // Convert little endian BSON float32 payload to big endian PVectorFloat encoding
-    byte[] out = new byte[payloadLength];
-    for (int i = 0; i < payloadLength; i += Bytes.SIZEOF_FLOAT) {
-      int src = VECTOR_HEADER_SIZE + i;
-      out[i] = data[src + 3];
-      out[i + 1] = data[src + 2];
-      out[i + 2] = data[src + 1];
-      out[i + 3] = data[src];
-    }
-    ptr.set(out);
+    // The little-endian FLOAT32 payload is the same as the PVectorFloat encoding
+    ptr.set(data, VECTOR_HEADER_SIZE, payloadLength);
     return true;
   }
 

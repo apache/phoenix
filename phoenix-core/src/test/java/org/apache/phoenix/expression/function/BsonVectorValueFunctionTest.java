@@ -104,7 +104,7 @@ public class BsonVectorValueFunctionTest {
 
   @Test
   public void testExtractsSpecEncodedVector() throws Exception {
-    // Verify extraction and big-endian transcoding against IEEE 754 float values.
+    // Make sure that extraction gives the original IEEE 754 float values.
     float[] expected = new float[] { 1.5f, -2.5f, 3.0e-3f };
     BsonDocument doc = new BsonDocument("search", new BsonDocument("embedding", vector(expected)));
     BsonVectorValueFunction f = func(doc, "search.embedding", 3);
@@ -113,6 +113,21 @@ public class BsonVectorValueFunctionTest {
     assertEquals(Integer.valueOf(3), f.getMaxLength());
     assertEquals(Determinism.ALWAYS, f.getDeterminism());
     assertArrayEquals(expected, eval(f), DELTA);
+  }
+
+  @Test
+  public void testOutputIsBsonPayloadUnchanged() throws Exception {
+    // The BSON FLOAT32 payload is the PVectorFloat encoding, so the output must be the same bytes.
+    float[] values = new float[] { 1.5f, -2.5f, 3.0e-3f, Float.MIN_VALUE };
+    BsonBinary binary = vector(values);
+    BsonVectorValueFunction f = func(new BsonDocument("v", binary), "v", values.length);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    assertTrue(f.evaluate(null, ptr));
+    byte[] data = binary.getData();
+    assertArrayEquals(
+      Arrays.copyOfRange(data, BsonVectorValueFunction.VECTOR_HEADER_SIZE, data.length),
+      ptr.copyBytes());
+    assertArrayEquals(PVectorFloat.INSTANCE.toBytes(values), ptr.copyBytes());
   }
 
   @Test

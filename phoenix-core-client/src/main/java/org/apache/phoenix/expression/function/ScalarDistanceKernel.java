@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.types.PVectorFloat;
 
 /**
  * Reference scalar distance kernels for packed float bytes and {@code float[]} arrays. The kernels
@@ -30,7 +30,7 @@ final class ScalarDistanceKernel {
   }
 
   private static float read(byte[] buf, int off, int i) {
-    return Bytes.toFloat(buf, off + i * Bytes.SIZEOF_FLOAT);
+    return PVectorFloat.readElement(buf, off, i);
   }
 
   /**

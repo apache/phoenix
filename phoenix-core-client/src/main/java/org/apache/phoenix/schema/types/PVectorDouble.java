@@ -22,8 +22,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
 /**
- * Data type representing fixed-dimension double-precision floating point vectors,
- * {@code VECTOR(DOUBLE, N)}. Stored as packed big-endian IEEE 754 values.
+ * Data type for fixed-dimension vectors of double-precision floating point values,
+ * {@code VECTOR(DOUBLE, N)}. The serialized form is a packed sequence of little-endian IEEE 754
+ * values, as in {@link PVectorFloat}.
  */
 public class PVectorDouble extends PVectorDataType<double[]> {
 
@@ -35,16 +36,20 @@ public class PVectorDouble extends PVectorDataType<double[]> {
 
   /** Reads the element at the given index from packed vector bytes in ASC sort order. */
   public static double readElement(byte[] buf, int offset, int index) {
-    return Bytes.toDouble(buf, offset + index * Bytes.SIZEOF_DOUBLE);
+    return Double.longBitsToDouble(readBits(buf, offset, index));
   }
 
   /** Reads the element at the given index from packed vector bytes in the given sort order. */
   public static double readElement(byte[] buf, int offset, int index, SortOrder sortOrder) {
-    long b = Bytes.toLong(buf, offset + index * Bytes.SIZEOF_DOUBLE);
+    long b = readBits(buf, offset, index);
     if (sortOrder == SortOrder.DESC) {
       b ^= 0xFFFFFFFFFFFFFFFFL;
     }
     return Double.longBitsToDouble(b);
+  }
+
+  private static long readBits(byte[] buf, int offset, int index) {
+    return Long.reverseBytes(Bytes.toLong(buf, offset + index * Bytes.SIZEOF_DOUBLE));
   }
 
   /** Reads the element at the given index from a packed vector pointer in ASC sort order. */
@@ -67,8 +72,8 @@ public class PVectorDouble extends PVectorDataType<double[]> {
   }
 
   /**
-   * Writes a vector into a byte buffer as packed contiguous big-endian IEEE 754 values.
-   * @throws IllegalArgumentException if the buffer is too small to contain the vector
+   * Writes a vector into a byte buffer as a packed sequence of little-endian IEEE 754 values.
+   * @throws IllegalArgumentException if the buffer cannot hold the vector at the given offset
    */
   public static void writeElements(double[] vector, byte[] buf, int offset) {
     if (buf.length < offset + (long) vector.length * Bytes.SIZEOF_DOUBLE) {
@@ -76,7 +81,8 @@ public class PVectorDouble extends PVectorDataType<double[]> {
         + (offset + vector.length * Bytes.SIZEOF_DOUBLE) + " bytes, have " + buf.length);
     }
     for (int i = 0; i < vector.length; i++) {
-      Bytes.putDouble(buf, offset + i * Bytes.SIZEOF_DOUBLE, vector[i]);
+      Bytes.putLong(buf, offset + i * Bytes.SIZEOF_DOUBLE,
+        Long.reverseBytes(Double.doubleToRawLongBits(vector[i])));
     }
   }
 
