@@ -55,6 +55,24 @@ public class VectorDataTypeTest {
     assertTrue(factory.getTypes().contains(PVectorDouble.INSTANCE));
   }
 
+  /**
+   * The SQL type ID and the serialization ordinal identify a type across versions. Thus, the values
+   * of each vector type must not change, and no other registered type can use them.
+   */
+  @Test
+  public void testTypeIdentifiersAreUniqueAndStable() {
+    assertEquals(51, PVectorFloat.INSTANCE.ordinal());
+    assertEquals(52, PVectorDouble.INSTANCE.ordinal());
+    java.util.Set<Integer> sqlTypes = new java.util.HashSet<>();
+    java.util.Set<Integer> ordinals = new java.util.HashSet<>();
+    for (PDataType<?> type : PDataTypeFactory.getInstance().getTypes()) {
+      assertTrue("duplicate sql type " + type.getSqlType() + " for " + type,
+        sqlTypes.add(type.getSqlType()));
+      assertTrue("duplicate ordinal " + type.ordinal() + " for " + type,
+        ordinals.add(type.ordinal()));
+    }
+  }
+
   @Test
   public void testSqlTypeNameResolution() {
     PDataTypeFactory factory = PDataTypeFactory.getInstance();
