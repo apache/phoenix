@@ -207,4 +207,15 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
     HintNode invalid = new HintNode("/*+ VECTOR_PROBE_COUNT(abc) */");
     assertEquals(7, VectorIndexScanPlan.getHintInt(invalid, Hint.VECTOR_PROBE_COUNT, 7));
   }
+
+  @Test
+  public void testInterleaveAlternatesGenerationRankings() {
+    // Any prefix of 2n holds the n nearest of each generation, and a longer ranking keeps its tail
+    assertArrayEquals(new int[] { 0, 4, 1, 5, 2, 6 },
+      VectorIndexScanPlan.interleave(new int[] { 0, 1, 2 }, new int[] { 4, 5, 6 }));
+    assertArrayEquals(new int[] { 3, 9, 1, 8, 7 },
+      VectorIndexScanPlan.interleave(new int[] { 3, 1 }, new int[] { 9, 8, 7 }));
+    assertArrayEquals(new int[] { 2, 0 },
+      VectorIndexScanPlan.interleave(new int[] { 2, 0 }, new int[0]));
+  }
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GENERATION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME;
@@ -123,7 +124,24 @@ class VectorIndexTestUtil {
       .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
   }
 
-  /** Populates uniform random vector data across optional tenant partitions. */
+  /**
+   * Runs {@link IndexTool} verification and asserts that no index rows are invalid or missing.
+   * Unlike {@link #assertIndexVerifies}, valid row count is not compared against data table size.
+   */
+  static void assertIndexConsistent(String tableName, String indexName) throws Exception {
+    IndexTool tool = IndexToolIT.runIndexTool(false, null, tableName, indexName, null, 0,
+      IndexTool.IndexVerifyType.ONLY);
+    Counters counters = tool.getJob().getCounters();
+    assertEquals("invalid index rows", 0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+    assertEquals("missing index rows", 0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+  }
+
+  /**
+   * Upserts {@code rows} random vectors in [0, 10)^4 with ID {@code row_NNN} and a LABEL, spreading
+   * them over {@code tenants} when {@code tenantCol} is not null.
+   */
   static float[][] loadRandomVectors(Connection conn, String tableName, String tenantCol,
     String[] tenants, int rows, long seed) throws SQLException {
     Random rng = new Random(seed);
@@ -442,8 +460,9 @@ class VectorIndexTestUtil {
 
   static int countCentroids(Connection conn, String indexName, Long generation)
     throws SQLException {
-    String sql = "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME
-      + " = ?" + (generation == null ? "" : " AND " + GENERATION_ID + " = ?");
+    String sql =
+      "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME + " = ? AND "
+        + CENTROID_ID + " >= 0" + (generation == null ? "" : " AND " + GENERATION_ID + " = ?");
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, indexName);
       if (generation != null) {

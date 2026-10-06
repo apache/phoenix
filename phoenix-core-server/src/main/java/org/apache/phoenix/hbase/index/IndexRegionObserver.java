@@ -117,6 +117,7 @@ import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.index.vector.ScorecardAccumulator;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -356,6 +357,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
     // The current and next states of the data rows corresponding to the pending mutations
     private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
+    // Pending vector index scorecard deltas for this batch
+    private Map<ScorecardAccumulator.Key, long[]> scorecardDeltas;
     // The previous concurrent batch contexts
     private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
     // The latches of the threads waiting for this batch to complete
@@ -551,6 +554,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       this.builder = new IndexBuildManager(env);
       VectorCentroidCache.setServerConfiguration(env.getConfiguration());
+      ScorecardAccumulator.getInstance(env.getConfiguration());
       // Clone the config since it is shared
       DelegateRegionCoprocessorEnvironment indexWriterEnv =
         new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
@@ -1436,6 +1440,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
             indexUpdates.put(hTableInterfaceReference, del);
           }
+          if (indexMaintainer.isMigrating()) {
+            deleteOutgoingIndexRow(indexMaintainer, currentDataRowVG, rowKeyPtr, ts,
+              encodedRegionName, indexPut.getRow(), indexRowKeyForCurrentDataRow,
+              hTableInterfaceReference, indexUpdates);
+          }
         }
       } else if (currentDataRowState != null && indexMaintainer.hasIndexRow(currentDataRowState)) {
         if (indexMaintainer.isCDCIndex()) {
@@ -1448,9 +1457,55 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
             indexMaintainer, ts, rowKeyPtr, encodedRegionName));
         } else {
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          Mutation del = getDeleteIndexMutation(currentDataRowState, indexMaintainer, ts, rowKeyPtr,
+            encodedRegionName);
+          indexUpdates.put(hTableInterfaceReference, del);
+          if (indexMaintainer.isMigrating()) {
+            deleteOutgoingIndexRow(indexMaintainer,
+              new IndexUtil.SimpleValueGetter(currentDataRowState), rowKeyPtr, ts,
+              encodedRegionName, null, del.getRow(), hTableInterfaceReference, indexUpdates);
+          }
         }
+      }
+    }
+  }
+
+  /**
+   * Deletes the index row corresponding to the outgoing generation during migration rebuilds.
+   */
+  private static void deleteOutgoingIndexRow(IndexMaintainer indexMaintainer,
+    ValueGetter currentDataRowVG, ImmutableBytesPtr rowKeyPtr, long ts, byte[] encodedRegionName,
+    byte[] writtenRowKey, byte[] deletedRowKey, HTableInterfaceReference hTableInterfaceReference,
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates) {
+    byte[] outgoingRowKey =
+      indexMaintainer.buildOutgoingRowKey(currentDataRowVG, rowKeyPtr, ts, encodedRegionName);
+    if (
+      outgoingRowKey != null && !Bytes.equals(outgoingRowKey, writtenRowKey)
+        && !Bytes.equals(outgoingRowKey, deletedRowKey)
+    ) {
+      indexUpdates.put(hTableInterfaceReference, indexMaintainer
+        .buildRowDeleteMutation(outgoingRowKey, IndexMaintainer.DeleteType.ALL_VERSIONS, ts));
+    }
+  }
+
+  /**
+   * Derives scorecard deltas from index mutations for mutable vector indexes outside active
+   * migration.
+   */
+  private static void collectScorecardDeltas(BatchMutateContext context,
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables, Put currentDataRowState,
+    ListMultimap<HTableInterfaceReference, Mutation> idxUpdates) {
+    if (context.immutableRows) {
+      return;
+    }
+    for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
+      IndexMaintainer indexMaintainer = pair.getFirst();
+      if (indexMaintainer.isVectorIndex() && !indexMaintainer.isMigrating()) {
+        if (context.scorecardDeltas == null) {
+          context.scorecardDeltas = new HashMap<>();
+        }
+        ScorecardAccumulator.collect(indexMaintainer, currentDataRowState,
+          idxUpdates.get(pair.getSecond()), context.scorecardDeltas);
       }
     }
   }
@@ -1488,6 +1543,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
       generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
         encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+      collectScorecardDeltas(context, indexTables, currentDataRowState, idxUpdates);
       for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
         context.indexUpdates.put(idxUpdate.getKey(),
           new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
@@ -2233,6 +2289,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       if (success) { // The pre-index and data table updates are successful, and now, do post index
                      // updates
+        if (context.scorecardDeltas != null) {
+          ScorecardAccumulator.getInstance(c.getEnvironment().getConfiguration())
+            .accumulate(context.scorecardDeltas);
+        }
         doPost(c, context);
       }
     } finally {

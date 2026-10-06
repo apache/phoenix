@@ -229,6 +229,8 @@ import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexRebuilder;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -1543,6 +1545,12 @@ public class MetaDataClient {
             dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
       alterIndex(indexStatement);
 
+      if (index.isVectorIndex()) {
+        // Initialize baseline scorecard counts for index maintenance
+        try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+          VectorIndexScorecard.reconcile(internal, index, index.getVectorCentroidGeneration());
+        }
+      }
       return state;
     } finally {
       connection.setAutoCommit(wasAutoCommit);
@@ -1987,6 +1995,10 @@ public class MetaDataClient {
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
 
+    if (table.isVectorIndex()) {
+      enqueueScorecardReconciliation(table);
+    }
+
     if (
       statement.getIndexConsistency() != null && statement.getIndexConsistency().isAsynchronous()
     ) {
@@ -2033,6 +2045,19 @@ public class MetaDataClient {
         dataTable.getTimeStamp());
     }
     return state;
+  }
+
+  /**
+   * Enqueues the periodic task responsible for vector index scorecard reconciliation.
+   */
+  private void enqueueScorecardReconciliation(PTable index) {
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+      CentroidManager.enqueueTask(internal, index, PTable.TaskType.VECTOR_SCORECARD_RECONCILE,
+        null);
+    } catch (SQLException e) {
+      LOGGER.warn("Could not enqueue scorecard reconciliation for vector index {}",
+        index.getName().getString(), e);
+    }
   }
 
   /**
@@ -4645,9 +4670,32 @@ public class MetaDataClient {
     }
   }
 
+  /** Executes a synchronous or asynchronous vector index rebuild and migration. */
+  private MutationState rebuildVectorIndex(PTable index, boolean isAsync) throws SQLException {
+    String indexName = index.getName().getString();
+    if (isAsync) {
+      try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+        CentroidManager.enqueueTask(internal, index, PTable.TaskType.VECTOR_INDEX_REBUILD,
+          VectorIndexRebuilder.rebuildTaskData(true, VectorIndexRebuilder.MANUAL_REASON));
+      }
+      return new MutationState(0, 0, connection);
+    }
+    VectorIndexRebuilder.Outcome outcome =
+      VectorIndexRebuilder.rebuild(connection, indexName, true, VectorIndexRebuilder.MANUAL_REASON);
+    if (outcome != VectorIndexRebuilder.Outcome.REBUILT) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
+        .setMessage("Vector index " + indexName + " was not rebuilt: " + outcome)
+        .setSchemaName(index.getSchemaName().getString())
+        .setTableName(index.getTableName().getString()).build().buildException();
+    }
+    connection.removeTable(connection.getTenantId(), indexName, index.getParentName().getString(),
+      HConstants.LATEST_TIMESTAMP);
+    return new MutationState(0, 0, connection);
+  }
+
   /**
-   * Deletes SYSTEM.VECTOR_CENTROID entries for a dropped vector index using an isolated connection
-   * to preserve caller transaction state.
+   * Deletes centroid metadata and scheduled tasks for a dropped vector index using an isolated
+   * connection.
    */
   private void deleteVectorCentroids(PTable index) {
     if (!index.isVectorIndex()) {
@@ -4658,9 +4706,10 @@ public class MetaDataClient {
       .invalidate(indexName);
     try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
       CentroidManager.deleteAllCentroids(internal, indexName);
+      CentroidManager.deleteTasks(internal, index);
     } catch (SQLException e) {
-      LOGGER.warn("Could not delete the centroids of dropped vector index {}; its "
-        + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME + " rows remain.", indexName, e);
+      LOGGER.warn("Could not delete the centroids and tasks of dropped vector index {}; its "
+        + "reconciliation task removes what remains.", indexName, e);
     }
   }
 
@@ -6198,6 +6247,9 @@ public class MetaDataClient {
           .setSchemaName(schemaName).setTableName(indexName).build().buildException();
       }
 
+      if (newIndexState == PIndexState.REBUILD && table.isVectorIndex()) {
+        return rebuildVectorIndex(table, isAsync);
+      }
       if (newIndexState == PIndexState.REBUILD) {
         newIndexState = PIndexState.BUILDING;
       }

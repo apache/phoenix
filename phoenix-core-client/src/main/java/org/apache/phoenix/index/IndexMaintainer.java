@@ -491,7 +491,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private String vectorAlgorithm;
   private DistanceMetric distanceMetric;
   private Long centroidGeneration;
-  // Index column reference for expression derived vector values, or null if directly mapped.
+  private Long buildingGeneration;
   private ColumnReference functionalVectorColumn;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
@@ -523,6 +523,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       this.vectorAlgorithm = index.getVectorIndexAlgorithm();
       this.distanceMetric = DistanceMetric.fromString(index.getVectorDistanceMetric());
       this.centroidGeneration = index.getVectorCentroidGeneration();
+      this.buildingGeneration =
+        index.isVectorRebuildInProgress() ? index.getVectorBuildingGeneration() : null;
       PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
       if (IndexUtil.getDataColumnOrNull(dataTable, vectorColumn.getName().getString()) == null) {
         this.functionalVectorColumn = new ColumnReference(vectorColumn.getFamilyName().getBytes(),
@@ -807,12 +809,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName) {
     return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, encodedRegionName,
-      null);
+      null, getWriteGeneration());
+  }
+
+  /** Generates index row key for the outgoing centroid generation during active migrations. */
+  public byte[] buildOutgoingRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts, byte[] encodedRegionName) {
+    if (!isMigrating()) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, null,
+      centroidGeneration);
   }
 
   private byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName,
-    ImmutableBytesWritable indexedVector) {
+    ImmutableBytesWritable indexedVector, Long generation) {
     if (isCDCIndex && encodedRegionName == null) {
       throw new IllegalArgumentException("Encoded region name is required for a CDC index");
     }
@@ -899,7 +911,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             if (vector == null) {
               return null;
             }
-            ptr.set(PInteger.INSTANCE.toBytes(getCentroids().assign(vector.get(),
+            ptr.set(PInteger.INSTANCE.toBytes(getCentroids(generation).assign(vector.get(),
               vector.getOffset(), vector.getLength(), dataColumnType)));
             dataColumnType = PInteger.INSTANCE;
             dataSortOrder = SortOrder.ASC;
@@ -1413,7 +1425,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       }
     }
     byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey,
-      ts, encodedRegionName, indexedVector);
+      ts, encodedRegionName, indexedVector, getWriteGeneration());
     if (indexRowKey == null) {
       return null;
     }
@@ -2216,6 +2228,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       maintainer.distanceMetric = DistanceMetric.fromString(proto.getDistanceMetric());
       maintainer.centroidGeneration =
         proto.hasCentroidGeneration() ? proto.getCentroidGeneration() : null;
+      maintainer.buildingGeneration =
+        proto.hasBuildingGeneration() ? proto.getBuildingGeneration() : null;
       if (proto.hasFunctionalVectorColumn()) {
         maintainer.functionalVectorColumn =
           new ColumnReference(proto.getFunctionalVectorColumn().getFamily().toByteArray(),
@@ -2386,6 +2400,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       builder.setDistanceMetric(maintainer.distanceMetric.name());
       if (maintainer.centroidGeneration != null) {
         builder.setCentroidGeneration(maintainer.centroidGeneration);
+      }
+      if (maintainer.buildingGeneration != null) {
+        builder.setBuildingGeneration(maintainer.buildingGeneration);
       }
       if (maintainer.functionalVectorColumn != null) {
         builder.setFunctionalVectorColumn(ServerCachingProtos.ColumnReference.newBuilder()
@@ -2792,6 +2809,25 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return centroidGeneration;
   }
 
+  /** Indicates whether an index rebuild migration is currently in progress. */
+  public boolean isMigrating() {
+    return buildingGeneration != null;
+  }
+
+  /** Returns the target centroid generation for new index row writes. */
+  public Long getWriteGeneration() {
+    return isMigrating() ? buildingGeneration : centroidGeneration;
+  }
+
+  /** Extracts the centroid identifier from an index row key. */
+  public int getCentroidId(byte[] indexRowKey) {
+    int slot =
+      (nIndexSaltBuckets > 0 ? 1 : 0) + (viewIndexId != null ? 1 : 0) + (isMultiTenant ? 1 : 0);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    getIndexRowKeySchema().iterator(indexRowKey, ptr, slot + 1);
+    return PInteger.INSTANCE.getCodec().decodeInt(ptr, SortOrder.ASC);
+  }
+
   /** Returns the column reference for computed vector expressions, or null. */
   public ColumnReference getFunctionalVectorColumn() {
     return functionalVectorColumn;
@@ -2804,13 +2840,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   public void loadCentroids(Connection conn) throws SQLException {
     if (isVectorIndex()) {
       VectorCentroidCache.getForWrite(conn, logicalIndexName, centroidGeneration, distanceMetric);
+      if (isMigrating()) {
+        VectorCentroidCache.getForWrite(conn, logicalIndexName, buildingGeneration, distanceMetric);
+      }
     }
   }
 
-  private CachedCentroids getCentroids() {
+  private CachedCentroids getCentroids(long generation) {
     try {
-      return VectorCentroidCache.getForWrite(null, logicalIndexName, centroidGeneration,
-        distanceMetric);
+      return VectorCentroidCache.getForWrite(null, logicalIndexName, generation, distanceMetric);
     } catch (SQLException e) {
       throw new IllegalStateException(e);
     }
@@ -2856,7 +2894,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    * indicating no index row key relocation is required.
    */
   public boolean isVectorUnchanged(Put currentDataRowState, Put nextDataRowState) {
-    if (!isVectorIndex()) {
+    if (!isVectorIndex() || isMigrating()) {
+      // Migration requires rewriting unchanged vector rows under the building generation
       return false;
     }
     ImmutableBytesWritable current = getIndexedVector(currentDataRowState, false);

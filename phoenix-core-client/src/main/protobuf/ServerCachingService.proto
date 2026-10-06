@@ -78,6 +78,7 @@ message IndexMaintainer {
   optional string distanceMetric = 35;
   optional int64 centroidGeneration = 36;
   optional ColumnReference functionalVectorColumn = 37;
+  optional int64 buildingGeneration = 38;
 }
 
 message TransformMaintainer {

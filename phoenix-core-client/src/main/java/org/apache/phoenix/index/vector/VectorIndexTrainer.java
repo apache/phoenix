@@ -46,6 +46,8 @@ public final class VectorIndexTrainer {
   private static final Logger LOGGER = LoggerFactory.getLogger(VectorIndexTrainer.class);
   /** Oversampling margin to ensure sufficient sample volume for the reservoir. */
   private static final double OVERSAMPLE = 1.2;
+  /** Initial creation trigger reason for newly trained vector indexes. */
+  public static final String CREATE_INDEX_REASON = "CREATE_INDEX";
 
   private VectorIndexTrainer() {
   }
@@ -68,7 +70,17 @@ public final class VectorIndexTrainer {
   /** Samples base table vectors and trains centroids according to the index configuration. */
   public static KMeansResult train(PhoenixConnection conn, PTable dataTable, PTable index)
     throws SQLException {
-    int lists = index.getVectorIvfLists();
+    return train(conn, dataTable, index, index.getVectorIvfLists());
+  }
+
+  /**
+   * Samples base table vectors and trains the requested number of centroids using the index
+   * configuration.
+   * @return trained k-means model, or null if sample volume is insufficient for the requested
+   *         clusters
+   */
+  public static KMeansResult train(PhoenixConnection conn, PTable dataTable, PTable index,
+    int lists) throws SQLException {
     int sampleSize = index.getVectorIvfSampleSize();
     DistanceMetric metric = DistanceMetric.fromString(index.getVectorDistanceMetric());
     PColumn vectorColumn = getIndexedVectorColumn(index);
@@ -112,6 +124,9 @@ public final class VectorIndexTrainer {
     String indexName = index.getName().getString();
     long generation = CentroidManager.nextGeneration(index.getVectorCentroidGeneration());
     CentroidManager.persistCentroids(conn, indexName, generation, result.getCentroids());
+    CentroidManager.persistGenerationSummary(conn, indexName, generation,
+      new GenerationSummary(GenerationSummary.ACTIVE, CREATE_INDEX_REASON, result.getRequestedK(),
+        result.getSkewMetrics(), null, null));
     CentroidManager.setGenerationAndLists(conn, index, generation, result.getEffectiveK());
     VectorCentroidCache.getInstance(conn.getQueryServices().getConfiguration()).put(indexName,
       generation, new CachedCentroids(result.getCentroids(), result.getDistanceMetric()));

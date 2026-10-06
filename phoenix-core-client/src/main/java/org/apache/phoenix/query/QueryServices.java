@@ -156,6 +156,24 @@ public interface QueryServices extends SQLCloseable {
   public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
   // Maximum number of probe batches scanned during adaptive vector query execution
   public static final String VECTOR_MAX_PROBE_LIMIT_ATTRIB = "phoenix.vector.max.probe.limit";
+  // Vector index scorecard flush interval in milliseconds
+  public static final String VECTOR_SCORECARD_FLUSH_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.flush.interval.ms";
+  // Vector index scorecard reconciliation interval in milliseconds
+  public static final String VECTOR_SCORECARD_RECONCILE_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.reconcile.interval.ms";
+  // Posting list skew ratio threshold relative to median list size for drift detection
+  public static final String VECTOR_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB =
+    "phoenix.vector.drift.skew.ratio.threshold";
+  // Minimum index population threshold required for drift evaluation
+  public static final String VECTOR_DRIFT_MIN_POPULATION_ATTRIB =
+    "phoenix.vector.drift.min.population";
+  // Enable automatic background rebuild for drifted vector indexes
+  public static final String VECTOR_REBUILD_AUTO_ENABLED_ATTRIB =
+    "phoenix.vector.rebuild.auto.enabled";
+  // Minimum elapsed interval between consecutive background rebuilds of a vector index
+  public static final String VECTOR_REBUILD_MIN_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.rebuild.min.interval.ms";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

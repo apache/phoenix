@@ -153,15 +153,15 @@ public final class VectorCentroidCache {
 
   private static CachedCentroids load(Connection conn, Key key, DistanceMetric metric)
     throws SQLException {
-    List<float[]> centroids = CentroidManager.loadCentroids(conn, key.indexName, key.generation);
-    if (centroids.isEmpty()) {
+    CentroidManager.Model model = CentroidManager.loadModel(conn, key.indexName, key.generation);
+    if (model.getCentroids().isEmpty()) {
       // Unrecorded centroid generation indicates stale index metadata
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_METADATA_CACHE_EXCEPTION)
         .setMessage("No centroids recorded for vector index " + key.indexName + " generation "
           + key.generation)
         .build().buildException();
     }
-    return new CachedCentroids(centroids, metric);
+    return new CachedCentroids(model.getCentroids(), metric, model.getFirstId());
   }
 
   private static final class Key {
@@ -199,14 +199,25 @@ public final class VectorCentroidCache {
     private final float[][] centroids;
     private final int dimension;
     private final DistanceMetric metric;
+    private final int firstId;
 
     public CachedCentroids(List<float[]> centroids, DistanceMetric metric) {
+      this(centroids, metric, 0);
+    }
+
+    public CachedCentroids(List<float[]> centroids, DistanceMetric metric, int firstId) {
       if (centroids.isEmpty()) {
         throw new IllegalArgumentException("centroids must not be empty");
       }
       this.centroids = centroids.toArray(new float[0][]);
       this.dimension = this.centroids[0].length;
       this.metric = Objects.requireNonNull(metric, "metric");
+      this.firstId = firstId;
+    }
+
+    /** Returns the initial centroid identifier for this generation. */
+    public int getFirstId() {
+      return firstId;
     }
 
     public int size() {
@@ -223,7 +234,7 @@ public final class VectorCentroidCache {
 
     /** Returns the centroid vector at the specified index. */
     public float[] getCentroid(int id) {
-      return centroids[id];
+      return centroids[id - firstId];
     }
 
     /** Returns the ID of the centroid nearest to the given vector. */
@@ -238,7 +249,7 @@ public final class VectorCentroidCache {
           best = c;
         }
       }
-      return best;
+      return firstId + best;
     }
 
     /**
@@ -267,7 +278,7 @@ public final class VectorCentroidCache {
       }
       int[] result = new int[count];
       for (int i = count - 1; i >= 0; i--) {
-        result[i] = farthestFirst.poll();
+        result[i] = firstId + farthestFirst.poll();
       }
       return result;
     }

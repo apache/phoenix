@@ -171,11 +171,14 @@ public class ClusterSkewMetrics {
     }
   }
 
+  /** Coefficient of variation threshold indicating severe cluster distribution skew. */
+  public static final double SEVERE_SKEW_CV_THRESHOLD = 1.0;
+
   /**
    * Indicates whether cluster distribution exhibits severe skew (coefficient of variation > 1.0).
    */
   public boolean isSevereSkew() {
-    return coefficientOfVariation > 1.0;
+    return coefficientOfVariation > SEVERE_SKEW_CV_THRESHOLD;
   }
 
   public int getMin() {

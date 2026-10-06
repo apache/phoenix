@@ -237,4 +237,16 @@ public class VectorCentroidCacheTest {
     cache.getIfPresent("A", 3L);
     assertEquals(2, cache.size());
   }
+
+  /** Verifies centroid assignment and indexing when IDs start from a non-zero base ID. */
+  @Test
+  public void testCentroidIdsStartAtFirstId() {
+    CachedCentroids c = new CachedCentroids(
+      centroids(new float[] { 0, 0 }, new float[] { 10, 0 }, new float[] { 0, 10 }),
+      DistanceMetric.L2, 7);
+    assertEquals(7, c.getFirstId());
+    assertEquals(8, c.assign(new float[] { 9.5f, 0.5f }));
+    assertArrayEquals(new int[] { 8, 7 }, c.nearest(new float[] { 9.5f, 0.5f }, 2));
+    assertArrayEquals(new float[] { 0, 10 }, c.getCentroid(9), 0f);
+  }
 }

@@ -92,6 +92,8 @@ public class VectorIndexScanPlan extends ScanPlan {
   private final int[] probeCentroids;
   private final int maxProbeBatches;
   private final CachedCentroids centroids;
+  // Building generation centroids while a rebuild migration is in progress, otherwise null
+  private final CachedCentroids buildingCentroids;
   private final float[] queryVector;
   // Active posting list skip scan filter, updated across successive adaptive probing batches
   private final SkipScanFilter postingListFilter;
@@ -109,22 +111,32 @@ public class VectorIndexScanPlan extends ScanPlan {
 
     this.queryVector = getQueryVector(orderBy);
     CachedCentroids centroids = null;
+    CachedCentroids building = null;
     if (queryVector != null && index.getVectorCentroidGeneration() != null) {
-      centroids = VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
-        .get(connection, index.getName().getString(), index.getVectorCentroidGeneration(),
-          DistanceMetric.fromString(index.getVectorDistanceMetric()));
+      VectorCentroidCache cache =
+        VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration());
+      DistanceMetric metric = DistanceMetric.fromString(index.getVectorDistanceMetric());
+      String indexName = index.getName().getString();
+      centroids = cache.get(connection, indexName, index.getVectorCentroidGeneration(), metric);
+      // A migration moves each index row from the active generation's posting lists to the
+      // building generation's, whose centroid IDs are disjoint, so every row is under exactly one
+      // of the two models until promotion and both must be probed
+      if (index.isVectorRebuildInProgress()) {
+        building = cache.get(connection, indexName, index.getVectorBuildingGeneration(), metric);
+      }
     }
     this.centroids = centroids;
-    this.centroidCount = centroids == null ? 0 : centroids.size();
+    this.buildingCentroids = building;
+    this.centroidCount =
+      (centroids == null ? 0 : centroids.size()) + (building == null ? 0 : building.size());
     int[] probes = new int[0];
     SkipScanFilter filter = null;
     if (centroids != null) {
       int requested = getHintInt(hint, Hint.VECTOR_PROBE_COUNT, props.getInt(
         QueryServices.VECTOR_PROBE_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_VECTOR_PROBE_COUNT));
-      int count = requested > 0
-        ? Math.min(requested, centroidCount)
-        : Math.max(1, (int) Math.round(Math.sqrt(centroidCount)));
-      int[] nearest = centroids.nearest(queryVector, count);
+      int count =
+        requested > 0 ? requested : Math.max(1, (int) Math.round(Math.sqrt(centroids.size())));
+      int[] nearest = nearestCentroids(count);
       ScanRanges ranges = getPostingListRanges(context, index, nearest);
       if (ranges != null) {
         probes = nearest;
@@ -217,6 +229,37 @@ public class VectorIndexScanPlan extends ScanPlan {
       index.getBucketNum(), true, -1);
   }
 
+  /**
+   * Returns the {@code n} centroids nearest the query vector in each probed generation, in
+   * ascending distance order. During a migration the two generations' rankings are interleaved, so
+   * any prefix of twice a per-generation count holds that count from each model.
+   */
+  private int[] nearestCentroids(int n) {
+    int[] active = centroids.nearest(queryVector, Math.min(n, centroids.size()));
+    if (buildingCentroids == null) {
+      return active;
+    }
+    return interleave(active,
+      buildingCentroids.nearest(queryVector, Math.min(n, buildingCentroids.size())));
+  }
+
+  /** Alternates the elements of two arrays, appending the remainder of the longer one. */
+  static int[] interleave(int[] a, int[] b) {
+    int[] out = new int[a.length + b.length];
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length) {
+        out[k++] = a[i++];
+      }
+      if (j < b.length) {
+        out[k++] = b[j++];
+      }
+    }
+    return out;
+  }
+
   static int getHintInt(HintNode hint, Hint name, int defaultValue) {
     String value = hint.getHint(name);
     if (value != null) {
@@ -274,13 +317,16 @@ public class VectorIndexScanPlan extends ScanPlan {
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     ExplainPlan explainPlan = super.getExplainPlan();
+    String metric = getTableRef().getTable().getVectorDistanceMetric();
+    List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
     if (probeCount == 0) {
       return explainPlan;
     }
-    String metric = getTableRef().getTable().getVectorDistanceMetric();
-    List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
     String probing =
       "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS (" + metric + ")";
+    if (buildingCentroids != null) {
+      probing += " ACROSS ACTIVE AND BUILDING GENERATIONS";
+    }
     if (isAdaptive()) {
       int batches = Math.min(maxProbeBatches, (centroidCount + probeCount - 1) / probeCount);
       probing += " EXPANDING UP TO " + batches + " BATCHES";
@@ -402,7 +448,7 @@ public class VectorIndexScanPlan extends ScanPlan {
           found.size() < batchLimit && probed.size() < centroidCount && batches < maxProbeBatches
         ) {
           if (ranked == null) {
-            ranked = centroids.nearest(queryVector, centroidCount);
+            ranked = nearestCentroids(centroidCount);
           }
           List<Integer> batch = new ArrayList<>(probeCount);
           for (int i = 0; i < ranked.length && batch.size() < probeCount; i++) {

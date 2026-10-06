@@ -81,6 +81,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GENERATION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES;
@@ -442,6 +443,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_IVF_SAMPLE_SIZE_BYTES);
   private static final Cell VECTOR_CENTROID_GENERATION_KV = createFirstOnRow(
     ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_CENTROID_GENERATION_BYTES);
+  private static final Cell VECTOR_BUILDING_GENERATION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_BUILDING_GENERATION_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -462,7 +465,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
     CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV,
     VECTOR_INDEX_ALGORITHM_KV, VECTOR_DISTANCE_METRIC_KV, VECTOR_DIMENSION_KV, VECTOR_IVF_LISTS_KV,
-    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV);
+    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -535,6 +538,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     TABLE_KV_COLUMNS.indexOf(VECTOR_IVF_SAMPLE_SIZE_KV);
   private static final int VECTOR_CENTROID_GENERATION_INDEX =
     TABLE_KV_COLUMNS.indexOf(VECTOR_CENTROID_GENERATION_KV);
+  private static final int VECTOR_BUILDING_GENERATION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_BUILDING_GENERATION_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1696,6 +1701,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
     builder.setVectorCentroidGeneration(vectorCentroidGeneration != null ? vectorCentroidGeneration
       : oldTable != null ? oldTable.getVectorCentroidGeneration()
+      : null);
+
+    Cell vectorBuildingGenerationKv = tableKeyValues[VECTOR_BUILDING_GENERATION_INDEX];
+    Long vectorBuildingGeneration = null;
+    if (vectorBuildingGenerationKv != null) {
+      vectorBuildingGeneration =
+        (Long) PLong.INSTANCE.toObject(vectorBuildingGenerationKv.getValueArray(),
+          vectorBuildingGenerationKv.getValueOffset(), vectorBuildingGenerationKv.getValueLength());
+    }
+    builder.setVectorBuildingGeneration(vectorBuildingGeneration != null ? vectorBuildingGeneration
+      : oldTable != null ? oldTable.getVectorBuildingGeneration()
       : null);
 
     // Check the cell tag to see whether the view has modified this property
@@ -4613,6 +4629,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
             cell.getQualifierLength(), VECTOR_CENTROID_GENERATION_BYTES, 0,
             VECTOR_CENTROID_GENERATION_BYTES.length) == 0
+            || Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+              cell.getQualifierLength(), VECTOR_BUILDING_GENERATION_BYTES, 0,
+              VECTOR_BUILDING_GENERATION_BYTES.length) == 0
         ) {
           setsVectorGeneration = true;
         }
