@@ -17,27 +17,43 @@
  */
 package org.apache.phoenix.expression.function;
 
+import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.types.PVectorFloat;
 
 /**
- * SIMD distance kernels leveraging the Panama Vector API over {@code float[]} operands.
+ * SIMD distance kernels that use the Panama Vector API on packed little-endian float vectors.
  * <p>
- * Accumulates intermediate lane sums in single precision across fixed size blocks of
- * {@link #BLOCK_STRIDES} vector strides before reducing to double precision. Block level reduction
- * bounds floating point accumulation drift relative to {@link ScalarDistanceKernel} while enabling
- * periodic upper bound pruning without per-stride reduction overhead.
+ * The kernels load operands directly from their {@code byte[]} encodings, at any offset, as byte
+ * vectors. Then they reinterpret the bytes as float lanes. The Vector API defines this
+ * reinterpretation as little-endian on all platforms, which agrees with the {@link PVectorFloat}
+ * encoding. Because of this, the kernels do not decode or copy the operands.
+ * <p>
+ * Each kernel adds lane sums in single precision across a block of {@link #BLOCK_STRIDES} vector
+ * strides. Then it adds the block result to a double-precision total. This limits the rounding
+ * error relative to {@link ScalarDistanceKernel}. It also lets the L2 kernel compare the total with
+ * the upper bound after each block and stop early if the total is larger. The cost of a reduction
+ * occurs once for each block, not once for each stride.
  */
 final class PanamaDistanceKernel {
 
   private static final VectorSpecies<Float> SPECIES = FloatVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Byte> BYTE_SPECIES =
+    VectorSpecies.of(byte.class, SPECIES.vectorShape());
   static final int BLOCK_STRIDES = 8;
 
   private PanamaDistanceKernel() {
   }
 
-  static double l2DistanceSquared(float[] a, float[] b, int dim, double bound) {
+  private static FloatVector load(byte[] buf, int off, int i) {
+    return ByteVector.fromArray(BYTE_SPECIES, buf, off + i * Bytes.SIZEOF_FLOAT)
+      .reinterpretAsFloats();
+  }
+
+  static double l2DistanceSquared(byte[] a, int aOff, byte[] b, int bOff, int dim, double bound) {
     int step = SPECIES.length();
     int upper = SPECIES.loopBound(dim);
     int blockLen = step * BLOCK_STRIDES;
@@ -47,8 +63,7 @@ final class PanamaDistanceKernel {
       int blockEnd = Math.min(upper, i + blockLen);
       FloatVector acc = FloatVector.zero(SPECIES);
       for (; i < blockEnd; i += step) {
-        FloatVector diff =
-          FloatVector.fromArray(SPECIES, a, i).sub(FloatVector.fromArray(SPECIES, b, i));
+        FloatVector diff = load(a, aOff, i).sub(load(b, bOff, i));
         acc = diff.fma(diff, acc);
       }
       total += acc.reduceLanes(VectorOperators.ADD);
@@ -57,7 +72,7 @@ final class PanamaDistanceKernel {
       }
     }
     for (; i < dim; i++) {
-      double diff = a[i] - b[i];
+      double diff = PVectorFloat.readElement(a, aOff, i) - PVectorFloat.readElement(b, bOff, i);
       total += diff * diff;
       if (total > bound) {
         return Double.MAX_VALUE;
@@ -66,7 +81,7 @@ final class PanamaDistanceKernel {
     return total;
   }
 
-  static double dotProduct(float[] a, float[] b, int dim) {
+  static double dotProduct(byte[] a, int aOff, byte[] b, int bOff, int dim) {
     int step = SPECIES.length();
     int upper = SPECIES.loopBound(dim);
     int blockLen = step * BLOCK_STRIDES;
@@ -76,17 +91,17 @@ final class PanamaDistanceKernel {
       int blockEnd = Math.min(upper, i + blockLen);
       FloatVector acc = FloatVector.zero(SPECIES);
       for (; i < blockEnd; i += step) {
-        acc = FloatVector.fromArray(SPECIES, a, i).fma(FloatVector.fromArray(SPECIES, b, i), acc);
+        acc = load(a, aOff, i).fma(load(b, bOff, i), acc);
       }
       total += acc.reduceLanes(VectorOperators.ADD);
     }
     for (; i < dim; i++) {
-      total += (double) a[i] * b[i];
+      total += (double) PVectorFloat.readElement(a, aOff, i) * PVectorFloat.readElement(b, bOff, i);
     }
     return total;
   }
 
-  static double cosineDistance(float[] a, float[] b, int dim) {
+  static double cosineDistance(byte[] a, int aOff, byte[] b, int bOff, int dim) {
     int step = SPECIES.length();
     int upper = SPECIES.loopBound(dim);
     int blockLen = step * BLOCK_STRIDES;
@@ -100,8 +115,8 @@ final class PanamaDistanceKernel {
       FloatVector vNormA = FloatVector.zero(SPECIES);
       FloatVector vNormB = FloatVector.zero(SPECIES);
       for (; i < blockEnd; i += step) {
-        FloatVector va = FloatVector.fromArray(SPECIES, a, i);
-        FloatVector vb = FloatVector.fromArray(SPECIES, b, i);
+        FloatVector va = load(a, aOff, i);
+        FloatVector vb = load(b, bOff, i);
         vDot = va.fma(vb, vDot);
         vNormA = va.fma(va, vNormA);
         vNormB = vb.fma(vb, vNormB);
@@ -111,8 +126,8 @@ final class PanamaDistanceKernel {
       normB += vNormB.reduceLanes(VectorOperators.ADD);
     }
     for (; i < dim; i++) {
-      double ai = a[i];
-      double bi = b[i];
+      double ai = PVectorFloat.readElement(a, aOff, i);
+      double bi = PVectorFloat.readElement(b, bOff, i);
       dot += ai * bi;
       normA += ai * ai;
       normB += bi * bi;

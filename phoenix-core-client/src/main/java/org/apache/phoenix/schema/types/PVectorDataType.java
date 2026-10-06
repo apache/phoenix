@@ -27,12 +27,12 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
 /**
- * Base class for fixed-dimension vector types {@code VECTOR(FLOAT, N)} and
+ * Base class for the fixed-dimension vector types {@code VECTOR(FLOAT, N)} and
  * {@code VECTOR(DOUBLE, N)}.
  * <p>
- * Vectors are serialized as dense, contiguous IEEE 754 big-endian values without header metadata or
- * null masks. Vector dimension is stored in column max length. Vectors do not support primary key
- * usage or ordering comparisons.
+ * The serialized form of a vector is a dense sequence of little-endian IEEE 754 values. It has no
+ * header and no null mask. The column max length holds the vector dimension. A vector column cannot
+ * be part of a primary key, and vectors do not support order comparisons.
  * @param <T> the primitive array type of the vector, {@code float[]} or {@code double[]}
  */
 public abstract class PVectorDataType<T> extends PDataType<T> {
@@ -65,7 +65,7 @@ public abstract class PVectorDataType<T> extends PDataType<T> {
   /** Parses one element from its string form. */
   protected abstract Number parseElement(String s);
 
-  /** Packs a vector into a byte buffer as contiguous big-endian IEEE 754 values. */
+  /** Writes a vector into a byte buffer as a dense sequence of little-endian IEEE 754 values. */
   protected abstract void pack(T vector, byte[] buf, int offset);
 
   /** Unpacks a vector from a packed byte range that the writer encoded in the given sort order. */

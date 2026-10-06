@@ -26,6 +26,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -354,7 +356,8 @@ public class VectorDataTypeTest {
     PVectorFloat.writeElements(original, encoded, 0);
 
     for (int i = 0; i < original.length; i++) {
-      int rawBits = Bytes.toInt(encoded, i * Bytes.SIZEOF_FLOAT);
+      int rawBits =
+        ByteBuffer.wrap(encoded).order(ByteOrder.LITTLE_ENDIAN).getInt(i * Bytes.SIZEOF_FLOAT);
       assertEquals("Element " + i + " bit pattern mismatch", Float.floatToRawIntBits(original[i]),
         rawBits);
     }
@@ -371,7 +374,8 @@ public class VectorDataTypeTest {
     PVectorDouble.writeElements(original, encoded, 0);
 
     for (int i = 0; i < original.length; i++) {
-      long rawBits = Bytes.toLong(encoded, i * Bytes.SIZEOF_DOUBLE);
+      long rawBits =
+        ByteBuffer.wrap(encoded).order(ByteOrder.LITTLE_ENDIAN).getLong(i * Bytes.SIZEOF_DOUBLE);
       assertEquals("Element " + i + " bit pattern mismatch",
         Double.doubleToRawLongBits(original[i]), rawBits);
     }
