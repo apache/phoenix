@@ -57,9 +57,10 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
  * <li>Vector dimension literal</li>
  * </ol>
  * </p>
- * Transcodes BSON Binary subtype 9 (VECTOR) FLOAT32 payloads from little endian format into the big
- * endian packed representation of {@link PVectorFloat}. Missing paths or documents evaluate to SQL
- * NULL. Structural or dimension mismatches raise {@link IllegalDataException}.
+ * Extracts BSON Binary subtype 9 (VECTOR) FLOAT32 payloads, whose little endian float32 layout is
+ * the packed representation of {@link PVectorFloat}, without copying or transcoding. Missing paths
+ * or documents evaluate to SQL NULL. Structural or dimension mismatches raise
+ * {@link IllegalDataException}.
  */
 @FunctionParseNode.BuiltInFunction(name = BsonVectorValueFunction.NAME,
     nodeClass = BsonVectorValueParseNode.class,
@@ -202,16 +203,8 @@ public class BsonVectorValueFunction extends ScalarFunction {
             + ", found " + payloadLength / (double) Bytes.SIZEOF_FLOAT)
           .build().buildException());
     }
-    // Convert little endian BSON float32 payload to big endian PVectorFloat encoding
-    byte[] out = new byte[payloadLength];
-    for (int i = 0; i < payloadLength; i += Bytes.SIZEOF_FLOAT) {
-      int src = VECTOR_HEADER_SIZE + i;
-      out[i] = data[src + 3];
-      out[i + 1] = data[src + 2];
-      out[i + 2] = data[src + 1];
-      out[i + 3] = data[src];
-    }
-    ptr.set(out);
+    // The little endian BSON float32 payload is already the PVectorFloat encoding
+    ptr.set(data, VECTOR_HEADER_SIZE, payloadLength);
     return true;
   }
 

@@ -23,7 +23,9 @@ import org.apache.phoenix.schema.SortOrder;
 
 /**
  * Data type representing fixed-dimension single-precision floating point vectors,
- * {@code VECTOR(FLOAT, N)}. Stored as packed big-endian IEEE 754 values.
+ * {@code VECTOR(FLOAT, N)}. Stored as packed little-endian IEEE 754 values, the byte order of
+ * x86_64 and arm64, so SIMD kernels load elements directly from cell bytes and BSON FLOAT32 vectors
+ * copy in unchanged. The encoding is not order preserving; vectors are not comparable by bytes.
  */
 public class PVectorFloat extends PVectorDataType<float[]> {
 
@@ -35,16 +37,20 @@ public class PVectorFloat extends PVectorDataType<float[]> {
 
   /** Reads one element by index from a packed ascending-order vector buffer. */
   public static float readElement(byte[] buf, int offset, int index) {
-    return Bytes.toFloat(buf, offset + index * Bytes.SIZEOF_FLOAT);
+    return Float.intBitsToFloat(readBits(buf, offset, index));
   }
 
   /** Reads one element by index from a packed vector buffer with the given sort order. */
   public static float readElement(byte[] buf, int offset, int index, SortOrder sortOrder) {
-    int b = Bytes.toInt(buf, offset + index * Bytes.SIZEOF_FLOAT);
+    int b = readBits(buf, offset, index);
     if (sortOrder == SortOrder.DESC) {
       b ^= 0xFFFFFFFF;
     }
     return Float.intBitsToFloat(b);
+  }
+
+  private static int readBits(byte[] buf, int offset, int index) {
+    return Integer.reverseBytes(Bytes.toInt(buf, offset + index * Bytes.SIZEOF_FLOAT));
   }
 
   /** Reads one element by index from a packed ascending-order vector pointer. */
@@ -67,7 +73,7 @@ public class PVectorFloat extends PVectorDataType<float[]> {
   }
 
   /**
-   * Writes a vector into a byte buffer as packed contiguous big-endian IEEE 754 values.
+   * Writes a vector into a byte buffer as packed contiguous little-endian IEEE 754 values.
    * @throws IllegalArgumentException if the buffer is too small to contain the vector
    */
   public static void writeElements(float[] vector, byte[] buf, int offset) {
@@ -76,7 +82,8 @@ public class PVectorFloat extends PVectorDataType<float[]> {
         + (offset + vector.length * Bytes.SIZEOF_FLOAT) + " bytes, have " + buf.length);
     }
     for (int i = 0; i < vector.length; i++) {
-      Bytes.putFloat(buf, offset + i * Bytes.SIZEOF_FLOAT, vector[i]);
+      Bytes.putInt(buf, offset + i * Bytes.SIZEOF_FLOAT,
+        Integer.reverseBytes(Float.floatToRawIntBits(vector[i])));
     }
   }
 
