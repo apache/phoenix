@@ -113,6 +113,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
   public static final int MIN_VERSION_ALLOW_VBE_COLUMNS = VersionUtil.encodeVersion("5", "3", "0");
   public static final int MIN_VERSION_TABLE_TTL_IN_SYSTEM_CATALOG =
     VersionUtil.encodeVersion("5", "3", "0");
+  // Minimum server version supporting vector index maintenance and vector function evaluation
+  public static final int MIN_VECTOR_INDEX_VERSION = VersionUtil.encodeVersion("5", "4", "0");
   // Version below which we should turn off essential column family.
   public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD =
     VersionUtil.encodeVersion("0", "94", "7");

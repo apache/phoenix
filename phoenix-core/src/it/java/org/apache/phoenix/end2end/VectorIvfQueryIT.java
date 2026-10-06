@@ -1665,7 +1665,11 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
           exact.add(rs.getString(1) + "=" + rs.getString(2));
         }
       }
-      assertEquals(exact, deferred);
+      List<String> expected = new ArrayList<>();
+      expected.add("R0=n0");
+      expected.add("R1=n1");
+      assertEquals(expected, exact);
+      assertEquals(expected, deferred);
     }
   }
 

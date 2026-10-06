@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -61,10 +62,12 @@ import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.DelegateTable;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -72,6 +75,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.bson.BinaryVector;
+import org.bson.BsonBinary;
+import org.bson.BsonDocument;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -548,6 +554,83 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       assertTrue(im.isVectorUnchanged(near, same));
       assertFalse(im.isVectorUnchanged(near, moved));
       assertFalse(im.isVectorUnchanged(noVector, near));
+    }
+  }
+
+  private static Put bsonDataRow(PhoenixConnection pconn, String tableName, String id,
+    BsonDocument doc) throws Exception {
+    try (PreparedStatement ps =
+      pconn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)")) {
+      ps.setString(1, id);
+      ps.setObject(2, doc);
+      ps.executeUpdate();
+    }
+    Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+    Put put = (Put) iterator.next().getSecond().get(0);
+    pconn.rollback();
+    return put;
+  }
+
+  @Test
+  public void testFunctionalVectorIndexMaintainer() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, DOC BSON)");
+      pconn.createStatement()
+        .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(DOC, 'v', 2)) WITH (algorithm = 'IVF', metric = 'L2',"
+          + " lists = 2, sample_size = 10) ASYNC");
+      PTable index = pconn.getTable(indexName);
+      PTable trained = new DelegateTable(index) {
+        @Override
+        public Long getVectorCentroidGeneration() {
+          return 3L;
+        }
+      };
+      VectorCentroidCache.getInstance(HBaseConfiguration.create()).put(index.getName().getString(),
+        3L, new CachedCentroids(Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }),
+          DistanceMetric.L2));
+      IndexMaintainer im = IndexMaintainer.create(pconn.getTable(tableName), trained, pconn);
+      ColumnReference vectorColumn = im.getFunctionalVectorColumn();
+      assertNotNull(vectorColumn);
+
+      // Verify index mutation contains computed vector encoded as PVectorFloat
+      Put near = bsonDataRow(pconn, tableName, "a",
+        new BsonDocument("v", new BsonBinary(BinaryVector.floatVector(new float[] { 9, 8 }))));
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(near.getRow());
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(near), rowKey, ts, null, null, false, null);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        indexPut.getRow());
+      assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 9, 8 }), CellUtil
+        .cloneValue(indexPut.get(vectorColumn.getFamily(), vectorColumn.getQualifier()).get(0)));
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(IndexMaintainer.toProto(im),
+        pconn.getTable(tableName).getRowKeySchema(), false);
+      assertEquals(vectorColumn, fromProto.getFunctionalVectorColumn());
+
+      // Malformed vectors reject writes during update, but omit index entries for current
+      // state evaluation
+      Put malformed = bsonDataRow(pconn, tableName, "b",
+        new BsonDocument("v", new BsonBinary(BinaryVector.int8Vector(new byte[] { 1, 2 }))));
+      assertFalse(im.hasIndexRow(malformed));
+      assertNull(im.buildRowKey(new IndexUtil.SimpleValueGetter(malformed),
+        new ImmutableBytesPtr(malformed.getRow()), null, null, ts));
+      try {
+        im.shouldPrepareIndexMutations(malformed);
+        fail("A malformed vector being written must fail");
+      } catch (IllegalDataException expected) {
+      }
+      try {
+        im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+          new IndexUtil.SimpleValueGetter(malformed), new ImmutableBytesPtr(malformed.getRow()), ts,
+          null, null, false, null);
+        fail("A malformed vector being written must fail");
+      } catch (IllegalDataException expected) {
+      }
     }
   }
 

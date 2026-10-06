@@ -1437,10 +1437,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             indexUpdates.put(hTableInterfaceReference, del);
           }
         }
-      } else if (
-        currentDataRowState != null
-          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)
-      ) {
+      } else if (currentDataRowState != null && indexMaintainer.hasIndexRow(currentDataRowState)) {
         if (indexMaintainer.isCDCIndex()) {
           // CDC Index needs two a delete marker for referencing the data table
           // delete mutation with the right index row key, that is, the index row key

@@ -27,9 +27,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -47,6 +49,7 @@ import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -58,13 +61,17 @@ import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
@@ -540,10 +547,12 @@ public class ProjectionCompiler {
       index++;
     }
 
+    // Preserve columns referenced by ORDER BY in the raw row rather than projecting server side
+    Set<String> orderByColumnNames = getOrderByColumnNames(statement);
     for (int i = serverParsedProjectedColumnRefs.size() - 1; i >= 0; i--) {
-      Expression expression = serverParsedProjectedColumnRefs.get(i);
+      ProjectedColumnExpression expression = serverParsedProjectedColumnRefs.get(i);
       Integer count = serverParsedExpressionCounts.get(expression);
-      if (count != 0) {
+      if (count != 0 || orderByColumnNames.contains(expression.getColumn().getName().getString())) {
         serverParsedKVRefs.remove(i);
         serverParsedKVFuncs.remove(i);
         serverParsedOldFuncs.remove(i);
@@ -551,17 +560,21 @@ public class ProjectionCompiler {
     }
 
     if (serverParsedKVFuncs.size() > 0 && serverParsedKVRefs.size() > 0) {
+      // Evaluation layout order for server parsed functions, see
+      // NonAggregateRegionScannerFactory#getServerParsedExpressions
       String[] scanAttributes =
         new String[] { BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX,
           BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
+          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION,
           BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION,
-          BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION };
+          BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION };
       Map<String, Class> attributeToFunctionMap = new HashMap<String, Class>() {
         {
           put(scanAttributes[0], ArrayIndexFunction.class);
           put(scanAttributes[1], JsonValueFunction.class);
-          put(scanAttributes[2], JsonQueryFunction.class);
-          put(scanAttributes[3], BsonValueFunction.class);
+          put(scanAttributes[2], BsonValueFunction.class);
+          put(scanAttributes[3], JsonQueryFunction.class);
+          put(scanAttributes[4], BsonVectorValueFunction.class);
         }
       };
       // This map is to keep track of the positions that get swapped with rearranging
@@ -603,17 +616,17 @@ public class ProjectionCompiler {
       // Stash the per-type expression buckets on the context so EXPLAIN can render the per-type
       // SERVER ARRAY|JSON|BSON PROJECTION clauses (and their per-expression detail lines).
       context.setServerParsedProjections(serverAttributeToFuncExpressionMap);
-      KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-      for (Expression expression : serverParsedKVRefs) {
-        builder.addField(expression);
+      // Match schema to the server's serialized projection field order
+      Expression[] shuffledFuncs = new Expression[serverParsedKVFuncs.size()];
+      for (int i = 0; i < serverParsedKVFuncs.size(); i++) {
+        shuffledFuncs[initialToShuffledPositionMap.get(i)] = serverParsedKVFuncs.get(i);
       }
-      KeyValueSchema kvSchema = builder.build();
-      ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
-      builder = new KeyValueSchemaBuilder(0);
-      for (Expression expression : serverParsedKVFuncs) {
+      KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+      for (Expression expression : shuffledFuncs) {
         builder.addField(expression);
       }
       KeyValueSchema arrayIndexesSchema = builder.build();
+      ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(arrayIndexesSchema);
 
       Map<Expression, Expression> replacementMap = new HashMap<>();
       for (int i = 0; i < serverParsedOldFuncs.size(); i++) {
@@ -861,14 +874,21 @@ public class ProjectionCompiler {
       return context.getSequenceManager().newSequenceReference(node);
     }
 
+    /** Evaluates whether BSON_VECTOR_VALUE projection is supported on target region servers. */
+    private boolean isServerBsonVectorFunction(FunctionParseNode node) {
+      return BsonVectorValueFunction.NAME.equals(node.getName())
+        && context.getConnection().getQueryServices().supportsFeature(Feature.VECTOR_INDEX);
+    }
+
     @Override
     public Expression visitLeave(FunctionParseNode node, final List<Expression> children)
       throws SQLException {
 
       // this need not be done for group by clause with array or json. Hence, the below check
       if (
-        !statement.isAggregate() && (ArrayIndexFunction.NAME.equals(node.getName())
-          || isJsonFunction(node) || isBsonFunction(node))
+        !statement.isAggregate()
+          && (ArrayIndexFunction.NAME.equals(node.getName()) || isJsonFunction(node)
+            || isBsonFunction(node) || isServerBsonVectorFunction(node))
           && children.get(0) instanceof ProjectedColumnExpression
       ) {
         final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
@@ -925,6 +945,43 @@ public class ProjectionCompiler {
         return super.visitLeave(node, children);
       }
     }
+  }
+
+  /** Resolves column names referenced in the ORDER BY clause, expanding aliases and ordinals. */
+  private static Set<String> getOrderByColumnNames(SelectStatement statement) throws SQLException {
+    Set<String> names = new HashSet<>();
+    if (statement.getOrderBy().isEmpty()) {
+      return names;
+    }
+    Map<String, ParseNode> aliases = new HashMap<>();
+    for (AliasedNode aliasedNode : statement.getSelect()) {
+      if (aliasedNode.getAlias() != null) {
+        aliases.put(aliasedNode.getAlias(), aliasedNode.getNode());
+      }
+    }
+    StatelessTraverseAllParseNodeVisitor visitor = new StatelessTraverseAllParseNodeVisitor() {
+      @Override
+      public Void visit(ColumnParseNode node) {
+        names.add(node.getName());
+        return null;
+      }
+    };
+    for (OrderByNode orderByNode : statement.getOrderBy()) {
+      ParseNode node = orderByNode.getNode();
+      if (node instanceof ColumnParseNode && ((ColumnParseNode) node).getTableName() == null) {
+        ParseNode aliased = aliases.get(((ColumnParseNode) node).getName());
+        node = aliased != null ? aliased : node;
+      } else if (
+        node instanceof LiteralParseNode && ((LiteralParseNode) node).getValue() instanceof Integer
+      ) {
+        int position = (Integer) ((LiteralParseNode) node).getValue();
+        if (position >= 1 && position <= statement.getSelect().size()) {
+          node = statement.getSelect().get(position - 1).getNode();
+        }
+      }
+      node.accept(visitor);
+    }
+    return names;
   }
 
   private static boolean isJsonFunction(FunctionParseNode node) {

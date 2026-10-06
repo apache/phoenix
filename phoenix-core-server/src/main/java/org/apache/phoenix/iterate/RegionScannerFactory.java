@@ -473,8 +473,19 @@ public abstract class RegionScannerFactory {
     };
   }
 
-  // PHOENIX-4791 Share position of array element cell
+  // PHOENIX-4791 Share position of array element cell. The cell is appended last to an ordinary
+  // list, but an encoded qualifier list keeps it in its reserved qualifier range, ahead of the
+  // column cells, so look it up by its column.
   public static int getArrayCellPosition(List<Cell> result) {
+    for (int i = result.size() - 1; i >= 0; i--) {
+      Cell cell = result.get(i);
+      if (
+        CellUtil.matchingColumn(cell, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY,
+          QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER)
+      ) {
+        return i;
+      }
+    }
     return result.size() - 1;
   }
 }

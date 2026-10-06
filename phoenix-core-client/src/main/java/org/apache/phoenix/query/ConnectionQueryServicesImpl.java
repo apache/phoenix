@@ -377,6 +377,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   // Lowest HBase version on the cluster.
   private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
+  private int lowestClusterPhoenixVersion = Integer.MAX_VALUE;
   private boolean hasIndexWALCodec = true;
 
   @GuardedBy("connectionCountLock")
@@ -459,6 +460,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       public boolean isSupported(ConnectionQueryServices services) {
         int hbaseVersion = services.getLowestClusterHBaseVersion();
         return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
+      }
+    }, Feature.VECTOR_INDEX, new FeatureSupported() {
+      @Override
+      public boolean isSupported(ConnectionQueryServices services) {
+        return lowestClusterPhoenixVersion >= MetaDataProtocol.MIN_VECTOR_INDEX_VERSION;
       }
     });
   private QueryLoggerDisruptor queryDisruptor;
@@ -2167,6 +2173,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     throws SQLException, AccessDeniedException {
     StringBuilder errorMessage = new StringBuilder();
     int minHBaseVersion = Integer.MAX_VALUE;
+    int minPhoenixVersion = Integer.MAX_VALUE;
     boolean isTableNamespaceMappingEnabled = false;
     long systemCatalogTimestamp = Long.MAX_VALUE;
     long startTime = 0L;
@@ -2235,6 +2242,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(serverJarVersion)) {
           minHBaseVersion = MetaDataUtil.decodeHBaseVersion(serverJarVersion);
         }
+        minPhoenixVersion =
+          Math.min(minPhoenixVersion, MetaDataUtil.decodePhoenixVersion(serverJarVersion));
         // In case this is the first time connecting to this cluster, the system catalog table does
         // not have an
         // entry for itself yet, so we cannot get the timestamp and this will not be returned from
@@ -2272,6 +2281,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             .build().buildException();
       }
       lowestClusterHBaseVersion = minHBaseVersion;
+      lowestClusterPhoenixVersion = minPhoenixVersion;
     } finally {
       if (ht != null) {
         try {

@@ -234,7 +234,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   public enum Feature {
     LOCAL_INDEX,
-    RENEW_LEASE
+    RENEW_LEASE,
+    VECTOR_INDEX
   };
 
   public boolean supportsFeature(Feature feature);
