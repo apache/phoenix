@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Random;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.junit.Test;
 
@@ -33,6 +34,8 @@ public class PanamaDistanceKernelParityTest {
 
   private static final int[] DIMS = { 1, 3, 7, 8, 15, 16, 64, 100, 128, 129, 768, 1536 };
   private static final double TOLERANCE = 1e-5;
+  /** A value can start at any offset in a cell, so the kernels must load from any offset. */
+  private static final int[] OFFSETS = { 0, 1, 3, 4 };
 
   private static float[] random(Random rng, int dim) {
     float[] v = new float[dim];
@@ -42,9 +45,32 @@ public class PanamaDistanceKernelParityTest {
     return v;
   }
 
+  /** Packs {@code v} at {@code off} between random bytes. A kernel must not read these bytes. */
+  private static byte[] pack(Random rng, float[] v, int off) {
+    byte[] buf = new byte[off + v.length * Bytes.SIZEOF_FLOAT + 64];
+    rng.nextBytes(buf);
+    PVectorFloat.writeElements(v, buf, off);
+    return buf;
+  }
+
   private static void assertClose(String what, double expected, double actual) {
-    double scale = Math.max(1.0, Math.abs(expected));
-    assertEquals(what, expected, actual, TOLERANCE * scale);
+    assertClose(what, expected, actual, Math.abs(expected));
+  }
+
+  private static void assertClose(String what, double expected, double actual, double magnitude) {
+    assertEquals(what, expected, actual, TOLERANCE * Math.max(1.0, magnitude));
+  }
+
+  /**
+   * Returns the sum of the absolute term values of a dot product. Single-precision rounding error
+   * scales with this sum, not with the result, because cancellation can make the result very small.
+   */
+  private static double termMagnitude(float[] a, float[] b) {
+    double sum = 0.0;
+    for (int i = 0; i < a.length; i++) {
+      sum += Math.abs((double) a[i] * b[i]);
+    }
+    return sum;
   }
 
   @Test
@@ -60,14 +86,18 @@ public class PanamaDistanceKernelParityTest {
       for (int trial = 0; trial < 50; trial++) {
         float[] a = random(rng, dim);
         float[] b = random(rng, dim);
-        String ctx = "dim=" + dim + " trial=" + trial;
+        int aOff = OFFSETS[trial % OFFSETS.length];
+        int bOff = OFFSETS[(trial / OFFSETS.length) % OFFSETS.length];
+        byte[] pa = pack(rng, a, aOff);
+        byte[] pb = pack(rng, b, bOff);
+        String ctx = "dim=" + dim + " trial=" + trial + " aOff=" + aOff + " bOff=" + bOff;
         assertClose("l2sq " + ctx,
           ScalarDistanceKernel.l2DistanceSquared(a, b, dim, Double.MAX_VALUE),
-          PanamaDistanceKernel.l2DistanceSquared(a, b, dim, Double.MAX_VALUE));
+          PanamaDistanceKernel.l2DistanceSquared(pa, aOff, pb, bOff, dim, Double.MAX_VALUE));
         assertClose("dot " + ctx, ScalarDistanceKernel.dotProduct(a, b, dim),
-          PanamaDistanceKernel.dotProduct(a, b, dim));
+          PanamaDistanceKernel.dotProduct(pa, aOff, pb, bOff, dim), termMagnitude(a, b));
         assertClose("cosine " + ctx, ScalarDistanceKernel.cosineDistance(a, b, dim),
-          PanamaDistanceKernel.cosineDistance(a, b, dim));
+          PanamaDistanceKernel.cosineDistance(pa, aOff, pb, bOff, dim));
       }
     }
   }
@@ -87,7 +117,8 @@ public class PanamaDistanceKernelParityTest {
         Math.sqrt(ScalarDistanceKernel.l2DistanceSquared(a, b, dim, Double.MAX_VALUE)),
         VectorDistanceUtil.l2DistanceWithBound(pa, 0, pb, 0, dim, Double.MAX_VALUE));
       assertClose("ip " + ctx, -ScalarDistanceKernel.dotProduct(a, b, dim),
-        VectorDistanceUtil.innerProductDistanceWithBound(pa, 0, pb, 0, dim, Double.MAX_VALUE));
+        VectorDistanceUtil.innerProductDistanceWithBound(pa, 0, pb, 0, dim, Double.MAX_VALUE),
+        termMagnitude(a, b));
       assertClose("cosine " + ctx, ScalarDistanceKernel.cosineDistance(a, b, dim),
         VectorDistanceUtil.cosineDistanceWithBound(pa, 0, pb, 0, dim, Double.MAX_VALUE));
     }
@@ -99,11 +130,13 @@ public class PanamaDistanceKernelParityTest {
     for (int dim : DIMS) {
       float[] a = random(rng, dim);
       float[] b = random(rng, dim);
+      byte[] pa = pack(rng, a, 1);
+      byte[] pb = pack(rng, b, 0);
       double exact = ScalarDistanceKernel.l2DistanceSquared(a, b, dim, Double.MAX_VALUE);
       assertEquals(Double.MAX_VALUE,
-        PanamaDistanceKernel.l2DistanceSquared(a, b, dim, exact * 0.5), 0.0);
+        PanamaDistanceKernel.l2DistanceSquared(pa, 1, pb, 0, dim, exact * 0.5), 0.0);
       assertClose("dim=" + dim, exact,
-        PanamaDistanceKernel.l2DistanceSquared(a, b, dim, exact * 1.5));
+        PanamaDistanceKernel.l2DistanceSquared(pa, 1, pb, 0, dim, exact * 1.5));
     }
   }
 }
