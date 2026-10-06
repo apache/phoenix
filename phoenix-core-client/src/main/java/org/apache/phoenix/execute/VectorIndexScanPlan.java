@@ -17,11 +17,21 @@
  */
 package org.apache.phoenix.execute;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -32,10 +42,20 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.DistanceFunction;
+import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.iterate.BaseResultIterators;
+import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.optimize.DistanceMetric;
@@ -43,12 +63,18 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
@@ -65,6 +91,10 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
  * If the probed posting lists hold too few rows, the plan can probe more posting lists in batches.
  * During a migration, the plan probes both the active and the building generation.
  * <p>
+ * A probe batch uses positional reads (PREAD) while its estimated bytes per index region scan are
+ * at most a bound. The estimate comes from the index statistics. A larger batch, or a batch with no
+ * estimate, keeps the default read type, so that a long region scan can switch to a stream read.
+ * <p>
  * If the plan cannot limit the scan to posting lists, it keeps the compiled key ranges of the query
  * and probes no centroids. Examples are an untrained index, a view index, a multitenant index
  * without a tenant ID, and a query that binds a key column after the salt and tenant prefix. For
@@ -75,6 +105,22 @@ public class VectorIndexScanPlan extends ScanPlan {
   private final int centroidCount;
   private final int probeCount;
   private final int[] probeCentroids;
+  private final int maxProbeBatches;
+  private final CachedCentroids centroids;
+  private final float[] queryVector;
+  // Skip scan filter for the posting lists of the first probe batch, or null. Each later adaptive
+  // batch replaces this filter in its copy of the scan.
+  private final SkipScanFilter postingListFilter;
+  // Largest estimated bytes per index region scan for which a probe batch uses PREAD, or 0 or less
+  // if no batch uses PREAD
+  private final long preadMaxBytesPerRegion;
+  // Estimated bytes of one posting list part at the last read type check, or null if there is no
+  // estimate. An iterator keeps its own copy for its later batches.
+  private Long listPartBytes;
+  // The scan whose read type an earlier iteration of this plan set, or null
+  private Scan boundedReadTypeScan;
+  // The read type that the plan set on that scan
+  private Scan.ReadType plannedReadType;
 
   public VectorIndexScanPlan(StatementContext context, FilterableStatement statement,
     TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
@@ -87,7 +133,7 @@ public class VectorIndexScanPlan extends ScanPlan {
     ReadOnlyProps props = connection.getQueryServices().getProps();
     HintNode hint = statement.getHint();
 
-    float[] queryVector = getQueryVector(orderBy);
+    this.queryVector = getQueryVector(orderBy);
     CachedCentroids centroids = null;
     if (queryVector != null && index.getVectorCentroidGeneration() != null) {
       centroids = VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
@@ -95,8 +141,10 @@ public class VectorIndexScanPlan extends ScanPlan {
           index.getVectorCentroidGeneration(),
           DistanceMetric.fromString(index.getVectorDistanceMetric()));
     }
+    this.centroids = centroids;
     this.centroidCount = centroids == null ? 0 : centroids.size();
     int[] probes = new int[0];
+    SkipScanFilter filter = null;
     if (centroids != null) {
       int requested = getHintInt(hint, Hint.VECTOR_PROBE_COUNT, props.getInt(
         QueryServices.VECTOR_PROBE_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_VECTOR_PROBE_COUNT));
@@ -109,12 +157,20 @@ public class VectorIndexScanPlan extends ScanPlan {
         probes = nearest;
         context.setScanRanges(ranges);
         if (ranges.useSkipScanFilter()) {
-          ScanUtil.andFilterAtBeginning(context.getScan(), ranges.getSkipScanFilter());
+          filter = ranges.getSkipScanFilter();
+          ScanUtil.andFilterAtBeginning(context.getScan(), filter);
         }
       }
     }
     this.probeCentroids = probes;
     this.probeCount = probes.length;
+    this.postingListFilter = filter;
+    this.maxProbeBatches = getHintInt(hint, Hint.MAX_PROBE_LIMIT,
+      props.getInt(QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB,
+        QueryServicesOptions.DEFAULT_VECTOR_MAX_PROBE_LIMIT));
+    this.preadMaxBytesPerRegion =
+      props.getLongBytes(QueryServices.VECTOR_PREAD_MAX_BYTES_PER_REGION_ATTRIB,
+        QueryServicesOptions.DEFAULT_VECTOR_PREAD_MAX_BYTES_PER_REGION);
   }
 
   /**
@@ -166,7 +222,19 @@ public class VectorIndexScanPlan extends ScanPlan {
     if (!compiled.isEverything() && compiled.getBoundPkColumnCount() > prefixSlots) {
       return null;
     }
-    List<List<KeyRange>> slots = new ArrayList<>(prefixSlots + 1);
+    return buildPostingListRanges(context, index, centroids);
+  }
+
+  /**
+   * Makes scan ranges for the posting lists of the given centroids. A salted index gets a slot with
+   * all salt buckets. A multitenant index gets a slot with the tenant ID of the connection, so the
+   * caller must make sure that the connection has a tenant ID.
+   */
+  private static ScanRanges buildPostingListRanges(StatementContext context, PTable index,
+    int[] centroids) throws SQLException {
+    boolean isSalted = index.getBucketNum() != null;
+    boolean scopeTenant = index.isMultiTenant();
+    List<List<KeyRange>> slots = new ArrayList<>(3);
     if (isSalted) {
       slots.add(SaltingUtil.generateAllSaltingRanges(index.getBucketNum()));
     }
@@ -250,8 +318,13 @@ public class VectorIndexScanPlan extends ScanPlan {
     }
     String metric = getTableRef().getTable().getVectorDistanceMetric();
     List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
-    steps.add(0,
-      "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS (" + metric + ")");
+    String probing =
+      "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS (" + metric + ")";
+    if (isAdaptive()) {
+      int batches = Math.min(maxProbeBatches, (centroidCount + probeCount - 1) / probeCount);
+      probing += " EXPANDING UP TO " + batches + " BATCHES";
+    }
+    steps.add(0, probing);
     ExplainPlanAttributes attributes = explainPlan.getPlanStepsAsAttributes();
     return new ExplainPlan(steps,
       (attributes == null
@@ -260,7 +333,392 @@ public class VectorIndexScanPlan extends ScanPlan {
           .setVectorCentroidCount(centroidCount).setVectorDistanceMetric(metric).build());
   }
 
-  /** Number of probed centroid posting lists, or 0 for full index scans. */
+  /**
+   * Returns true if execution can scan more centroid posting lists when the probed lists hold fewer
+   * rows than the limit. A filter can cause this. A tenant scope can also cause this, because all
+   * tenants share the centroids. The plan must have a LIMIT, must probe fewer centroids than the
+   * index has, and must allow more than one probe batch.
+   */
+  public boolean isAdaptive() {
+    return limit != null && probeCount > 0 && probeCount < centroidCount && maxProbeBatches > 1;
+  }
+
+  /**
+   * Returns the read type for a probe batch of {@code parts} posting list parts over
+   * {@code regions} index regions. A short region scan uses PREAD, which does not reopen its store
+   * files for a stream read. A long region scan keeps the default read type, so that the region
+   * server can switch it to a stream read. The rule assumes that the probed rows spread evenly over
+   * the regions. A region scan reads at least one part. Thus the estimated mean bytes of a region
+   * scan are {@code bytesPerPart * max(1, parts / regions)}. A null {@code bytesPerPart} means that
+   * there is no estimate. No estimate, or a bound of 0 or less, gives the default read type.
+   */
+  static Scan.ReadType boundedReadType(long parts, int regions, Long bytesPerPart,
+    long maxBytesPerRegion) {
+    return maxBytesPerRegion > 0 && bytesPerPart != null
+      && bytesPerPart * Math.max(1.0, (double) parts / regions) <= maxBytesPerRegion
+        ? Scan.ReadType.PREAD
+        : Scan.ReadType.DEFAULT;
+  }
+
+  // Returns the number of parts of one posting list. A salted index has one part of each list in
+  // each salt bucket. An index without salt has the full list as one part.
+  private int listParts() {
+    Integer buckets = getTableRef().getTable().getBucketNum();
+    return buckets == null ? 1 : buckets;
+  }
+
+  /**
+   * Returns the read type for a probe batch of {@code width} posting lists over {@code regions}
+   * index regions, from the estimate {@code listPartBytes} of one list part.
+   */
+  private Scan.ReadType batchReadType(long width, int regions, Long listPartBytes) {
+    return boundedReadType(width * listParts(), regions, listPartBytes, preadMaxBytesPerRegion);
+  }
+
+  /**
+   * Returns the estimated bytes of one posting list part, or null if there is no estimate. The
+   * estimate is the index size from the statistics divided by the part count of the probed
+   * generations. A failed statistics read gives no estimate.
+   */
+  private Long estimateListPartBytes() {
+    Long indexBytes;
+    try {
+      indexBytes = getIndexBytes(context.getConnection(), getTableRef().getTable());
+    } catch (SQLException e) {
+      return null;
+    }
+    long parts = (long) centroidCount * listParts();
+    if (indexBytes == null || parts <= 0) {
+      return null;
+    }
+    return indexBytes / parts + (indexBytes % parts == 0 ? 0 : 1);
+  }
+
+  /**
+   * Returns the estimated bytes of the index from the guideposts in the statistics cache of the
+   * connection, or null if there is no estimate. Each index row has a cell in the empty column
+   * family, so that family must have guideposts. Another family adds the bytes of its guideposts,
+   * if it has some. An empty guidepost gives no bytes, because its byte count is the guidepost
+   * width and not the data size. The total can be low, because the statistics can be stale and do
+   * not count the bytes after the last guidepost of a region.
+   */
+  static Long getIndexBytes(PhoenixConnection connection, PTable index) throws SQLException {
+    byte[] physicalName = index.getPhysicalName().getBytes();
+    byte[] emptyFamily = SchemaUtil.getEmptyColumnFamily(index);
+    Long total = getGuidePostBytes(connection, physicalName, emptyFamily);
+    if (total == null) {
+      return null;
+    }
+    for (PColumnFamily family : index.getColumnFamilies()) {
+      byte[] name = family.getName().getBytes();
+      if (!Bytes.equals(name, emptyFamily)) {
+        Long bytes = getGuidePostBytes(connection, physicalName, name);
+        total += bytes == null ? 0 : bytes;
+      }
+    }
+    return total > 0 ? total : null;
+  }
+
+  // Returns the guidepost bytes of one column family, or null if the family has no guideposts
+  private static Long getGuidePostBytes(PhoenixConnection connection, byte[] physicalName,
+    byte[] family) throws SQLException {
+    GuidePostsInfo info =
+      connection.getQueryServices().getTableStats(new GuidePostsKey(physicalName, family));
+    if (info == null || info.getGuidePostsCount() == 0 || info.isEmptyGuidePost()) {
+      return null;
+    }
+    long total = 0;
+    for (long bytes : info.getByteCounts()) {
+      total += bytes;
+    }
+    return total;
+  }
+
+  /**
+   * Returns the index region count if the bound selects the read type of the probe batches,
+   * otherwise 0. The bound does not apply if the caller set a read type, or if the plan probes no
+   * posting lists. A read type that an earlier iteration of this plan set is not a caller choice.
+   * The bound also does not apply to a scan other than the statement scan. For example, a retry of
+   * one region scan keeps the read type of that region scan. The method also updates the estimated
+   * bytes of one posting list part. If the region count cannot change the read type of a batch, the
+   * method returns 1 and does not look up the regions.
+   */
+  int getBoundedReadTypeRegions(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+    boolean ownReadType = scan == boundedReadTypeScan && scan.getReadType() == plannedReadType;
+    if (
+      preadMaxBytesPerRegion <= 0 || probeCount == 0 || scan != context.getScan()
+        || (!ownReadType && scan.getReadType() != Scan.ReadType.DEFAULT)
+    ) {
+      return 0;
+    }
+    listPartBytes = estimateListPartBytes();
+    // All batches use the default read type for any region count. The plan still sets it, because
+    // an earlier iteration can have set PREAD on the scan.
+    if (listPartBytes == null || listPartBytes > preadMaxBytesPerRegion) {
+      return 1;
+    }
+    // No batch is wider than the first batch, so all batches use PREAD for any region count
+    if ((double) listPartBytes * probeCount * listParts() <= preadMaxBytesPerRegion) {
+      return 1;
+    }
+    return getProbedRegions(scanGrouper);
+  }
+
+  /**
+   * Returns the number of index regions that can hold the probed posting lists. The regions come
+   * from the cached region locations of the index.
+   */
+  private int getProbedRegions(ParallelScanGrouper scanGrouper) throws SQLException {
+    PTable index = getTableRef().getTable();
+    KeyRange probed =
+      buildPostingListRanges(context, index, new int[] { 0, centroidCount - 1 }).getScanRange();
+    int regions = 0;
+    for (HRegionLocation location : scanGrouper.getRegionBoundaries(context,
+      index.getPhysicalName().getBytes())) {
+      KeyRange region =
+        KeyRange.getKeyRange(location.getRegion().getStartKey(), location.getRegion().getEndKey());
+      if (probed.intersect(region) != KeyRange.EMPTY_RANGE) {
+        regions++;
+      }
+    }
+    return Math.max(1, regions);
+  }
+
+  @Override
+  protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan,
+    Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
+    // Set the read type of the first batch before the batch copies the scan for each region
+    int regions = getBoundedReadTypeRegions(scanGrouper, scan);
+    if (regions > 0) {
+      plannedReadType = batchReadType(probeCount, regions, listPartBytes);
+      scan.setReadType(plannedReadType);
+      boundedReadTypeScan = scan;
+    }
+    if (!isAdaptive()) {
+      return super.newIterator(scanGrouper, scan, caches);
+    }
+    scan.setAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
+    // Make the first probe batch now, so that the plan records its estimates and splits
+    BaseResultIterators first = newBatch(scanGrouper, scan, caches);
+    recordIteratorStats(first);
+    return new AdaptiveProbeResultIterator(scanGrouper, scan, caches, first, regions,
+      listPartBytes);
+  }
+
+  /**
+   * Returns a copy of {@code scan} for a later probe batch that reads the posting lists of
+   * {@code ranges}. If {@code regions} is more than 0, the bound selects the read type of the copy
+   * from the batch width and the estimate {@code listPartBytes} of one posting list part. Otherwise
+   * the copy keeps the read type of {@code scan}.
+   */
+  Scan newBatchScan(Scan scan, ScanRanges ranges, int width, int regions, Long listPartBytes)
+    throws SQLException {
+    Scan batchScan;
+    try {
+      batchScan = new Scan(scan);
+    } catch (IOException e) {
+      throw ClientUtil.parseServerException(e);
+    }
+    batchScan.setFilter(replacePostingListFilter(scan.getFilter(),
+      ranges.useSkipScanFilter() ? ranges.getSkipScanFilter() : null));
+    ranges.initializeScan(batchScan);
+    if (regions > 0) {
+      batchScan.setReadType(batchReadType(width, regions, listPartBytes));
+    }
+    return batchScan;
+  }
+
+  private BaseResultIterators newBatch(ParallelScanGrouper scanGrouper, Scan scan,
+    Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
+    return isSerial
+      ? new SerialIterators(this, null, null, parallelIteratorFactory, scanGrouper, scan, caches,
+        dataPlan)
+      : new ParallelIterators(this, null, parallelIteratorFactory, scanGrouper, scan, false, caches,
+        dataPlan);
+  }
+
+  /**
+   * Returns the scan filter with {@code next} in place of the posting list filter of the first
+   * batch. A null {@code next} removes that filter. The other filters keep their structure and
+   * position. The method finds the posting list filter only at the top level or in a top level
+   * FilterList. If it does not find the filter, it puts {@code next} first with MUST_PASS_ALL.
+   */
+  private Filter replacePostingListFilter(Filter filter, SkipScanFilter next) {
+    if (filter == postingListFilter) {
+      return next;
+    }
+    if (filter instanceof FilterList) {
+      List<Filter> filters = new ArrayList<>(((FilterList) filter).getFilters());
+      int i = filters.indexOf(postingListFilter);
+      if (i >= 0) {
+        if (next == null) {
+          filters.remove(i);
+        } else {
+          filters.set(i, next);
+        }
+        return new FilterList(((FilterList) filter).getOperator(), filters);
+      }
+    }
+    if (next == null) {
+      return filter;
+    }
+    return filter == null ? next : new FilterList(FilterList.Operator.MUST_PASS_ALL, next, filter);
+  }
+
+  /**
+   * Result iterator executing adaptive multi-batch scans across successive centroid posting lists,
+   * aggregating and globally reranking candidate tuples to satisfy filter and limit criteria.
+   */
+  private class AdaptiveProbeResultIterator implements ResultIterator {
+    private final ParallelScanGrouper scanGrouper;
+    private final Scan scan;
+    private final Map<ImmutableBytesPtr, ServerCache> caches;
+    private final BaseResultIterators first;
+    private final int batchLimit;
+    // Index region count for the read type bound of each batch, or 0 to keep the read type
+    private final int regions;
+    // Estimated bytes of one posting list part for the read type bound, or null
+    private final Long listPartBytes;
+    private List<Tuple> rows;
+    private int next;
+
+    AdaptiveProbeResultIterator(ParallelScanGrouper scanGrouper, Scan scan,
+      Map<ImmutableBytesPtr, ServerCache> caches, BaseResultIterators first, int regions,
+      Long listPartBytes) {
+      this.scanGrouper = scanGrouper;
+      this.scan = scan;
+      this.caches = caches;
+      this.first = first;
+      this.batchLimit = limit + (offset == null ? 0 : offset);
+      this.regions = regions;
+      this.listPartBytes = listPartBytes;
+    }
+
+    private List<OrderByExpression> orderByExpressions() {
+      return orderBy.getOrderByExpressions();
+    }
+
+    private void drain(ResultIterator batch, List<Tuple> into) throws SQLException {
+      try {
+        for (Tuple t = batch.next(); t != null; t = batch.next()) {
+          into.add(t);
+        }
+      } finally {
+        batch.close();
+      }
+    }
+
+    private void probe() throws SQLException {
+      List<Tuple> found = new ArrayList<>();
+      drain(new MergeSortTopNResultIterator(first, batchLimit, null, orderByExpressions()), found);
+      Set<Integer> probed = new HashSet<>();
+      for (int c : probeCentroids) {
+        probed.add(c);
+      }
+      int[] ranked = null;
+      int batches = 1;
+      ScanRanges original = context.getScanRanges();
+      try {
+        while (
+          found.size() < batchLimit && probed.size() < centroidCount && batches < maxProbeBatches
+        ) {
+          if (ranked == null) {
+            ranked = centroids.nearest(queryVector, centroidCount);
+          }
+          List<Integer> batch = new ArrayList<>(probeCount);
+          for (int i = 0; i < ranked.length && batch.size() < probeCount; i++) {
+            if (probed.add(ranked[i])) {
+              batch.add(ranked[i]);
+            }
+          }
+          int[] ids = new int[batch.size()];
+          for (int i = 0; i < ids.length; i++) {
+            ids[i] = batch.get(i);
+          }
+          ScanRanges ranges = buildPostingListRanges(context, getTableRef().getTable(), ids);
+          Scan batchScan = newBatchScan(scan, ranges, ids.length, regions, listPartBytes);
+          // The iterators of this batch read their scan ranges from the statement context
+          context.setScanRanges(ranges);
+          drain(new MergeSortTopNResultIterator(newBatch(scanGrouper, batchScan, caches),
+            batchLimit, null, orderByExpressions()), found);
+          batches++;
+        }
+      } finally {
+        context.setScanRanges(original);
+      }
+      found.sort(new TupleComparator(orderByExpressions()));
+      int from = Math.min(offset == null ? 0 : offset, found.size());
+      rows = found.subList(from, Math.min(from + limit, found.size()));
+    }
+
+    @Override
+    public Tuple next() throws SQLException {
+      if (rows == null) {
+        probe();
+      }
+      return next < rows.size() ? rows.get(next++) : null;
+    }
+
+    @Override
+    public void close() throws SQLException {
+      if (rows == null) {
+        first.close();
+      }
+    }
+
+    @Override
+    public void explain(List<String> planSteps) {
+      new MergeSortTopNResultIterator(first, limit, offset, orderByExpressions())
+        .explain(planSteps);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+      ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+      new MergeSortTopNResultIterator(first, limit, offset, orderByExpressions()).explain(planSteps,
+        explainPlanAttributesBuilder);
+    }
+  }
+
+  /** Orders tuples on the client by the compiled ORDER BY expressions and their null order. */
+  private static final class TupleComparator implements java.util.Comparator<Tuple> {
+    private final List<OrderByExpression> orderBy;
+    private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
+    private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+
+    TupleComparator(List<OrderByExpression> orderBy) {
+      this.orderBy = orderBy;
+    }
+
+    @Override
+    public int compare(Tuple t1, Tuple t2) {
+      for (OrderByExpression order : orderBy) {
+        boolean isNull1 = !order.getExpression().evaluate(t1, ptr1) || ptr1.getLength() == 0;
+        boolean isNull2 = !order.getExpression().evaluate(t2, ptr2) || ptr2.getLength() == 0;
+        if (isNull1 || isNull2) {
+          if (isNull1 != isNull2) {
+            return isNull1 == order.isNullsLast() ? 1 : -1;
+          }
+          continue;
+        }
+        int c = ptr1.compareTo(ptr2);
+        if (c != 0) {
+          return order.isAscending() ? c : -c;
+        }
+      }
+      return 0;
+    }
+  }
+
+  /** Returns the maximum number of probe batches, including the first, that a query can scan. */
+  public int getMaxProbeBatches() {
+    return maxProbeBatches;
+  }
+
+  /**
+   * Returns the number of posting lists that the first probe batch scans, or 0 if the plan scans
+   * the whole index.
+   */
   public int getProbeCount() {
     return probeCount;
   }

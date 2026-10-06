@@ -19,34 +19,62 @@ package org.apache.phoenix.execute;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.DelegateTable;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -203,8 +231,9 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testProbeHints() {
-    HintNode hint = new HintNode("/*+ VECTOR_PROBE_COUNT(5) */");
+    HintNode hint = new HintNode("/*+ VECTOR_PROBE_COUNT(5) MAX_PROBE_LIMIT(3) */");
     assertEquals(5, VectorIndexScanPlan.getHintInt(hint, Hint.VECTOR_PROBE_COUNT, 0));
+    assertEquals(3, VectorIndexScanPlan.getHintInt(hint, Hint.MAX_PROBE_LIMIT, 8));
     HintNode none = new HintNode("/*+ INDEX(T I) */");
     assertEquals(7, VectorIndexScanPlan.getHintInt(none, Hint.VECTOR_PROBE_COUNT, 7));
     HintNode invalid = new HintNode("/*+ VECTOR_PROBE_COUNT(abc) */");
@@ -214,5 +243,563 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
     assertEquals(4, VectorIndexScanPlan.getHintInt(repeated, Hint.VECTOR_PROBE_COUNT, 7));
     HintNode bare = new HintNode("/*+ VECTOR_PROBE_COUNT */");
     assertEquals(7, VectorIndexScanPlan.getHintInt(bare, Hint.VECTOR_PROBE_COUNT, 7));
+  }
+
+  /** Returns a scan grouper that reports the given number of index regions. */
+  private static ParallelScanGrouper regionGrouper(int regions) {
+    return new DefaultParallelScanGrouper() {
+      @Override
+      public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) {
+        List<HRegionLocation> locations = new ArrayList<>(regions);
+        for (int i = 0; i < regions; i++) {
+          locations.add(
+            new HRegionLocation(RegionInfoBuilder.newBuilder(TableName.valueOf(tableName)).build(),
+              ServerName.valueOf("localhost", 1, 1)));
+        }
+        return locations;
+      }
+    };
+  }
+
+  /**
+   * Returns a scan grouper that reports index regions with the given split keys. The regions cover
+   * the full key range.
+   */
+  private static ParallelScanGrouper splitGrouper(byte[]... splits) {
+    return new DefaultParallelScanGrouper() {
+      @Override
+      public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) {
+        List<HRegionLocation> locations = new ArrayList<>(splits.length + 1);
+        for (int i = 0; i <= splits.length; i++) {
+          locations.add(new HRegionLocation(
+            RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+              .setStartKey(i == 0 ? ByteUtil.EMPTY_BYTE_ARRAY : splits[i - 1])
+              .setEndKey(i == splits.length ? ByteUtil.EMPTY_BYTE_ARRAY : splits[i]).build(),
+            ServerName.valueOf("localhost", 1, 1)));
+        }
+        return locations;
+      }
+    };
+  }
+
+  /**
+   * Makes a table with a vector index of eight trained centroids, and returns a connection with the
+   * given read type bound in bytes. A null bound keeps the default bound. If {@code indexBytes} is
+   * not null, the statistics cache gets guideposts with that total size for the index.
+   */
+  private static Connection trainedIndex(String table, String index, Long bound, Long indexBytes)
+    throws Exception {
+    return trainedIndex(table, index, bound == null ? null : Long.toString(bound), indexBytes, "");
+  }
+
+  /**
+   * Makes a trained index as above, with the read type bound as text. The table gets the given
+   * options.
+   */
+  private static Connection trainedIndex(String table, String index, String bound, Long indexBytes,
+    String tableOptions) throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+    if (bound != null) {
+      props.setProperty(QueryServices.VECTOR_PREAD_MAX_BYTES_PER_REGION_ATTRIB, bound);
+    }
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    conn.createStatement().execute("CREATE TABLE " + table
+      + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 2))" + tableOptions);
+    conn.createStatement().execute("CREATE VECTOR INDEX " + index + " ON " + table + INDEX_OPTIONS);
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    List<float[]> vectors = new ArrayList<>();
+    for (int i = 0; i < 8; i++) {
+      vectors.add(new float[] { i, i });
+    }
+    VectorCentroidCache.getInstance(pconn.getQueryServices().getConfiguration()).put(index, 1L,
+      new CachedCentroids(vectors, DistanceMetric.L2));
+    PTable indexTable = index(conn, index);
+    pconn.addTable(new DelegateTable(indexTable) {
+      @Override
+      public PIndexState getIndexState() {
+        return PIndexState.ACTIVE;
+      }
+
+      @Override
+      public Long getVectorCentroidGeneration() {
+        return 1L;
+      }
+    }, indexTable.getTimeStamp());
+    if (indexBytes != null) {
+      putIndexStats(conn, index, guideposts(indexBytes));
+    }
+    return conn;
+  }
+
+  /** Returns two guideposts with the given total bytes. */
+  private static GuidePostsInfo guideposts(long bytes) {
+    GuidePostsInfoBuilder builder = new GuidePostsInfoBuilder();
+    builder.trackGuidePost(new ImmutableBytesWritable(centroid(2)), bytes / 2, 1, 0);
+    builder.trackGuidePost(new ImmutableBytesWritable(centroid(6)), bytes - bytes / 2, 1, 0);
+    return builder.build();
+  }
+
+  /** Puts the given statistics into the statistics cache for each column family of the index. */
+  private static void putIndexStats(Connection conn, String indexName, GuidePostsInfo info)
+    throws SQLException {
+    PTable index = index(conn, indexName);
+    List<byte[]> families = new ArrayList<>();
+    for (PColumnFamily family : index.getColumnFamilies()) {
+      families.add(family.getName().getBytes());
+    }
+    if (families.isEmpty()) {
+      families.add(SchemaUtil.getEmptyColumnFamily(index));
+    }
+    for (byte[] family : families) {
+      putFamilyStats(conn, index, family, info);
+    }
+  }
+
+  /** Puts the given statistics into the statistics cache for one column family of the index. */
+  private static void putFamilyStats(Connection conn, PTable index, byte[] family,
+    GuidePostsInfo info) throws SQLException {
+    // A connection with its own properties wraps the shared query services in a delegate
+    ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+    while (services instanceof DelegateConnectionQueryServices) {
+      services = ((DelegateConnectionQueryServices) services).getDelegate();
+    }
+    ((ConnectionlessQueryServicesImpl) services)
+      .addTableStats(new GuidePostsKey(index.getPhysicalName().getBytes(), family), info);
+  }
+
+  /** Compiles a vector query on the trained index with the given probe count and batch limit. */
+  private static VectorIndexScanPlan plan(Connection conn, String table, int probes, int batches,
+    String hints) throws Exception {
+    PreparedStatement ps =
+      conn.prepareStatement("SELECT /*+ VECTOR_PROBE_COUNT(" + probes + ") MAX_PROBE_LIMIT("
+        + batches + ") " + hints + " */ ID FROM " + table + " ORDER BY L2_DISTANCE(V, ?) LIMIT 3");
+    ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.5f, 0.5f }));
+    VectorIndexScanPlan plan =
+      (VectorIndexScanPlan) ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+    assertEquals(probes, plan.getProbeCount());
+    assertEquals(batches > 1 && probes < 8, plan.isAdaptive());
+    return plan;
+  }
+
+  /** Returns the posting list ranges of a later batch, as the plan makes them. */
+  private static ScanRanges batchRanges(Connection conn, VectorIndexScanPlan plan, int[] ids)
+    throws SQLException {
+    PTable index = plan.getTableRef().getTable();
+    ScanRanges ranges = VectorIndexScanPlan
+      .getPostingListRanges(indexContext(conn, index.getName().getString()), index, ids);
+    assertNotNull(ranges);
+    return ranges;
+  }
+
+  /**
+   * Makes the iterator of the plan over the given number of regions, and closes it. Returns the
+   * read type of the statement scan. Each region scan of the first batch must have the same read
+   * type.
+   */
+  private static Scan.ReadType firstBatchReadType(VectorIndexScanPlan plan, int regions)
+    throws Exception {
+    return firstBatchReadType(plan, regionGrouper(regions));
+  }
+
+  /** Makes the iterator of the plan with the given scan grouper, as above. */
+  private static Scan.ReadType firstBatchReadType(VectorIndexScanPlan plan,
+    ParallelScanGrouper grouper) throws Exception {
+    ResultIterator iterator = plan.iterator(grouper);
+    iterator.close();
+    Scan.ReadType readType = plan.getContext().getScan().getReadType();
+    assertFalse(plan.getScans().isEmpty());
+    for (List<Scan> scans : plan.getScans()) {
+      for (Scan scan : scans) {
+        assertEquals(readType, scan.getReadType());
+      }
+    }
+    return readType;
+  }
+
+  /** Returns a scan grouper that fails on a lookup of the index regions for the read type. */
+  private static ParallelScanGrouper noRegionLookup() {
+    return new DefaultParallelScanGrouper() {
+      @Override
+      public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) {
+        throw new AssertionError("unexpected region lookup");
+      }
+    };
+  }
+
+  private static final long MB = 1024L * 1024L;
+
+  @Test
+  public void testBoundedReadTypeRule() {
+    // A region scan reads at least one posting list, also if the batch is narrower than the
+    // region count
+    assertEquals(Scan.ReadType.PREAD, VectorIndexScanPlan.boundedReadType(1, 4, 100L, 100));
+    assertEquals(Scan.ReadType.DEFAULT, VectorIndexScanPlan.boundedReadType(1, 4, 101L, 100));
+    // The lists of a batch spread over the regions
+    assertEquals(Scan.ReadType.PREAD, VectorIndexScanPlan.boundedReadType(64, 4, MB, 16 * MB));
+    assertEquals(Scan.ReadType.DEFAULT, VectorIndexScanPlan.boundedReadType(65, 4, MB, 16 * MB));
+    assertEquals(Scan.ReadType.PREAD, VectorIndexScanPlan.boundedReadType(3, 2, 100L, 150));
+    // A large posting list is above the default bound for any width and region count
+    assertEquals(Scan.ReadType.DEFAULT,
+      VectorIndexScanPlan.boundedReadType(1, 12, 30 * MB, 16 * MB));
+    // No estimate, or a bound of 0 or less, gives the default read type
+    assertEquals(Scan.ReadType.DEFAULT, VectorIndexScanPlan.boundedReadType(1, 4, null, 16 * MB));
+    assertEquals(Scan.ReadType.DEFAULT, VectorIndexScanPlan.boundedReadType(1, 4, 1L, 0));
+    assertEquals(Scan.ReadType.DEFAULT, VectorIndexScanPlan.boundedReadType(1, 4, 1L, -1));
+  }
+
+  /** The index size comes from the guideposts. An empty guidepost or no statistics give none. */
+  @Test
+  public void testIndexBytesFromStatistics() throws Exception {
+    try (Connection conn = trainedIndex("T_PRS", "I_PRS", null, null)) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      assertNull(VectorIndexScanPlan.getIndexBytes(pconn, index(conn, "I_PRS")));
+      putIndexStats(conn, "I_PRS", guideposts(801));
+      assertEquals(Long.valueOf(801),
+        VectorIndexScanPlan.getIndexBytes(pconn, index(conn, "I_PRS")));
+      putIndexStats(conn, "I_PRS", GuidePostsInfo.createEmptyGuidePost(300 * MB, 0));
+      assertNull(VectorIndexScanPlan.getIndexBytes(pconn, index(conn, "I_PRS")));
+    }
+  }
+
+  /**
+   * The first batch uses PREAD under the default bound, on the adaptive and the non-adaptive path.
+   * Eight lists of 512 KB give 1 MB for a region scan of two lists.
+   */
+  @Test
+  public void testPreadUnderBoundOnBothPaths() throws Exception {
+    try (Connection conn = trainedIndex("T_PR", "I_PR", null, 4 * MB)) {
+      for (int batches : new int[] { 1, 4 }) {
+        assertEquals(Scan.ReadType.PREAD,
+          firstBatchReadType(plan(conn, "T_PR", 2, batches, ""), 1));
+      }
+    }
+  }
+
+  /** The first batch keeps the default read type above the bound, on both paths. */
+  @Test
+  public void testDefaultReadTypeAboveBound() throws Exception {
+    // Lists of 100 bytes and a bound of 200 bytes
+    try (Connection conn = trainedIndex("T_PRA", "I_PRA", 200L, 800L)) {
+      for (int batches : new int[] { 1, 4 }) {
+        assertEquals(Scan.ReadType.DEFAULT,
+          firstBatchReadType(plan(conn, "T_PRA", 6, batches, ""), 2));
+        // More regions put fewer posting lists in each region scan
+        assertEquals(Scan.ReadType.PREAD,
+          firstBatchReadType(plan(conn, "T_PRA", 6, batches, ""), 3));
+      }
+    }
+  }
+
+  /**
+   * A posting list above the bound gives the default read type without a region lookup. A probe of
+   * all lists gives the mean region size, which the bound compares as for any batch.
+   */
+  @Test
+  public void testLargePostingListsKeepDefaultReadType() throws Exception {
+    try (Connection conn = trainedIndex("T_PRL", "I_PRL", null, 8 * 30 * MB)) {
+      for (int batches : new int[] { 1, 4 }) {
+        VectorIndexScanPlan plan = plan(conn, "T_PRL", 1, batches, "");
+        assertEquals(1,
+          plan.getBoundedReadTypeRegions(noRegionLookup(), plan.getContext().getScan()));
+        assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 12));
+      }
+    }
+    try (Connection conn = trainedIndex("T_PRP", "I_PRP", null, 8 * 4 * MB)) {
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan(conn, "T_PRP", 8, 1, ""), 1));
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan(conn, "T_PRP", 8, 1, ""), 2));
+    }
+  }
+
+  /**
+   * Without an estimate, all batches keep the default read type and the plan does not look up the
+   * regions. An empty guidepost is not an estimate, because it holds the guidepost width.
+   */
+  @Test
+  public void testNoEstimateKeepsDefaultReadType() throws Exception {
+    try (Connection conn = trainedIndex("T_PRX", "I_PRX", null, null)) {
+      for (GuidePostsInfo stats : new GuidePostsInfo[] { null,
+        GuidePostsInfo.createEmptyGuidePost(300 * MB, 0) }) {
+        if (stats != null) {
+          putIndexStats(conn, "I_PRX", stats);
+        }
+        for (int batches : new int[] { 1, 4 }) {
+          VectorIndexScanPlan plan = plan(conn, "T_PRX", 1, batches, "");
+          Scan scan = plan.getContext().getScan();
+          assertEquals(1, plan.getBoundedReadTypeRegions(noRegionLookup(), scan));
+          assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 8));
+          ScanRanges ranges = batchRanges(conn, plan, new int[] { 3 });
+          assertEquals(Scan.ReadType.DEFAULT,
+            plan.newBatchScan(scan, ranges, 1, 8, null).getReadType());
+        }
+      }
+    }
+  }
+
+  /** A repeat iteration replaces the PREAD of an earlier iteration if the estimate goes away. */
+  @Test
+  public void testOwnPreadReplacedWhenEstimateGoesAway() throws Exception {
+    try (Connection conn = trainedIndex("T_PRV", "I_PRV", null, 4 * MB)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRV", 2, 4, "");
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 1));
+      putIndexStats(conn, "I_PRV", GuidePostsInfo.NO_GUIDEPOST);
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 1));
+    }
+  }
+
+  /**
+   * Each later batch gets the read type for its own width. The copy of a scan with PREAD from the
+   * first batch must change to the default read type above the bound.
+   */
+  @Test
+  public void testPreadBoundAppliesToEachLaterBatch() throws Exception {
+    // Lists of 100 bytes and a bound of 200 bytes
+    try (Connection conn = trainedIndex("T_PRB", "I_PRB", 200L, 800L)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRB", 2, 4, "");
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 1));
+      Scan scan = plan.getContext().getScan();
+      ScanRanges ranges = batchRanges(conn, plan, new int[] { 3, 4, 5, 6 });
+      assertEquals(Scan.ReadType.DEFAULT,
+        plan.newBatchScan(scan, ranges, 4, 1, 100L).getReadType());
+      assertEquals(Scan.ReadType.PREAD, plan.newBatchScan(scan, ranges, 4, 2, 100L).getReadType());
+      // The rule does not round down the posting lists per region scan
+      assertEquals(Scan.ReadType.DEFAULT,
+        plan.newBatchScan(scan, ranges, 5, 2, 100L).getReadType());
+      assertEquals(Scan.ReadType.PREAD, scan.getReadType());
+      // A later batch scan of a scan with the default read type can get PREAD
+      scan.setReadType(Scan.ReadType.DEFAULT);
+      assertEquals(Scan.ReadType.PREAD, plan.newBatchScan(scan, ranges, 2, 1, 100L).getReadType());
+      // Without an estimate, a later batch keeps the default read type
+      assertEquals(Scan.ReadType.DEFAULT,
+        plan.newBatchScan(scan, ranges, 1, 1, null).getReadType());
+    }
+  }
+
+  /** A bound of 0 turns off PREAD for all batches, also with an estimate. */
+  @Test
+  public void testPreadBoundDisabledByConfig() throws Exception {
+    try (Connection conn = trainedIndex("T_PRD", "I_PRD", 0L, 800L)) {
+      for (int batches : new int[] { 1, 4 }) {
+        assertEquals(Scan.ReadType.DEFAULT,
+          firstBatchReadType(plan(conn, "T_PRD", 1, batches, ""), 8));
+      }
+      VectorIndexScanPlan plan = plan(conn, "T_PRD", 1, 4, "");
+      assertEquals(0,
+        plan.getBoundedReadTypeRegions(noRegionLookup(), plan.getContext().getScan()));
+      ScanRanges ranges = batchRanges(conn, plan, new int[] { 3 });
+      assertEquals(Scan.ReadType.DEFAULT,
+        plan.newBatchScan(plan.getContext().getScan(), ranges, 1, 8, 100L).getReadType());
+    }
+  }
+
+  /** The bound does not change a read type that the caller set. */
+  @Test
+  public void testExplicitReadTypeIsKept() throws Exception {
+    // Lists of 100 bytes and a bound of 100 bytes
+    try (Connection conn = trainedIndex("T_PRE", "I_PRE", 100L, 800L)) {
+      for (int batches : new int[] { 1, 4 }) {
+        // The SMALL hint asks for PREAD, also above the bound
+        assertEquals(Scan.ReadType.PREAD,
+          firstBatchReadType(plan(conn, "T_PRE", 6, batches, "SMALL"), 1));
+        // A stream read stays a stream read, also under the bound
+        VectorIndexScanPlan plan = plan(conn, "T_PRE", 1, batches, "");
+        Scan scan = plan.getContext().getScan();
+        scan.setReadType(Scan.ReadType.STREAM);
+        assertEquals(Scan.ReadType.STREAM, firstBatchReadType(plan, 8));
+        ScanRanges ranges = batchRanges(conn, plan, new int[] { 3 });
+        assertEquals(Scan.ReadType.STREAM,
+          plan.newBatchScan(scan, ranges, 1, 0, 100L).getReadType());
+      }
+    }
+  }
+
+  /**
+   * A repeat iteration of a plan, as for an EXPLAIN before the query, does not take the PREAD of
+   * the earlier iteration as a caller choice.
+   */
+  @Test
+  public void testRepeatIterationChecksBoundAgain() throws Exception {
+    try (Connection conn = trainedIndex("T_PRR", "I_PRR", 200L, 800L)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRR", 6, 4, "");
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 3));
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 2));
+      assertTrue(plan.isAdaptive());
+    }
+  }
+
+  /**
+   * The bound applies only to the statement scan with the default read type or with the read type
+   * that the plan set. Otherwise the plan keeps the read type of the scan for all batches.
+   */
+  @Test
+  public void testBoundedReadTypeRegionsKeepsOtherReadTypes() throws Exception {
+    try (Connection conn = trainedIndex("T_PRK", "I_PRK", 200L, 800L)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRK", 6, 4, "");
+      Scan scan = plan.getContext().getScan();
+      assertEquals(3, plan.getBoundedReadTypeRegions(regionGrouper(3), scan));
+      // A region scan copy, as for a retry, keeps its read type
+      assertEquals(0, plan.getBoundedReadTypeRegions(regionGrouper(3), ScanUtil.newScan(scan)));
+      for (Scan.ReadType readType : new Scan.ReadType[] { Scan.ReadType.PREAD,
+        Scan.ReadType.STREAM }) {
+        scan.setReadType(readType);
+        assertEquals(0, plan.getBoundedReadTypeRegions(regionGrouper(3), scan));
+      }
+      // A caller read type on the scan of an earlier iteration is still a caller choice
+      scan.setReadType(Scan.ReadType.DEFAULT);
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 3));
+      scan.setReadType(Scan.ReadType.STREAM);
+      assertEquals(0, plan.getBoundedReadTypeRegions(regionGrouper(3), scan));
+      assertEquals(Scan.ReadType.STREAM, firstBatchReadType(plan, 2));
+    }
+    try (Connection conn = trainedIndex("T_PRZ", "I_PRZ", 0L, 800L)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRZ", 6, 4, "");
+      assertEquals(0,
+        plan.getBoundedReadTypeRegions(regionGrouper(3), plan.getContext().getScan()));
+    }
+  }
+
+  /** If the widest batch fits in the bound, the plan uses PREAD without a region lookup. */
+  @Test
+  public void testNarrowBatchesSkipRegionLookup() throws Exception {
+    // Lists of 100 bytes and a bound of 400 bytes
+    try (Connection conn = trainedIndex("T_PRN", "I_PRN", 400L, 800L)) {
+      // No later batch is wider than the first batch of four lists
+      for (int batches : new int[] { 1, 2, 4 }) {
+        VectorIndexScanPlan plan = plan(conn, "T_PRN", 4, batches, "");
+        assertEquals(1,
+          plan.getBoundedReadTypeRegions(noRegionLookup(), plan.getContext().getScan()));
+      }
+      // A first batch of five lists is wider than the bound
+      VectorIndexScanPlan plan = plan(conn, "T_PRN", 5, 4, "");
+      assertEquals(5,
+        plan.getBoundedReadTypeRegions(regionGrouper(5), plan.getContext().getScan()));
+    }
+  }
+
+  /** A plan that probes no posting lists keeps the default read type. */
+  @Test
+  public void testUntrainedIndexKeepsDefaultReadType() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE T_PRU (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 2))");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_PRU ON T_PRU" + INDEX_OPTIONS);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = index(conn, "I_PRU");
+      pconn.addTable(new DelegateTable(indexTable) {
+        @Override
+        public PIndexState getIndexState() {
+          return PIndexState.ACTIVE;
+        }
+      }, indexTable.getTimeStamp());
+      putIndexStats(conn, "I_PRU", guideposts(800));
+      PreparedStatement ps =
+        conn.prepareStatement("SELECT ID FROM T_PRU ORDER BY L2_DISTANCE(V, ?) LIMIT 3");
+      ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.5f, 0.5f }));
+      VectorIndexScanPlan plan =
+        (VectorIndexScanPlan) ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      assertEquals(0, plan.getProbeCount());
+      assertEquals(0,
+        plan.getBoundedReadTypeRegions(regionGrouper(1), plan.getContext().getScan()));
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 1));
+    }
+  }
+
+  /** The estimate of one posting list rounds up, so that it is not low. */
+  @Test
+  public void testListEstimateRoundsUp() throws Exception {
+    // 801 bytes over 8 lists give lists of 101 bytes, which is above a bound of 100 bytes
+    for (long indexBytes : new long[] { 800, 801 }) {
+      try (Connection conn =
+        trainedIndex("T_PRC" + indexBytes, "I_PRC" + indexBytes, 100L, indexBytes)) {
+        VectorIndexScanPlan plan = plan(conn, "T_PRC" + indexBytes, 1, 1, "");
+        assertEquals(1,
+          plan.getBoundedReadTypeRegions(noRegionLookup(), plan.getContext().getScan()));
+        assertEquals(indexBytes == 800 ? Scan.ReadType.PREAD : Scan.ReadType.DEFAULT,
+          firstBatchReadType(plan, 1));
+      }
+    }
+  }
+
+  /** The region count does not include regions that hold no posting lists. */
+  @Test
+  public void testRegionCountSkipsRegionsWithoutPostingLists() throws Exception {
+    // Lists of 100 bytes and a bound of 200 bytes. The centroid IDs are 0 to 7
+    try (Connection conn = trainedIndex("T_PRO", "I_PRO", 200L, 800L)) {
+      VectorIndexScanPlan plan = plan(conn, "T_PRO", 6, 4, "");
+      ParallelScanGrouper grouper =
+        splitGrouper(centroid(0), centroid(4), centroid(8), centroid(12));
+      assertEquals(2, plan.getBoundedReadTypeRegions(grouper, plan.getContext().getScan()));
+      // Six lists over two regions give 300 bytes for a region scan
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, grouper));
+      // Six lists over three regions give 200 bytes for a region scan
+      assertEquals(Scan.ReadType.PREAD,
+        firstBatchReadType(plan, splitGrouper(centroid(3), centroid(6), centroid(8))));
+    }
+  }
+
+  /**
+   * A salted index has a part of each posting list in each salt bucket. Thus a region scan can read
+   * less than one full list.
+   */
+  @Test
+  public void testSaltedIndexSplitsListsOverBuckets() throws Exception {
+    // Lists of 400 bytes, parts of 100 bytes in each of four buckets, and a bound of 200 bytes
+    try (Connection conn = trainedIndex("T_PRT", "I_PRT", "200", 3200L, " SALT_BUCKETS=4")) {
+      assertEquals(Integer.valueOf(4), index(conn, "I_PRT").getBucketNum());
+      VectorIndexScanPlan plan = plan(conn, "T_PRT", 1, 1, "");
+      // Four parts over four regions give 100 bytes for a region scan
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 4));
+      assertEquals(Scan.ReadType.PREAD, firstBatchReadType(plan, 2));
+      // Four parts in one region give 400 bytes
+      assertEquals(Scan.ReadType.DEFAULT, firstBatchReadType(plan, 1));
+    }
+  }
+
+  /**
+   * The empty column family must have guideposts. Another family adds the bytes of its guideposts,
+   * and without guideposts it adds nothing.
+   */
+  @Test
+  public void testIndexBytesOverColumnFamilies() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE T_PRF (ID VARCHAR NOT NULL PRIMARY KEY, "
+        + "A.V VECTOR(FLOAT, 2), B.TAG VARCHAR)");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_PRF ON T_PRF (A.V) INCLUDE (B.TAG) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 32, sample_size = 100) ASYNC");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable index = index(conn, "I_PRF");
+      byte[] empty = SchemaUtil.getEmptyColumnFamily(index);
+      byte[] other = null;
+      for (PColumnFamily family : index.getColumnFamilies()) {
+        if (!Bytes.equals(family.getName().getBytes(), empty)) {
+          other = family.getName().getBytes();
+        }
+      }
+      assertNotNull(other);
+      // The other family alone gives no estimate
+      putFamilyStats(conn, index, other, guideposts(50));
+      assertNull(VectorIndexScanPlan.getIndexBytes(pconn, index));
+      putFamilyStats(conn, index, empty, guideposts(800));
+      assertEquals(Long.valueOf(850), VectorIndexScanPlan.getIndexBytes(pconn, index));
+      for (GuidePostsInfo stats : new GuidePostsInfo[] { GuidePostsInfo.NO_GUIDEPOST,
+        GuidePostsInfo.createEmptyGuidePost(300 * MB, 0) }) {
+        putFamilyStats(conn, index, other, stats);
+        assertEquals(Long.valueOf(800), VectorIndexScanPlan.getIndexBytes(pconn, index));
+      }
+      putFamilyStats(conn, index, empty, GuidePostsInfo.createEmptyGuidePost(300 * MB, 0));
+      assertNull(VectorIndexScanPlan.getIndexBytes(pconn, index));
+    }
+  }
+
+  /** The bound accepts a byte size with a unit suffix. */
+  @Test
+  public void testPreadBoundAcceptsUnitSuffix() throws Exception {
+    // Lists of 2000 bytes are over a bound of 1 KB and under a bound of 4 KB
+    for (String bound : new String[] { "1k", "4k" }) {
+      String table = "T_PRQ" + bound.charAt(0);
+      try (Connection conn = trainedIndex(table, "I_PRQ" + bound.charAt(0), bound, 16000L, "")) {
+        assertEquals(bound.equals("1k") ? Scan.ReadType.DEFAULT : Scan.ReadType.PREAD,
+          firstBatchReadType(plan(conn, table, 1, 1, ""), 1));
+      }
+    }
   }
 }

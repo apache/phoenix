@@ -18,10 +18,16 @@
 package org.apache.phoenix.optimize;
 
 import java.lang.reflect.Array;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.DelegateQueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
@@ -38,9 +44,16 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVectorDataType;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * Finds vector similarity search queries and extracts their parameters.
@@ -260,7 +273,114 @@ public final class VectorSearchUtil {
       : null;
   }
 
-  /** Indicates whether the query execution plan incorporates a vector index scan. */
+  /**
+   * The maximum fraction of rows that a filter first plan can scan. A secondary index plan uses the
+   * row estimate of the data plan as the base. The data plan uses the row count of the table.
+   */
+  public static final double FILTER_FIRST_MAX_ROW_FRACTION = 0.05;
+
+  /**
+   * Finds the filter first plans, which read few rows and give exact results, so the optimizer
+   * prefers them to an approximate vector index plan. A secondary index plan qualifies if
+   * statistics estimate its rows at no more than {@link #FILTER_FIRST_MAX_ROW_FRACTION} of the data
+   * plan rows. The data plan qualifies if it binds a primary key column after the constant key
+   * prefix, and the bound range is small. Returns an empty set if no plan reads a vector index. The
+   * returned set compares plans by identity.
+   */
+  public static Set<QueryPlan> getFilterFirstPlans(List<QueryPlan> plans, QueryPlan dataPlan) {
+    Set<QueryPlan> filterFirst = Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean hasVectorPlan = false;
+    for (QueryPlan plan : plans) {
+      hasVectorPlan |= usesVectorIndex(plan);
+    }
+    if (!hasVectorPlan) {
+      return filterFirst;
+    }
+    Long dataRows = null;
+    try {
+      dataRows = dataPlan.getEstimatedRowsToScan();
+    } catch (SQLException e) {
+      // Without a data plan row estimate, no secondary index plan can be a filter first plan
+    }
+    if (isSelectiveKeyRange(dataPlan, dataRows)) {
+      filterFirst.add(dataPlan);
+    }
+    if (dataRows == null || dataRows <= 0) {
+      return filterFirst;
+    }
+    for (QueryPlan plan : plans) {
+      if (
+        plan == dataPlan || usesVectorIndex(plan)
+          || plan.getTableRef().getTable().getType() != PTableType.INDEX
+      ) {
+        continue;
+      }
+      try {
+        Long rows = plan.getEstimatedRowsToScan();
+        if (rows != null && rows <= dataRows * FILTER_FIRST_MAX_ROW_FRACTION) {
+          filterFirst.add(plan);
+        }
+      } catch (SQLException e) {
+        // A plan without a row estimate cannot be a filter first plan
+      }
+    }
+    return filterFirst;
+  }
+
+  /**
+   * Returns true if the data plan binds a small range of a primary key column. The column must come
+   * after the salt byte, the tenant ID and the view constants. With statistics, the range must hold
+   * no more than {@link #FILTER_FIRST_MAX_ROW_FRACTION} of the table rows. Without statistics, the
+   * first such column must be bound to point keys. A vector plan scans the posting lists of all
+   * keys and applies the bound columns only after it ranks the rows.
+   */
+  private static boolean isSelectiveKeyRange(QueryPlan dataPlan, Long dataRows) {
+    StatementContext context = dataPlan.getContext();
+    ScanRanges ranges = context.getScanRanges();
+    PTable table = dataPlan.getTableRef().getTable();
+    int prefix = (ranges.isSalted() ? 1 : 0)
+      + (table.isMultiTenant() && context.getConnection().getTenantId() != null ? 1 : 0);
+    for (PColumn column : table.getPKColumns()) {
+      prefix += column.getViewConstant() == null ? 0 : 1;
+    }
+    if (ranges.getBoundPkColumnCount() <= prefix) {
+      return false;
+    }
+    Long tableRows = null;
+    try {
+      GuidePostsInfo stats =
+        context.getConnection().getQueryServices().getTableStats(new GuidePostsKey(
+          table.getPhysicalName().getBytes(), SchemaUtil.getEmptyColumnFamily(table)));
+      long rows = 0;
+      for (long count : stats.getRowCounts()) {
+        rows += count;
+      }
+      tableRows = rows > 0 ? rows : null;
+    } catch (SQLException e) {
+      // Without table statistics, only point keys can qualify the bound key range
+    }
+    if (dataRows != null && tableRows != null) {
+      return dataRows <= tableRows * FILTER_FIRST_MAX_ROW_FRACTION;
+    }
+    // Without statistics, only point keys qualify. A range such as ID > ? on the first column
+    // after the prefix can span most of the table.
+    int[] spans = ranges.getSlotSpans();
+    List<List<KeyRange>> slots = ranges.getRanges();
+    for (int i = 0, column = 0; i < slots.size(); i++) {
+      column += spans[i] + 1;
+      if (column > prefix) {
+        for (KeyRange range : slots.get(i)) {
+          if (!range.isSingleKey()) {
+            return false;
+          }
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Returns true if the plan reads a vector index; see {@link #getVectorIndexScan}. */
   public static boolean usesVectorIndex(QueryPlan plan) {
     return getVectorIndexScan(plan) != null;
   }
