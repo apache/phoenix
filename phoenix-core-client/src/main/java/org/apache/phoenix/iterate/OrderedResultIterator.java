@@ -411,7 +411,6 @@ public class OrderedResultIterator implements PeekingResultIterator {
       return resultIterator;
     }
 
-    final int numSortKeys = orderByExpressions.size();
     List<Expression> expressions =
       Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
     final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
@@ -433,15 +432,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
           getDummyResult();
           return resultIterator;
         }
-        int pos = 0;
-        ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[numSortKeys];
-        for (Expression expression : expressions) {
-          final ImmutableBytesWritable sortKey = new ImmutableBytesWritable();
-          boolean evaluated = expression.evaluate(result, sortKey);
-          // set the sort key that failed to get evaluated with null
-          sortKeys[pos++] = evaluated && sortKey.getLength() > 0 ? sortKey : null;
+        ImmutableBytesWritable[] sortKeys = evaluateSortKeys(result, expressions);
+        if (sortKeys != null) {
+          queueEntries.add(new ResultEntry(sortKeys, result));
         }
-        queueEntries.add(new ResultEntry(sortKeys, result));
         if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
           getDummyResult();
           return resultIterator;
@@ -458,6 +452,22 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     return resultIterator;
+  }
+
+  /**
+   * Evaluates sort keys for a candidate tuple. Returns null to exclude the tuple from the sort
+   * queue when subclass pruning criteria (such as distance bounds) are not met.
+   */
+  protected ImmutableBytesWritable[] evaluateSortKeys(Tuple result, List<Expression> expressions) {
+    ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[expressions.size()];
+    int pos = 0;
+    for (Expression expression : expressions) {
+      final ImmutableBytesWritable sortKey = new ImmutableBytesWritable();
+      boolean evaluated = expression.evaluate(result, sortKey);
+      // set the sort key that failed to get evaluated with null
+      sortKeys[pos++] = evaluated && sortKey.getLength() > 0 ? sortKey : null;
+    }
+    return sortKeys;
   }
 
   /**

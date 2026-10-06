@@ -34,6 +34,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
@@ -88,6 +89,13 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
     List<PColumn> pkColumns = index.getPKColumns();
     for (int i = indexPosOffset; i < pkColumns.size(); ++i) {
       PColumn column = pkColumns.get(i);
+      if (
+        index.isVectorIndex()
+          && MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME.equals(column.getName().getString())
+      ) {
+        // Centroid IDs are computed from indexed vectors and do not map to query expressions
+        continue;
+      }
       String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
       ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
       String colName = "\"" + column.getName().getString() + "\"";

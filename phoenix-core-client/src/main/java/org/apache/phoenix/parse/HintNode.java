@@ -125,7 +125,12 @@ public class HintNode {
     /**
      * Override the default CDC include scopes.
      */
-    CDC_INCLUDE,;
+    CDC_INCLUDE,
+
+    /**
+     * Overrides the number of IVF centroids probed during vector index scans.
+     */
+    VECTOR_PROBE_COUNT;
   };
 
   private final Map<Hint, String> hints;

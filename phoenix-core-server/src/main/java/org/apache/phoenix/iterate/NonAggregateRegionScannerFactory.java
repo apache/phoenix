@@ -289,9 +289,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       // context is used when we are iterating over the top n rows before the first next() call
       PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
       inner.setRegionScannerContext(sc);
-      OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions,
-        spoolingEnabled, thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
-        getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+      OrderedResultIterator iterator =
+        limit >= 0 && VectorDistanceOrderedResultIterator.appliesTo(orderByExpressions)
+          ? new VectorDistanceOrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
+            thresholdBytes, limit, estimatedRowSize, getPageSizeMsForRegionScanner(scan), scan,
+            s.getRegionInfo())
+          : new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled, thresholdBytes,
+            limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan),
+            scan, s.getRegionInfo());
       return new OrderedResultIteratorWithScannerContext(sc, iterator);
     } catch (IOException e) {
       throw new RuntimeException(e);

@@ -233,6 +233,7 @@ public class QueryServicesOptions {
   public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE = 1024L * 1024L * 20L; // 20 Mb
   public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE = 1024L * 1024L * 10L; // 10 Mb
   public static final long DEFAULT_VECTOR_CENTROID_CACHE_MAX_SIZE = 1000L;
+  public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
   public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
