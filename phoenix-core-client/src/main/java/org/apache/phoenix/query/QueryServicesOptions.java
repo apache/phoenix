@@ -235,6 +235,12 @@ public class QueryServicesOptions {
   public static final long DEFAULT_VECTOR_CENTROID_CACHE_MAX_BYTES = 1024L * 1024L * 256L; // 256 Mb
   public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
   public static final int DEFAULT_VECTOR_MAX_PROBE_LIMIT = 8;
+  public static final long DEFAULT_VECTOR_SCORECARD_FLUSH_INTERVAL_MS = 60000L;
+  public static final long DEFAULT_VECTOR_SCORECARD_RECONCILE_INTERVAL_MS = 86400000L;
+  public static final double DEFAULT_VECTOR_DRIFT_SKEW_RATIO_THRESHOLD = 4.0;
+  public static final long DEFAULT_VECTOR_DRIFT_MIN_POPULATION = 1000L;
+  public static final boolean DEFAULT_VECTOR_REBUILD_AUTO_ENABLED = false;
+  public static final long DEFAULT_VECTOR_REBUILD_MIN_INTERVAL_MS = 86400000L;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
   public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on

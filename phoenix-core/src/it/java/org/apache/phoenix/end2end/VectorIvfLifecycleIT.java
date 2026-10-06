@@ -26,14 +26,17 @@ import static org.apache.phoenix.end2end.VectorIndexTestUtil.loadClusteredVector
 import static org.apache.phoenix.end2end.VectorIndexTestUtil.loadRandomVectors;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +46,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
@@ -54,12 +60,15 @@ import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexRebuilder;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -190,6 +199,133 @@ public class VectorIvfLifecycleIT extends ParallelStatsDisabledIT {
       PTable pIndex = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
       assertEquals(PIndexState.BUILDING, pIndex.getIndexState());
       assertNull(pIndex.getVectorCentroidGeneration());
+    }
+  }
+
+  /**
+   * Tests that IndexTool trains and builds the first generation under the rebuild claim of the
+   * index. IndexTool fails while another process holds the claim, and releases the claim after it
+   * completes.
+   */
+  @Test
+  public void testIndexToolTrainsUnderRebuildClaim() throws Exception {
+    String tableName = "T_VEC_IT_" + generateUniqueName();
+    String indexName = "IDX_VEC_IT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      loadRandomVectors(conn, tableName, null, null, 100, 42);
+      conn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V)" + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100) ASYNC");
+      String[] args = { "-dt", tableName, "-it", indexName, "-runfg" };
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      assertTrue(CentroidManager.claimRebuild(conn, indexName, "other", 60000));
+      IndexTool tool = new IndexTool();
+      tool.setConf(new Configuration(getUtility().getConfiguration()));
+      assertEquals(-1, tool.run(args));
+      assertNull(pconn.getTableNoCache(indexName).getVectorCentroidGeneration());
+      CentroidManager.releaseRebuild(conn, indexName, "other");
+      tool = new IndexTool();
+      tool.setConf(new Configuration(getUtility().getConfiguration()));
+      assertEquals(0, tool.run(args));
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, pIndex.getIndexState());
+      assertNotNull(pIndex.getVectorCentroidGeneration());
+      assertTrue("IndexTool releases the claim",
+        CentroidManager.claimRebuild(conn, indexName, "after", 60000));
+      CentroidManager.releaseRebuild(conn, indexName, "after");
+      assertIndexVerifies(tableName, indexName, 100);
+    }
+  }
+
+  /**
+   * Tests that a synchronous CREATE VECTOR INDEX that finds the rebuild claim of the index held
+   * does not train or build the index. The index stays BUILDING for the claim holder. A first
+   * generation training that gets the claim after another process trained the index returns
+   * UP_TO_DATE, so CREATE does not build the index again.
+   */
+  @Test
+  public void testSynchronousCreateDefersToRebuildClaimHolder() throws Exception {
+    String tableName = "T_VEC_POP_" + generateUniqueName();
+    String indexName = "IDX_VEC_POP_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      loadClusteredVectors(conn, tableName, 100);
+      assertTrue(CentroidManager.claimRebuild(conn, indexName, "other", 60000));
+      conn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V)" + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.BUILDING, pIndex.getIndexState());
+      assertNull(pIndex.getVectorCentroidGeneration());
+      assertTrue(getHBaseRowKeys(pconn, pIndex).isEmpty());
+      CentroidManager.releaseRebuild(conn, indexName, "other");
+      conn.createStatement().execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+      PTable rebuilt = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, rebuilt.getIndexState());
+      assertNotNull(rebuilt.getVectorCentroidGeneration());
+      assertEquals(VectorIndexRebuilder.Outcome.UP_TO_DATE,
+        VectorIndexTrainer.trainFirstGeneration(pconn, pconn.getTableNoCache(tableName), pIndex));
+      assertEquals(rebuilt.getVectorCentroidGeneration(),
+        pconn.getTableNoCache(indexName).getVectorCentroidGeneration());
+      assertIndexVerifies(tableName, indexName, 100);
+    }
+  }
+
+  /**
+   * Tests that a synchronous CREATE VECTOR INDEX holds the rebuild claim of the index through the
+   * build that follows training. An ALTER INDEX ... REBUILD during that build must find the rebuild
+   * IN_PROGRESS and must not run concurrently with the build. The build waits for the index
+   * population sleep time between its two passes. During that wait, the rows of the first pass are
+   * visible and CREATE still runs.
+   */
+  @Test
+  public void testSynchronousCreateHoldsRebuildClaimThroughBuild() throws Exception {
+    String tableName = "T_VEC_POP_" + generateUniqueName();
+    String indexName = "IDX_VEC_POP_" + generateUniqueName();
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      loadClusteredVectors(conn, tableName, 100);
+      Future<?> create = executor.submit(() -> {
+        try (Connection createConn = DriverManager.getConnection(getUrl())) {
+          createConn.createStatement()
+            .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V)"
+              + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+        }
+        return null;
+      });
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable building = null;
+      while (building == null || getHBaseRowKeys(pconn, building).isEmpty()) {
+        assertFalse("CREATE writes index rows before its build completes", create.isDone());
+        Thread.sleep(10);
+        try {
+          building = pconn.getTableNoCache(indexName);
+        } catch (TableNotFoundException e) {
+          // CREATE did not add the index to the catalog yet
+        }
+      }
+      try {
+        conn.createStatement()
+          .execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+        fail("ALTER INDEX ... REBUILD ran while CREATE built the index");
+      } catch (SQLException e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("IN_PROGRESS"));
+      }
+      assertFalse("CREATE was building when the rebuild found the claim held", create.isDone());
+      create.get();
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, pIndex.getIndexState());
+      assertNotNull(pIndex.getVectorCentroidGeneration());
+      assertTrue("CREATE releases the claim",
+        CentroidManager.claimRebuild(conn, indexName, "after", 60000));
+      CentroidManager.releaseRebuild(conn, indexName, "after");
+      assertIndexVerifies(tableName, indexName, 100);
+    } finally {
+      executor.shutdownNow();
     }
   }
 

@@ -494,8 +494,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   // The maintainer keeps the centroid models for writes during its full lifetime. Thus a cache
   // eviction cannot cause a reload for each row, or a failure on a client with no server connection
   private CachedCentroids activeCentroids;
+  private CachedCentroids buildingCentroids;
   private Long centroidGeneration;
-  // Index column reference for expression derived vector values, or null if directly mapped.
+  private Long buildingGeneration;
   private ColumnReference functionalVectorColumn;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
@@ -527,6 +528,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       this.vectorAlgorithm = index.getVectorIndexAlgorithm();
       this.distanceMetric = DistanceMetric.fromString(index.getVectorDistanceMetric());
       this.centroidGeneration = index.getVectorCentroidGeneration();
+      this.buildingGeneration =
+        index.isVectorRebuildInProgress() ? index.getVectorBuildingGeneration() : null;
       PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
       if (IndexUtil.getDataColumnOrNull(dataTable, vectorColumn.getName().getString()) == null) {
         this.functionalVectorColumn = new ColumnReference(vectorColumn.getFamilyName().getBytes(),
@@ -812,7 +815,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName) {
     return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, encodedRegionName,
-      null);
+      null, getWriteGeneration());
   }
 
   /**
@@ -825,12 +828,40 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     if (isVectorIndex() && indexedVector == null) {
       return null;
     }
-    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, indexedVector);
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, indexedVector,
+      getWriteGeneration());
+  }
+
+  /**
+   * Builds the index row key of a data row under the outgoing generation of a migration. Returns
+   * null if no migration is in progress or the row has no vector.
+   */
+  public byte[] buildOutgoingRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts, byte[] encodedRegionName) {
+    if (!isMigrating()) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, null,
+      centroidGeneration);
+  }
+
+  /**
+   * Builds the index row key of a data row under the outgoing generation of a migration. The caller
+   * supplies the indexed vector from {@link #getIndexedVector(Put, boolean)}. Returns null if no
+   * migration is in progress or the row has no vector.
+   */
+  public byte[] buildOutgoingRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts, byte[] encodedRegionName, ImmutableBytesWritable indexedVector) {
+    if (!isMigrating() || indexedVector == null) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, indexedVector,
+      centroidGeneration);
   }
 
   private byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName,
-    ImmutableBytesWritable indexedVector) {
+    ImmutableBytesWritable indexedVector, Long generation) {
     if (isCDCIndex && encodedRegionName == null) {
       throw new IllegalArgumentException("Encoded region name is required for a CDC index");
     }
@@ -912,7 +943,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           dataSortOrder = expression.getSortOrder();
           isNullable = expression.isNullable();
           if (i == 0 && isVectorIndex()) {
-            if (centroidGeneration == null) {
+            if (generation == null) {
               // An untrained index has no centroids for assignment, so it keeps no index rows
               return null;
             }
@@ -921,7 +952,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             if (vector == null) {
               return null;
             }
-            ptr.set(PInteger.INSTANCE.toBytes(getCentroids().assign(vector.get(),
+            ptr.set(PInteger.INSTANCE.toBytes(getCentroids(generation).assign(vector.get(),
               vector.getOffset(), vector.getLength(), dataColumnType)));
             dataColumnType = PInteger.INSTANCE;
             dataSortOrder = SortOrder.ASC;
@@ -1208,14 +1239,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   }
 
   /**
-   * Checks whether the current row state corresponds to an existing index entry for deletion.
-   */
-  public boolean hasIndexRow(Put currentDataRowState) {
-    return shouldPrepareIndexMutations(currentDataRowState,
-      getIndexedVector(currentDataRowState, false));
-  }
-
-  /**
    * Determines if the index row for a data row must be prepared. The caller gives the indexed
    * vector that {@link #getIndexedVector(Put, boolean)} already evaluated. A vector index prepares
    * no index row if the vector is null. Other indexes ignore the vector.
@@ -1452,7 +1475,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       return null;
     }
     byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey,
-      ts, encodedRegionName, indexedVector);
+      ts, encodedRegionName, indexedVector, getWriteGeneration());
     if (indexRowKey == null) {
       return null;
     }
@@ -2255,6 +2278,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       maintainer.distanceMetric = DistanceMetric.fromString(proto.getDistanceMetric());
       maintainer.centroidGeneration =
         proto.hasCentroidGeneration() ? proto.getCentroidGeneration() : null;
+      maintainer.buildingGeneration =
+        proto.hasBuildingGeneration() ? proto.getBuildingGeneration() : null;
       if (proto.hasFunctionalVectorColumn()) {
         maintainer.functionalVectorColumn =
           new ColumnReference(proto.getFunctionalVectorColumn().getFamily().toByteArray(),
@@ -2425,6 +2450,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       builder.setDistanceMetric(maintainer.distanceMetric.name());
       if (maintainer.centroidGeneration != null) {
         builder.setCentroidGeneration(maintainer.centroidGeneration);
+      }
+      if (maintainer.buildingGeneration != null) {
+        builder.setBuildingGeneration(maintainer.buildingGeneration);
       }
       if (maintainer.functionalVectorColumn != null) {
         builder.setFunctionalVectorColumn(ServerCachingProtos.ColumnReference.newBuilder()
@@ -2831,6 +2859,28 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return centroidGeneration;
   }
 
+  /** Returns true if a rebuild migration to a building generation is in progress. */
+  public boolean isMigrating() {
+    return buildingGeneration != null;
+  }
+
+  /**
+   * Returns the generation of new index rows: the building generation during a migration, otherwise
+   * the active generation.
+   */
+  public Long getWriteGeneration() {
+    return isMigrating() ? buildingGeneration : centroidGeneration;
+  }
+
+  /** Reads the centroid ID from an index row key. */
+  public int getCentroidId(byte[] indexRowKey) {
+    int slot =
+      (nIndexSaltBuckets > 0 ? 1 : 0) + (viewIndexId != null ? 1 : 0) + (isMultiTenant ? 1 : 0);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    getIndexRowKeySchema().iterator(indexRowKey, ptr, slot + 1);
+    return PInteger.INSTANCE.getCodec().decodeInt(ptr, SortOrder.ASC);
+  }
+
   /**
    * Returns the index column that holds the computed vector of a functional vector index. Returns
    * null if the index is not a vector index or indexes a plain vector column.
@@ -2840,9 +2890,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   }
 
   /**
-   * Resolves the centroids of this vector index generation prior to row lock acquisition, from the
-   * cache or, if not cached, via {@code conn} or internal server connection, and holds them for
-   * this maintainer's lifetime. An untrained index has none.
+   * Loads the centroids of the active generation and, during a migration, of the building
+   * generation. Callers use this before they take row locks, so that no load occurs under a lock.
+   * The centroids come from the cache. On a cache miss they load through {@code conn}, or through
+   * an internal server connection if {@code conn} is null. The maintainer keeps them for its
+   * lifetime. An untrained index has no centroids.
    */
   public void loadCentroids(Connection conn) throws SQLException {
     if (!isVectorIndex() || centroidGeneration == null) {
@@ -2852,6 +2904,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     if (activeCentroids == null) {
       activeCentroids = loadCentroids(conn, centroidGeneration);
     }
+    if (isMigrating() && buildingCentroids == null) {
+      buildingCentroids = loadCentroids(conn, buildingGeneration);
+    }
   }
 
   private CachedCentroids loadCentroids(Connection conn, long generation) throws SQLException {
@@ -2860,13 +2915,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       CentroidManager.getCentroidIndexName(logicalIndexName), generation, distanceMetric);
   }
 
-  private CachedCentroids getCentroids() {
+  private CachedCentroids getCentroids(long generation) {
     try {
       loadCentroids(null);
     } catch (SQLException e) {
       throw new IllegalStateException(e);
     }
-    return activeCentroids;
+    return generation == centroidGeneration ? activeCentroids : buildingCentroids;
   }
 
   /**

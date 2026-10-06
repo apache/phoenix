@@ -53,6 +53,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.Cost;
@@ -64,6 +65,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
@@ -71,6 +73,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -98,6 +102,8 @@ public class VectorIndexScanPlan extends ScanPlan {
   private final int[] probeCentroids;
   private final int maxProbeBatches;
   private final CachedCentroids centroids;
+  // Centroids of the building generation during a migration, otherwise null
+  private final CachedCentroids buildingCentroids;
   private final float[] queryVector;
   // Skip scan filter for the posting lists of the first probe batch, or null. Each later adaptive
   // batch replaces this filter in its copy of the scan.
@@ -116,23 +122,40 @@ public class VectorIndexScanPlan extends ScanPlan {
 
     this.queryVector = getQueryVector(orderBy);
     CachedCentroids centroids = null;
+    CachedCentroids building = null;
     if (queryVector != null && index.getVectorCentroidGeneration() != null) {
-      centroids = VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
-        .get(connection, CentroidManager.getCentroidIndexName(index.getName().getString()),
-          index.getVectorCentroidGeneration(),
-          DistanceMetric.fromString(index.getVectorDistanceMetric()));
+      VectorCentroidCache cache =
+        VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration());
+      DistanceMetric metric = DistanceMetric.fromString(index.getVectorDistanceMetric());
+      String indexName = CentroidManager.getCentroidIndexName(index.getName().getString());
+      centroids = cache.get(connection, indexName, index.getVectorCentroidGeneration(), metric);
+      // A migration writes the index rows under the building generation, whose centroid IDs are
+      // disjoint from the IDs of the active generation. Until promotion, a scan can find a data
+      // row under one generation or under both, so the scan must probe both generations. The
+      // client returns each data row once.
+      if (index.isVectorRebuildInProgress()) {
+        building = cache.get(connection, indexName, index.getVectorBuildingGeneration(), metric);
+      }
     }
     this.centroids = centroids;
-    this.centroidCount = centroids == null ? 0 : centroids.size();
+    this.buildingCentroids = building;
+    if (building != null) {
+      // A data row under both generations can use two of the top N slots of a region. Each
+      // region returns 2N rows, so that the client merge can keep N distinct data rows.
+      serializeScanRegionObserverIntoScan(context.getScan(),
+        (int) Math.min(2L * QueryUtil.getOffsetLimit(limit, offset), Integer.MAX_VALUE),
+        orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
+    }
+    this.centroidCount =
+      (centroids == null ? 0 : centroids.size()) + (building == null ? 0 : building.size());
     int[] probes = new int[0];
     SkipScanFilter filter = null;
     if (centroids != null) {
       int requested = getHintInt(hint, Hint.VECTOR_PROBE_COUNT, props.getInt(
         QueryServices.VECTOR_PROBE_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_VECTOR_PROBE_COUNT));
-      int count = requested > 0
-        ? Math.min(requested, centroidCount)
-        : Math.max(1, (int) Math.round(Math.sqrt(centroidCount)));
-      int[] nearest = centroids.nearest(queryVector, count);
+      int count =
+        requested > 0 ? requested : Math.max(1, (int) Math.round(Math.sqrt(centroids.size())));
+      int[] nearest = nearestCentroids(count);
       ScanRanges ranges = getPostingListRanges(context, index, nearest);
       if (ranges != null) {
         probes = nearest;
@@ -231,6 +254,41 @@ public class VectorIndexScanPlan extends ScanPlan {
       index.getBucketNum(), true, -1);
   }
 
+  /**
+   * Returns the {@code n} centroids nearest the query vector in each probed generation, from the
+   * nearest to the farthest. During a migration, the result interleaves the rankings of the two
+   * generations. A prefix of length 2k then holds the k nearest centroids of each generation, if
+   * each generation has at least k centroids.
+   */
+  private int[] nearestCentroids(int n) {
+    int[] active = centroids.nearest(queryVector, Math.min(n, centroids.size()));
+    if (buildingCentroids == null) {
+      return active;
+    }
+    return interleave(active,
+      buildingCentroids.nearest(queryVector, Math.min(n, buildingCentroids.size())));
+  }
+
+  /**
+   * Merges two arrays in alternate order: {@code a[0]}, {@code b[0]}, {@code a[1]}, and so on. The
+   * other elements of the longer array go at the end.
+   */
+  static int[] interleave(int[] a, int[] b) {
+    int[] out = new int[a.length + b.length];
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length) {
+        out[k++] = a[i++];
+      }
+      if (j < b.length) {
+        out[k++] = b[j++];
+      }
+    }
+    return out;
+  }
+
   static int getHintInt(HintNode hint, Hint name, int defaultValue) {
     String value = hint.getHint(name);
     if (value != null) {
@@ -291,13 +349,16 @@ public class VectorIndexScanPlan extends ScanPlan {
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     ExplainPlan explainPlan = super.getExplainPlan();
+    String metric = getTableRef().getTable().getVectorDistanceMetric();
+    List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
     if (probeCount == 0) {
       return explainPlan;
     }
-    String metric = getTableRef().getTable().getVectorDistanceMetric();
-    List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
     String probing =
       "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS (" + metric + ")";
+    if (buildingCentroids != null) {
+      probing += " ACROSS ACTIVE AND BUILDING GENERATIONS";
+    }
     if (isAdaptive()) {
       int batches = Math.min(maxProbeBatches, (centroidCount + probeCount - 1) / probeCount);
       probing += " EXPANDING UP TO " + batches + " BATCHES";
@@ -324,7 +385,7 @@ public class VectorIndexScanPlan extends ScanPlan {
   @Override
   protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan,
     Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
-    if (!isAdaptive()) {
+    if (!isAdaptive() && buildingCentroids == null) {
       return super.newIterator(scanGrouper, scan, caches);
     }
     scan.setAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
@@ -372,8 +433,10 @@ public class VectorIndexScanPlan extends ScanPlan {
   }
 
   /**
-   * Result iterator executing adaptive multi-batch scans across successive centroid posting lists,
-   * aggregating and globally reranking candidate tuples to satisfy filter and limit criteria.
+   * Result iterator that probes posting lists in successive batches until it has enough rows for
+   * the limit, or a probe bound stops it. It then sorts all candidates on the client. While a
+   * building generation is probed, a plan that is not adaptive also uses this iterator, so that it
+   * returns each data row once.
    */
   private class AdaptiveProbeResultIterator implements ResultIterator {
     private final ParallelScanGrouper scanGrouper;
@@ -381,6 +444,9 @@ public class VectorIndexScanPlan extends ScanPlan {
     private final Map<ImmutableBytesPtr, ServerCache> caches;
     private final BaseResultIterators first;
     private final int batchLimit;
+    // Keys of the data rows found so far if a building generation is probed, otherwise null
+    private final Set<ImmutableBytesPtr> dataRowKeys;
+    private final int centroidPosition;
     private List<Tuple> rows;
     private int next;
 
@@ -391,25 +457,22 @@ public class VectorIndexScanPlan extends ScanPlan {
       this.caches = caches;
       this.first = first;
       this.batchLimit = limit + (offset == null ? 0 : offset);
+      this.dataRowKeys = buildingCentroids == null ? null : new HashSet<>();
+      this.centroidPosition = getCentroidPosition(getTableRef().getTable());
     }
 
     private List<OrderByExpression> orderByExpressions() {
       return orderBy.getOrderByExpressions();
     }
 
-    private void drain(ResultIterator batch, List<Tuple> into) throws SQLException {
-      try {
-        for (Tuple t = batch.next(); t != null; t = batch.next()) {
-          into.add(t);
-        }
-      } finally {
-        batch.close();
-      }
+    private void drain(ResultIterators batch, List<Tuple> into) throws SQLException {
+      VectorIndexScanPlan.drain(batch, batchLimit, orderByExpressions(), dataRowKeys,
+        getTableRef().getTable(), centroidPosition, into);
     }
 
     private void probe() throws SQLException {
       List<Tuple> found = new ArrayList<>();
-      drain(new MergeSortTopNResultIterator(first, batchLimit, null, orderByExpressions()), found);
+      drain(first, found);
       Set<Integer> probed = new HashSet<>();
       for (int c : probeCentroids) {
         probed.add(c);
@@ -419,10 +482,11 @@ public class VectorIndexScanPlan extends ScanPlan {
       ScanRanges original = context.getScanRanges();
       try {
         while (
-          found.size() < batchLimit && probed.size() < centroidCount && batches < maxProbeBatches
+          isAdaptive() && found.size() < batchLimit && probed.size() < centroidCount
+            && batches < maxProbeBatches
         ) {
           if (ranked == null) {
-            ranked = centroids.nearest(queryVector, centroidCount);
+            ranked = nearestCentroids(centroidCount);
           }
           List<Integer> batch = new ArrayList<>(probeCount);
           for (int i = 0; i < ranked.length && batch.size() < probeCount; i++) {
@@ -446,8 +510,7 @@ public class VectorIndexScanPlan extends ScanPlan {
           ranges.initializeScan(batchScan);
           // The iterators of this batch read their scan ranges from the statement context
           context.setScanRanges(ranges);
-          drain(new MergeSortTopNResultIterator(newBatch(scanGrouper, batchScan, caches),
-            batchLimit, null, orderByExpressions()), found);
+          drain(newBatch(scanGrouper, batchScan, caches), found);
           batches++;
         }
       } finally {
@@ -485,6 +548,65 @@ public class VectorIndexScanPlan extends ScanPlan {
       new MergeSortTopNResultIterator(first, limit, offset, orderByExpressions()).explain(planSteps,
         explainPlanAttributesBuilder);
     }
+  }
+
+  /** Returns the position of the centroid ID column in the primary key of the index. */
+  static int getCentroidPosition(PTable index) {
+    List<PColumn> pk = index.getPKColumns();
+    for (int i = 0; i < pk.size(); i++) {
+      if (MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME.equals(pk.get(i).getName().getString())) {
+        return i;
+      }
+    }
+    throw new IllegalStateException(index.getName() + " has no centroid id column");
+  }
+
+  /**
+   * Merges the per-region results of one batch in sort order and adds up to {@code max} rows to
+   * {@code into}. If {@code dataRowKeys} is not null, the merge skips a data row that it already
+   * found under the other generation. In that case the merge does not stop at {@code max} rows, so
+   * that a skipped copy does not use the place of a distinct row. Each region returns at most twice
+   * {@code max} rows, which hold at least {@code max} distinct data rows if the region has them.
+   */
+  static void drain(ResultIterators batch, int max, List<OrderByExpression> orderBy,
+    Set<ImmutableBytesPtr> dataRowKeys, PTable index, int centroidPosition, List<Tuple> into)
+    throws SQLException {
+    ResultIterator merged =
+      new MergeSortTopNResultIterator(batch, dataRowKeys == null ? max : null, null, orderBy);
+    try {
+      Tuple t;
+      for (int added = 0; added < max && (t = merged.next()) != null;) {
+        // Add a data row only once, also if the scan finds it under both generations
+        if (dataRowKeys == null || dataRowKeys.add(getDataRowKey(t, index, centroidPosition))) {
+          into.add(t);
+          added++;
+        }
+      }
+    } finally {
+      merged.close();
+    }
+  }
+
+  /**
+   * Returns the index row key without its salt byte and centroid ID. The result identifies the data
+   * row, whichever generation, centroid, and salt byte its index row has.
+   */
+  static ImmutableBytesPtr getDataRowKey(Tuple tuple, PTable index, int centroidPosition) {
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    tuple.getKey(ptr);
+    byte[] row = ptr.get();
+    int start =
+      ptr.getOffset() + (index.getBucketNum() == null ? 0 : SaltingUtil.NUM_SALTING_BYTES);
+    int end = ptr.getOffset() + ptr.getLength();
+    // Set ptr to the centroid ID field, which has a fixed width
+    index.getRowKeySchema().iterator(row, ptr.getOffset(), ptr.getLength(), ptr,
+      centroidPosition + 1);
+    int prefix = ptr.getOffset() - start;
+    int suffix = end - ptr.getOffset() - ptr.getLength();
+    byte[] key = new byte[prefix + suffix];
+    System.arraycopy(row, start, key, 0, prefix);
+    System.arraycopy(row, ptr.getOffset() + ptr.getLength(), key, prefix, suffix);
+    return new ImmutableBytesPtr(key);
   }
 
   /** Orders tuples on the client by the compiled ORDER BY expressions and their null order. */
