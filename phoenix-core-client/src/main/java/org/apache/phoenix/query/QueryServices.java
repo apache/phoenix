@@ -154,6 +154,8 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.vector.centroid.cache.maxSize";
   // Number of IVF centroids probed per vector query; 0 defaults to sqrt(total lists)
   public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
+  // Maximum number of probe batches scanned during adaptive vector query execution
+  public static final String VECTOR_MAX_PROBE_LIMIT_ATTRIB = "phoenix.vector.max.probe.limit";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

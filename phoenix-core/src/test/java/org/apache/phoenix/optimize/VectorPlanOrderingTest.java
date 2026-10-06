@@ -24,12 +24,17 @@ import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableRef;
 import org.junit.Test;
 
 /** Unit tests for vector index plan comparison and precedence rules in query optimization. */
@@ -97,5 +102,45 @@ public class VectorPlanOrderingTest {
     assertTrue(QueryOptimizer.compareVectorPlans(index, vector, DATA_HINTED) < 0);
     assertTrue(QueryOptimizer.compareVectorPlans(data, vector, DATA_HINTED) < 0);
     assertEquals(0, QueryOptimizer.compareVectorPlans(index, data, DATA_HINTED));
+  }
+
+  private static QueryPlan planOver(PTableType type, Long estimatedRows) throws Exception {
+    QueryPlan plan = mock(QueryPlan.class);
+    PTable table = mock(PTable.class);
+    when(table.getType()).thenReturn(type);
+    TableRef tableRef = mock(TableRef.class);
+    when(tableRef.getTable()).thenReturn(table);
+    when(plan.getTableRef()).thenReturn(tableRef);
+    when(plan.getEstimatedRowsToScan()).thenReturn(estimatedRows);
+    return plan;
+  }
+
+  @Test
+  public void testSelectiveRegularIndexIsEvaluatedFirst() throws Exception {
+    QueryPlan data = planOver(PTableType.TABLE, 10_000L);
+    QueryPlan selective = planOver(PTableType.INDEX, 10L);
+    QueryPlan unselective = planOver(PTableType.INDEX, 9_000L);
+    QueryPlan vector = vectorScan(false);
+    List<QueryPlan> plans = Arrays.asList(data, selective, unselective, vector);
+    Set<QueryPlan> filterFirst = VectorSearchUtil.getFilterFirstPlans(plans, data);
+    assertEquals(Collections.singleton(selective), filterFirst);
+
+    List<QueryPlan> ordered = new ArrayList<>(Arrays.asList(unselective, vector, data, selective));
+    ordered.sort((p1, p2) -> QueryOptimizer.compareVectorPlans(p1, p2, NO_HINT, filterFirst));
+    assertEquals(selective, ordered.get(0));
+    assertEquals(vector, ordered.get(1));
+    // Explicit data table hint overrides secondary index filter first precedence
+    assertEquals(0, QueryOptimizer.compareVectorPlans(selective, data, DATA_HINTED, filterFirst));
+    assertTrue(QueryOptimizer.compareVectorPlans(selective, vector, DATA_HINTED, filterFirst) < 0);
+  }
+
+  @Test
+  public void testNoFilterFirstWithoutStatisticsOrVectorPlan() throws Exception {
+    QueryPlan noStats = planOver(PTableType.TABLE, null);
+    QueryPlan index = planOver(PTableType.INDEX, 1L);
+    assertTrue(VectorSearchUtil
+      .getFilterFirstPlans(Arrays.asList(noStats, index, vectorScan(false)), noStats).isEmpty());
+    QueryPlan data = planOver(PTableType.TABLE, 10_000L);
+    assertTrue(VectorSearchUtil.getFilterFirstPlans(Arrays.asList(data, index), data).isEmpty());
   }
 }

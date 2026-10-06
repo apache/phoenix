@@ -130,7 +130,12 @@ public class HintNode {
     /**
      * Overrides the number of IVF centroids probed during vector index scans.
      */
-    VECTOR_PROBE_COUNT;
+    VECTOR_PROBE_COUNT,
+
+    /**
+     * Overrides the maximum number of probe batches scanned during adaptive vector index search.
+     */
+    MAX_PROBE_LIMIT;
   };
 
   private final Map<Hint, String> hints;

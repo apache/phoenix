@@ -18,7 +18,11 @@
 package org.apache.phoenix.optimize;
 
 import java.lang.reflect.Array;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -38,6 +42,7 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVectorDataType;
 import org.apache.phoenix.util.CostUtil;
@@ -238,7 +243,56 @@ public final class VectorSearchUtil {
       : null;
   }
 
-  /** Indicates whether the query execution plan incorporates a vector index scan. */
+  /**
+   * Maximum table row scan ratio threshold for evaluating selective secondary index filters ahead
+   * of approximate vector index probing.
+   */
+  public static final double FILTER_FIRST_MAX_ROW_FRACTION = 0.05;
+
+  /**
+   * Identifies candidate secondary index plans whose estimated row scan counts fall within the
+   * selectivity threshold relative to the primary data table. When statistics demonstrate high
+   * filter selectivity, exact post-filtering over the secondary index is preferred to vector index
+   * probing. If statistics are unavailable or no vector index plan exists, returns an empty set.
+   */
+  public static Set<QueryPlan> getFilterFirstPlans(List<QueryPlan> plans, QueryPlan dataPlan) {
+    Set<QueryPlan> filterFirst = Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean hasVectorPlan = false;
+    for (QueryPlan plan : plans) {
+      hasVectorPlan |= usesVectorIndex(plan);
+    }
+    if (!hasVectorPlan) {
+      return filterFirst;
+    }
+    Long dataRows = null;
+    try {
+      dataRows = dataPlan.getEstimatedRowsToScan();
+    } catch (SQLException e) {
+      // Missing cardinality estimate disables filter first selection
+    }
+    if (dataRows == null || dataRows <= 0) {
+      return filterFirst;
+    }
+    for (QueryPlan plan : plans) {
+      if (
+        plan == dataPlan || usesVectorIndex(plan)
+          || plan.getTableRef().getTable().getType() != PTableType.INDEX
+      ) {
+        continue;
+      }
+      try {
+        Long rows = plan.getEstimatedRowsToScan();
+        if (rows != null && rows <= dataRows * FILTER_FIRST_MAX_ROW_FRACTION) {
+          filterFirst.add(plan);
+        }
+      } catch (SQLException e) {
+        // Unestimated plan disqualified from filter first selection
+      }
+    }
+    return filterFirst;
+  }
+
+  /** Returns true when the plan reads a vector index; see {@link #getVectorIndexScan}. */
   public static boolean usesVectorIndex(QueryPlan plan) {
     return getVectorIndexScan(plan) != null;
   }

@@ -36,6 +36,7 @@ public final class OptimizerReasons {
   public static final String RULE_NON_LOCAL_PREFERRED = "non-local preferred";
   public static final String RULE_PARTIAL_INDEX_APPLICABLE = "partial index applicable";
   public static final String RULE_NEAREST_NEIGHBOR_INDEX = "nearest-neighbor index";
+  public static final String RULE_SELECTIVE_FILTER_FIRST = "selective filter first";
 
   // REASON_* — rejected-index reason labels.
   public static final String REASON_NO_PK_PREFIX_BOUND = "no PK prefix bound";

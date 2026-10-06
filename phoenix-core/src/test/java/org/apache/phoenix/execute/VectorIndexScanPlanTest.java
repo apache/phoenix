@@ -199,8 +199,9 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testProbeHints() {
-    HintNode hint = new HintNode("/*+ VECTOR_PROBE_COUNT(5) */");
+    HintNode hint = new HintNode("/*+ VECTOR_PROBE_COUNT(5) MAX_PROBE_LIMIT(3) */");
     assertEquals(5, VectorIndexScanPlan.getHintInt(hint, Hint.VECTOR_PROBE_COUNT, 0));
+    assertEquals(3, VectorIndexScanPlan.getHintInt(hint, Hint.MAX_PROBE_LIMIT, 8));
     HintNode none = new HintNode("/*+ INDEX(T I) */");
     assertEquals(7, VectorIndexScanPlan.getHintInt(none, Hint.VECTOR_PROBE_COUNT, 7));
     HintNode invalid = new HintNode("/*+ VECTOR_PROBE_COUNT(abc) */");
