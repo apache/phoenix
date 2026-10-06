@@ -31,12 +31,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Get;
@@ -47,11 +51,15 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
@@ -61,6 +69,8 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 /**
  * Integration tests for write path vector index maintenance, covering centroid key assignment,
@@ -68,7 +78,83 @@ import org.junit.experimental.categories.Category;
  * markers, read repair, and immutable client side maintenance.
  */
 @Category(ParallelStatsDisabledTest.class)
+@RunWith(Parameterized.class)
 public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
+
+  private final ImmutableStorageScheme storageScheme;
+
+  public VectorIndexWriteIT(ImmutableStorageScheme storageScheme) {
+    this.storageScheme = storageScheme;
+  }
+
+  @Parameterized.Parameters(name = "VectorIndexWriteIT_storageScheme={0}")
+  public static synchronized Collection<ImmutableStorageScheme> data() {
+    return Arrays.asList(ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+      ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS);
+  }
+
+  private boolean isSingleCell() {
+    return storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+  }
+
+  /**
+   * Initializes the base table and associated vector index for the parameterized storage scheme.
+   */
+  private void setup(Connection conn, String tableName, String indexName) throws Exception {
+    setupTableAndKnownCentroids(conn, tableName, indexName, "FLOAT",
+      isSingleCell()
+        ? "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,"
+          + " COLUMN_ENCODED_BYTES=2"
+        : "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0");
+  }
+
+  /**
+   * Replaces a data row. For immutable single cell tables, deletes the prior row before upserting
+   * to ensure complete index row replacement without prior row reads.
+   */
+  private void replaceRow(Connection conn, String tableName, String id, Float[] vector,
+    String label) throws SQLException {
+    if (isSingleCell()) {
+      try (PreparedStatement ps =
+        conn.prepareStatement("DELETE FROM " + tableName + " WHERE ID = ?")) {
+        ps.setString(1, id);
+        ps.executeUpdate();
+      }
+      conn.commit();
+    }
+    try (PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+      ps.setString(1, id);
+      ps.setArray(2, conn.createArrayOf("FLOAT", vector));
+      ps.setString(3, label);
+      ps.executeUpdate();
+    }
+    conn.commit();
+  }
+
+  /**
+   * Extracts the serialized vector bytes from an index row across one cell per column and single
+   * cell storage schemes.
+   */
+  private byte[] getIndexedVector(PhoenixConnection pconn, PTable indexTable, byte[] rowKey)
+    throws Exception {
+    PColumn vectorCol = indexTable.getColumnForColumnName("0:V");
+    try (
+      Table hTable = pconn.getQueryServices().getTable(indexTable.getPhysicalName().getBytes())) {
+      Result r = hTable.get(new Get(rowKey));
+      if (indexTable.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+        return r.getValue(vectorCol.getFamilyName().getBytes(),
+          vectorCol.getColumnQualifierBytes());
+      }
+      ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+      SingleCellColumnExpression expr =
+        new SingleCellColumnExpression(vectorCol, vectorCol.getName().getString(),
+          indexTable.getEncodingScheme(), indexTable.getImmutableStorageScheme());
+      return expr.evaluate(new ResultTuple(r), ptr) && ptr.getLength() > 0
+        ? ptr.copyBytesIfNecessary()
+        : null;
+    }
+  }
 
   @Test
   public void testVectorInsertGeneratesIndexRow() throws Exception {
@@ -76,7 +162,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     String indexName = "IDX_VEC_INS_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -95,6 +181,9 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
       assertEquals("Expected exactly 1 index row", 1, rowKeys.size());
       assertEquals("Centroid prefix must be 2", 2, extractCentroidId(rowKeys.get(0)));
+      assertEquals(storageScheme, indexTable.getImmutableStorageScheme());
+      assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 1.0f, 0.0f, 0.0f, 0.0f }),
+        getIndexedVector(pconn, indexTable, rowKeys.get(0)));
 
       // Query index table via SQL
       String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
@@ -114,7 +203,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     String indexName = "IDX_VEC_UPD_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -133,14 +222,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       assertEquals(1, rowKeysBefore.size());
       assertEquals(2, extractCentroidId(rowKeysBefore.get(0)));
 
-      // Update vector across centroid boundary to centroid 0
-      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
-        ps.setString(1, "row_1");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 1.0f }));
-        ps.setString(3, "lbl_updated");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      // Update vector to [0,0,0,1] -> nearest centroid ID 0
+      replaceRow(conn, tableName, "row_1", new Float[] { 0.0f, 0.0f, 0.0f, 1.0f }, "lbl_updated");
 
       // Assert old index key deletion and new index key creation across partitions
       List<byte[]> rowKeysAfter = getHBaseRowKeys(pconn, indexTable);
@@ -166,7 +249,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     String indexName = "IDX_VEC_COV_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -185,15 +268,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       assertEquals(1, rowKeysBefore.size());
       assertEquals(2, extractCentroidId(rowKeysBefore.get(0)));
 
-      // Update non-vector covered column in place
-      try (PreparedStatement ps =
-        conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
-        ps.setString(1, "row_1");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
-        ps.setString(3, "updated_label");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      // Update ONLY covered column (same vector, new label)
+      replaceRow(conn, tableName, "row_1", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }, "updated_label");
 
       // Assert index row key and centroid partition remain unchanged
       List<byte[]> rowKeysAfter = getHBaseRowKeys(pconn, indexTable);
@@ -218,7 +294,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     String indexName = "IDX_VEC_DEL_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -261,7 +337,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     String indexName = "IDX_VEC_NULL_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -292,6 +368,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testVectorUnchangedUpdateMaintainsIndexRowAndCoveredColumns() throws Exception {
+    assumeFalse(isSingleCell());
     String tableName = "T_VEC_ZUPD_" + generateUniqueName();
     String indexName = "IDX_VEC_ZUPD_" + generateUniqueName();
 
@@ -368,13 +445,66 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Verifies that single cell vector index rows preserve indexed vectors when updating covered
+   * columns on a multi-cell base table.
+   */
+  @Test
+  public void testUnchangedVectorCoveredUpdateOnSingleCellIndex() throws Exception {
+    assumeFalse(isSingleCell());
+    String tableName = "T_VEC_SC_" + generateUniqueName();
+    String indexName = "IDX_VEC_SC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100,"
+          + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName,
+        VectorIndexTestUtil.KNOWN_CENTROIDS);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      assertEquals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+        pconn.getTableNoCache(tableName).getImmutableStorageScheme());
+      assertEquals(ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+        indexTable.getImmutableStorageScheme());
+
+      replaceRow(conn, tableName, "row_sc_1", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f },
+        "lbl_initial");
+      try (Statement stmt = conn.createStatement()) {
+        stmt
+          .execute("UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('row_sc_1', 'lbl_updated')");
+      }
+      conn.commit();
+
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeys.size());
+      assertEquals(2, extractCentroidId(rowKeys.get(0)));
+      assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 1.0f, 0.0f, 0.0f, 0.0f }),
+        getIndexedVector(pconn, indexTable, rowKeys.get(0)));
+      String querySql =
+        "SELECT ID, LABEL FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 1";
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.9f, 0.0f, 0.0f, 0.0f }));
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals("row_sc_1", rs.getString(1));
+          assertEquals("lbl_updated", rs.getString(2));
+          assertFalse(rs.next());
+        }
+      }
+    }
+  }
+
   @Test
   public void testVerifiedMarkerPresentAfterCommit() throws Exception {
     String tableName = "T_VEC_VER_" + generateUniqueName();
     String indexName = "IDX_VEC_VER_" + generateUniqueName();
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      setupTableAndKnownCentroids(conn, tableName, indexName);
+      setup(conn, tableName, indexName);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
       PTable indexTable = pconn.getTableNoCache(indexName);
@@ -418,6 +548,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
    */
   @Test
   public void testReadRepairWithCentroidReassignment() throws Exception {
+    assumeFalse(isSingleCell());
     String tableName = "T_VEC_RR_" + generateUniqueName();
     String indexName = "IDX_VEC_RR_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -488,6 +619,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
   /** Preserves covered vector columns of differing element widths in index rows. */
   @Test
   public void testCoveredDoubleVectorColumn() throws Exception {
+    assumeFalse(isSingleCell());
     String tableName = "T_VEC_COVD_" + generateUniqueName();
     String indexName = "IDX_VEC_COVD_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -541,6 +673,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
   /** Validates double precision vector index maintenance across mutations and boundary updates. */
   @Test
   public void testDoubleVectorIndexMaintenance() throws Exception {
+    assumeFalse(isSingleCell());
     String tableName = "T_VEC_DBL_" + generateUniqueName();
     String indexName = "IDX_VEC_DBL_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -579,6 +712,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
   /** Validates client side immutable index generation parity against server side builds. */
   @Test
   public void testImmutableTableClientMaintenanceMatchesServerBuild() throws Exception {
+    assumeFalse(isSingleCell());
     String tableName = "T_VEC_IMM_" + generateUniqueName();
     String indexName = "IDX_VEC_IMM_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {

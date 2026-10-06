@@ -634,6 +634,45 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
     }
   }
 
+  /**
+   * Verifies covered column value extraction when the data table and single cell index use
+   * different qualifier encoding schemes.
+   */
+  @Test
+  public void testSingleCellCoveredValueAcrossEncodingSchemes() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR PRIMARY KEY, K VARCHAR, C VARCHAR) IMMUTABLE_ROWS=true,"
+          + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+      pconn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+        + " (K) INCLUDE (C) COLUMN_ENCODED_BYTES=4");
+      PTable dataTable = pconn.getTable(tableName);
+      PTable index = pconn.getTable(indexName);
+      assertEquals(PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+        dataTable.getEncodingScheme());
+      assertEquals(PTable.QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, index.getEncodingScheme());
+      IndexMaintainer im = index.getIndexMaintainer(dataTable, pconn);
+
+      Put dataRow = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', 'k', 'covered')");
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(dataRow), new ImmutableBytesPtr(dataRow.getRow()),
+        EnvironmentEdgeManager.currentTimeMillis(), null, null, false, null);
+      PColumn indexCol = index.getColumnForColumnName("0:C");
+      List<Cell> cells = indexPut.get(indexCol.getFamilyName().getBytes(),
+        QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
+      assertEquals(1, cells.size());
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable(CellUtil.cloneValue(cells.get(0)));
+      assertTrue(index.getImmutableStorageScheme().getDecoder().decode(ptr,
+        index.getEncodingScheme().decode(indexCol.getColumnQualifierBytes())
+          - QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 1));
+      assertEquals("covered", Bytes.toString(ptr.copyBytes()));
+    }
+  }
+
   @Test
   public void testNonVectorIndexMaintainerHasNoVectorFields() throws Exception {
     String tableName = "T_" + generateUniqueName();
