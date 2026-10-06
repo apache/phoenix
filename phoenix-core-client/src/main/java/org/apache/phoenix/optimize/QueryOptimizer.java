@@ -600,8 +600,11 @@ public class QueryOptimizer {
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
           isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
 
-        if (index.isVectorIndex() && !ordersByIndexedVector(index, rewrittenIndexSelect)) {
-          return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH);
+        if (index.isVectorIndex()) {
+          String reason = getVectorOrderingRejection(index, rewrittenIndexSelect);
+          if (reason != null) {
+            return AddPlanResult.rejected(index, reason);
+          }
         }
         QueryPlan plan;
         if (index.isVectorIndex()) {
@@ -830,11 +833,17 @@ public class QueryOptimizer {
    * Returns the reason to reject the index if the rewritten index query does not rank by the
    * indexed vector column of the index. Returns null if it does.
    */
-  private static boolean ordersByIndexedVector(PTable index, SelectStatement indexSelect) {
+  private static String getVectorOrderingRejection(PTable index, SelectStatement indexSelect) {
     VectorSearchDescriptor descriptor = VectorSearchUtil.getVectorSearchDescriptor(indexSelect);
+    if (descriptor == null || !descriptor.isSourceColumn()) {
+      // The rewrite did not replace the ranked vector with an index column, so the index does not
+      // store this vector
+      return OptimizerReasons.REASON_VECTOR_EXPRESSION_NOT_INDEXED;
+    }
     PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
-    return descriptor != null && descriptor.isSourceColumn() && vectorColumn != null
-      && vectorColumn.getName().getString().equals(descriptor.getSourceColumnName());
+    return vectorColumn.getName().getString().equals(descriptor.getSourceColumnName())
+      ? null
+      : OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH;
   }
 
   /**

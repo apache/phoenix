@@ -56,6 +56,8 @@ public final class OptimizerReasons {
   public static final String REASON_VECTOR_NULLS_FIRST =
     "NULLS FIRST needs rows the index does not hold";
   public static final String REASON_VECTOR_COLUMN_MISMATCH = "indexes a different vector column";
+  public static final String REASON_VECTOR_EXPRESSION_NOT_INDEXED =
+    "does not index the query vector expression";
 
   /** Builds the functional index rule label of the form {@code "matches <expr>"}. */
   public static String matches(String expression) {
