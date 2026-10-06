@@ -25,6 +25,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -35,6 +37,7 @@ import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -46,8 +49,10 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 
@@ -193,15 +198,66 @@ public class VectorIndexScanPlan extends ScanPlan {
     return defaultValue;
   }
 
+  /**
+   * Estimates the cost of the vector index scan. If the index has guideposts, the cost comes from
+   * the scan ranges of the probed posting lists. Without index statistics, the estimate scales the
+   * data table statistics by the probed centroid fraction and by the ratio of the row sizes. If the
+   * query has a limit, this estimate also adds the cost of the server top-N sort. For an uncovered
+   * index, the cost also includes a data table lookup for each candidate row. Returns
+   * {@link Cost#UNKNOWN} if the statistics cannot supply an estimate.
+   */
+  @Override
+  public Cost getCost() {
+    Cost cost = super.getCost();
+    Long candidates = null;
+    try {
+      candidates = getEstimatedRowsToScan();
+      if (cost.isUnknown()) {
+        Long dataBytes = dataPlan == null ? null : dataPlan.getEstimatedBytesToScan();
+        if (dataBytes == null) {
+          return Cost.UNKNOWN;
+        }
+        double fraction = probeCount == 0 ? 1.0 : (double) probeCount / centroidCount;
+        double bytes = dataBytes * fraction * SchemaUtil.estimateRowSize(getTableRef().getTable())
+          / SchemaUtil.estimateRowSize(dataPlan.getTableRef().getTable());
+        cost = new Cost(0, 0, bytes);
+        Long dataRows = dataPlan.getEstimatedRowsToScan();
+        candidates = dataRows == null ? null : (long) Math.ceil(dataRows * fraction);
+        if (limit != null && candidates != null) {
+          double outputBytes = Math.min(candidates, limit + (offset == null ? 0 : offset))
+            * (double) SchemaUtil.estimateRowSize(getTableRef().getTable());
+          cost = cost.plus(CostUtil.estimateOrderByCost(bytes, outputBytes,
+            CostUtil.estimateParallelLevel(true, context.getConnection().getQueryServices())));
+        }
+      }
+    } catch (SQLException e) {
+      return Cost.UNKNOWN;
+    }
+    if (context.isUncoveredIndex()) {
+      if (candidates == null) {
+        return Cost.UNKNOWN;
+      }
+      cost = cost.plus(CostUtil.estimateLookupCost(candidates, dataPlan.getTableRef().getTable()));
+    }
+    return cost;
+  }
+
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     ExplainPlan explainPlan = super.getExplainPlan();
     if (probeCount == 0) {
       return explainPlan;
     }
+    String metric = getTableRef().getTable().getVectorDistanceMetric();
     List<String> steps = new ArrayList<>(explainPlan.getPlanSteps());
-    steps.add(0, "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS");
-    return new ExplainPlan(steps, explainPlan.getPlanStepsAsAttributes());
+    steps.add(0,
+      "CLIENT PROBING " + probeCount + " OF " + centroidCount + " CENTROIDS (" + metric + ")");
+    ExplainPlanAttributes attributes = explainPlan.getPlanStepsAsAttributes();
+    return new ExplainPlan(steps,
+      (attributes == null
+        ? new ExplainPlanAttributesBuilder()
+        : new ExplainPlanAttributesBuilder(attributes)).setVectorProbeCount(probeCount)
+          .setVectorCentroidCount(centroidCount).setVectorDistanceMetric(metric).build());
   }
 
   /** Number of probed centroid posting lists, or 0 for full index scans. */

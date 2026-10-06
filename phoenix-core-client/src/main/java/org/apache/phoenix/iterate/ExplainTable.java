@@ -516,7 +516,8 @@ public abstract class ExplainTable {
       String orderByExpressions;
       if (isVectorSearch) {
         Expression distanceExpr = orderBy.getOrderByExpressions().get(0).getExpression();
-        orderByExpressions = "SERVER TOP-" + limit + " BY " + distanceExpr;
+        orderByExpressions =
+          "SERVER TOP-" + limit + " BY " + VectorSearchUtil.toExplainString(distanceExpr);
       } else {
         orderByExpressions =
           "SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
