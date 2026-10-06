@@ -137,7 +137,8 @@ public interface PTable extends PMetaDataEntity {
 
     public static IndexType fromSerializedValue(byte serializedValue) {
       if (serializedValue < 1 || serializedValue > IndexType.values().length) {
-        throw new IllegalArgumentException("Invalid IndexType " + serializedValue);
+        throw new IllegalArgumentException("Unsupported IndexType " + serializedValue
+          + ": the index was created by a newer Phoenix version. Upgrade this client to read it.");
       }
       return IndexType.values()[serializedValue - 1];
     }

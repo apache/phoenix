@@ -67,6 +67,8 @@ public class VectorIndexTypeTest {
       fail("Expected IllegalArgumentException for unknown serialized value 99");
     } catch (IllegalArgumentException e) {
       assertTrue("Exception message should mention invalid value", e.getMessage().contains("99"));
+      assertTrue("Exception message should direct an upgrade",
+        e.getMessage().toLowerCase().contains("upgrade"));
     }
   }
 
