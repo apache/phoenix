@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.optimize;
 
+import java.lang.reflect.Array;
 import java.util.List;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.DelegateQueryPlan;
@@ -36,6 +38,9 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVectorDataType;
+import org.apache.phoenix.util.CostUtil;
 
 /**
  * Finds vector similarity search queries and extracts their parameters.
@@ -46,6 +51,9 @@ import org.apache.phoenix.parse.SelectStatement;
  * to such a distance in the projection.
  */
 public final class VectorSearchUtil {
+
+  /** The maximum number of elements that EXPLAIN shows for a literal query vector. */
+  private static final int EXPLAIN_VECTOR_ELEMENTS = 8;
 
   private VectorSearchUtil() {
   }
@@ -255,5 +263,75 @@ public final class VectorSearchUtil {
   /** Indicates whether the query execution plan incorporates a vector index scan. */
   public static boolean usesVectorIndex(QueryPlan plan) {
     return getVectorIndexScan(plan) != null;
+  }
+
+  /**
+   * Returns the rank of a plan by its data table lookups, where a lower rank does fewer lookups. A
+   * covering vector index plan gets 0 because it does no lookups. A deferred projection gets 1
+   * because it looks up only the top-k rows. An uncovered vector index plan gets 2 because it looks
+   * up every candidate row at filter time. A plan that does not read a vector index gets 0.
+   */
+  public static int getLookupRank(QueryPlan plan) {
+    VectorIndexScanPlan scan = getVectorIndexScan(plan);
+    if (scan == null || scan == plan) {
+      return scan != null && scan.getContext().isUncoveredIndex() ? 2 : 0;
+    }
+    return 1;
+  }
+
+  /**
+   * Returns the cost of a query plan for comparison with the other candidate plans. For a deferred
+   * projection, the cost is the vector index scan cost plus point lookups for LIMIT + OFFSET rows.
+   * This cost does not include a full data table scan. For other plans, the cost is
+   * {@link QueryPlan#getCost()}. A deferred projection gets {@link Cost#UNKNOWN} if the scan cost
+   * is unknown or the scan has no limit.
+   */
+  public static Cost getCost(QueryPlan plan) {
+    VectorIndexScanPlan scan = getVectorIndexScan(plan);
+    if (scan == null || scan == plan) {
+      return plan.getCost();
+    }
+    Cost scanCost = scan.getCost();
+    if (scanCost.isUnknown() || scan.getLimit() == null) {
+      return Cost.UNKNOWN;
+    }
+    long rows = scan.getLimit() + (scan.getOffset() == null ? 0 : scan.getOffset());
+    return scanCost.plus(CostUtil.estimateLookupCost(rows, plan.getTableRef().getTable()));
+  }
+
+  /**
+   * Formats a distance expression for EXPLAIN output. A literal query vector shows only its type,
+   * its dimension, and its first elements, so that a large vector does not make the plan too long.
+   */
+  public static String toExplainString(Expression distance) {
+    if (!(distance instanceof DistanceFunction)) {
+      return distance.toString();
+    }
+    StringBuilder buf = new StringBuilder(((DistanceFunction) distance).getName()).append('(');
+    List<Expression> children = distance.getChildren();
+    for (int i = 0; i < children.size(); i++) {
+      if (i > 0) {
+        buf.append(", ");
+      }
+      Expression child = children.get(i);
+      PDataType type = child.getDataType();
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      if (
+        child.isStateless() && type instanceof PVectorDataType && child.evaluate(null, ptr)
+          && ptr.getLength() > 0
+      ) {
+        Object elements = type.toObject(ptr);
+        int dim = Array.getLength(elements);
+        buf.append("VECTOR(").append(((PVectorDataType<?>) type).getElementType().getSqlTypeName())
+          .append(", ").append(dim).append(")[");
+        for (int j = 0; j < Math.min(dim, EXPLAIN_VECTOR_ELEMENTS); j++) {
+          buf.append(j > 0 ? ", " : "").append(Array.get(elements, j));
+        }
+        buf.append(dim > EXPLAIN_VECTOR_ELEMENTS ? ", ...]" : "]");
+      } else {
+        buf.append(child);
+      }
+    }
+    return buf.append(')').toString();
   }
 }
