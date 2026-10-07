@@ -169,10 +169,6 @@ tokens
     CONSISTENCY = 'consistency';
     EVENTUAL = 'eventual';
     STRONG = 'strong';
-    // Infix vector distance operator tokens (<->, <=>, <#>)
-    DIST_L2;
-    DIST_COSINE;
-    DIST_INNER;
 }
 
 
@@ -1556,6 +1552,11 @@ LT
         |                         { $type = LT; }
         )
     ;
+
+// Token types for the infix distance operators; emitted only by LT above
+fragment DIST_L2 : '<->' ;
+fragment DIST_COSINE : '<=>' ;
+fragment DIST_INNER : '<#>' ;
 
 GT
     :   '>'
