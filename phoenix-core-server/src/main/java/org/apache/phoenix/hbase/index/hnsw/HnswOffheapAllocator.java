@@ -30,6 +30,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 /**
  * Manages RegionServer level off-heap memory allocations for materialized HNSW graph segments,
  * bounded by {@value QueryServices#HNSW_OFFHEAP_MAX_BYTES_ATTRIB}. Allocations that exceed the
@@ -120,6 +122,22 @@ public final class HnswOffheapAllocator {
     Allocation a = allocations.remove(owner);
     if (a != null) {
       allocatedBytes -= a.size;
+    }
+  }
+
+  /** Evicts every resident segment, as memory pressure would. */
+  @VisibleForTesting
+  public void evictAll() {
+    List<Runnable> evicted = new ArrayList<>();
+    synchronized (this) {
+      for (Allocation a : allocations.values()) {
+        evicted.add(a.onEvict);
+      }
+      allocations.clear();
+      allocatedBytes = 0;
+    }
+    for (Runnable onEvict : evicted) {
+      onEvict.run();
     }
   }
 

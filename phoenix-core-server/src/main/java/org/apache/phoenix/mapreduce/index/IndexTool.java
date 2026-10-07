@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -43,14 +44,17 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -69,6 +73,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
@@ -93,6 +98,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ColumnInfo;
@@ -858,7 +864,10 @@ public class IndexTool extends Configured implements Tool {
       createIndexToolTables(conn);
       if (dataTable != null && indexTable != null) {
         setupIndexAndDataTable(conn);
-        if (pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null) {
+        if (
+          pIndexTable.getVectorIndexType() == VectorIndexType.IVF
+            && pIndexTable.getVectorCentroidGeneration() == null
+        ) {
           LOGGER.info("Vector index {} has too few vectors to train centroids, leaving it unbuilt",
             qIndexTable);
           return 0;
@@ -870,6 +879,10 @@ public class IndexTool extends Configured implements Tool {
         preSplitIndexTable(cmdLine, conn);
       }
 
+      if (pIndexTable != null && pIndexTable.getVectorIndexType() == VectorIndexType.HNSW) {
+        buildHnswIndex(conn.unwrap(PhoenixConnection.class), pDataTable, pIndexTable);
+        return 0;
+      }
       boolean result = submitIndexToolJob(conn, configuration);
 
       if (result) {
@@ -1028,7 +1041,10 @@ public class IndexTool extends Configured implements Tool {
           .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
     indexType = pIndexTable.getIndexType();
-    if (pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null) {
+    if (
+      pIndexTable.getVectorIndexType() == VectorIndexType.IVF
+        && pIndexTable.getVectorCentroidGeneration() == null
+    ) {
       // Train initial centroid generation for ASYNC vector indexes prior to build
       PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
       try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
@@ -1055,9 +1071,62 @@ public class IndexTool extends Configured implements Tool {
       }
     }
     // We have to mark Disable index to Building before we can set it to Active in the reducer.
-    // Otherwise it errors out with
-    // index state transition error
+    // Otherwise it errors out with index state transition error.
     changeDisabledIndexStateToBuiding(connection);
+  }
+
+  /**
+   * Builds an HNSW vector index by triggering segment construction across all data regions and
+   * transitioning the index state to ACTIVE once all regions complete.
+   */
+  static void buildHnswIndex(PhoenixConnection conn, PTable dataTable, PTable indexTable)
+    throws Exception {
+    String indexName = indexTable.getName().getString();
+    byte[] dataPhysical = dataTable.getPhysicalName().getBytes();
+    byte[] family = SchemaUtil.getEmptyColumnFamily(indexTable);
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    long deadline = start + TimeUnit.HOURS.toMillis(1);
+    ConnectionQueryServices services = conn.getQueryServices();
+    try (Table data = services.getTable(dataPhysical);
+      Table index = services.getTable(indexTable.getPhysicalName().getBytes())) {
+      for (int round = 0;; round++) {
+        List<HRegionLocation> missing = new ArrayList<>();
+        List<HnswSegment.Descriptor> segments = HnswSegment.list(index, family);
+        for (HRegionLocation location : services.getAllTableRegions(dataPhysical)) {
+          RegionInfo region = location.getRegion();
+          boolean built = false;
+          for (HnswSegment.Descriptor d : segments) {
+            built |= d.time >= start && d.covers(region.getStartKey(), region.getEndKey());
+          }
+          if (!built) {
+            missing.add(location);
+          }
+        }
+        if (missing.isEmpty()) {
+          break;
+        }
+        if (EnvironmentEdgeManager.currentTimeMillis() > deadline) {
+          throw new IOException("HNSW index " + indexName + " build timed out with "
+            + missing.size() + " regions unbuilt");
+        }
+        if (round % 30 == 0) {
+          for (HRegionLocation location : missing) {
+            Scan trigger = new Scan().withStartRow(location.getRegion().getStartKey())
+              .withStopRow(location.getRegion().getEndKey()).setLimit(1)
+              .setFilter(new FirstKeyOnlyFilter());
+            trigger.setAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD,
+              Bytes.toBytes(indexName));
+            try (ResultScanner scanner = data.getScanner(trigger)) {
+              scanner.next();
+            }
+          }
+          LOGGER.info("Building HNSW index {}: {} regions remaining", indexName, missing.size());
+        }
+        Thread.sleep(1000);
+      }
+    }
+    IndexUtil.updateIndexState(conn, indexName, PIndexState.ACTIVE, null);
+    LOGGER.info("Built HNSW index {}", indexName);
   }
 
   public static boolean isTimeRangeSet(Long startTime, Long endTime) {

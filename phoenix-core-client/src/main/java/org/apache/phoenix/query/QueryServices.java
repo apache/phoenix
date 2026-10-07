@@ -177,6 +177,8 @@ public interface QueryServices extends SQLCloseable {
   // RegionServer-wide byte budget for materialized HNSW graph segments
   public static final String HNSW_OFFHEAP_MAX_BYTES_ATTRIB =
     "phoenix.vector.hnsw.offheap.max.bytes";
+  // Default search beam width (ef_search) for HNSW vector index queries
+  public static final String HNSW_EF_SEARCH_ATTRIB = "phoenix.vector.hnsw.ef_search.default";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

@@ -46,6 +46,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
@@ -70,6 +71,11 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.MultiRowRangeFilter;
+import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -100,6 +106,7 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
 import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
@@ -112,6 +119,8 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
+import org.apache.phoenix.hbase.index.vector.VectorIndexManager;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -132,6 +141,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpressionFactory;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -359,6 +369,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
     // Pending vector index scorecard deltas for this batch
     private Map<ScorecardAccumulator.Key, long[]> scorecardDeltas;
+    // In-memory vector graph updates to apply upon successful batch commit
+    private final List<Runnable> vectorIndexUpdates = new ArrayList<>();
     // The previous concurrent batch contexts
     private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
     // The latches of the threads waiting for this batch to complete
@@ -532,6 +544,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
+  private RegionCoprocessorEnvironment env;
+  // Region-level vector index managers keyed by logical index name
+  private final ConcurrentMap<String, VectorIndexManager> vectorIndexManagers =
+    new ConcurrentHashMap<>();
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -542,6 +558,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void start(CoprocessorEnvironment e) throws IOException {
     try {
       final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
+      this.env = env;
       encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
       String serverName = env.getServerName().getServerName();
       if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
@@ -642,6 +659,77 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (this.indexCDCConsumer != null) {
       this.indexCDCConsumer.stop();
     }
+    for (VectorIndexManager manager : vectorIndexManagers.values()) {
+      try {
+        manager.close();
+      } catch (IOException ex) {
+        LOG.warn("Failed to close vector index manager on stop", ex);
+      }
+    }
+  }
+
+  /**
+   * Returns the vector index manager for the specified index on this region, initializing it lazily
+   * on first access.
+   */
+  public VectorIndexManager getVectorIndexManager(String indexName) throws IOException {
+    VectorIndexManager manager = vectorIndexManagers.get(indexName);
+    if (manager != null) {
+      return manager;
+    }
+    synchronized (vectorIndexManagers) {
+      manager = vectorIndexManagers.get(indexName);
+      if (manager == null) {
+        manager = VectorIndexManager.create(env, indexName);
+        vectorIndexManagers.put(indexName, manager);
+      }
+      return manager;
+    }
+  }
+
+  /** Triggers an asynchronous segment rebuild when a build scan attribute is present. */
+  @Override
+  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+    throws IOException {
+    byte[] index = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD);
+    if (index != null) {
+      ((HnswIndexManager) getVectorIndexManager(Bytes.toString(index))).rebuild();
+    }
+    index = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX);
+    if (index != null) {
+      byte[] query = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY);
+      int candidates = Bytes.toInt(query, 0);
+      float[] vector = new float[query.length / Bytes.SIZEOF_INT - 1];
+      for (int i = 0; i < vector.length; i++) {
+        vector[i] = Bytes.toFloat(query, Bytes.SIZEOF_INT * (1 + i));
+      }
+      List<byte[]> keys = ((HnswIndexManager) getVectorIndexManager(Bytes.toString(index)))
+        .search(vector, candidates, candidates);
+      // Filter candidate keys to match the boundaries of the current scan
+      List<RowRange> rows = new ArrayList<>(keys.size());
+      for (byte[] key : keys) {
+        if (
+          Bytes.compareTo(key, scan.getStartRow()) >= 0
+            && (scan.getStopRow().length == 0 || Bytes.compareTo(key, scan.getStopRow()) < 0)
+        ) {
+          rows.add(new RowRange(key, true, key, true));
+        }
+      }
+      Filter candidateFilter = rows.isEmpty() ? new PageFilter(0) : new MultiRowRangeFilter(rows);
+      Filter filter = scan.getFilter();
+      if (filter instanceof PagingFilter) {
+        PagingFilter paging = (PagingFilter) filter;
+        paging.setDelegateFilter(and(paging.getDelegateFilter(), candidateFilter));
+      } else {
+        scan.setFilter(and(filter, candidateFilter));
+      }
+    }
+  }
+
+  private static Filter and(Filter filter, Filter other) {
+    return filter == null
+      ? other
+      : new FilterList(FilterList.Operator.MUST_PASS_ALL, filter, other);
   }
 
   /**
@@ -1518,8 +1606,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     long ts) throws IOException {
     List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
       new ArrayList<>(maintainers.size());
+    List<VectorIndexManager> graphIndexes = new ArrayList<>();
     for (IndexMaintainer indexMaintainer : maintainers) {
       if (indexMaintainer.isLocalIndex()) {
+        continue;
+      }
+      if (indexMaintainer.getVectorIndexType() == VectorIndexType.HNSW) {
+        // Stage in-memory graph updates rather than generating index table mutations
+        graphIndexes.add(getVectorIndexManager(indexMaintainer.getLogicalIndexName()));
         continue;
       }
       if (
@@ -1539,6 +1633,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Put nextDataRowState = dataRowState.getSecond();
       if (currentDataRowState == null && nextDataRowState == null) {
         continue;
+      }
+      for (VectorIndexManager manager : graphIndexes) {
+        context.vectorIndexUpdates
+          .add(() -> manager.onMutation(currentDataRowState, nextDataRowState));
       }
       ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
       generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
@@ -2046,12 +2144,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       ServerIndexUtil.setDeleteAttributes(miniBatchOp);
     }
 
-    // Pre-warm centroid caches before acquiring row locks.
+    // Pre-warm centroid caches and open HNSW index managers before acquiring row locks.
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
       try {
         indexMaintainer.loadCentroids(null);
       } catch (SQLException e) {
         throw ClientUtil.createIOException("Unable to load vector index centroids", e);
+      }
+      if (indexMaintainer.getVectorIndexType() == VectorIndexType.HNSW) {
+        getVectorIndexManager(indexMaintainer.getLogicalIndexName());
       }
     }
 
@@ -2255,6 +2356,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         removePendingRows(context);
       }
       if (success) {
+        // Apply graph updates prior to releasing row locks to preserve mutation ordering
+        for (Runnable update : context.vectorIndexUpdates) {
+          update.run();
+        }
         context.currentPhase = BatchMutatePhase.POST;
         if ((context.hasAtomic || context.returnResult) && miniBatchOp.size() == 1) {
           if (!isAtomicOperationComplete(miniBatchOp.getOperationStatus(0))) {

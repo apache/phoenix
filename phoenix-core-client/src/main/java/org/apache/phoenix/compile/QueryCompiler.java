@@ -44,6 +44,7 @@ import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
+import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SegmentInfoPlan;
@@ -339,6 +340,14 @@ public class QueryCompiler {
       justification = "StatementContext instances are intentionally shared by reference")
   public QueryCompiler withRewriteContext(StatementContext prebuiltContext) {
     this.prebuiltContext = prebuiltContext;
+    return this;
+  }
+
+  private PTable hnswIndex;
+
+  /** Sets the HNSW index used to compile a nearest neighbor query over the data table. */
+  public QueryCompiler withHnswIndex(PTable hnswIndex) {
+    this.hnswIndex = hnswIndex;
     return this;
   }
 
@@ -916,6 +925,9 @@ public class QueryCompiler {
         : (select.isAggregate() || select.isDistinct()
           ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
             parallelIteratorFactory, groupBy, having, dataPlan)
+          : hnswIndex != null
+            ? new HnswScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+              parallelIteratorFactory, allowPageFilter, compiledOffset.getByteOffset(), hnswIndex)
           : (tableRef.getTable() != null && tableRef.getTable().isVectorIndex()
             && VectorSearchUtil.isVectorSearch(orderBy, limit)
               ? new VectorIndexScanPlan(context, select, tableRef, projector, limit, offset,

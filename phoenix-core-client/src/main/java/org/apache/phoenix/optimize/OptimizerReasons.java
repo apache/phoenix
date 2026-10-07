@@ -54,6 +54,8 @@ public final class OptimizerReasons {
     "path expression does not match";
   public static final String REASON_NOT_A_VECTOR_SEARCH = "not a nearest-neighbor search";
   public static final String REASON_VECTOR_METRIC_MISMATCH = "distance metric does not match index";
+  public static final String REASON_HNSW_FILTERED_SEARCH =
+    "filtered search not supported for HNSW index";
   public static final String REASON_VECTOR_COLUMN_MISMATCH = "indexes a different vector column";
   public static final String REASON_VECTOR_EXPRESSION_NOT_INDEXED =
     "does not index the query vector expression";

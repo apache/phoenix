@@ -135,7 +135,10 @@ public class HintNode {
     /**
      * Overrides the maximum number of probe batches scanned during adaptive vector index search.
      */
-    MAX_PROBE_LIMIT;
+    MAX_PROBE_LIMIT,
+
+    /** Overrides the HNSW search beam width (ef_search) for nearest neighbor queries. */
+    HNSW_EF_SEARCH;
   };
 
   private final Map<Hint, String> hints;

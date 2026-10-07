@@ -45,16 +45,24 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.IntFunction;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
 
 /**
@@ -69,6 +77,10 @@ import org.apache.phoenix.schema.PTable;
 public final class HnswSegment {
   /** Column qualifier used for segment payloads in the index table. */
   public static final byte[] PAYLOAD_QUALIFIER = Bytes.toBytes("P");
+  /** Column qualifier storing the segment region end key. */
+  public static final byte[] END_KEY_QUALIFIER = Bytes.toBytes("E");
+  /** Column qualifier storing the number of indexed vectors. */
+  public static final byte[] COUNT_QUALIFIER = Bytes.toBytes("N");
   private static final int MAGIC = 0x484E5357; // "HNSW"
   private static final float NEIGHBOR_OVERFLOW = 1.2f;
 
@@ -79,6 +91,7 @@ public final class HnswSegment {
   private final HnswOffheapAllocator allocator;
   private final VectorSimilarityFunction similarity;
   private final byte[][] keys;
+  private final Map<ImmutableBytesPtr, Integer> ordinals;
   private volatile OnDiskGraphIndex graph;
 
   private HnswSegment(Connection connection, TableName indexTable, byte[] family, byte[] rowKey,
@@ -90,6 +103,130 @@ public final class HnswSegment {
     this.allocator = allocator;
     this.similarity = similarity;
     this.keys = keys;
+    this.ordinals = new HashMap<>(keys.length * 2);
+    for (int i = 0; i < keys.length; i++) {
+      ordinals.put(new ImmutableBytesPtr(keys[i]), i);
+    }
+  }
+
+  /**
+   * Metadata describing a persisted segment, including its row key, covered region key range,
+   * creation timestamp, and vector count.
+   */
+  public static final class Descriptor {
+    public final byte[] rowKey;
+    public final byte[] startKey;
+    public final byte[] endKey;
+    public final long time;
+    public final int count;
+
+    Descriptor(byte[] rowKey, byte[] endKey, int count) {
+      this.rowKey = rowKey;
+      this.startKey = Arrays.copyOf(rowKey, rowKey.length - Bytes.SIZEOF_LONG);
+      this.endKey = endKey;
+      this.time = Bytes.toLong(rowKey, rowKey.length - Bytes.SIZEOF_LONG);
+      this.count = count;
+    }
+
+    /** Returns true if the segment covers the exact key range {@code [start, end)}. */
+    public boolean covers(byte[] start, byte[] end) {
+      return Bytes.equals(startKey, start) && Bytes.equals(endKey, end);
+    }
+
+    /**
+     * Determines whether the key range of this segment intersects the given boundary range.
+     * @param start start key of the range (inclusive)
+     * @param end   end key of the range (exclusive, or empty byte array if unbounded)
+     * @return true if the ranges intersect
+     */
+    public boolean overlaps(byte[] start, byte[] end) {
+      return (end.length == 0 || Bytes.compareTo(startKey, end) < 0)
+        && (endKey.length == 0 || Bytes.compareTo(start, endKey) < 0);
+    }
+
+    /**
+     * Determines whether this segment's key range is fully covered by the given segments.
+     * @param segments list of candidate segment descriptors
+     * @return true if completely covered
+     */
+    public boolean coveredBy(List<Descriptor> segments) {
+      return covered(startKey, endKey, segments);
+    }
+  }
+
+  /**
+   * Evaluates whether the key range {@code [from, to)} is fully spanned by the collective ranges of
+   * the specified segments. Empty start or end keys indicate unbounded intervals.
+   * @param from     start key of the target range (inclusive)
+   * @param to       end key of the target range (exclusive, or empty byte array if unbounded)
+   * @param segments collection of segment descriptors to evaluate
+   * @return true if the range is fully covered
+   */
+  public static boolean covered(byte[] from, byte[] to, List<Descriptor> segments) {
+    List<Descriptor> sorted = new ArrayList<>(segments);
+    sorted.sort((a, b) -> Bytes.compareTo(a.startKey, b.startKey));
+    byte[] reached = from;
+    for (Descriptor d : sorted) {
+      if (Bytes.compareTo(d.startKey, reached) > 0) {
+        break;
+      }
+      if (d.endKey.length == 0) {
+        return true;
+      }
+      if (Bytes.compareTo(d.endKey, reached) > 0) {
+        reached = d.endKey;
+      }
+      if (to.length > 0 && Bytes.compareTo(reached, to) >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Persists a segment record to the index table.
+   * @param table    index table
+   * @param family   column family
+   * @param startKey region start key
+   * @param endKey   region end key
+   * @param time     timestamp
+   * @param payload  serialized segment bytes, or null if empty
+   * @param count    number of vectors
+   * @return descriptor for the written segment
+   * @throws IOException if writing fails
+   */
+  public static Descriptor write(Table table, byte[] family, byte[] startKey, byte[] endKey,
+    long time, byte[] payload, int count) throws IOException {
+    byte[] rowKey = Bytes.add(startKey, Bytes.toBytes(time));
+    Put put = new Put(rowKey).addColumn(family, END_KEY_QUALIFIER, endKey).addColumn(family,
+      COUNT_QUALIFIER, Bytes.toBytes(count));
+    if (payload != null) {
+      put.addColumn(family, PAYLOAD_QUALIFIER, payload);
+    }
+    table.put(put);
+    return new Descriptor(rowKey, endKey, count);
+  }
+
+  /**
+   * Scans and returns descriptors for all segments in the index table.
+   * @param table  index table
+   * @param family column family
+   * @return list of segment descriptors
+   * @throws IOException if scanning fails
+   */
+  public static List<Descriptor> list(Table table, byte[] family) throws IOException {
+    List<Descriptor> segments = new ArrayList<>();
+    Scan scan = new Scan().addColumn(family, END_KEY_QUALIFIER).addColumn(family, COUNT_QUALIFIER);
+    try (ResultScanner scanner = table.getScanner(scan)) {
+      for (Result r : scanner) {
+        byte[] end = r.getValue(family, END_KEY_QUALIFIER);
+        byte[] count = r.getValue(family, COUNT_QUALIFIER);
+        if (end != null && count != null) {
+          segments.add(new Descriptor(r.getRow(), end, Bytes.toInt(count)));
+        }
+      }
+    }
+    return segments;
   }
 
   /** Maps a vector distance metric name to the corresponding JVector similarity function. */
@@ -180,6 +317,15 @@ public final class HnswSegment {
     }
   }
 
+  /** Thrown when a segment row, or the payload of a segment that holds vectors, is absent. */
+  public static final class NotFoundException extends IOException {
+    private static final long serialVersionUID = 1L;
+
+    NotFoundException(byte[] rowKey, TableName indexTable) {
+      super("HNSW segment " + Bytes.toStringBinary(rowKey) + " not found in " + indexTable);
+    }
+  }
+
   /**
    * Opens and materializes an HNSW segment stored in the specified index table.
    * @param connection HBase connection
@@ -208,8 +354,7 @@ public final class HnswSegment {
       Result result = table.get(new Get(rowKey).addColumn(family, PAYLOAD_QUALIFIER));
       Cell cell = result.getColumnLatestCell(family, PAYLOAD_QUALIFIER);
       if (cell == null) {
-        throw new IOException(
-          "HNSW segment " + Bytes.toStringBinary(rowKey) + " not found in " + indexTable);
+        throw new NotFoundException(rowKey, indexTable);
       }
       return cell;
     }
@@ -275,6 +420,12 @@ public final class HnswSegment {
   /** Returns the data table primary key for the specified vector ordinal. */
   public byte[] getKey(int ordinal) {
     return keys[ordinal];
+  }
+
+  /** Returns the vector ordinal corresponding to the specified row key, or -1 if not present. */
+  public int ordinalOf(ImmutableBytesPtr key) {
+    Integer ordinal = ordinals.get(key);
+    return ordinal != null ? ordinal : -1;
   }
 
   /**

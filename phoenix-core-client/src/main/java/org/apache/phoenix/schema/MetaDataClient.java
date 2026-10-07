@@ -6448,7 +6448,11 @@ public class MetaDataClient {
             }
           }
         }
-        if (newIndexState == PIndexState.BUILDING && !isAsync) {
+        // Defer HNSW segment population to IndexTool
+        if (
+          newIndexState == PIndexState.BUILDING && !isAsync
+            && table.getVectorIndexType() != VectorIndexType.HNSW
+        ) {
           PTable index = indexRef.getTable();
           // First delete any existing rows of the index
           if (IndexUtil.isGlobalIndex(index) && index.getViewIndexId() == null) {

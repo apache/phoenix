@@ -209,6 +209,15 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testHnswEfSearchHint() {
+    HintNode hint = new HintNode("/*+ HNSW_EF_SEARCH(150) VECTOR_PROBE_COUNT(5) */");
+    assertEquals(150, VectorIndexScanPlan.getHintInt(hint, Hint.HNSW_EF_SEARCH, 64));
+    assertEquals(5, VectorIndexScanPlan.getHintInt(hint, Hint.VECTOR_PROBE_COUNT, 0));
+    assertEquals(64,
+      VectorIndexScanPlan.getHintInt(new HintNode("/*+ INDEX(T I) */"), Hint.HNSW_EF_SEARCH, 64));
+  }
+
+  @Test
   public void testInterleaveAlternatesGenerationRankings() {
     // Any prefix of 2n holds the n nearest of each generation, and a longer ranking keeps its tail
     assertArrayEquals(new int[] { 0, 4, 1, 5, 2, 6 },

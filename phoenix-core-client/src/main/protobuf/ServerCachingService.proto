@@ -79,6 +79,8 @@ message IndexMaintainer {
   optional int64 centroidGeneration = 36;
   optional ColumnReference functionalVectorColumn = 37;
   optional int64 buildingGeneration = 38;
+  optional bytes vectorExpression = 39;
+  repeated ColumnReference vectorExpressionColumns = 40;
 }
 
 message TransformMaintainer {

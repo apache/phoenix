@@ -242,6 +242,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_VECTOR_REBUILD_AUTO_ENABLED = false;
   public static final long DEFAULT_VECTOR_REBUILD_MIN_INTERVAL_MS = 86400000L;
   public static final long DEFAULT_HNSW_OFFHEAP_MAX_BYTES = 2L * 1024 * 1024 * 1024;
+  public static final int DEFAULT_HNSW_EF_SEARCH = 64;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
   public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on

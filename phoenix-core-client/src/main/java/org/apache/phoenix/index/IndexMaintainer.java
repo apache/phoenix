@@ -108,6 +108,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -117,6 +118,8 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
@@ -174,7 +177,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
   public static boolean sendIndexMaintainer(PTable index) {
     PIndexState indexState = index.getIndexState();
-    if (index.isVectorIndex() && index.getVectorCentroidGeneration() == null) {
+    if (
+      index.getVectorIndexType() == VectorIndexType.IVF
+        && index.getVectorCentroidGeneration() == null
+    ) {
       // Untrained vector indexes do not emit maintainer metadata
       return false;
     }
@@ -195,9 +201,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return Iterators.filter(indexes, new Predicate<PTable>() {
       @Override
       public boolean apply(PTable index) {
+        // An HNSW graph is region state, so it is maintained on the server like a CDC index
         return sendIndexMaintainer(index) && IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() == index.getImmutableStorageScheme()
-            && !CDCUtil.isCDCIndex(index));
+            && !CDCUtil.isCDCIndex(index) && index.getVectorIndexType() != VectorIndexType.HNSW);
       }
     });
   }
@@ -210,7 +217,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return sendIndexMaintainer(index) && ((IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme()
             || IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection)))
-          || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
+          || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index)
+          || index.getVectorIndexType() == VectorIndexType.HNSW);
       }
     });
   }
@@ -493,6 +501,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private Long centroidGeneration;
   private Long buildingGeneration;
   private ColumnReference functionalVectorColumn;
+  // Compiled vector expression and source data columns for HNSW indexing
+  private Expression vectorExpression;
+  private Set<ColumnReference> vectorExpressionColumns;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
@@ -779,6 +790,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
       }
     }
+    if (index.getVectorIndexType() == VectorIndexType.HNSW) {
+      compileVectorExpression(VectorIndexTrainer.getIndexedVectorColumn(index).getExpressionStr(),
+        expressionIndexCompiler);
+    }
     this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
     this.logicalIndexName = index.getName().getString();
     if (index.getIndexWhere() != null) {
@@ -787,6 +802,29 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     initCachedState();
+  }
+
+  private void compileVectorExpression(String expressionStr, IndexExpressionCompiler compiler) {
+    try {
+      compiler.reset();
+      vectorExpression = SQLParser.parseCondition(expressionStr).accept(compiler);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+    vectorExpressionColumns = new HashSet<>();
+    vectorExpression.accept(new KeyValueExpressionVisitor() {
+      @Override
+      public Void visit(KeyValueColumnExpression expression) {
+        vectorExpressionColumns
+          .add(new ColumnReference(expression.getColumnFamily(), expression.getColumnQualifier()));
+        return null;
+      }
+
+      @Override
+      public Void visit(SingleCellColumnExpression expression) {
+        return visit(expression.getKeyValueExpression());
+      }
+    });
   }
 
   public void setDataImmutableStorageScheme(ImmutableStorageScheme sc) {
@@ -1936,6 +1974,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     if (indexWhereColumns != null) {
       addColumnRefForScan(indexWhereColumns, result);
     }
+    if (vectorExpressionColumns != null) {
+      addColumnRefForScan(vectorExpressionColumns, result);
+    }
     return result;
   }
 
@@ -2235,6 +2276,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           new ColumnReference(proto.getFunctionalVectorColumn().getFamily().toByteArray(),
             proto.getFunctionalVectorColumn().getQualifier().toByteArray());
       }
+      if (proto.hasVectorExpression()) {
+        try (ByteArrayInputStream stream =
+          new ByteArrayInputStream(proto.getVectorExpression().toByteArray())) {
+          DataInput input = new DataInputStream(stream);
+          maintainer.vectorExpression =
+            ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+          maintainer.vectorExpression.readFields(input);
+        }
+        maintainer.vectorExpressionColumns = new HashSet<>();
+        for (ServerCachingProtos.ColumnReference colRef : proto.getVectorExpressionColumnsList()) {
+          maintainer.vectorExpressionColumns.add(new ColumnReference(
+            colRef.getFamily().toByteArray(), colRef.getQualifier().toByteArray()));
+        }
+      }
     }
     maintainer.initCachedState();
     return maintainer;
@@ -2408,6 +2463,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setFunctionalVectorColumn(ServerCachingProtos.ColumnReference.newBuilder()
           .setFamily(ByteStringer.wrap(maintainer.functionalVectorColumn.getFamily()))
           .setQualifier(ByteStringer.wrap(maintainer.functionalVectorColumn.getQualifier())));
+      }
+      if (maintainer.vectorExpression != null) {
+        try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+          DataOutput output = new DataOutputStream(stream);
+          WritableUtils.writeVInt(output,
+            ExpressionType.valueOf(maintainer.vectorExpression).ordinal());
+          maintainer.vectorExpression.write(output);
+          builder.setVectorExpression(ByteStringer.wrap(stream.toByteArray()));
+        }
+        for (ColumnReference colRef : maintainer.vectorExpressionColumns) {
+          builder.addVectorExpressionColumns(ServerCachingProtos.ColumnReference.newBuilder()
+            .setFamily(ByteStringer.wrap(colRef.getFamily()))
+            .setQualifier(ByteStringer.wrap(colRef.getQualifier())).build());
+        }
       }
     }
     return builder.build();
@@ -2801,6 +2870,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return vectorAlgorithm != null;
   }
 
+  /** Returns the vector index algorithm, or null if not a vector index. */
+  public VectorIndexType getVectorIndexType() {
+    return VectorIndexType.fromAlgorithm(vectorAlgorithm);
+  }
+
   public DistanceMetric getDistanceMetric() {
     return distanceMetric;
   }
@@ -2838,7 +2912,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    * not cached, loads centroids via {@code conn} or internal server connection.
    */
   public void loadCentroids(Connection conn) throws SQLException {
-    if (isVectorIndex()) {
+    if (getVectorIndexType() == VectorIndexType.IVF) {
       VectorCentroidCache.getForWrite(conn, logicalIndexName, centroidGeneration, distanceMetric);
       if (isMigrating()) {
         VectorCentroidCache.getForWrite(conn, logicalIndexName, buildingGeneration, distanceMetric);
@@ -2875,8 +2949,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     try {
       if (
-        !indexedExpressions.get(0).evaluate(new ValueGetterTuple(valueGetter, ts), ptr)
-          || ptr.getLength() == 0
+        !(vectorExpression != null ? vectorExpression : indexedExpressions.get(0))
+          .evaluate(new ValueGetterTuple(valueGetter, ts), ptr) || ptr.getLength() == 0
       ) {
         return null;
       }
@@ -2887,6 +2961,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       return null;
     }
     return ptr;
+  }
+
+  /** Evaluates and returns the row's indexed vector as a float array, or null if absent. */
+  public float[] getVectorAsFloats(ValueGetter valueGetter, long ts) {
+    ImmutableBytesWritable ptr = getIndexedVector(valueGetter, ts, false);
+    if (ptr == null) {
+      return null;
+    }
+    Expression expression = vectorExpression != null ? vectorExpression : indexedExpressions.get(0);
+    if (expression.getDataType() instanceof PVectorDouble) {
+      double[] d = PVectorDouble.readElements(ptr.get(), ptr.getOffset(), ptr.getLength());
+      float[] f = new float[d.length];
+      for (int i = 0; i < d.length; i++) {
+        f[i] = (float) d[i];
+      }
+      return f;
+    }
+    return PVectorFloat.readElements(ptr.get(), ptr.getOffset(), ptr.getLength());
   }
 
   /**

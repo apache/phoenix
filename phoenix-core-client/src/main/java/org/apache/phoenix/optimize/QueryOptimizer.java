@@ -39,6 +39,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
@@ -74,6 +75,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -560,6 +562,10 @@ public class QueryOptimizer {
           indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))
     ) {
       try {
+        if (index.getVectorIndexType() == VectorIndexType.HNSW) {
+          return addHnswPlan(statement, index, dataPlan, indexSelect, targetColumns,
+            parallelIteratorFactory);
+        }
         if (
           !isServerMergeForUncoveredIndexEnabled
             || select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE)
@@ -803,6 +809,39 @@ public class QueryOptimizer {
       rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
       dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
         .withRewriteContext(dataPlan.getContext()).compile();
+  }
+
+  /**
+   * Plans a nearest neighbor query using an HNSW vector index. Scans the data table restricted to
+   * candidate rows returned by region local graph indexes. Queries with filters, partial scan
+   * ranges, or SCN reads are rejected because graph search candidates currently cover the entire
+   * region at the current timestamp.
+   */
+  private AddPlanResult addHnswPlan(PhoenixStatement statement, PTable index, QueryPlan dataPlan,
+    SelectStatement indexSelect, List<? extends PDatum> targetColumns,
+    ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+    String reason = getVectorIndexRejection(index, dataPlan);
+    if (reason == null) {
+      reason = getVectorOrderingRejection(index,
+        ParseNodeRewriter.rewrite(indexSelect, new IndexExpressionParseNodeRewriter(index, null,
+          statement.getConnection(), indexSelect.getUdfParseNodes())));
+    }
+    if (reason != null) {
+      return AddPlanResult.rejected(index, reason);
+    }
+    SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
+    if (
+      dataSelect.getWhere() != null || !dataPlan.getContext().getScanRanges().isEverything()
+        || statement.getConnection().getSCN() != null
+        || HnswScanPlan.queryVector(dataPlan.getOrderBy()) == null
+    ) {
+      return AddPlanResult.rejected(index, OptimizerReasons.REASON_HNSW_FILTERED_SEARCH);
+    }
+    // Compile using the data plan statement and a new resolver configured with the HNSW index
+    return AddPlanResult.success(new QueryCompiler(statement, dataSelect,
+      FromCompiler.getResolverForQuery(dataSelect, statement.getConnection()), targetColumns,
+      parallelIteratorFactory, dataPlan.getContext().getSequenceManager()).withHnswIndex(index)
+        .compile());
   }
 
   /** Validates query suitability for a vector index, returning rejection reason or null. */
@@ -1196,9 +1235,11 @@ public class QueryOptimizer {
     // functional index that matched a query expression, the "matches <expr>" disclosure is
     // recorded separately so both the selection reason and the functional match are surfaced.
     String functionalMatch = functionalIndexRule(winner);
-    winner.setOptimizerDecision(
-      new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
-        functionalMatch, state == null ? null : state.getRejections()));
+    PTable chosen = winner instanceof HnswScanPlan
+      ? ((HnswScanPlan) winner).getIndex()
+      : winner.getTableRef().getTable();
+    winner.setOptimizerDecision(new OptimizerDecision(chosen.getTableName().getString(), rule,
+      functionalMatch, state == null ? null : state.getRejections()));
     recordFunctionalIndexExpressionBreadcrumbs(winner);
     return winner;
   }

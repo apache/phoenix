@@ -192,6 +192,13 @@ public class BaseScannerRegionObserverConstants {
   public static final String PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY = "phoenix.max.lookback.age.seconds";
   public static final int DEFAULT_PHOENIX_MAX_LOOKBACK_AGE = 0;
 
+  /** Scan attribute naming an HNSW index whose segment the scanned region rebuilds. */
+  public static final String HNSW_BUILD = "_HnswBuild";
+  /** Scan attribute specifying the target HNSW index for nearest neighbor search. */
+  public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
+  /** Scan attribute specifying the candidate count and query vector for HNSW search. */
+  public static final String HNSW_SEARCH_QUERY = "_HnswSearchQuery";
+
   /**
    * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom
    * annotations are used to augment log lines emitted by Phoenix. See

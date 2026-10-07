@@ -90,6 +90,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -1211,7 +1212,7 @@ public class DeleteCompiler {
 
   private static boolean isMaintainedOnClient(PTable table, PTable dataTable,
     PhoenixConnection connection) {
-    if (CDCUtil.isCDCIndex(table)) {
+    if (CDCUtil.isCDCIndex(table) || table.getVectorIndexType() == VectorIndexType.HNSW) {
       return false;
     }
     // The server-side-maintenance flag is read against the data table so a ROW_TIMESTAMP data
