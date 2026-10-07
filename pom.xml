@@ -134,6 +134,7 @@
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <json-path.version>2.9.0</json-path.version>
     <bson.version>5.3.1</bson.version>
+    <jvector.version>4.0.1</jvector.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
@@ -1397,6 +1398,11 @@
         <artifactId>bson</artifactId>
         <version>${bson.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.github.jbellis</groupId>
+        <artifactId>jvector</artifactId>
+        <version>${jvector.version}</version>
+      </dependency>
 
       <!-- Other test dependencies -->
       <dependency>
@@ -1668,6 +1674,7 @@
                    jdk18on:1.79, but the 2.6.0 profile's HBase pulls jdk15on:1.68 transitively. The
                    analyzer then flags jdk18on as unused for that profile. -->
               <ignoredUnusedDeclaredDependency>org.bouncycastle:bcprov-jdk18on</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>io.github.jbellis:jvector</ignoredUnusedDeclaredDependency>
             </ignoredUnusedDeclaredDependencies>
             <ignoredUsedUndeclaredDependencies>
               <ignoredUsedUndeclaredDependency>

@@ -372,6 +372,11 @@
               <!-- Phoenix specific -->
             </filters>
             <transformers>
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                <manifestEntries>
+                  <Multi-Release>true</Multi-Release>
+                </manifestEntries>
+              </transformer>
               <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
               <transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                 <resource>csv-bulk-load-config.properties</resource>
@@ -488,6 +493,7 @@
                   <exclude>io/skip/checksum/errors</exclude>
                   <exclude>io/sort/*</exclude>
                   <exclude>io/serializations</exclude>
+                  <exclude>io/github/jbellis/**</exclude>
                 </excludes>
               </relocation>
               <!-- JSRs that haven't made it to inclusion in J2SE -->

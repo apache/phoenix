@@ -174,6 +174,9 @@ public interface QueryServices extends SQLCloseable {
   // Minimum elapsed interval between consecutive background rebuilds of a vector index
   public static final String VECTOR_REBUILD_MIN_INTERVAL_MS_ATTRIB =
     "phoenix.vector.rebuild.min.interval.ms";
+  // RegionServer-wide byte budget for materialized HNSW graph segments
+  public static final String HNSW_OFFHEAP_MAX_BYTES_ATTRIB =
+    "phoenix.vector.hnsw.offheap.max.bytes";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling
