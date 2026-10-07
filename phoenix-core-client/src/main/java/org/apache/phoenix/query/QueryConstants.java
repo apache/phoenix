@@ -191,9 +191,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
@@ -442,7 +447,10 @@ public interface QueryConstants {
       + IS_STRICT_TTL + " BOOLEAN, \n" + INDEX_CONSISTENCY + " CHAR(1), \n" + VECTOR_INDEX_ALGORITHM
       + " VARCHAR, \n" + VECTOR_DISTANCE_METRIC + " VARCHAR, \n" + VECTOR_DIMENSION + " INTEGER, \n"
       + VECTOR_IVF_LISTS + " INTEGER, \n" + VECTOR_IVF_SAMPLE_SIZE + " INTEGER, \n"
-      + VECTOR_CENTROID_GENERATION + " BIGINT, \n" + VECTOR_BUILDING_GENERATION + " BIGINT, \n" +
+      + VECTOR_CENTROID_GENERATION + " BIGINT, \n" + VECTOR_BUILDING_GENERATION + " BIGINT, \n"
+      + VECTOR_HNSW_M + " INTEGER, \n" + VECTOR_HNSW_EF_CONSTRUCTION + " INTEGER, \n"
+      + VECTOR_HNSW_ALPHA + " DOUBLE, \n" + VECTOR_QUANTIZATION_TYPE + " VARCHAR, \n"
+      + VECTOR_PQ_SEGMENTS + " INTEGER, \n" +
       // Column metadata (will be null for table row)
       DATA_TYPE + " INTEGER," + COLUMN_SIZE + " INTEGER," + DECIMAL_DIGITS + " INTEGER," + NULLABLE
       + " INTEGER," + ORDINAL_POSITION + " INTEGER," + SORT_ORDER + " INTEGER," + ARRAY_SIZE

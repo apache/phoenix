@@ -130,6 +130,16 @@ public enum SQLExceptionCode {
   INVALID_VECTOR_INDEX_PARAMS(311, "23109", "Invalid vector index parameters: "),
   VECTOR_INDEX_ON_TRANSACTIONAL_TABLE(312, "23110",
     "Vector indexes are not supported on transactional tables."),
+  UNSUPPORTED_VECTOR_QUANTIZATION_TYPE(313, "23111", "Unsupported vector quantization type: "),
+  VECTOR_QUANTIZATION_DIMENSION_MISMATCH(314, "23112",
+    "Vector dimension is not evenly divisible by segments: "),
+  VECTOR_ALGORITHM_PARAM_MISMATCH(315, "23113",
+    "Vector index parameter is not valid for the specified algorithm: "),
+  HNSW_INCLUDE_NOT_SUPPORTED(316, "23114", "INCLUDE is not supported for HNSW vector indexes."),
+  HNSW_EVENTUAL_CONSISTENCY_NOT_SUPPORTED(317, "23115",
+    "HNSW vector indexes do not support eventual consistency."),
+  HNSW_ROW_TIMESTAMP_NOT_SUPPORTED(318, "23116",
+    "HNSW vector indexes are not supported on tables with a ROW_TIMESTAMP column."),
   /**
    * Invalid Cursor State (errorcode 04, sqlstate 24)
    */

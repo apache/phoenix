@@ -85,9 +85,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
@@ -264,6 +269,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.schema.export.SchemaWriter;
@@ -277,6 +283,7 @@ import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
@@ -445,6 +452,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_CENTROID_GENERATION_BYTES);
   private static final Cell VECTOR_BUILDING_GENERATION_KV = createFirstOnRow(
     ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_BUILDING_GENERATION_BYTES);
+  private static final Cell VECTOR_HNSW_M_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_M_BYTES);
+  private static final Cell VECTOR_HNSW_EF_CONSTRUCTION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_EF_CONSTRUCTION_BYTES);
+  private static final Cell VECTOR_HNSW_ALPHA_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_ALPHA_BYTES);
+  private static final Cell VECTOR_QUANTIZATION_TYPE_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_QUANTIZATION_TYPE_BYTES);
+  private static final Cell VECTOR_PQ_SEGMENTS_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_PQ_SEGMENTS_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -465,7 +482,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
     CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV,
     VECTOR_INDEX_ALGORITHM_KV, VECTOR_DISTANCE_METRIC_KV, VECTOR_DIMENSION_KV, VECTOR_IVF_LISTS_KV,
-    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV);
+    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV,
+    VECTOR_HNSW_M_KV, VECTOR_HNSW_EF_CONSTRUCTION_KV, VECTOR_HNSW_ALPHA_KV,
+    VECTOR_QUANTIZATION_TYPE_KV, VECTOR_PQ_SEGMENTS_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -540,6 +559,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     TABLE_KV_COLUMNS.indexOf(VECTOR_CENTROID_GENERATION_KV);
   private static final int VECTOR_BUILDING_GENERATION_INDEX =
     TABLE_KV_COLUMNS.indexOf(VECTOR_BUILDING_GENERATION_KV);
+  private static final int VECTOR_HNSW_M_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_M_KV);
+  private static final int VECTOR_HNSW_EF_CONSTRUCTION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_EF_CONSTRUCTION_KV);
+  private static final int VECTOR_HNSW_ALPHA_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_ALPHA_KV);
+  private static final int VECTOR_QUANTIZATION_TYPE_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_QUANTIZATION_TYPE_KV);
+  private static final int VECTOR_PQ_SEGMENTS_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_PQ_SEGMENTS_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1712,6 +1739,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
     builder.setVectorBuildingGeneration(vectorBuildingGeneration != null ? vectorBuildingGeneration
       : oldTable != null ? oldTable.getVectorBuildingGeneration()
+      : null);
+
+    Cell kv = tableKeyValues[VECTOR_HNSW_M_INDEX];
+    builder.setVectorHnswM(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswM()
+      : null);
+    kv = tableKeyValues[VECTOR_HNSW_EF_CONSTRUCTION_INDEX];
+    builder.setVectorHnswEfConstruction(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswEfConstruction()
+      : null);
+    kv = tableKeyValues[VECTOR_HNSW_ALPHA_INDEX];
+    builder.setVectorHnswAlpha(kv != null
+      ? (Double) PDouble.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswAlpha()
+      : null);
+    kv = tableKeyValues[VECTOR_QUANTIZATION_TYPE_INDEX];
+    builder.setVectorQuantizationType(kv != null
+      ? (String) PVarchar.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorQuantizationType()
+      : null);
+    kv = tableKeyValues[VECTOR_PQ_SEGMENTS_INDEX];
+    builder.setVectorPqSegments(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorPqSegments()
       : null);
 
     // Check the cell tag to see whether the view has modified this property
@@ -3098,7 +3156,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         .setMessage("Vector index metadata is only valid on a VECTOR_GLOBAL index").build()
         .buildException();
     }
-    if (!"IVF".equalsIgnoreCase(algorithm)) {
+    VectorIndexType type = VectorIndexType.fromAlgorithm(algorithm);
+    if (type == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
         .setMessage(String.valueOf(algorithm)).build().buildException();
     }
@@ -3117,7 +3176,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       MetaDataUtil.getMutationValue(header, VECTOR_IVF_SAMPLE_SIZE_BYTES, kvBuilder, ptr)
         ? (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
         : null;
-    if (lists == null || lists <= 0 || sampleSize == null || sampleSize < lists) {
+    if (
+      type == VectorIndexType.IVF
+        && (lists == null || lists <= 0 || sampleSize == null || sampleSize < lists)
+    ) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
         .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
     }

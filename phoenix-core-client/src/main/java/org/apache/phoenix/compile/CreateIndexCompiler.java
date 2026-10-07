@@ -26,6 +26,7 @@ import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
@@ -55,6 +56,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -76,6 +78,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimeArray;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestampArray;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -253,9 +256,8 @@ public class CreateIndexCompiler {
       new StatementContext(statement, resolver, scan, new SequenceManager(statement));
     verifyIndexWhere(create.getWhere(), context, create.getTable().getName());
     ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-    if (create.getIndexType() == IndexType.VECTOR_GLOBAL) {
-      verifyVectorIndex(create, context);
-    }
+    final PTable.VectorIndex vectorIndex =
+      create.getIndexType() == IndexType.VECTOR_GLOBAL ? verifyVectorIndex(create, context) : null;
     List<ParseNode> splitNodes = create.getSplitNodes();
     if (create.getIndexType() == IndexType.LOCAL) {
       if (!splitNodes.isEmpty()) {
@@ -288,7 +290,7 @@ public class CreateIndexCompiler {
     return new BaseMutationPlan(context, operation) {
       @Override
       public MutationState execute() throws SQLException {
-        return client.createIndex(create, splits);
+        return client.createIndex(create, splits, vectorIndex);
       }
 
       @Override
@@ -300,11 +302,11 @@ public class CreateIndexCompiler {
   }
 
   /**
-   * Validates vector index constraints including base table type, transactional restrictions,
-   * indexed expression type and dimensionality, distance metric, and algorithm parameters.
+   * Validates vector index configuration and returns the resolved index parameters for catalog
+   * persistence.
    */
-  private void verifyVectorIndex(CreateIndexStatement create, StatementContext context)
-    throws SQLException {
+  private PTable.VectorIndex verifyVectorIndex(CreateIndexStatement create,
+    StatementContext context) throws SQLException {
     if (
       !context.getConnection().getQueryServices()
         .supportsFeature(ConnectionQueryServices.Feature.VECTOR_INDEX)
@@ -350,25 +352,146 @@ public class CreateIndexCompiler {
     }
 
     String metric = create.getVectorMetric();
-    if (metric == null || DistanceMetric.fromString(metric) == null) {
+    DistanceMetric distanceMetric = metric == null ? null : DistanceMetric.fromString(metric);
+    if (distanceMetric == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_DISTANCE_METRIC)
         .setMessage(String.valueOf(metric)).build().buildException();
     }
     String algorithm = create.getVectorAlgorithm();
-    if (!"IVF".equalsIgnoreCase(algorithm == null ? null : algorithm.trim())) {
+    VectorIndexType type = VectorIndexType.fromAlgorithm(algorithm);
+    if (type == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
         .setMessage(String.valueOf(algorithm)).build().buildException();
     }
-    Integer lists = create.getVectorLists();
-    Integer sampleSize = create.getVectorSampleSize();
-    if (lists == null || sampleSize == null) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
-        .setMessage("IVF requires lists and sample_size").build().buildException();
+    PTable.VectorIndex.Builder vectorIndex = new PTable.VectorIndex.Builder()
+      .setAlgorithm(type.name()).setDistanceMetric(distanceMetric.name()).setDimension(dimension);
+    if (type == VectorIndexType.IVF) {
+      rejectOptions(type, create.getVectorM(), CreateIndexStatement.VECTOR_M_OPTION,
+        create.getVectorEfConstruction(), CreateIndexStatement.VECTOR_EF_CONSTRUCTION_OPTION,
+        create.getVectorAlpha(), CreateIndexStatement.VECTOR_ALPHA_OPTION,
+        create.getVectorQuantization(), CreateIndexStatement.VECTOR_QUANTIZATION_OPTION,
+        create.getVectorPqSegments(), CreateIndexStatement.VECTOR_PQ_SEGMENTS_OPTION);
+      Integer lists = create.getVectorLists();
+      Integer sampleSize = create.getVectorSampleSize();
+      if (lists == null || sampleSize == null) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("IVF requires lists and sample_size").build().buildException();
+      }
+      if (lists <= 0 || sampleSize < lists) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
+      }
+      return vectorIndex.setIvfLists(lists).setIvfSampleSize(sampleSize).build();
     }
-    if (lists <= 0 || sampleSize < lists) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
-        .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
+
+    rejectOptions(type, create.getVectorLists(), CreateIndexStatement.VECTOR_LISTS_OPTION,
+      create.getVectorSampleSize(), CreateIndexStatement.VECTOR_SAMPLE_SIZE_OPTION);
+    // Covered columns are not supported for HNSW indexes
+    if (!create.getIncludeColumns().isEmpty()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.HNSW_INCLUDE_NOT_SUPPORTED).build()
+        .buildException();
     }
+    // Eventual consistency is not supported for HNSW indexes
+    if (create.getIndexConsistency() != null && create.getIndexConsistency().isAsynchronous()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.HNSW_EVENTUAL_CONSISTENCY_NOT_SUPPORTED)
+        .build().buildException();
+    }
+    // A region replays rows by cell timestamp on open, so it would miss rows written with a
+    // ROW_TIMESTAMP older than its segments
+    if (dataTable.getRowTimestampColPos() != -1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.HNSW_ROW_TIMESTAMP_NOT_SUPPORTED)
+        .setSchemaName(dataTable.getSchemaName().getString())
+        .setTableName(dataTable.getTableName().getString()).build().buildException();
+    }
+    int m = checkRange(CreateIndexStatement.VECTOR_M_OPTION,
+      parseInt(CreateIndexStatement.VECTOR_M_OPTION, create.getVectorM(), DEFAULT_HNSW_M), 4, 64);
+    int efConstruction = checkRange(CreateIndexStatement.VECTOR_EF_CONSTRUCTION_OPTION,
+      parseInt(CreateIndexStatement.VECTOR_EF_CONSTRUCTION_OPTION, create.getVectorEfConstruction(),
+        DEFAULT_HNSW_EF_CONSTRUCTION),
+      16, 512);
+    double alpha = DEFAULT_HNSW_ALPHA;
+    if (create.getVectorAlpha() != null) {
+      try {
+        alpha = Double.parseDouble(create.getVectorAlpha().trim());
+      } catch (NumberFormatException e) {
+        throw invalidParam(CreateIndexStatement.VECTOR_ALPHA_OPTION + " must be a number, but was: "
+          + create.getVectorAlpha());
+      }
+    }
+    if (!(alpha >= 1.0 && alpha <= 2.0)) {
+      throw invalidParam(CreateIndexStatement.VECTOR_ALPHA_OPTION
+        + " must be between 1.0 and 2.0, but was: " + alpha);
+    }
+    String quantization = create.getVectorQuantization() == null
+      ? "NONE"
+      : create.getVectorQuantization().trim().toUpperCase(Locale.ROOT);
+    if (!"NONE".equals(quantization) && !"SQ8".equals(quantization) && !"PQ".equals(quantization)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_QUANTIZATION_TYPE)
+        .setMessage(quantization + ". Supported types are NONE, SQ8, and PQ.").build()
+        .buildException();
+    }
+    if ("SQ8".equals(quantization) && !(vectorExpr.getDataType() instanceof PVectorFloat)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_QUANTIZATION_TYPE)
+        .setMessage("SQ8 requires single-precision vectors, found "
+          + vectorExpr.getDataType().getSqlTypeName())
+        .build().buildException();
+    }
+    // Product quantization requires specifying the number of segments
+    Integer pqSegments = create.getVectorPqSegments() == null
+      ? null
+      : parseInt(CreateIndexStatement.VECTOR_PQ_SEGMENTS_OPTION, create.getVectorPqSegments(), 0);
+    if ("PQ".equals(quantization) != (pqSegments != null)) {
+      throw invalidParam("PQ_SEGMENTS must be specified when QUANTIZATION is 'PQ'");
+    }
+    if (pqSegments != null) {
+      checkRange(CreateIndexStatement.VECTOR_PQ_SEGMENTS_OPTION, pqSegments, 1, 256);
+      if (dimension % pqSegments != 0) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_QUANTIZATION_DIMENSION_MISMATCH)
+          .setMessage("dimension=" + dimension + ", pq_segments=" + pqSegments).build()
+          .buildException();
+      }
+    }
+    return vectorIndex.setHnswM(m).setHnswEfConstruction(efConstruction).setHnswAlpha(alpha)
+      .setQuantizationType(quantization).setPqSegments(pqSegments).build();
+  }
+
+  private static final int DEFAULT_HNSW_M = 16;
+  private static final int DEFAULT_HNSW_EF_CONSTRUCTION = 100;
+  private static final double DEFAULT_HNSW_ALPHA = 1.2;
+
+  /** Rejects index options that are not supported by the specified algorithm. */
+  private static void rejectOptions(VectorIndexType type, Object... valuesAndNames)
+    throws SQLException {
+    for (int i = 0; i < valuesAndNames.length; i += 2) {
+      if (valuesAndNames[i] != null) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_ALGORITHM_PARAM_MISMATCH)
+          .setMessage(valuesAndNames[i + 1] + " is not valid for algorithm " + type).build()
+          .buildException();
+      }
+    }
+  }
+
+  private static int parseInt(String name, String value, int defaultValue) throws SQLException {
+    if (value == null) {
+      return defaultValue;
+    }
+    try {
+      return Integer.parseInt(value.trim());
+    } catch (NumberFormatException e) {
+      throw invalidParam(name + " must be an integer, but was: " + value);
+    }
+  }
+
+  private static int checkRange(String name, int value, int min, int max) throws SQLException {
+    if (value < min || value > max) {
+      throw invalidParam(name + " must be between " + min + " and " + max + ", but was: " + value);
+    }
+    return value;
+  }
+
+  private static SQLException invalidParam(String message) {
+    return new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+      .setMessage(message).build().buildException();
   }
 
   /**

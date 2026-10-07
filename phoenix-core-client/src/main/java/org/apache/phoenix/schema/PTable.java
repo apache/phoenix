@@ -1097,9 +1097,179 @@ public interface PTable extends PMetaDataEntity {
     return building != null && (active == null || building > active);
   }
 
+  /** Returns the HNSW maximum node degree, or null if not configured. */
+  Integer getVectorHnswM();
+
+  /** Returns the HNSW construction beam width, or null if not configured. */
+  Integer getVectorHnswEfConstruction();
+
+  /** Returns the HNSW neighbor diversity factor, or null if not configured. */
+  Double getVectorHnswAlpha();
+
+  /** Returns the HNSW quantization type, or null if not configured. */
+  String getVectorQuantizationType();
+
+  /** Returns the product quantization segment count, or null if not configured. */
+  Integer getVectorPqSegments();
+
   /** Returns true if this table is a vector index. */
   default boolean isVectorIndex() {
     return getIndexType() == IndexType.VECTOR_GLOBAL;
+  }
+
+  /** Returns the vector index algorithm, or null if not a vector index. */
+  default VectorIndexType getVectorIndexType() {
+    return isVectorIndex() ? VectorIndexType.fromAlgorithm(getVectorIndexAlgorithm()) : null;
+  }
+
+  /**
+   * Returns an immutable view of the vector index configuration parameters, or null if not a vector
+   * index.
+   */
+  default VectorIndex getVectorIndex() {
+    if (!isVectorIndex()) {
+      return null;
+    }
+    return new VectorIndex.Builder().setAlgorithm(getVectorIndexAlgorithm())
+      .setDistanceMetric(getVectorDistanceMetric()).setDimension(getVectorDimension())
+      .setIvfLists(getVectorIvfLists()).setIvfSampleSize(getVectorIvfSampleSize())
+      .setHnswM(getVectorHnswM()).setHnswEfConstruction(getVectorHnswEfConstruction())
+      .setHnswAlpha(getVectorHnswAlpha()).setQuantizationType(getVectorQuantizationType())
+      .setPqSegments(getVectorPqSegments()).build();
+  }
+
+  /** Vector index configuration parameters persisted in SYSTEM.CATALOG. */
+  final class VectorIndex {
+    private final String algorithm;
+    private final String distanceMetric;
+    private final Integer dimension;
+    private final Integer ivfLists;
+    private final Integer ivfSampleSize;
+    private final Integer hnswM;
+    private final Integer hnswEfConstruction;
+    private final Double hnswAlpha;
+    private final String quantizationType;
+    private final Integer pqSegments;
+
+    private VectorIndex(Builder b) {
+      this.algorithm = b.algorithm;
+      this.distanceMetric = b.distanceMetric;
+      this.dimension = b.dimension;
+      this.ivfLists = b.ivfLists;
+      this.ivfSampleSize = b.ivfSampleSize;
+      this.hnswM = b.hnswM;
+      this.hnswEfConstruction = b.hnswEfConstruction;
+      this.hnswAlpha = b.hnswAlpha;
+      this.quantizationType = b.quantizationType;
+      this.pqSegments = b.pqSegments;
+    }
+
+    public String getAlgorithm() {
+      return algorithm;
+    }
+
+    public String getDistanceMetric() {
+      return distanceMetric;
+    }
+
+    public Integer getDimension() {
+      return dimension;
+    }
+
+    public Integer getIvfLists() {
+      return ivfLists;
+    }
+
+    public Integer getIvfSampleSize() {
+      return ivfSampleSize;
+    }
+
+    public Integer getHnswM() {
+      return hnswM;
+    }
+
+    public Integer getHnswEfConstruction() {
+      return hnswEfConstruction;
+    }
+
+    public Double getHnswAlpha() {
+      return hnswAlpha;
+    }
+
+    public String getQuantizationType() {
+      return quantizationType;
+    }
+
+    public Integer getPqSegments() {
+      return pqSegments;
+    }
+
+    public static final class Builder {
+      private String algorithm;
+      private String distanceMetric;
+      private Integer dimension;
+      private Integer ivfLists;
+      private Integer ivfSampleSize;
+      private Integer hnswM;
+      private Integer hnswEfConstruction;
+      private Double hnswAlpha;
+      private String quantizationType;
+      private Integer pqSegments;
+
+      public Builder setAlgorithm(String algorithm) {
+        this.algorithm = algorithm;
+        return this;
+      }
+
+      public Builder setDistanceMetric(String distanceMetric) {
+        this.distanceMetric = distanceMetric;
+        return this;
+      }
+
+      public Builder setDimension(Integer dimension) {
+        this.dimension = dimension;
+        return this;
+      }
+
+      public Builder setIvfLists(Integer ivfLists) {
+        this.ivfLists = ivfLists;
+        return this;
+      }
+
+      public Builder setIvfSampleSize(Integer ivfSampleSize) {
+        this.ivfSampleSize = ivfSampleSize;
+        return this;
+      }
+
+      public Builder setHnswM(Integer hnswM) {
+        this.hnswM = hnswM;
+        return this;
+      }
+
+      public Builder setHnswEfConstruction(Integer hnswEfConstruction) {
+        this.hnswEfConstruction = hnswEfConstruction;
+        return this;
+      }
+
+      public Builder setHnswAlpha(Double hnswAlpha) {
+        this.hnswAlpha = hnswAlpha;
+        return this;
+      }
+
+      public Builder setQuantizationType(String quantizationType) {
+        this.quantizationType = quantizationType;
+        return this;
+      }
+
+      public Builder setPqSegments(Integer pqSegments) {
+        this.pqSegments = pqSegments;
+        return this;
+      }
+
+      public VectorIndex build() {
+        return new VectorIndex(this);
+      }
+    }
   }
 
   /**

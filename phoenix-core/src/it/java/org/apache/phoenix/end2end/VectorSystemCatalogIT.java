@@ -27,9 +27,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -47,6 +52,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -62,7 +68,8 @@ public class VectorSystemCatalogIT extends ParallelStatsDisabledIT {
 
   private static final List<String> VECTOR_METADATA_COLUMNS =
     Arrays.asList(VECTOR_INDEX_ALGORITHM, VECTOR_DISTANCE_METRIC, VECTOR_DIMENSION,
-      VECTOR_IVF_LISTS, VECTOR_IVF_SAMPLE_SIZE, VECTOR_CENTROID_GENERATION);
+      VECTOR_IVF_LISTS, VECTOR_IVF_SAMPLE_SIZE, VECTOR_CENTROID_GENERATION, VECTOR_HNSW_M,
+      VECTOR_HNSW_EF_CONSTRUCTION, VECTOR_HNSW_ALPHA, VECTOR_QUANTIZATION_TYPE, VECTOR_PQ_SEGMENTS);
 
   private static final Map<String, PDataType<?>> EXPECTED_COLUMN_TYPES = new HashMap<>();
   static {
@@ -72,6 +79,11 @@ public class VectorSystemCatalogIT extends ParallelStatsDisabledIT {
     EXPECTED_COLUMN_TYPES.put(VECTOR_IVF_LISTS, PInteger.INSTANCE);
     EXPECTED_COLUMN_TYPES.put(VECTOR_IVF_SAMPLE_SIZE, PInteger.INSTANCE);
     EXPECTED_COLUMN_TYPES.put(VECTOR_CENTROID_GENERATION, PLong.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_HNSW_M, PInteger.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_HNSW_EF_CONSTRUCTION, PInteger.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_HNSW_ALPHA, PDouble.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_QUANTIZATION_TYPE, PVarchar.INSTANCE);
+    EXPECTED_COLUMN_TYPES.put(VECTOR_PQ_SEGMENTS, PInteger.INSTANCE);
   }
 
   /**

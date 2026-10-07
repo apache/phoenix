@@ -46,12 +46,22 @@ public class CreateIndexStatement extends SingleTableStatement {
   private final String vectorMetric;
   private final Integer vectorLists;
   private final Integer vectorSampleSize;
+  private final String vectorM;
+  private final String vectorEfConstruction;
+  private final String vectorAlpha;
+  private final String vectorQuantization;
+  private final String vectorPqSegments;
 
   /** Vector index options accepted in the WITH clause of CREATE VECTOR INDEX. */
   public static final String VECTOR_ALGORITHM_OPTION = "ALGORITHM";
   public static final String VECTOR_METRIC_OPTION = "METRIC";
   public static final String VECTOR_LISTS_OPTION = "LISTS";
   public static final String VECTOR_SAMPLE_SIZE_OPTION = "SAMPLE_SIZE";
+  public static final String VECTOR_M_OPTION = "M";
+  public static final String VECTOR_EF_CONSTRUCTION_OPTION = "EF_CONSTRUCTION";
+  public static final String VECTOR_ALPHA_OPTION = "ALPHA";
+  public static final String VECTOR_QUANTIZATION_OPTION = "QUANTIZATION";
+  public static final String VECTOR_PQ_SEGMENTS_OPTION = "PQ_SEGMENTS";
 
   public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
     IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -89,11 +99,25 @@ public class CreateIndexStatement extends SingleTableStatement {
         Objects.toString(removeVectorOption(this.props, VECTOR_METRIC_OPTION), null);
       this.vectorLists = toInteger(removeVectorOption(this.props, VECTOR_LISTS_OPTION));
       this.vectorSampleSize = toInteger(removeVectorOption(this.props, VECTOR_SAMPLE_SIZE_OPTION));
+      this.vectorM = Objects.toString(removeVectorOption(this.props, VECTOR_M_OPTION), null);
+      this.vectorEfConstruction =
+        Objects.toString(removeVectorOption(this.props, VECTOR_EF_CONSTRUCTION_OPTION), null);
+      this.vectorAlpha =
+        Objects.toString(removeVectorOption(this.props, VECTOR_ALPHA_OPTION), null);
+      this.vectorQuantization =
+        Objects.toString(removeVectorOption(this.props, VECTOR_QUANTIZATION_OPTION), null);
+      this.vectorPqSegments =
+        Objects.toString(removeVectorOption(this.props, VECTOR_PQ_SEGMENTS_OPTION), null);
     } else {
       this.vectorAlgorithm = null;
       this.vectorMetric = null;
       this.vectorLists = null;
       this.vectorSampleSize = null;
+      this.vectorM = null;
+      this.vectorEfConstruction = null;
+      this.vectorAlpha = null;
+      this.vectorQuantization = null;
+      this.vectorPqSegments = null;
     }
   }
 
@@ -115,6 +139,11 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.vectorMetric = createStmt.getVectorMetric();
     this.vectorLists = createStmt.getVectorLists();
     this.vectorSampleSize = createStmt.getVectorSampleSize();
+    this.vectorM = createStmt.getVectorM();
+    this.vectorEfConstruction = createStmt.getVectorEfConstruction();
+    this.vectorAlpha = createStmt.getVectorAlpha();
+    this.vectorQuantization = createStmt.getVectorQuantization();
+    this.vectorPqSegments = createStmt.getVectorPqSegments();
   }
 
   public static IndexConsistency
@@ -217,5 +246,25 @@ public class CreateIndexStatement extends SingleTableStatement {
 
   public Integer getVectorSampleSize() {
     return vectorSampleSize;
+  }
+
+  public String getVectorM() {
+    return vectorM;
+  }
+
+  public String getVectorEfConstruction() {
+    return vectorEfConstruction;
+  }
+
+  public String getVectorAlpha() {
+    return vectorAlpha;
+  }
+
+  public String getVectorQuantization() {
+    return vectorQuantization;
+  }
+
+  public String getVectorPqSegments() {
+    return vectorPqSegments;
   }
 }

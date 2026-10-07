@@ -287,4 +287,56 @@ public class VectorIndexTypeTest {
     } catch (SQLFeatureNotSupportedException expected) {
     }
   }
+
+  /** Tests round-trip serialization and deserialization of HNSW index metadata. */
+  @Test
+  public void testHnswVectorIndexProtoRoundTrip() throws Exception {
+    PTable table =
+      new PTableImpl.Builder().setType(PTableType.INDEX).setIndexType(IndexType.VECTOR_GLOBAL)
+        .setName(PNameFactory.newName("IDX_HNSW")).setTableName(PNameFactory.newName("IDX_HNSW"))
+        .setParentTableName(PNameFactory.newName("DATA_TBL")).setAllColumns(Collections.emptyList())
+        .setPkColumns(Collections.emptyList()).setIndexes(Collections.emptyList())
+        .setPhysicalNames(Collections.emptyList()).setVectorIndexAlgorithm("HNSW")
+        .setVectorDistanceMetric("COSINE").setVectorDimension(96).setVectorHnswM(24)
+        .setVectorHnswEfConstruction(150).setVectorHnswAlpha(1.4).setVectorQuantizationType("PQ")
+        .setVectorPqSegments(12).build();
+
+    PTable rt = PTableImpl.createFromProto(PTableImpl.toProto(table));
+    assertEquals(VectorIndexType.HNSW, rt.getVectorIndexType());
+    PTable.VectorIndex vi = rt.getVectorIndex();
+    assertEquals("HNSW", vi.getAlgorithm());
+    assertEquals("COSINE", vi.getDistanceMetric());
+    assertEquals(Integer.valueOf(96), vi.getDimension());
+    assertEquals(Integer.valueOf(24), vi.getHnswM());
+    assertEquals(Integer.valueOf(150), vi.getHnswEfConstruction());
+    assertEquals(Double.valueOf(1.4), vi.getHnswAlpha());
+    assertEquals("PQ", vi.getQuantizationType());
+    assertEquals(Integer.valueOf(12), vi.getPqSegments());
+    assertNull(vi.getIvfLists());
+    assertNull(vi.getIvfSampleSize());
+    assertNull(rt.getVectorCentroidGeneration());
+  }
+
+  /** Tests that vector index attributes are only accessible on VECTOR_GLOBAL index tables. */
+  @Test
+  public void testVectorIndexViewRequiresVectorIndexType() throws Exception {
+    PTable notVector = new PTableImpl.Builder().setIndexType(IndexType.GLOBAL)
+      .setVectorIndexAlgorithm("HNSW").setVectorHnswM(16).build();
+    assertNull(notVector.getVectorIndex());
+    assertNull(notVector.getVectorIndexType());
+    PTable ivf = new PTableImpl.Builder().setIndexType(IndexType.VECTOR_GLOBAL)
+      .setVectorIndexAlgorithm("IVF").setVectorIvfLists(8).build();
+    assertEquals(VectorIndexType.IVF, ivf.getVectorIndexType());
+    assertEquals(Integer.valueOf(8), ivf.getVectorIndex().getIvfLists());
+    assertNull(ivf.getVectorIndex().getHnswM());
+  }
+
+  @Test
+  public void testFromAlgorithm() {
+    assertEquals(VectorIndexType.IVF, VectorIndexType.fromAlgorithm("ivf"));
+    assertEquals(VectorIndexType.HNSW, VectorIndexType.fromAlgorithm("  Hnsw \t"));
+    assertNull(VectorIndexType.fromAlgorithm(null));
+    assertNull(VectorIndexType.fromAlgorithm(""));
+    assertNull(VectorIndexType.fromAlgorithm("DISKANN"));
+  }
 }

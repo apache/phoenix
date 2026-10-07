@@ -112,9 +112,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -364,9 +369,13 @@ public class MetaDataClient {
     + SCHEMA_VERSION + "," + STREAMING_TOPIC_NAME + "," + INDEX_WHERE + "," + CDC_INCLUDE_TABLE
     + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY + ","
     + VECTOR_INDEX_ALGORITHM + "," + VECTOR_DISTANCE_METRIC + "," + VECTOR_DIMENSION + ","
-    + VECTOR_IVF_LISTS + "," + VECTOR_IVF_SAMPLE_SIZE + "," + VECTOR_CENTROID_GENERATION
+    + VECTOR_IVF_LISTS + "," + VECTOR_IVF_SAMPLE_SIZE + "," + VECTOR_CENTROID_GENERATION + ","
+    + VECTOR_HNSW_M + "," + VECTOR_HNSW_EF_CONSTRUCTION + "," + VECTOR_HNSW_ALPHA + ","
+    + VECTOR_QUANTIZATION_TYPE + "," + VECTOR_PQ_SEGMENTS
     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+  private static final long HNSW_MOB_THRESHOLD_BYTES = 1024;
 
   private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
     + SYSTEM_CATALOG_TABLE + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1545,7 +1554,7 @@ public class MetaDataClient {
             dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
       alterIndex(indexStatement);
 
-      if (index.isVectorIndex()) {
+      if (index.getVectorIndexType() == VectorIndexType.IVF) {
         // Initialize baseline scorecard counts for index maintenance
         try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
           VectorIndexScorecard.reconcile(internal, index, index.getVectorCentroidGeneration());
@@ -1611,8 +1620,8 @@ public class MetaDataClient {
    * column.
    * @return MutationState from population of index table from data table
    */
-  public MutationState createIndex(CreateIndexStatement statement, byte[][] splits)
-    throws SQLException {
+  public MutationState createIndex(CreateIndexStatement statement, byte[][] splits,
+    PTable.VectorIndex vectorIndex) throws SQLException {
     IndexKeyConstraint ik = statement.getIndexConstraint();
     TableName indexTableName = statement.getIndexTableName();
 
@@ -1738,13 +1747,22 @@ public class MetaDataClient {
       }
 
       boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
-      if (isVectorIndex) {
+      // IVF indexes prefix the primary key with centroid ID. HNSW indexes preserve data table key.
+      if (
+        isVectorIndex
+          && VectorIndexType.fromAlgorithm(vectorIndex.getAlgorithm()) == VectorIndexType.IVF
+      ) {
         ColumnName centroidColName =
           ColumnName.caseSensitiveColumnName(MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME);
         allPkColumns
           .add(new ColumnDefInPkConstraint(centroidColName, SortOrder.getDefault(), false));
         columnDefs.add(FACTORY.columnDef(centroidColName, PInteger.INSTANCE.getSqlTypeName(), false,
           null, null, false, SortOrder.getDefault(), null, false));
+      } else if (isVectorIndex) {
+        // Store graph segment payloads in MOB to prevent compaction rewrite overhead
+        commonFamilyProps.put(ColumnFamilyDescriptorBuilder.IS_MOB, Boolean.TRUE.toString());
+        commonFamilyProps.put(ColumnFamilyDescriptorBuilder.MOB_THRESHOLD,
+          String.valueOf(HNSW_MOB_THRESHOLD_BYTES));
       }
       List<ColumnDef> vectorColDefs = isVectorIndex ? new ArrayList<ColumnDef>() : null;
       Integer vectorDimension = null;
@@ -1978,6 +1996,11 @@ public class MetaDataClient {
         tableProps.put(VECTOR_DIMENSION, vectorDimension);
         tableProps.put(VECTOR_IVF_LISTS, statement.getVectorLists());
         tableProps.put(VECTOR_IVF_SAMPLE_SIZE, statement.getVectorSampleSize());
+        tableProps.put(VECTOR_HNSW_M, vectorIndex.getHnswM());
+        tableProps.put(VECTOR_HNSW_EF_CONSTRUCTION, vectorIndex.getHnswEfConstruction());
+        tableProps.put(VECTOR_HNSW_ALPHA, vectorIndex.getHnswAlpha());
+        tableProps.put(VECTOR_QUANTIZATION_TYPE, vectorIndex.getQuantizationType());
+        tableProps.put(VECTOR_PQ_SEGMENTS, vectorIndex.getPqSegments());
       }
       CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
         statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX,
@@ -1995,7 +2018,7 @@ public class MetaDataClient {
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
 
-    if (table.isVectorIndex()) {
+    if (table.getVectorIndexType() == VectorIndexType.IVF) {
       enqueueScorecardReconciliation(table);
     }
 
@@ -2018,8 +2041,10 @@ public class MetaDataClient {
       return new MutationState(0, 0, connection);
     }
 
-    // Vector indexes require a trained centroid generation prior to index build.
-    // Indexes remain in BUILDING state if the data table has insufficient training vectors.
+    // HNSW indexes remain in BUILDING state until populated by IndexTool
+    if (table.getVectorIndexType() == VectorIndexType.HNSW) {
+      return new MutationState(0, 0, connection);
+    }
     if (table.isVectorIndex()) {
       table = trainVectorIndex(table, dataTable);
       if (table.getVectorCentroidGeneration() == null) {
@@ -3751,6 +3776,11 @@ public class MetaDataClient {
       Integer vectorIvfLists = null;
       Integer vectorIvfSampleSize = null;
       Long vectorCentroidGeneration = null;
+      Integer vectorHnswM = null;
+      Integer vectorHnswEfConstruction = null;
+      Double vectorHnswAlpha = null;
+      String vectorQuantizationType = null;
+      Integer vectorPqSegments = null;
       if (indexType == IndexType.VECTOR_GLOBAL) {
         vectorIndexAlgorithm = (String) tableProps.remove(VECTOR_INDEX_ALGORITHM);
         vectorDistanceMetric = (String) tableProps.remove(VECTOR_DISTANCE_METRIC);
@@ -3758,6 +3788,11 @@ public class MetaDataClient {
         vectorIvfLists = (Integer) tableProps.remove(VECTOR_IVF_LISTS);
         vectorIvfSampleSize = (Integer) tableProps.remove(VECTOR_IVF_SAMPLE_SIZE);
         vectorCentroidGeneration = (Long) tableProps.remove(VECTOR_CENTROID_GENERATION);
+        vectorHnswM = (Integer) tableProps.remove(VECTOR_HNSW_M);
+        vectorHnswEfConstruction = (Integer) tableProps.remove(VECTOR_HNSW_EF_CONSTRUCTION);
+        vectorHnswAlpha = (Double) tableProps.remove(VECTOR_HNSW_ALPHA);
+        vectorQuantizationType = (String) tableProps.remove(VECTOR_QUANTIZATION_TYPE);
+        vectorPqSegments = (Integer) tableProps.remove(VECTOR_PQ_SEGMENTS);
       }
       PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
       tableUpsert.setString(1, tenantIdStr);
@@ -3933,6 +3968,36 @@ public class MetaDataClient {
         tableUpsert.setLong(45, vectorCentroidGeneration);
       }
 
+      if (vectorHnswM == null) {
+        tableUpsert.setNull(46, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(46, vectorHnswM);
+      }
+
+      if (vectorHnswEfConstruction == null) {
+        tableUpsert.setNull(47, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(47, vectorHnswEfConstruction);
+      }
+
+      if (vectorHnswAlpha == null) {
+        tableUpsert.setNull(48, Types.DOUBLE);
+      } else {
+        tableUpsert.setDouble(48, vectorHnswAlpha);
+      }
+
+      if (vectorQuantizationType == null) {
+        tableUpsert.setNull(49, Types.VARCHAR);
+      } else {
+        tableUpsert.setString(49, vectorQuantizationType);
+      }
+
+      if (vectorPqSegments == null) {
+        tableUpsert.setNull(50, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(50, vectorPqSegments);
+      }
+
       tableUpsert.execute();
 
       if (asyncCreatedDate != null) {
@@ -4073,7 +4138,10 @@ public class MetaDataClient {
           .setRowKeyMatcher(rowKeyMatcher).setVectorIndexAlgorithm(vectorIndexAlgorithm)
           .setVectorDistanceMetric(vectorDistanceMetric).setVectorDimension(vectorDimension)
           .setVectorIvfLists(vectorIvfLists).setVectorIvfSampleSize(vectorIvfSampleSize)
-          .setVectorCentroidGeneration(vectorCentroidGeneration).build();
+          .setVectorCentroidGeneration(vectorCentroidGeneration).setVectorHnswM(vectorHnswM)
+          .setVectorHnswEfConstruction(vectorHnswEfConstruction).setVectorHnswAlpha(vectorHnswAlpha)
+          .setVectorQuantizationType(vectorQuantizationType).setVectorPqSegments(vectorPqSegments)
+          .build();
         result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
         addTableToCache(result, false);
         return table;
@@ -6211,6 +6279,13 @@ public class MetaDataClient {
       PIndexState newIndexState = statement.getIndexState();
       IndexConsistency newIndexConsistency = statement.getIndexConsistency();
 
+      if (
+        newIndexConsistency != null && newIndexConsistency.isAsynchronous()
+          && table.getVectorIndexType() == VectorIndexType.HNSW
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.HNSW_EVENTUAL_CONSISTENCY_NOT_SUPPORTED)
+          .setSchemaName(schemaName).setTableName(indexName).build().buildException();
+      }
       if (newIndexConsistency != null) {
         try (PreparedStatement consistencyUpsert =
           connection.prepareStatement(UPDATE_INDEX_CONSISTENCY)) {
@@ -6247,7 +6322,9 @@ public class MetaDataClient {
           .setSchemaName(schemaName).setTableName(indexName).build().buildException();
       }
 
-      if (newIndexState == PIndexState.REBUILD && table.isVectorIndex()) {
+      if (
+        newIndexState == PIndexState.REBUILD && table.getVectorIndexType() == VectorIndexType.IVF
+      ) {
         return rebuildVectorIndex(table, isAsync);
       }
       if (newIndexState == PIndexState.REBUILD) {
