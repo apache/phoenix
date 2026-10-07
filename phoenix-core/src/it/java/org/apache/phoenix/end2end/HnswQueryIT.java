@@ -17,8 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.end2end.HnswIndexIT.awaitDelta;
 import static org.apache.phoenix.end2end.HnswIndexIT.cosine;
 import static org.apache.phoenix.end2end.HnswIndexIT.createAndBuild;
+import static org.apache.phoenix.end2end.HnswIndexIT.delete;
+import static org.apache.phoenix.end2end.HnswIndexIT.manager;
+import static org.apache.phoenix.end2end.HnswIndexIT.regions;
+import static org.apache.phoenix.end2end.HnswIndexIT.reopen;
+import static org.apache.phoenix.end2end.HnswIndexIT.segments;
 import static org.apache.phoenix.end2end.HnswIndexIT.upsert;
 import static org.apache.phoenix.end2end.HnswIndexIT.vector;
 import static org.junit.Assert.assertEquals;
@@ -43,7 +49,9 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -220,5 +228,137 @@ public class HnswQueryIT extends ParallelStatsDisabledIT {
         assertEquals("a-new", query(conn, sql, added).get(0));
       }
     }
+  }
+
+  /**
+   * Tests nearest neighbor query accuracy across stacked delta segments before and after reopen.
+   */
+  @Test
+  public void testTopKWithDeltas() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 400);
+      Random random = new Random(17);
+
+      HRegion r0 = regions(table).get(0);
+      HRegion r1 = regions(table).get(1);
+
+      // Create stacked delta segments across regions
+      for (int i = 0; i < 20; i += 2) {
+        String id = "a" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      for (int i = 20; i < 30; i += 2) {
+        String id = "a" + i;
+        delete(conn, table, id);
+        rows.remove(id);
+      }
+      for (int i = 0; i < 5; i++) {
+        String id = "a100" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long sinceR0D1 = EnvironmentEdgeManager.currentTimeMillis();
+      manager(r0, index).flush();
+      awaitDelta(conn, index, r0, sinceR0D1, 60);
+
+      for (int i = 30; i < 50; i += 2) {
+        String id = "a" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      for (int i = 50; i < 60; i += 2) {
+        String id = "a" + i;
+        delete(conn, table, id);
+        rows.remove(id);
+      }
+      for (int i = 5; i < 10; i++) {
+        String id = "a100" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long sinceR0D2 = EnvironmentEdgeManager.currentTimeMillis();
+      manager(r0, index).flush();
+      awaitDelta(conn, index, r0, sinceR0D2, 60);
+
+      for (int i = 1; i < 21; i += 2) {
+        String id = "z" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      for (int i = 21; i < 31; i += 2) {
+        String id = "z" + i;
+        delete(conn, table, id);
+        rows.remove(id);
+      }
+      for (int i = 0; i < 5; i++) {
+        String id = "z100" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long sinceR1D1 = EnvironmentEdgeManager.currentTimeMillis();
+      manager(r1, index).flush();
+      awaitDelta(conn, index, r1, sinceR1D1, 60);
+
+      for (int i = 31; i < 51; i += 2) {
+        String id = "z" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      for (int i = 51; i < 61; i += 2) {
+        String id = "z" + i;
+        delete(conn, table, id);
+        rows.remove(id);
+      }
+      for (int i = 5; i < 10; i++) {
+        String id = "z100" + i;
+        float[] v = vector(random);
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long sinceR1D2 = EnvironmentEdgeManager.currentTimeMillis();
+      manager(r1, index).flush();
+      awaitDelta(conn, index, r1, sinceR1D2, 60);
+
+      assertEquals(6, segments(conn, index).size());
+
+      String sql = sql(table, "", "", 10);
+      float[] q = vector(random);
+      assertTrue(explain(conn, sql, q).contains("SERVER HNSW SEARCH " + index));
+
+      // Verify query recall before and after reopening the table
+      assertRecall(conn, sql, rows, random, 20, 10, 0.9);
+      reopen(table);
+      assertRecall(conn, sql, rows, random, 20, 10, 0.9);
+    }
+  }
+
+  private static void assertRecall(Connection conn, String sql, Map<String, float[]> rows,
+    Random random, int queries, int k, double minRecall) throws Exception {
+    int hits = 0;
+    for (int i = 0; i < queries; i++) {
+      float[] q = vector(random);
+      List<String> found = query(conn, sql, q);
+      assertEquals(k, found.size());
+      for (int j = 1; j < found.size(); j++) {
+        assertTrue("rows must be ordered by distance",
+          cosine(q, rows.get(found.get(j - 1))) >= cosine(q, rows.get(found.get(j))) - 1e-6);
+      }
+      Set<String> expected = bruteForce(rows, q, k).stream().collect(Collectors.toSet());
+      for (String id : found) {
+        hits += expected.contains(id) ? 1 : 0;
+      }
+    }
+    double recall = hits / (double) (queries * k);
+    assertTrue("recall " + recall + " < " + minRecall, recall >= minRecall);
   }
 }

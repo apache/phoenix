@@ -73,6 +73,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 /**
  * Manages an HNSW vector index for a single HBase region.
  * <p>
@@ -88,12 +90,18 @@ public final class HnswIndexManager implements VectorIndexManager {
   private static final Logger LOG = LoggerFactory.getLogger(HnswIndexManager.class);
   private static final VectorTypeSupport VTS =
     VectorizationProvider.getInstance().getVectorTypeSupport();
-  /** Maximum number of buffered mutations before triggering a segment flush. */
+  /** Number of accumulated mutations before triggering a segment flush. */
   public static final int FLUSH_THRESHOLD = 10_000;
-  /** Delay before retrying a failed segment rebuild. */
+  /** Maximum number of delta segments permitted before forcing a full rebuild. */
+  public static final int MAX_DELTAS = 4;
+  /** Maximum ratio of accumulated delta changes to base segment size before forcing a rebuild. */
+  public static final double REBUILD_RATIO = 0.25;
+  /** Delay before retrying a failed rebuild or flush. */
   public static final long RETRY_DELAY_MS = 60_000;
   /** Lookback window applied during mutation replay to account for concurrent writes. */
-  static final long REPLAY_MARGIN_MS = 60_000;
+  public static final long REPLAY_MARGIN_MS = 60_000;
+  // The replay margin in effect; tests shorten it rather than wait it out
+  private static volatile long replayMarginMs = REPLAY_MARGIN_MS;
   private static final float NEIGHBOR_OVERFLOW = 1.2f;
   // Limit concurrent rebuild operations per RegionServer to bound memory usage
   private static final ExecutorService REBUILDS = Executors.newSingleThreadExecutor(r -> {
@@ -123,14 +131,19 @@ public final class HnswIndexManager implements VectorIndexManager {
   /** Readable segment source with its mutation mask and boundary scope. */
   private static final class Source {
     final HnswSegment segment;
-    // Segment row ordinals invalidated by updates or deletions after segment construction
+    final HnswSegment.Descriptor descriptor;
+    // Total mutated rows represented by this segment
+    final int changes;
+    // Segment row ordinals invalidated by subsequent updates or deletions
     final Set<Integer> mask = ConcurrentHashMap.newKeySet();
     // Indicates whether the segment covers rows outside this region (e.g., split parent or merge
     // input)
     final boolean wider;
 
-    Source(HnswSegment segment, boolean wider) {
+    Source(HnswSegment segment, HnswSegment.Descriptor descriptor, boolean wider) {
       this.segment = segment;
+      this.descriptor = descriptor;
+      this.changes = segment.size() + segment.getTombstones().length;
       this.wider = wider;
     }
   }
@@ -156,6 +169,8 @@ public final class HnswIndexManager implements VectorIndexManager {
 
   private volatile State state;
   private boolean rebuilding;
+  // Target base segment timestamp for an in-progress delta flush, or null for a full rebuild
+  private Long deltaBase;
   private boolean closed;
 
   /**
@@ -198,66 +213,168 @@ public final class HnswIndexManager implements VectorIndexManager {
       current = listCurrentSegments();
       sources = openSources(current, Collections.emptyMap());
     } while (sources == null);
-    long oldest = Long.MAX_VALUE;
-    for (HnswSegment.Descriptor d : current) {
-      oldest = Math.min(oldest, d.time);
-    }
+    applyStackMasks(sources);
     this.state = new State(sources, new MutableGraph(), null, null, 0);
     if (!current.isEmpty()) {
-      replay(oldest - REPLAY_MARGIN_MS);
+      replay(replayStartTime(current));
     }
     LOG.info("Opened HNSW index {} for region {} with {} segments", indexName,
       region.getRegionInfo().getEncodedName(), sources.size());
-    // Rebuild immediately if the region does not have an exact covering segment (e.g., after
-    // splits, merges, or initial index building), while serving queries from overlapping segments
-    boolean exact = current.size() == 1 && current.get(0).covers(startKey, endKey);
+    // Rebuild immediately if the region lacks an exact base segment stack
+    boolean exact = exactBase(current, startKey, endKey) != null;
     if (!exact && (active || !current.isEmpty())) {
       flush(true);
     }
   }
 
-  /**
-   * Discovers active segments covering this region by selecting overlapping segment entries whose
-   * span within the region has not been superseded by newer segments.
-   * @param all candidate segment descriptors
-   * @return list of active segments for this region
-   */
-  private List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all) {
-    List<HnswSegment.Descriptor> overlapping = new ArrayList<>();
-    for (HnswSegment.Descriptor d : all) {
-      if (d.overlaps(startKey, endKey)) {
-        overlapping.add(d);
-      }
+  private static final class StackId {
+    final ImmutableBytesPtr startKey;
+    final long baseTime;
+
+    StackId(byte[] startKey, long baseTime) {
+      this.startKey = new ImmutableBytesPtr(startKey);
+      this.baseTime = baseTime;
     }
-    List<HnswSegment.Descriptor> current = new ArrayList<>();
-    for (HnswSegment.Descriptor d : overlapping) {
-      List<HnswSegment.Descriptor> newer = new ArrayList<>();
-      for (HnswSegment.Descriptor n : overlapping) {
-        if (n.time > d.time) {
-          newer.add(n);
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof StackId)) {
+        return false;
+      }
+      StackId other = (StackId) o;
+      return baseTime == other.baseTime && startKey.equals(other.startKey);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * startKey.hashCode() + Long.hashCode(baseTime);
+    }
+  }
+
+  private static StackId stackId(HnswSegment.Descriptor d) {
+    return new StackId(d.startKey, d.isDelta() ? d.baseTime : d.time);
+  }
+
+  /**
+   * Applies invalidation masks across segment stacks so that newer deltas and tombstones shadow
+   * older entries in the stack.
+   */
+  private static void applyStackMasks(List<Source> sources) {
+    Map<StackId, List<Source>> stacks = new LinkedHashMap<>();
+    for (Source source : sources) {
+      stacks.computeIfAbsent(stackId(source.descriptor), k -> new ArrayList<>()).add(source);
+    }
+    for (List<Source> stack : stacks.values()) {
+      Set<ImmutableBytesPtr> newerKeys = new HashSet<>();
+      for (Source source : stack) {
+        for (ImmutableBytesPtr key : newerKeys) {
+          int ordinal = source.segment.ordinalOf(key);
+          if (ordinal >= 0) {
+            source.mask.add(ordinal);
+          }
+        }
+        if (source.descriptor.isDelta()) {
+          for (int i = 0; i < source.segment.size(); i++) {
+            newerKeys.add(new ImmutableBytesPtr(source.segment.getKey(i)));
+          }
+          for (byte[] tombstone : source.segment.getTombstones()) {
+            newerKeys.add(new ImmutableBytesPtr(tombstone));
+          }
         }
       }
-      byte[] from = Bytes.compareTo(d.startKey, startKey) > 0 ? d.startKey : startKey;
-      byte[] to =
-        endKey.length == 0 || (d.endKey.length > 0 && Bytes.compareTo(d.endKey, endKey) < 0)
-          ? d.endKey
-          : endKey;
-      if (!HnswSegment.covered(from, to, newer)) {
-        current.add(d);
+    }
+  }
+
+  /** Returns the lookback margin applied during mutation replay. */
+  public static long getReplayMarginMs() {
+    return replayMarginMs;
+  }
+
+  /**
+   * Sets the lookback margin applied during mutation replay; {@link #REPLAY_MARGIN_MS} by default.
+   */
+  @VisibleForTesting
+  public static void setReplayMarginMs(long marginMs) {
+    replayMarginMs = marginMs;
+  }
+
+  /**
+   * Determines the replay start timestamp across active stacks, accounting for the replay lookback
+   * margin.
+   */
+  static long replayStartTime(List<HnswSegment.Descriptor> current) {
+    Map<StackId, Long> newestPerStack = new HashMap<>();
+    for (HnswSegment.Descriptor d : current) {
+      StackId id = stackId(d);
+      newestPerStack.merge(id, d.time, Math::max);
+    }
+    long oldestNewest = Long.MAX_VALUE;
+    for (long t : newestPerStack.values()) {
+      oldestNewest = Math.min(oldestNewest, t);
+    }
+    return Math.max(0, oldestNewest - replayMarginMs);
+  }
+
+  /**
+   * Finds active segments covering this region, retaining base segments not superseded by newer
+   * bases alongside their associated deltas.
+   */
+  static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
+    byte[] startKey, byte[] endKey) {
+    List<HnswSegment.Descriptor> overlappingBases = new ArrayList<>();
+    List<HnswSegment.Descriptor> overlappingDeltas = new ArrayList<>();
+    for (HnswSegment.Descriptor d : all) {
+      if (d.overlaps(startKey, endKey)) {
+        if (d.isDelta()) {
+          overlappingDeltas.add(d);
+        } else {
+          overlappingBases.add(d);
+        }
       }
     }
+    List<HnswSegment.Descriptor> currentBases = new ArrayList<>();
+    for (HnswSegment.Descriptor b : overlappingBases) {
+      List<HnswSegment.Descriptor> newerBases = new ArrayList<>();
+      for (HnswSegment.Descriptor n : overlappingBases) {
+        if (n.time > b.time) {
+          newerBases.add(n);
+        }
+      }
+      byte[] from = Bytes.compareTo(b.startKey, startKey) > 0 ? b.startKey : startKey;
+      byte[] to =
+        endKey.length == 0 || (b.endKey.length > 0 && Bytes.compareTo(b.endKey, endKey) < 0)
+          ? b.endKey
+          : endKey;
+      if (!HnswSegment.covered(from, to, newerBases)) {
+        currentBases.add(b);
+      }
+    }
+    List<HnswSegment.Descriptor> current = new ArrayList<>(currentBases);
+    for (HnswSegment.Descriptor d : overlappingDeltas) {
+      for (HnswSegment.Descriptor b : currentBases) {
+        if (d.baseTime == b.time && Bytes.equals(d.startKey, b.startKey)) {
+          current.add(d);
+          break;
+        }
+      }
+    }
+    current.sort((a, b) -> Long.compare(b.time, a.time));
     return current;
   }
 
   private List<HnswSegment.Descriptor> listCurrentSegments() throws IOException {
     try (Table table = env.getConnection().getTable(indexTable)) {
-      return currentSegments(HnswSegment.list(table, family));
+      return currentSegments(HnswSegment.list(table, family), startKey, endKey);
     }
   }
 
   /**
-   * Returns sources for the given segments in order, reusing those already open and opening the
-   * rest. Returns null if a segment row was retired after it was listed, so the caller lists again.
+   * Returns sources for the given segments in order, newest first, reusing those already open and
+   * opening the rest. Returns null if a segment row was retired after it was listed, so the caller
+   * lists again.
    */
   private List<Source> openSources(List<HnswSegment.Descriptor> current,
     Map<ImmutableBytesPtr, Source> open) throws IOException {
@@ -266,9 +383,9 @@ public final class HnswIndexManager implements VectorIndexManager {
     try {
       for (HnswSegment.Descriptor d : current) {
         Source source = open.get(new ImmutableBytesPtr(d.rowKey));
-        if (source == null && d.count > 0) {
+        if (source == null && (d.count > 0 || d.isDelta())) {
           source = new Source(HnswSegment.open(env.getConnection(), indexTable, family, d.rowKey,
-            allocator, vectorIndex.getDistanceMetric()), !d.covers(startKey, endKey));
+            allocator, vectorIndex.getDistanceMetric()), d, !d.covers(startKey, endKey));
           opened.add(source);
         }
         if (source != null) {
@@ -293,13 +410,13 @@ public final class HnswIndexManager implements VectorIndexManager {
   private boolean replaceRetired(List<Source> searched, Source retired) throws IOException {
     Map<ImmutableBytesPtr, Source> open = new HashMap<>();
     for (Source source : searched) {
-      open.put(new ImmutableBytesPtr(source.segment.getRowKey()), source);
+      open.put(new ImmutableBytesPtr(source.descriptor.rowKey), source);
     }
     List<Source> sources;
     do {
       List<HnswSegment.Descriptor> current = listCurrentSegments();
       for (HnswSegment.Descriptor d : current) {
-        if (Bytes.equals(d.rowKey, retired.segment.getRowKey())) {
+        if (Bytes.equals(d.rowKey, retired.descriptor.rowKey)) {
           return false;
         }
       }
@@ -317,11 +434,11 @@ public final class HnswIndexManager implements VectorIndexManager {
         }
       } else {
         // Buffered mutations are newer than any segment and shadow the newly opened ones
-        Set<ImmutableBytesPtr> buffered = new HashSet<>(s.mutable.live.keySet());
-        buffered.addAll(s.mutable.deleted);
+        Set<ImmutableBytesPtr> buffered = new HashSet<>(s.mutable.live().keySet());
+        buffered.addAll(s.mutable.deleted());
         if (s.flushing != null) {
-          buffered.addAll(s.flushing.live.keySet());
-          buffered.addAll(s.flushing.deleted);
+          buffered.addAll(s.flushing.live().keySet());
+          buffered.addAll(s.flushing.deleted());
         }
         for (Source source : sources) {
           if (!searched.contains(source)) {
@@ -333,6 +450,7 @@ public final class HnswIndexManager implements VectorIndexManager {
             }
           }
         }
+        applyStackMasks(sources);
         for (Source source : searched) {
           if (!sources.contains(source)) {
             close.add(source);
@@ -340,8 +458,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         }
         state = new State(sources, s.mutable, s.flushing, s.changedSinceSwap, s.swapTime);
         LOG.info("Replaced retired HNSW segment {} of index {} for region {} with {} segments",
-          Bytes.toStringBinary(retired.segment.getRowKey()), indexName,
-          region.getRegionInfo().getEncodedName(), sources.size());
+          retired.descriptor, indexName, region.getRegionInfo().getEncodedName(), sources.size());
       }
     }
     for (Source source : close) {
@@ -428,7 +545,12 @@ public final class HnswIndexManager implements VectorIndexManager {
       HConstants.LATEST_TIMESTAMP);
   }
 
-  /** Triggers an immediate segment rebuild. */
+  /** Triggers an immediate segment flush. */
+  public void flush() {
+    flush(false);
+  }
+
+  /** Triggers an immediate full segment rebuild. */
   public void rebuild() {
     flush(true);
   }
@@ -444,8 +566,20 @@ public final class HnswIndexManager implements VectorIndexManager {
       if (!force && s.mutable.isEmpty() && !hasMasks(s)) {
         return;
       }
+      deltaBase = force ? null : deltaBase(s.sources, s.mutable.changes(), startKey, endKey);
       state = new State(s.sources, new MutableGraph(), s.mutable, ConcurrentHashMap.newKeySet(),
         EnvironmentEdgeManager.currentTimeMillis());
+    } else if (force) {
+      deltaBase = null;
+    }
+    rebuilding = true;
+    REBUILDS.submit(this::rebuildSegment);
+  }
+
+  // Retries a previously failed flush or rebuild operation
+  private synchronized void retryFlush() {
+    if (closed || rebuilding || state.flushing == null) {
+      return;
     }
     rebuilding = true;
     REBUILDS.submit(this::rebuildSegment);
@@ -461,6 +595,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   }
 
   private void rebuildSegment() {
+    Long base = null;
     try {
       State s;
       synchronized (this) {
@@ -468,38 +603,17 @@ public final class HnswIndexManager implements VectorIndexManager {
           return;
         }
         s = state;
+        base = deltaBase;
       }
-      Map<ImmutableBytesPtr, float[]> vectors = scanRegion();
-      s.flushing.applyTo(vectors);
-      List<VectorFloat<?>> values = new ArrayList<>(vectors.size());
-      byte[][] keys = new byte[vectors.size()][];
-      int i = 0;
-      for (Map.Entry<ImmutableBytesPtr, float[]> e : vectors.entrySet()) {
-        keys[i++] = e.getKey().copyBytesIfNecessary();
-        values.add(VTS.createFloatVector(e.getValue()));
+      if (base != null) {
+        writeDelta(s, base);
+      } else {
+        writeFull(s);
       }
-      byte[] payload = keys.length > 0
-        ? HnswSegment.build(vectorIndex,
-          new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
-        : null;
-      HnswSegment.Descriptor written;
-      try (Table table = env.getConnection().getTable(indexTable)) {
-        written =
-          HnswSegment.write(table, family, startKey, endKey, s.swapTime, payload, keys.length);
-      }
-      HnswSegment segment = payload != null
-        ? HnswSegment.open(env.getConnection(), indexTable, family, written.rowKey, allocator,
-          vectorIndex.getDistanceMetric())
-        : null;
-      if (cutover(segment)) {
-        retireSupersededSegments();
-      }
-      LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
-        region.getRegionInfo().getEncodedName(), keys.length);
     } catch (Throwable t) {
-      LOG.error("HNSW index {} rebuild failed for region {}; will retry", indexName,
-        region.getRegionInfo().getEncodedName(), t);
-      RETRIES.schedule(() -> flush(true), RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
+      LOG.error("HNSW index {} {} failed for region {}; will retry", indexName,
+        base != null ? "delta flush" : "rebuild", region.getRegionInfo().getEncodedName(), t);
+      RETRIES.schedule(this::retryFlush, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
     } finally {
       synchronized (this) {
         rebuilding = false;
@@ -507,7 +621,74 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
   }
 
-  // Scans the region to retrieve current vector values for all data table rows
+  // Performs a full region scan to build and install a new base segment
+  private void writeFull(State s) throws IOException {
+    Map<ImmutableBytesPtr, float[]> vectors = scanRegion();
+    s.flushing.applyTo(vectors);
+    List<VectorFloat<?>> values = new ArrayList<>(vectors.size());
+    byte[][] keys = new byte[vectors.size()][];
+    int i = 0;
+    for (Map.Entry<ImmutableBytesPtr, float[]> e : vectors.entrySet()) {
+      keys[i++] = e.getKey().copyBytesIfNecessary();
+      values.add(VTS.createFloatVector(e.getValue()));
+    }
+    byte[] payload = keys.length > 0
+      ? HnswSegment.build(vectorIndex,
+        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
+      : null;
+    HnswSegment.Descriptor written;
+    try (Table table = env.getConnection().getTable(indexTable)) {
+      written =
+        HnswSegment.write(table, family, startKey, endKey, s.swapTime, payload, keys.length);
+    }
+    HnswSegment segment = payload != null
+      ? HnswSegment.open(env.getConnection(), indexTable, family, written.rowKey, allocator,
+        vectorIndex.getDistanceMetric())
+      : null;
+    if (cutover(segment, written)) {
+      retireSupersededSegments();
+    }
+    LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
+      region.getRegionInfo().getEncodedName(), keys.length);
+  }
+
+  // Flushes buffered mutations as a delta segment stacked on an existing base segment
+  private void writeDelta(State s, long baseTime) throws IOException {
+    Map<ImmutableBytesPtr, float[]> live = s.flushing.live();
+    List<VectorFloat<?>> values = new ArrayList<>(live.size());
+    byte[][] keys = new byte[live.size()][];
+    int i = 0;
+    for (Map.Entry<ImmutableBytesPtr, float[]> e : live.entrySet()) {
+      keys[i++] = e.getKey().copyBytesIfNecessary();
+      values.add(VTS.createFloatVector(e.getValue()));
+    }
+    byte[] payload = keys.length > 0
+      ? HnswSegment.build(vectorIndex,
+        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
+      : null;
+
+    Set<ImmutableBytesPtr> deleted = s.flushing.deleted();
+    byte[][] deletedKeys = new byte[deleted.size()][];
+    int d = 0;
+    for (ImmutableBytesPtr del : deleted) {
+      deletedKeys[d++] = del.copyBytesIfNecessary();
+    }
+    HnswSegment.Descriptor written;
+    try (Table table = env.getConnection().getTable(indexTable)) {
+      written = HnswSegment.write(table, family, startKey, endKey, s.swapTime, payload, keys.length,
+        baseTime, deletedKeys);
+    }
+    HnswSegment segment = HnswSegment.open(env.getConnection(), indexTable, family, written.rowKey,
+      allocator, vectorIndex.getDistanceMetric());
+    if (cutover(segment, written)) {
+      LOG.info(
+        "Wrote HNSW delta for index {} region {} stacked on base {} with {} vectors and {} tombstones",
+        indexName, region.getRegionInfo().getEncodedName(), baseTime, keys.length,
+        deletedKeys.length);
+    }
+  }
+
+  // The full-precision vectors of every row in the region
   private Map<ImmutableBytesPtr, float[]> scanRegion() throws IOException {
     Map<ImmutableBytesPtr, float[]> vectors = new LinkedHashMap<>();
     Scan scan = new Scan();
@@ -531,18 +712,19 @@ public final class HnswIndexManager implements VectorIndexManager {
     return vectors;
   }
 
-  // Atomically installs the newly built segment and releases completed flush state
-  private synchronized boolean cutover(HnswSegment segment) {
+  // Installs the newly written segment into active state and releases flushed mutations
+  private synchronized boolean cutover(HnswSegment segment, HnswSegment.Descriptor written) {
     State s = state;
+    boolean isDelta = written.isDelta();
     if (closed) {
       if (segment != null) {
         segment.close();
       }
       return false;
     }
-    List<Source> sources = new ArrayList<>(1);
+    List<Source> sources = new ArrayList<>(isDelta ? s.sources.size() + 1 : 1);
     if (segment != null) {
-      Source source = new Source(segment, false);
+      Source source = new Source(segment, written, false);
       for (ImmutableBytesPtr key : s.changedSinceSwap) {
         int ordinal = segment.ordinalOf(key);
         if (ordinal >= 0) {
@@ -551,33 +733,120 @@ public final class HnswIndexManager implements VectorIndexManager {
       }
       sources.add(source);
     }
-    state = new State(sources, s.mutable, null, null, 0);
-    for (Source old : s.sources) {
-      old.segment.close();
+    if (isDelta) {
+      sources.addAll(s.sources);
+    } else {
+      for (Source old : s.sources) {
+        old.segment.close();
+      }
     }
+    state = new State(sources, s.mutable, null, null, 0);
     return true;
   }
 
   /**
-   * Purges segment records intersecting this region whose entire key range is fully covered by
-   * newer segments. Predecessor segments (such as split parents) are retained until all daughter
-   * regions complete their respective rebuilds.
+   * Returns the base segment timestamp to stack a delta upon, or null if a full rebuild is required
+   * due to threshold limits or topology changes.
+   */
+  static Long deltaBase(List<Source> sources, int flushChanges, byte[] startKey, byte[] endKey) {
+    List<HnswSegment.Descriptor> stack = new ArrayList<>(sources.size());
+    int changes = flushChanges;
+    for (Source source : sources) {
+      stack.add(source.descriptor);
+      if (source.descriptor.isDelta()) {
+        changes += source.changes;
+      }
+    }
+    HnswSegment.Descriptor base = exactBase(stack, startKey, endKey);
+    return base != null && stack.size() <= MAX_DELTAS && changes < REBUILD_RATIO * base.count
+      ? base.time
+      : null;
+  }
+
+  /**
+   * Returns the base descriptor if the given segments form a single coherent stack exactly spanning
+   * the specified key range, or null otherwise.
+   */
+  static HnswSegment.Descriptor exactBase(List<HnswSegment.Descriptor> segments, byte[] startKey,
+    byte[] endKey) {
+    HnswSegment.Descriptor base = null;
+    for (HnswSegment.Descriptor d : segments) {
+      if (!d.covers(startKey, endKey) || (!d.isDelta() && base != null)) {
+        return null;
+      }
+      if (!d.isDelta()) {
+        base = d;
+      }
+    }
+    for (HnswSegment.Descriptor d : segments) {
+      if (base == null || (d != base && d.baseTime != base.time)) {
+        return null;
+      }
+    }
+    return base;
+  }
+
+  /**
+   * Deletes segment rows fully covered by newer segments. Delta segments are retired alongside
+   * their base segment, and orphaned deltas are removed.
    */
   private void retireSupersededSegments() throws IOException {
     try (Table table = env.getConnection().getTable(indexTable)) {
       List<HnswSegment.Descriptor> all = HnswSegment.list(table, family);
-      for (HnswSegment.Descriptor d : all) {
-        List<HnswSegment.Descriptor> newer = new ArrayList<>();
-        for (HnswSegment.Descriptor n : all) {
-          if (n.time > d.time) {
-            newer.add(n);
+      List<HnswSegment.Descriptor> toRetire = segmentsToRetire(all, startKey, endKey);
+      if (!toRetire.isEmpty()) {
+        List<Delete> deletes = new ArrayList<>(toRetire.size());
+        for (HnswSegment.Descriptor d : toRetire) {
+          deletes.add(new Delete(d.rowKey));
+        }
+        table.delete(deletes);
+      }
+    }
+  }
+
+  static List<HnswSegment.Descriptor> segmentsToRetire(List<HnswSegment.Descriptor> all,
+    byte[] startKey, byte[] endKey) {
+    List<HnswSegment.Descriptor> bases = new ArrayList<>();
+    List<HnswSegment.Descriptor> deltas = new ArrayList<>();
+    Set<StackId> listedBases = new HashSet<>();
+
+    for (HnswSegment.Descriptor d : all) {
+      if (d.isDelta()) {
+        deltas.add(d);
+      } else {
+        bases.add(d);
+        listedBases.add(new StackId(d.startKey, d.time));
+      }
+    }
+
+    Set<StackId> retiredBases = new HashSet<>();
+    List<HnswSegment.Descriptor> toRetire = new ArrayList<>();
+
+    for (HnswSegment.Descriptor b : bases) {
+      if (b.overlaps(startKey, endKey)) {
+        List<HnswSegment.Descriptor> newerBases = new ArrayList<>();
+        for (HnswSegment.Descriptor n : bases) {
+          if (n.time > b.time) {
+            newerBases.add(n);
           }
         }
-        if (d.overlaps(startKey, endKey) && d.coveredBy(newer)) {
-          table.delete(new Delete(d.rowKey));
+        if (b.coveredBy(newerBases)) {
+          toRetire.add(b);
+          retiredBases.add(new StackId(b.startKey, b.time));
         }
       }
     }
+
+    for (HnswSegment.Descriptor d : deltas) {
+      if (d.overlaps(startKey, endKey)) {
+        StackId baseId = new StackId(d.startKey, d.baseTime);
+        if (retiredBases.contains(baseId) || !listedBases.contains(baseId)) {
+          toRetire.add(d);
+        }
+      }
+    }
+
+    return toRetire;
   }
 
   /**
@@ -638,7 +907,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   }
 
   /** In-memory HNSW graph supporting concurrent vector insertions and soft deletions. */
-  private final class MutableGraph {
+  final class MutableGraph {
     private final Map<ImmutableBytesPtr, float[]> live = new ConcurrentHashMap<>();
     private final Set<ImmutableBytesPtr> deleted = ConcurrentHashMap.newKeySet();
     private final Map<ImmutableBytesPtr, Integer> ordinals = new ConcurrentHashMap<>();
@@ -678,14 +947,24 @@ public final class HnswIndexManager implements VectorIndexManager {
       reset();
     }
 
-    // Reinitializes the graph builder to reset graph structure and entry points
+    Map<ImmutableBytesPtr, float[]> live() {
+      return live;
+    }
+
+    Set<ImmutableBytesPtr> deleted() {
+      return deleted;
+    }
+
+    // Recreates the graph index builder to reset entry points and graph state
     private void reset() {
       vectors.clear();
       keys.clear();
       next = 0;
-      builder = new GraphIndexBuilder(ravv, similarity, vectorIndex.getHnswM(),
-        vectorIndex.getHnswEfConstruction(), NEIGHBOR_OVERFLOW,
-        vectorIndex.getHnswAlpha().floatValue(), true, false);
+      if (vectorIndex != null && similarity != null) {
+        builder = new GraphIndexBuilder(ravv, similarity, vectorIndex.getHnswM(),
+          vectorIndex.getHnswEfConstruction(), NEIGHBOR_OVERFLOW,
+          vectorIndex.getHnswAlpha().floatValue(), true, false);
+      }
     }
 
     // Total count of buffered additions and deletions
@@ -706,7 +985,9 @@ public final class HnswIndexManager implements VectorIndexManager {
       vectors.put(ordinal, v);
       keys.put(ordinal, key);
       ordinals.put(key, ordinal);
-      builder.addGraphNode(ordinal, v);
+      if (builder != null) {
+        builder.addGraphNode(ordinal, v);
+      }
     }
 
     void delete(ImmutableBytesPtr key) {
@@ -722,14 +1003,16 @@ public final class HnswIndexManager implements VectorIndexManager {
       Integer old = ordinals.remove(key);
       if (old != null) {
         keys.remove(old);
-        builder.markNodeDeleted(old);
+        if (builder != null) {
+          builder.markNodeDeleted(old);
+        }
       }
     }
 
     // Searches the in-memory graph and records scores for eligible row keys
     void search(VectorFloat<?> query, int topK, int efSearch, Map<ImmutableBytesPtr, Float> scores,
       Set<ImmutableBytesPtr> excluded) {
-      if (ordinals.isEmpty()) {
+      if (ordinals.isEmpty() || builder == null) {
         return;
       }
       SearchResult result = GraphSearcher.search(query, topK, Math.max(efSearch, topK), ravv,

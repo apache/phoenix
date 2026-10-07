@@ -19,6 +19,9 @@ package org.apache.phoenix.hbase.index.hnsw;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -263,4 +266,125 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     } catch (IOException expected) {
     }
   }
+
+  /** Tests serialization and deserialization of delta segments with tombstones. */
+  @Test
+  public void testDeltaSegmentRoundTripAndTombstones() throws Exception {
+    byte[] baseStart = Bytes.toBytes("seg-delta-test-");
+    byte[] endKey = Bytes.toBytes("seg-delta-test-z");
+    long baseTime = 1000L;
+    long deltaTime = 2000L;
+
+    List<VectorFloat<?>> jv =
+      vectors.stream().map(VTS::createFloatVector).collect(Collectors.toList());
+    byte[] basePayload =
+      HnswSegment.build(index("NONE", null), new ListRandomAccessVectorValues(jv, DIM), keys);
+    try (Table t = connection.getTable(table)) {
+      HnswSegment.write(t, FAMILY, baseStart, endKey, baseTime, basePayload, COUNT);
+    }
+
+    int deltaCount = 10;
+    List<VectorFloat<?>> deltaVectors = new ArrayList<>();
+    byte[][] deltaKeys = new byte[deltaCount][];
+    for (int i = 0; i < deltaCount; i++) {
+      deltaVectors.add(jv.get(i));
+      deltaKeys[i] = Bytes.toBytes("delta-row-" + i);
+    }
+    byte[] deltaPayload = HnswSegment.build(index("NONE", null),
+      new ListRandomAccessVectorValues(deltaVectors, DIM), deltaKeys);
+    byte[][] tombstones = new byte[][] { Bytes.toBytes("deleted-row-1"),
+      Bytes.toBytes("deleted-row-2"), Bytes.toBytes("deleted-row-3") };
+
+    HnswSegment.Descriptor deltaDesc;
+    try (Table t = connection.getTable(table)) {
+      deltaDesc = HnswSegment.write(t, FAMILY, baseStart, endKey, deltaTime, deltaPayload,
+        deltaCount, baseTime, tombstones);
+    }
+    assertTrue(deltaDesc.isDelta());
+    assertEquals(Long.valueOf(baseTime), deltaDesc.baseTime);
+
+    // Verify segment listing distinguishes bases and deltas without reading payloads
+    try (Table t = connection.getTable(table)) {
+      List<HnswSegment.Descriptor> listed = HnswSegment.list(t, FAMILY);
+      HnswSegment.Descriptor foundBase = null;
+      HnswSegment.Descriptor foundDelta = null;
+      for (HnswSegment.Descriptor d : listed) {
+        if (Arrays.equals(d.startKey, baseStart)) {
+          if (d.time == baseTime) {
+            foundBase = d;
+          } else if (d.time == deltaTime) {
+            foundDelta = d;
+          }
+        }
+      }
+      assertNotNull("Base segment must be found", foundBase);
+      assertFalse("Base segment must not be delta", foundBase.isDelta());
+      assertNull(foundBase.baseTime);
+      assertEquals(COUNT, foundBase.count);
+
+      assertNotNull("Delta segment must be found", foundDelta);
+      assertTrue("Delta segment must be delta", foundDelta.isDelta());
+      assertEquals(Long.valueOf(baseTime), foundDelta.baseTime);
+      assertEquals(deltaCount, foundDelta.count);
+    }
+
+    HnswSegment deltaSegment = HnswSegment.open(connection, table, FAMILY, deltaDesc.rowKey,
+      new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+    assertEquals(deltaCount, deltaSegment.size());
+    byte[][] readTombs = deltaSegment.getTombstones();
+    assertEquals(3, readTombs.length);
+    assertArrayEquals(tombstones[0], readTombs[0]);
+    assertArrayEquals(tombstones[1], readTombs[1]);
+    assertArrayEquals(tombstones[2], readTombs[2]);
+
+    SearchResult result = deltaSegment.search(deltaVectors.get(0), 1, 16, Bits.ALL);
+    assertEquals(1, result.getNodes().length);
+    assertArrayEquals(deltaKeys[0], deltaSegment.getKey(result.getNodes()[0].node));
+  }
+
+  /** Tests behavior of delta segments containing only deletion tombstones. */
+  @Test
+  public void testDeleteOnlyDeltaSegment() throws Exception {
+    byte[] baseStart = Bytes.toBytes("seg-delonly-test-");
+    byte[] endKey = Bytes.toBytes("seg-delonly-test-z");
+    long baseTime = 5000L;
+    long deltaTime = 6000L;
+
+    byte[][] tombstones = new byte[][] { Bytes.toBytes("tomb-a"), Bytes.toBytes("tomb-b") };
+
+    HnswSegment.Descriptor deleteOnlyDesc;
+    try (Table t = connection.getTable(table)) {
+      deleteOnlyDesc =
+        HnswSegment.write(t, FAMILY, baseStart, endKey, deltaTime, null, 0, baseTime, tombstones);
+    }
+    assertTrue(deleteOnlyDesc.isDelta());
+    assertEquals(0, deleteOnlyDesc.count);
+
+    try (Table t = connection.getTable(table)) {
+      List<HnswSegment.Descriptor> listed = HnswSegment.list(t, FAMILY);
+      HnswSegment.Descriptor found = null;
+      for (HnswSegment.Descriptor d : listed) {
+        if (Arrays.equals(d.rowKey, deleteOnlyDesc.rowKey)) {
+          found = d;
+          break;
+        }
+      }
+      assertNotNull(found);
+      assertTrue(found.isDelta());
+      assertEquals(0, found.count);
+      assertEquals(Long.valueOf(baseTime), found.baseTime);
+    }
+
+    HnswSegment delSegment = HnswSegment.open(connection, table, FAMILY, deleteOnlyDesc.rowKey,
+      new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+    assertEquals(0, delSegment.size());
+    byte[][] readTombs = delSegment.getTombstones();
+    assertEquals(2, readTombs.length);
+    assertArrayEquals(tombstones[0], readTombs[0]);
+    assertArrayEquals(tombstones[1], readTombs[1]);
+
+    SearchResult res = delSegment.search(VTS.createFloatVector(new float[DIM]), 5, 16, Bits.ALL);
+    assertEquals(0, res.getNodes().length);
+  }
+
 }

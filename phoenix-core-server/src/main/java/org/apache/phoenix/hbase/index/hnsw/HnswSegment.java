@@ -70,9 +70,21 @@ import org.apache.phoenix.schema.PTable;
  * contains a serialized JVector {@link OnDiskGraphIndex} alongside dense mappings from graph node
  * ordinals to data table primary keys.
  * <p>
- * Segments support unquantized vectors as well as scalar (SQ8) and product (PQ) quantization. Graph
- * structures are materialized into off-heap direct buffers managed by {@link HnswOffheapAllocator}
- * and reloaded on demand when evicted.
+ * Payload layout: {@code [graph][mapping][mapping length (int)][MAGIC (int)]}, where the mapping is
+ * {@code [count (int)] ([key length (int)][key])*} in ordinal order. Ordinals are dense.
+ * <p>
+ * Base segments are produced by full rebuilds. Delta segments are produced by flushes and stacked
+ * onto a base segment, recording updated rows, tombstones for deletions, and the base segment
+ * timestamp.
+ * <p>
+ * The graph stores quantized codes only (NVQ for SQ8, fused PQ with NVQ for PQ, as JVector needs a
+ * vector feature and reranks PQ candidates with it) or, without quantization, the full vectors. A
+ * rebuild never reads vectors back from a segment; it rescans the base table.
+ * <p>
+ * The graph is materialized into a direct buffer from {@link HnswOffheapAllocator}. When the
+ * allocator evicts it, the graph reference is dropped and the next search re-reads the cell.
+ * Eviction takes no lock, so it cannot deadlock with a reload on another segment, and in-flight
+ * searches keep their reference until they finish.
  */
 public final class HnswSegment {
   /** Column qualifier used for segment payloads in the index table. */
@@ -81,6 +93,10 @@ public final class HnswSegment {
   public static final byte[] END_KEY_QUALIFIER = Bytes.toBytes("E");
   /** Column qualifier storing the number of indexed vectors. */
   public static final byte[] COUNT_QUALIFIER = Bytes.toBytes("N");
+  /** Column qualifier storing the base segment timestamp for delta segments. */
+  public static final byte[] BASE_TIME_QUALIFIER = Bytes.toBytes("B");
+  /** Column qualifier storing tombstones for deleted row keys in delta segments. */
+  public static final byte[] TOMBSTONES_QUALIFIER = Bytes.toBytes("T");
   private static final int MAGIC = 0x484E5357; // "HNSW"
   private static final float NEIGHBOR_OVERFLOW = 1.2f;
 
@@ -92,10 +108,12 @@ public final class HnswSegment {
   private final VectorSimilarityFunction similarity;
   private final byte[][] keys;
   private final Map<ImmutableBytesPtr, Integer> ordinals;
+  private final byte[][] tombstones;
   private volatile OnDiskGraphIndex graph;
 
   private HnswSegment(Connection connection, TableName indexTable, byte[] family, byte[] rowKey,
-    HnswOffheapAllocator allocator, VectorSimilarityFunction similarity, byte[][] keys) {
+    HnswOffheapAllocator allocator, VectorSimilarityFunction similarity, byte[][] keys,
+    byte[][] tombstones) {
     this.connection = connection;
     this.indexTable = indexTable;
     this.family = family;
@@ -107,6 +125,7 @@ public final class HnswSegment {
     for (int i = 0; i < keys.length; i++) {
       ordinals.put(new ImmutableBytesPtr(keys[i]), i);
     }
+    this.tombstones = tombstones;
   }
 
   /**
@@ -119,13 +138,21 @@ public final class HnswSegment {
     public final byte[] endKey;
     public final long time;
     public final int count;
+    /** Base segment timestamp for delta segments, or null for base segments. */
+    public final Long baseTime;
 
-    Descriptor(byte[] rowKey, byte[] endKey, int count) {
+    public Descriptor(byte[] rowKey, byte[] endKey, int count, Long baseTime) {
       this.rowKey = rowKey;
       this.startKey = Arrays.copyOf(rowKey, rowKey.length - Bytes.SIZEOF_LONG);
       this.endKey = endKey;
       this.time = Bytes.toLong(rowKey, rowKey.length - Bytes.SIZEOF_LONG);
       this.count = count;
+      this.baseTime = baseTime;
+    }
+
+    /** Returns true if this descriptor represents a delta segment. */
+    public boolean isDelta() {
+      return baseTime != null;
     }
 
     /** Returns true if the segment covers the exact key range {@code [start, end)}. */
@@ -152,18 +179,31 @@ public final class HnswSegment {
     public boolean coveredBy(List<Descriptor> segments) {
       return covered(startKey, endKey, segments);
     }
+
+    @Override
+    public String toString() {
+      return "Descriptor{" + "startKey=" + Bytes.toStringBinary(startKey) + ", endKey="
+        + Bytes.toStringBinary(endKey) + ", time=" + time + ", count=" + count
+        + (isDelta() ? ", baseTime=" + baseTime : "") + '}';
+    }
   }
 
   /**
    * Evaluates whether the key range {@code [from, to)} is fully spanned by the collective ranges of
-   * the specified segments. Empty start or end keys indicate unbounded intervals.
+   * the specified segments. Empty start or end keys indicate unbounded intervals. Delta segments
+   * never cover or hide older segments.
    * @param from     start key of the target range (inclusive)
    * @param to       end key of the target range (exclusive, or empty byte array if unbounded)
    * @param segments collection of segment descriptors to evaluate
    * @return true if the range is fully covered
    */
   public static boolean covered(byte[] from, byte[] to, List<Descriptor> segments) {
-    List<Descriptor> sorted = new ArrayList<>(segments);
+    List<Descriptor> sorted = new ArrayList<>();
+    for (Descriptor d : segments) {
+      if (!d.isDelta()) {
+        sorted.add(d);
+      }
+    }
     sorted.sort((a, b) -> Bytes.compareTo(a.startKey, b.startKey));
     byte[] reached = from;
     for (Descriptor d : sorted) {
@@ -183,28 +223,32 @@ public final class HnswSegment {
     return false;
   }
 
-  /**
-   * Persists a segment record to the index table.
-   * @param table    index table
-   * @param family   column family
-   * @param startKey region start key
-   * @param endKey   region end key
-   * @param time     timestamp
-   * @param payload  serialized segment bytes, or null if empty
-   * @param count    number of vectors
-   * @return descriptor for the written segment
-   * @throws IOException if writing fails
-   */
+  /** Writes a base segment record to the index table. */
   public static Descriptor write(Table table, byte[] family, byte[] startKey, byte[] endKey,
     long time, byte[] payload, int count) throws IOException {
+    return write(table, family, startKey, endKey, time, payload, count, null, new byte[0][]);
+  }
+
+  /**
+   * Writes a segment record to the index table. When {@code baseTime} is non-null, the record is
+   * written as a delta segment with optional deletion tombstones.
+   */
+  public static Descriptor write(Table table, byte[] family, byte[] startKey, byte[] endKey,
+    long time, byte[] payload, int count, Long baseTime, byte[][] tombstones) throws IOException {
     byte[] rowKey = Bytes.add(startKey, Bytes.toBytes(time));
     Put put = new Put(rowKey).addColumn(family, END_KEY_QUALIFIER, endKey).addColumn(family,
       COUNT_QUALIFIER, Bytes.toBytes(count));
+    if (baseTime != null) {
+      put.addColumn(family, BASE_TIME_QUALIFIER, Bytes.toBytes(baseTime));
+    }
     if (payload != null) {
       put.addColumn(family, PAYLOAD_QUALIFIER, payload);
     }
+    if (tombstones.length > 0) {
+      put.addColumn(family, TOMBSTONES_QUALIFIER, encodeKeys(tombstones));
+    }
     table.put(put);
-    return new Descriptor(rowKey, endKey, count);
+    return new Descriptor(rowKey, endKey, count, baseTime);
   }
 
   /**
@@ -216,13 +260,17 @@ public final class HnswSegment {
    */
   public static List<Descriptor> list(Table table, byte[] family) throws IOException {
     List<Descriptor> segments = new ArrayList<>();
-    Scan scan = new Scan().addColumn(family, END_KEY_QUALIFIER).addColumn(family, COUNT_QUALIFIER);
+    Scan scan = new Scan().addColumn(family, END_KEY_QUALIFIER).addColumn(family, COUNT_QUALIFIER)
+      .addColumn(family, BASE_TIME_QUALIFIER);
     try (ResultScanner scanner = table.getScanner(scan)) {
       for (Result r : scanner) {
         byte[] end = r.getValue(family, END_KEY_QUALIFIER);
         byte[] count = r.getValue(family, COUNT_QUALIFIER);
         if (end != null && count != null) {
-          segments.add(new Descriptor(r.getRow(), end, Bytes.toInt(count)));
+          byte[] base = r.getValue(family, BASE_TIME_QUALIFIER);
+          Long baseTime =
+            base != null && base.length == Bytes.SIZEOF_LONG ? Bytes.toLong(base) : null;
+          segments.add(new Descriptor(r.getRow(), end, Bytes.toInt(count), baseTime));
         }
       }
     }
@@ -263,16 +311,12 @@ public final class HnswSegment {
       ImmutableGraphIndex graph = builder.build(vectors);
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       out.write(writeGraph(graph, vectors, vi));
-      DataOutputStream mapping = new DataOutputStream(out);
-      int start = out.size();
-      mapping.writeInt(keys.length);
-      for (byte[] key : keys) {
-        mapping.writeInt(key.length);
-        mapping.write(key);
-      }
-      mapping.writeInt(out.size() - start);
-      mapping.writeInt(MAGIC);
-      mapping.flush();
+      byte[] mapping = encodeKeys(keys);
+      DataOutputStream trailer = new DataOutputStream(out);
+      trailer.write(mapping);
+      trailer.writeInt(mapping.length);
+      trailer.writeInt(MAGIC);
+      trailer.flush();
       return out.toByteArray();
     }
   }
@@ -339,13 +383,32 @@ public final class HnswSegment {
    */
   public static HnswSegment open(Connection connection, TableName indexTable, byte[] family,
     byte[] rowKey, HnswOffheapAllocator allocator, String metric) throws IOException {
-    Cell cell = readPayload(connection, indexTable, family, rowKey);
-    int graphLength = graphLength(cell, rowKey);
-    HnswSegment segment = new HnswSegment(connection, indexTable, family, rowKey, allocator,
-      similarityFunction(metric), decodeKeys(cell.getValueArray(),
-        cell.getValueOffset() + graphLength, cell.getValueLength() - graphLength - 8));
-    segment.materialize(cell, graphLength);
-    return segment;
+    try (Table table = connection.getTable(indexTable)) {
+      Result result = table.get(new Get(rowKey).addColumn(family, PAYLOAD_QUALIFIER)
+        .addColumn(family, TOMBSTONES_QUALIFIER).addColumn(family, COUNT_QUALIFIER));
+      Cell payloadCell = result.getColumnLatestCell(family, PAYLOAD_QUALIFIER);
+      Cell tombstoneCell = result.getColumnLatestCell(family, TOMBSTONES_QUALIFIER);
+      Cell countCell = result.getColumnLatestCell(family, COUNT_QUALIFIER);
+      if (payloadCell == null && tombstoneCell == null && countCell == null) {
+        throw new NotFoundException(rowKey, indexTable);
+      }
+      byte[][] tombstones = tombstoneCell != null
+        ? decodeKeys(tombstoneCell.getValueArray(), tombstoneCell.getValueOffset(),
+          tombstoneCell.getValueLength())
+        : new byte[0][];
+      if (payloadCell == null) {
+        return new HnswSegment(connection, indexTable, family, rowKey, allocator,
+          similarityFunction(metric), new byte[0][], tombstones);
+      }
+      int graphLength = graphLength(payloadCell, rowKey);
+      HnswSegment segment = new HnswSegment(connection, indexTable, family, rowKey, allocator,
+        similarityFunction(metric),
+        decodeKeys(payloadCell.getValueArray(), payloadCell.getValueOffset() + graphLength,
+          payloadCell.getValueLength() - graphLength - 8),
+        tombstones);
+      segment.materialize(payloadCell, graphLength);
+      return segment;
+    }
   }
 
   private static Cell readPayload(Connection connection, TableName indexTable, byte[] family,
@@ -377,6 +440,19 @@ public final class HnswSegment {
     graph = OnDiskGraphIndex.load(() -> new ByteBufferReader(graphBytes.duplicate()));
   }
 
+  // [count (int)] ([key length (int)][key])*, the payload's key mapping and a delta's tombstones
+  private static byte[] encodeKeys(byte[][] keys) throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    DataOutputStream out = new DataOutputStream(bytes);
+    out.writeInt(keys.length);
+    for (byte[] key : keys) {
+      out.writeInt(key.length);
+      out.write(key);
+    }
+    out.flush();
+    return bytes.toByteArray();
+  }
+
   private static byte[][] decodeKeys(byte[] bytes, int offset, int length) throws IOException {
     DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes, offset, length));
     byte[][] keys = new byte[in.readInt()][];
@@ -392,6 +468,9 @@ public final class HnswSegment {
   }
 
   private OnDiskGraphIndex graph() throws IOException {
+    if (keys.length == 0) {
+      return null;
+    }
     OnDiskGraphIndex g = graph;
     if (g == null) {
       synchronized (this) {
@@ -422,6 +501,11 @@ public final class HnswSegment {
     return keys[ordinal];
   }
 
+  /** Returns deleted row keys recorded as tombstones in this segment. */
+  public byte[][] getTombstones() {
+    return tombstones;
+  }
+
   /** Returns the vector ordinal corresponding to the specified row key, or -1 if not present. */
   public int ordinalOf(ImmutableBytesPtr key) {
     Integer ordinal = ordinals.get(key);
@@ -439,6 +523,9 @@ public final class HnswSegment {
    */
   public SearchResult search(VectorFloat<?> query, int topK, int efSearch, Bits accept)
     throws IOException {
+    if (keys.length == 0) {
+      return new SearchResult(new SearchResult.NodeScore[0], 0, 0, 0, 0, 0.0f);
+    }
     OnDiskGraphIndex g = graph();
     try (GraphSearcher searcher = new GraphSearcher(g)) {
       // Use the searcher view to evaluate scores and load quantized neighbor codes during traversal

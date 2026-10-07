@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import io.github.jbellis.jvector.graph.ListRandomAccessVectorValues;
@@ -41,9 +42,14 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -62,6 +68,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.bson.BinaryVector;
 import org.bson.BsonBinary;
 import org.bson.BsonDocument;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -71,6 +78,13 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
   private static final VectorTypeSupport VTS =
     VectorizationProvider.getInstance().getVectorTypeSupport();
   private static final int DIM = 16;
+  // The replay margin a test that waits it out shortens the default to
+  private static final long REPLAY_MARGIN_MS = 8_000;
+
+  @After
+  public void restoreReplayMargin() {
+    HnswIndexManager.setReplayMarginMs(HnswIndexManager.REPLAY_MARGIN_MS);
+  }
 
   static float[] vector(Random random) {
     float[] v = new float[DIM];
@@ -93,7 +107,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     conn.commit();
   }
 
-  private static void delete(Connection conn, String table, String id) throws SQLException {
+  static void delete(Connection conn, String table, String id) throws SQLException {
     conn.createStatement().execute("DELETE FROM " + table + " WHERE ID = '" + id + "'");
     conn.commit();
   }
@@ -130,13 +144,13 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       IndexTool.IndexVerifyType.NONE, IndexTool.IndexDisableLoggingType.NONE)));
   }
 
-  private static List<HRegion> regions(String table) {
+  static List<HRegion> regions(String table) {
     List<HRegion> regions = getUtility().getHBaseCluster().getRegions(TableName.valueOf(table));
     regions.sort(Comparator.comparing(r -> r.getRegionInfo().getStartKey(), Bytes::compareTo));
     return regions;
   }
 
-  private static HnswIndexManager manager(HRegion region, String index) throws IOException {
+  static HnswIndexManager manager(HRegion region, String index) throws IOException {
     IndexRegionObserver observer =
       region.getCoprocessorHost().findCoprocessor(IndexRegionObserver.class);
     return (HnswIndexManager) observer.getVectorIndexManager(index);
@@ -200,8 +214,30 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       "segment of " + region.getRegionInfo().getEncodedName() + " not rebuilt");
   }
 
-  private static List<HnswSegment.Descriptor> segments(Connection conn, String index)
-    throws Exception {
+  /** Waits for a delta segment to be written for the specified region. */
+  static HnswSegment.Descriptor awaitDelta(Connection conn, String index, HRegion region,
+    long since, int seconds) throws Exception {
+    PTable indexTable = PhoenixRuntime.getTableNoCache(conn, index);
+    try (Table t = conn.unwrap(PhoenixConnection.class).getQueryServices()
+      .getTable(indexTable.getPhysicalName().getBytes())) {
+      for (int i = 0; i < seconds * 10; i++) {
+        for (HnswSegment.Descriptor d : HnswSegment.list(t,
+          QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)) {
+          if (
+            d.time >= since && d.isDelta()
+              && d.covers(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey())
+          ) {
+            return d;
+          }
+        }
+        Thread.sleep(100);
+      }
+    }
+    throw new AssertionError(
+      "delta segment of " + region.getRegionInfo().getEncodedName() + " not written");
+  }
+
+  static List<HnswSegment.Descriptor> segments(Connection conn, String index) throws Exception {
     PTable indexTable = PhoenixRuntime.getTableNoCache(conn, index);
     try (Table t = conn.unwrap(PhoenixConnection.class).getQueryServices()
       .getTable(indexTable.getPhysicalName().getBytes())) {
@@ -238,8 +274,8 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     awaitRebuilt(conn, table, index, since);
   }
 
-  /** Reassigns all regions of the table to test state recovery on reopen. */
-  private static void reopen(String table) throws Exception {
+  /** Closes and reopens every region of the table. */
+  static void reopen(String table) throws Exception {
     try (Admin admin = getUtility().getAdmin()) {
       for (HRegion region : regions(table)) {
         byte[] name = region.getRegionInfo().getRegionName();
@@ -372,7 +408,283 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
-  /** Tests visibility of mutations in memory prior to and following a segment rebuild. */
+  /** Tests that incremental flushes write delta segments without scanning base table rows. */
+  @Test
+  public void testFlushWritesDelta() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 400);
+      HRegion region = regions(table).get(0);
+      HnswIndexManager mgr = manager(region, index);
+
+      List<HnswSegment.Descriptor> initialSegments = segments(conn, index);
+      for (HnswSegment.Descriptor d : initialSegments) {
+        assertFalse(d.isDelta());
+        assertNull(d.baseTime);
+      }
+
+      float[] oldA0 = rows.get("a0");
+      float[] newA0 = negate(oldA0);
+      upsert(conn, table, "a0", newA0);
+
+      float[] oldA2 = rows.get("a2");
+      float[] newA2 = negate(oldA2);
+      upsert(conn, table, "a2", newA2);
+
+      // Insert a row directly via HBase to verify delta flushes do not read base table rows
+      Result existing = region.get(new Get(Bytes.toBytes("a4")));
+      byte[] rawKey = Bytes.toBytes("a-raw");
+      Put rawPut = new Put(rawKey);
+      for (Cell cell : existing.rawCells()) {
+        rawPut.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell),
+          cell.getTimestamp(), CellUtil.cloneValue(cell));
+      }
+      region.put(rawPut);
+
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      HnswSegment.Descriptor delta = awaitDelta(conn, index, region, since, 60);
+      assertTrue(delta.isDelta());
+      assertNotNull(delta.baseTime);
+
+      assertEquals("a0", nearest(table, index, "a0", newA0));
+      assertNotFound(table, index, "a0", oldA0);
+      assertEquals("a2", nearest(table, index, "a2", newA2));
+      assertNotFound(table, index, "a2", oldA2);
+
+      // Unindexed direct HBase row should not be found until a full rebuild
+      List<String> found = search(table, index, "a-raw", rows.get("a4"), 10);
+      assertFalse("raw row should be absent after delta flush: " + found, found.contains("a-raw"));
+
+      long rebuildSince = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.rebuild();
+      awaitSegment(conn, index, region, rebuildSince, 60);
+      assertEquals("a-raw", nearest(table, index, "a-raw", rows.get("a4")));
+    }
+  }
+
+  /** Tests that stacked delta segments and tombstones are properly restored when regions reopen. */
+  @Test
+  public void testDeltaStackOnReopen() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 400);
+      HRegion region = regions(table).get(0);
+      HnswIndexManager mgr = manager(region, index);
+
+      float[] initialA0 = rows.get("a0");
+      float[] initialA2 = rows.get("a2");
+      float[] initialA4 = rows.get("a4");
+      float[] initialA6 = rows.get("a6");
+
+      float[] delta1A0 = negate(initialA0);
+      upsert(conn, table, "a0", delta1A0);
+      delete(conn, table, "a2");
+      float[] delta1A4 = negate(initialA4);
+      upsert(conn, table, "a4", delta1A4);
+      float[] initialA10 = rows.get("a10");
+      float[] delta1A10 = negate(initialA10);
+      upsert(conn, table, "a10", delta1A10);
+
+      long sinceDelta1 = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      HnswSegment.Descriptor delta1 = awaitDelta(conn, index, region, sinceDelta1, 60);
+      assertTrue(delta1.isDelta());
+
+      // Sleep past a shortened replay lookback window so masking relies on persisted deltas
+      HnswIndexManager.setReplayMarginMs(REPLAY_MARGIN_MS);
+      Thread.sleep(REPLAY_MARGIN_MS + 2000);
+
+      float[] delta2A0 = vector(new Random(99));
+      upsert(conn, table, "a0", delta2A0);
+      delete(conn, table, "a4");
+      float[] delta2A6 = negate(initialA6);
+      upsert(conn, table, "a6", delta2A6);
+
+      long sinceDelta2 = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      HnswSegment.Descriptor delta2 = awaitDelta(conn, index, region, sinceDelta2, 60);
+      assertTrue(delta2.isDelta());
+
+      assertEquals("a0", nearest(table, index, "a0", delta2A0));
+      assertNotFound(table, index, "a0", initialA0);
+      assertNotFound(table, index, "a0", delta1A0);
+      assertNotFound(table, index, "a2", initialA2);
+      assertNotFound(table, index, "a4", initialA4);
+      assertNotFound(table, index, "a4", delta1A4);
+      assertEquals("a6", nearest(table, index, "a6", delta2A6));
+      assertNotFound(table, index, "a6", initialA6);
+      assertEquals("a8", nearest(table, index, "a8", rows.get("a8")));
+
+      List<HnswSegment.Descriptor> stack = new ArrayList<>();
+      for (HnswSegment.Descriptor d : segments(conn, index)) {
+        if (d.overlaps(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey())) {
+          stack.add(d);
+        }
+      }
+      assertEquals("base and two deltas", 3, stack.size());
+
+      // Reopen table to reload segments and stack masks from disk
+      reopen(table);
+
+      assertEquals("a10", nearest(table, index, "a10", delta1A10));
+      assertNotFound(table, index, "a10", initialA10);
+      assertEquals("a0", nearest(table, index, "a0", delta2A0));
+      assertNotFound(table, index, "a0", initialA0);
+      assertNotFound(table, index, "a0", delta1A0);
+      assertNotFound(table, index, "a2", initialA2);
+      assertNotFound(table, index, "a4", initialA4);
+      assertNotFound(table, index, "a4", delta1A4);
+      assertEquals("a6", nearest(table, index, "a6", delta2A6));
+      assertNotFound(table, index, "a6", initialA6);
+      assertEquals("a8", nearest(table, index, "a8", rows.get("a8")));
+
+      // Verify that no rebuild was triggered
+      Thread.sleep(5000);
+      List<HnswSegment.Descriptor> after = new ArrayList<>();
+      for (HnswSegment.Descriptor d : segments(conn, index)) {
+        if (d.overlaps(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey())) {
+          after.add(d);
+        }
+      }
+      assertEquals(stack.size(), after.size());
+      for (int i = 0; i < stack.size(); i++) {
+        assertTrue(Bytes.equals(stack.get(i).rowKey, after.get(i).rowKey));
+      }
+    }
+  }
+
+  /**
+   * Tests that full rebuilds are triggered when delta count or mutation ratio thresholds are
+   * exceeded.
+   */
+  @Test
+  public void testRatioTriggersFullRebuild() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 200, "");
+      HRegion region = regions(table).get(0);
+      HnswIndexManager mgr = manager(region, index);
+
+      // Exceeding the rebuild ratio threshold triggers a full rebuild
+      for (int i = 0; i < 20; i++) {
+        String id = "a" + (2 * i);
+        float[] v = negate(rows.get(id));
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long since1 = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      HnswSegment.Descriptor d1 = awaitDelta(conn, index, region, since1, 60);
+      assertTrue(d1.isDelta());
+
+      List<HnswSegment.Descriptor> stackAfterD1 = segments(conn, index);
+      assertEquals(2, stackAfterD1.size());
+
+      for (int i = 20; i < 55; i++) {
+        String id = "a" + (2 * i);
+        float[] v = negate(rows.get(id));
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+      }
+      long since2 = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      awaitSegment(conn, index, region, since2, 60);
+      List<HnswSegment.Descriptor> stackAfterRatio = awaitSegments(conn, index, 1);
+      assertEquals(1, stackAfterRatio.size());
+      assertFalse("must be a base segment", stackAfterRatio.get(0).isDelta());
+
+      // Exceeding MAX_DELTAS triggers a full rebuild
+      for (int deltaIdx = 1; deltaIdx <= 4; deltaIdx++) {
+        String id = "a" + (2 * (60 + deltaIdx));
+        float[] v = negate(rows.get(id));
+        upsert(conn, table, id, v);
+        rows.put(id, v);
+
+        long sinceDelta = EnvironmentEdgeManager.currentTimeMillis();
+        mgr.flush();
+        HnswSegment.Descriptor d = awaitDelta(conn, index, region, sinceDelta, 60);
+        assertTrue(d.isDelta());
+      }
+
+      List<HnswSegment.Descriptor> stackWith4Deltas = segments(conn, index);
+      assertEquals(5, stackWith4Deltas.size());
+
+      String id = "a" + (2 * 70);
+      float[] v = negate(rows.get(id));
+      upsert(conn, table, id, v);
+      rows.put(id, v);
+
+      long sinceMaxDeltas = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      awaitSegment(conn, index, region, sinceMaxDeltas, 60);
+      List<HnswSegment.Descriptor> stackAfterMaxDeltas = awaitSegments(conn, index, 1);
+      assertEquals(1, stackAfterMaxDeltas.size());
+      assertFalse("must be a base segment", stackAfterMaxDeltas.get(0).isDelta());
+
+      assertEquals("a0", nearest(table, index, "a0", rows.get("a0")));
+      double recall = recall(table, index, rows);
+      assertTrue("recall " + recall, recall >= 0.9);
+    }
+  }
+
+  /** Tests that a flush containing only deletions produces a tombstone-only delta segment. */
+  @Test
+  public void testDeleteOnlyDelta() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 200, "");
+      HRegion region = regions(table).get(0);
+      HnswIndexManager mgr = manager(region, index);
+
+      float[] initialA0 = rows.get("a0");
+      float[] initialA2 = rows.get("a2");
+      float[] initialA4 = rows.get("a4");
+
+      delete(conn, table, "a0");
+      delete(conn, table, "a2");
+      delete(conn, table, "a4");
+
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      mgr.flush();
+      HnswSegment.Descriptor delta = awaitDelta(conn, index, region, since, 60);
+      assertTrue(delta.isDelta());
+
+      PTable indexTable = PhoenixRuntime.getTableNoCache(conn, index);
+      try (Table t = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getTable(indexTable.getPhysicalName().getBytes())) {
+        Result r = t.get(new Get(delta.rowKey));
+        byte[] fam = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+        assertNull("delete-only delta should have no payload cell",
+          r.getValue(fam, HnswSegment.PAYLOAD_QUALIFIER));
+        assertNotNull("delete-only delta must have tombstones cell",
+          r.getValue(fam, HnswSegment.TOMBSTONES_QUALIFIER));
+        assertNotNull("delta must have base time cell",
+          r.getValue(fam, HnswSegment.BASE_TIME_QUALIFIER));
+      }
+
+      assertNotFound(table, index, "a0", initialA0);
+      assertNotFound(table, index, "a2", initialA2);
+      assertNotFound(table, index, "a4", initialA4);
+
+      reopen(table);
+
+      assertNotFound(table, index, "a0", initialA0);
+      assertNotFound(table, index, "a2", initialA2);
+      assertNotFound(table, index, "a4", initialA4);
+
+      assertEquals("a6", nearest(table, index, "a6", rows.get("a6")));
+    }
+  }
+
+  /**
+   * Committed upserts, updates, and deletes are searchable before any rebuild, and a rebuild keeps
+   * them.
+   */
   @Test
   public void testRowChangesBeforeAndAfterRebuild() throws Exception {
     String table = generateUniqueName();
@@ -650,10 +962,66 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
-  /**
-   * Tests region merge handling: verifies the merged region queries across predecessor segments
-   * before replacing them with a consolidated local segment.
-   */
+  /** Tests region split behavior when predecessor regions contain stacked delta segments. */
+  @Test
+  public void testSplitWithDeltas() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 400, "");
+      HRegion parentRegion = regions(table).get(0);
+      HnswIndexManager parentMgr = manager(parentRegion, index);
+
+      float[] initialA0 = rows.get("a0");
+      float[] newA0 = negate(initialA0);
+      upsert(conn, table, "a0", newA0);
+      float[] initialA2 = rows.get("a2");
+      delete(conn, table, "a2");
+      rows.put("a0", newA0);
+      rows.remove("a2");
+
+      long sinceDelta = EnvironmentEdgeManager.currentTimeMillis();
+      parentMgr.flush();
+      HnswSegment.Descriptor parentDelta = awaitDelta(conn, index, parentRegion, sinceDelta, 60);
+      assertTrue(parentDelta.isDelta());
+
+      long split = EnvironmentEdgeManager.currentTimeMillis();
+      try (Admin admin = getUtility().getAdmin()) {
+        admin.split(TableName.valueOf(table), Bytes.toBytes("m"));
+      }
+      awaitRegions(table, 2);
+
+      List<HRegion> daughters = regions(table);
+      HRegion first = daughters.get(0);
+      HRegion second = daughters.get(1);
+
+      for (byte[] key : manager(first, index).search(rows.get("z1"), 50, 64)) {
+        assertTrue(Bytes.toString(key) + " is outside the daughter",
+          first.getRegionInfo().containsRow(key));
+      }
+      assertEquals("a0", nearest(table, index, "a0", newA0));
+      assertNotFound(table, index, "a2", initialA2);
+
+      manager(second, index).search(rows.get("a0"), 10, 64);
+      awaitRebuilt(conn, table, index, split);
+
+      List<HnswSegment.Descriptor> segments = awaitSegments(conn, index, 2);
+      for (HRegion region : regions(table)) {
+        boolean own = false;
+        for (HnswSegment.Descriptor d : segments) {
+          own |= d.covers(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey());
+          assertFalse("daughter segments should be base segments", d.isDelta());
+        }
+        assertTrue(own);
+      }
+      assertEquals("a0", nearest(table, index, "a0", newA0));
+      assertNotFound(table, index, "a2", initialA2);
+      double recall = recall(table, index, rows);
+      assertTrue("recall " + recall, recall >= 0.9);
+    }
+  }
+
+  /** A merged region searches both inputs' segments, then replaces them with its own. */
   @Test
   public void testMerge() throws Exception {
     String table = generateUniqueName();
