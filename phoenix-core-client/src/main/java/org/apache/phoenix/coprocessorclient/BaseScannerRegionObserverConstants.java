@@ -94,6 +94,7 @@ public class BaseScannerRegionObserverConstants {
     "_IndexRebuildDisableLoggingVerifyType";
   public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
     "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
+  public static final String INDEX_REBUILD_DELETE_ORPHANS = "_IndexRebuildDeleteOrphans";
   @Deprecated
   public static final String LOCAL_INDEX_FILTER = "_LocalIndexFilter";
   @Deprecated

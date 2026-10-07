@@ -588,7 +588,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     return true;
   }
 
-  private boolean isVerified(Put mutation) throws IOException {
+  protected final boolean isVerified(Put mutation) throws IOException {
     List<Cell> cellList =
       mutation.get(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
         indexMaintainer.getEmptyKeyValueQualifier());
