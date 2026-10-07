@@ -223,6 +223,10 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             BaseScannerRegionObserverConstants.INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE,
             Bytes.toBytes(shouldLogMaxLookbackOutput));
         }
+        if (PhoenixConfigurationUtil.isIndexToolDeleteOrphans(configuration)) {
+          scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_REBUILD_DELETE_ORPHANS,
+            TRUE_BYTES);
+        }
       } catch (IOException e) {
         throw new SQLException(e);
       }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.index.vector;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -138,13 +139,12 @@ public final class VectorIndexScorecard {
   }
 
   /**
-   * Reconciles scorecard statistics against physical index table row counts. Resets inline
-   * reassignment counters and updates last reconciliation timestamp. Both are applied as
-   * corrections relative to the counters read, so concurrent RegionServer flushes are kept.
-   * @param conn connection without tenant scoping to aggregate across all tenants
-   * @return reconciled scorecard rows with pre-reset reassignment metrics
+   * Counts the live index rows of each centroid ID in the full index table.
+   * @param conn  a connection without a tenant, so that the count includes all tenants
+   * @param index the vector index table
+   * @return a map from the centroid ID to the count of live postings
    */
-  public static List<ScorecardRow> reconcile(PhoenixConnection conn, PTable index, long generation)
+  public static Map<Integer, Long> countPostings(Connection conn, PTable index)
     throws SQLException {
     String indexName = index.getName().getString();
     String centroidColumn = "\"" + MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME + "\"";
@@ -156,6 +156,23 @@ public final class VectorIndexScorecard {
         populations.put(rs.getInt(1), rs.getLong(2));
       }
     }
+    return populations;
+  }
+
+  /**
+   * Makes the scorecard of a generation agree with the actual index row counts. The method also
+   * resets the inline reassignment counters and records the time of the reconciliation. It writes
+   * the changes as corrections relative to the counters that it read. Thus the counter updates that
+   * region servers flush concurrently stay in the scorecard.
+   * @param conn       a connection without a tenant, so that the counts include all tenants
+   * @param index      the vector index table
+   * @param generation the centroid generation of the scorecard
+   * @return the reconciled scorecard rows, with the reassignment counts from before the reset
+   */
+  public static List<ScorecardRow> reconcile(PhoenixConnection conn, PTable index, long generation)
+    throws SQLException {
+    String indexName = index.getName().getString();
+    Map<Integer, Long> populations = countPostings(conn, index);
     List<ScorecardRow> before = CentroidManager.loadScorecard(conn, indexName, generation);
     List<ScorecardRow> reconciled = new ArrayList<>(before.size());
     // Each correction is a delta from the values read. Thus a region server flush that commits

@@ -315,6 +315,11 @@ public class IndexVerificationResultRepository implements AutoCloseable {
       put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT_BYTES,
         Bytes
           .toBytes(Long.toString(verificationResult.getAfterRepairExtraUnverifiedIndexRowCount())));
+      if (verificationResult.getBeforeRepairExtraVerifiedIndexRowCount() > 0) {
+        put.addColumn(RESULT_TABLE_COLUMN_FAMILY,
+          BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT_BYTES, Bytes.toBytes(
+            Long.toString(verificationResult.getBeforeRepairExtraVerifiedIndexRowCount())));
+      }
     }
     resultTable.put(put);
   }
