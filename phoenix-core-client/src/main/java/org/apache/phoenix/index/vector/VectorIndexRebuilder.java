@@ -72,7 +72,7 @@ public final class VectorIndexRebuilder {
   /** Trigger reason identifier for operator initiated index rebuilds. */
   public static final String MANUAL_REASON = "MANUAL";
   /** Maximum lease duration for rebuild locks before allowing preemption. */
-  static final long CLAIM_EXPIRY_MS = 24L * 60 * 60 * 1000;
+  public static final long CLAIM_EXPIRY_MS = 24L * 60 * 60 * 1000;
   /**
    * Maximum threshold of concurrently changed rows for point catch-up repair before falling back to
    * full scan.

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.index.vector;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -127,13 +128,12 @@ public final class VectorIndexScorecard {
   }
 
   /**
-   * Reconciles scorecard statistics against physical index table row counts. Resets inline
-   * reassignment counters and updates last reconciliation timestamp. Both are applied as
-   * corrections relative to the counters read, so concurrent RegionServer flushes are kept.
-   * @param conn connection without tenant scoping to aggregate across all tenants
-   * @return reconciled scorecard rows with pre-reset reassignment metrics
+   * Counts live index rows grouped by centroid ID across the index table.
+   * @param conn  connection without tenant scoping to aggregate across all tenants
+   * @param index vector index table
+   * @return map of centroid ID to live posting count
    */
-  public static List<ScorecardRow> reconcile(PhoenixConnection conn, PTable index, long generation)
+  public static Map<Integer, Long> countPostings(Connection conn, PTable index)
     throws SQLException {
     String indexName = index.getName().getString();
     String centroidColumn = "\"" + MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME + "\"";
@@ -145,6 +145,20 @@ public final class VectorIndexScorecard {
         populations.put(rs.getInt(1), rs.getLong(2));
       }
     }
+    return populations;
+  }
+
+  /**
+   * Reconciles scorecard statistics against physical index table row counts. Resets inline
+   * reassignment counters and updates last reconciliation timestamp. Both are applied as
+   * corrections relative to the counters read, so concurrent RegionServer flushes are kept.
+   * @param conn connection without tenant scoping to aggregate across all tenants
+   * @return reconciled scorecard rows with pre-reset reassignment metrics
+   */
+  public static List<ScorecardRow> reconcile(PhoenixConnection conn, PTable index, long generation)
+    throws SQLException {
+    String indexName = index.getName().getString();
+    Map<Integer, Long> populations = countPostings(conn, index);
     List<ScorecardRow> before = CentroidManager.loadScorecard(conn, indexName, generation);
     List<ScorecardRow> reconciled = new ArrayList<>(before.size());
     // Corrections are relative to the values read, so RegionServer flushes committed after the

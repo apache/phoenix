@@ -441,6 +441,13 @@ public final class CentroidManager {
     }
   }
 
+  /** Returns true if the task is pending or active (neither COMPLETED nor FAILED). */
+  public static boolean isLive(Task.TaskRecord task) {
+    String status = task.getStatus();
+    return !TaskStatus.COMPLETED.toString().equals(status)
+      && !TaskStatus.FAILED.toString().equals(status);
+  }
+
   /**
    * Enqueues an index task in {@code SYSTEM.TASK} if no active task of the given type exists.
    */
@@ -451,11 +458,7 @@ public final class CentroidManager {
     String tenantId = index.getTenantId() == null ? null : index.getTenantId().getString();
     for (Task.TaskRecord task : Task.queryTaskTable(conn, null, schemaName, tableName, taskType,
       tenantId, null)) {
-      String status = task.getStatus();
-      if (
-        !TaskStatus.COMPLETED.toString().equals(status)
-          && !TaskStatus.FAILED.toString().equals(status)
-      ) {
+      if (isLive(task)) {
         return;
       }
     }

@@ -211,6 +211,7 @@ public class IndexTool extends Configured implements Tool {
   private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
   private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
   private SourceTable sourceTable = SourceTable.DATA_TABLE_SOURCE;
+  private boolean isDeleteOrphans = false;
   // The qualified normalized table names (no double quotes, case same as HBase table)
   private String qDataTable; // normalized with schema
   private String qIndexTable; // normalized with schema
@@ -227,6 +228,10 @@ public class IndexTool extends Configured implements Tool {
   private String basePath;
   byte[][] splitKeysBeforeJob = null;
   Configuration configuration;
+
+  public boolean isDeleteOrphans() {
+    return isDeleteOrphans;
+  }
 
   private static final Option SCHEMA_NAME_OPTION =
     new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -298,6 +303,9 @@ public class IndexTool extends Configured implements Tool {
         + "Only supported for global indexes. If this option is used with -v AFTER, these "
         + "extra rows will be identified but not repaired.");
 
+  private static final Option DELETE_ORPHANS_OPTION = new Option("do", "delete-orphans", false,
+    "Delete verified orphan index rows found during index-to-data verification (-fi -v AFTER).");
+
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
   public static final String FEATURE_NOT_APPLICABLE =
@@ -333,6 +341,7 @@ public class IndexTool extends Configured implements Tool {
     options.addOption(RETRY_VERIFY_OPTION);
     options.addOption(DISABLE_LOGGING_OPTION);
     options.addOption(USE_INDEX_TABLE_AS_SOURCE_OPTION);
+    options.addOption(DELETE_ORPHANS_OPTION);
     return options;
   }
 
@@ -758,6 +767,7 @@ public class IndexTool extends Configured implements Tool {
       PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
       PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
       PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
+      PhoenixConfigurationUtil.setIndexToolDeleteOrphans(configuration, isDeleteOrphans);
       if (startTime != null) {
         PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
       }
@@ -918,6 +928,7 @@ public class IndexTool extends Configured implements Tool {
     boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
     boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
     boolean useIndexTableAsSource = cmdLine.hasOption(USE_INDEX_TABLE_AS_SOURCE_OPTION.getOpt());
+    boolean deleteOrphans = cmdLine.hasOption(DELETE_ORPHANS_OPTION.getOpt());
 
     if (useTenantId) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -943,6 +954,14 @@ public class IndexTool extends Configured implements Tool {
 
     if (useIndexTableAsSource) {
       sourceTable = SourceTable.INDEX_TABLE_SOURCE;
+    }
+
+    if (deleteOrphans) {
+      if (!useIndexTableAsSource || indexVerifyType != IndexVerifyType.AFTER) {
+        throw new IllegalArgumentException(
+          "Delete orphans option (-do) is only valid together with -fi and -v AFTER");
+      }
+      isDeleteOrphans = true;
     }
 
     schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());

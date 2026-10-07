@@ -579,6 +579,78 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Tests that post-rebuild verification from index ({@code -fi -v AFTER}) confines row rescans to
+   * the task's assigned subset, preventing false orphan detections on healthy indexes.
+   */
+  @Test
+  public void testVerifyAfterFromIndexOnHealthyIndex() throws Exception {
+    final int NROWS = 20;
+    String schemaName = generateUniqueName();
+    String dataTableName = generateUniqueName();
+    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+        + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " + tableDDLOptions);
+      for (int i = 1; i <= NROWS; i++) {
+        conn.createStatement().execute(
+          "UPSERT INTO " + dataTableFullName + " VALUES(" + i + "," + (i + 1) + "," + i * 2 + ")");
+      }
+      conn.commit();
+      conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)",
+        indexTableName, dataTableFullName));
+      IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+        indexTableName, null, 0, IndexVerifyType.AFTER, "-fi");
+      assertExtraCounters(indexTool, 0, 0, false);
+    }
+  }
+
+  /**
+   * Tests orphan deletion ({@code -do}), verifying that orphan cell versions are purged at their
+   * exact timestamps without creating row or family delete markers.
+   */
+  @Test
+  public void testDeleteOrphanVerifiedIndexRows() throws Exception {
+    final int NROWS = 20;
+    String schemaName = generateUniqueName();
+    String dataTableName = generateUniqueName();
+    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+    String indexTableName = generateUniqueName();
+    String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      initTablesAndAddExtraRowsToIndex(conn, schemaName, dataTableName, indexTableName, NROWS);
+      IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+        indexTableName, null, 0, IndexVerifyType.AFTER, "-fi", "-do");
+      assertExtraCounters(indexTool, NROWS, 0, true);
+      assertExtraCounters(indexTool, 0, 0, false);
+      assertEquals(NROWS,
+        IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName));
+      PTable index = conn.unwrap(PhoenixConnection.class).getTable(indexTableFullName);
+      Scan raw = new Scan();
+      raw.setRaw(true);
+      raw.readAllVersions();
+      int versionDeletes = 0;
+      try (
+        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+          .getTable(index.getPhysicalName().getBytes());
+        ResultScanner scanner = table.getScanner(raw)) {
+        for (Result result : scanner) {
+          for (Cell cell : result.rawCells()) {
+            assertTrue("Unexpected " + cell.getType() + " marker",
+              cell.getType() == Cell.Type.Put || cell.getType() == Cell.Type.Delete);
+            versionDeletes += cell.getType() == Cell.Type.Delete ? 1 : 0;
+          }
+        }
+      }
+      assertTrue(versionDeletes >= NROWS);
+      // Verify idempotency: subsequent repair run finds zero orphan rows to delete
+      indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName, indexTableName, null,
+        0, IndexVerifyType.AFTER, "-fi", "-do");
+      assertExtraCounters(indexTool, 0, 0, true);
+    }
+  }
+
   @Test
   public void testVerifyBothExtraIndexRows() throws Exception {
     final int NROWS = 20;

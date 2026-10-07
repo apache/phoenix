@@ -142,6 +142,26 @@ public final class VectorIndexTrainer {
     }
   }
 
+  /**
+   * Converts a JDBC vector value ({@code float[]} or {@code double[]}) to a float array.
+   * @param value vector object read via JDBC
+   * @return float array representation, or null if value is null
+   */
+  public static float[] toFloats(Object value) {
+    if (value instanceof float[]) {
+      return (float[]) value;
+    }
+    if (value instanceof double[]) {
+      double[] d = (double[]) value;
+      float[] f = new float[d.length];
+      for (int i = 0; i < d.length; i++) {
+        f[i] = (float) d[i];
+      }
+      return f;
+    }
+    return null;
+  }
+
   /** Extracts float vector arrays from a result set stream. */
   private static final class VectorIterator implements Iterator<float[]> {
     private final ResultSet rs;
@@ -174,21 +194,6 @@ public final class VectorIndexTrainer {
       } catch (SQLException e) {
         throw new ReadException(e);
       }
-    }
-
-    private static float[] toFloats(Object value) {
-      if (value instanceof float[]) {
-        return (float[]) value;
-      }
-      if (value instanceof double[]) {
-        double[] d = (double[]) value;
-        float[] f = new float[d.length];
-        for (int i = 0; i < d.length; i++) {
-          f[i] = (float) d[i];
-        }
-        return f;
-      }
-      return null;
     }
 
     private static final class ReadException extends RuntimeException {

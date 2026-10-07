@@ -411,6 +411,13 @@ public class IndexScrutinyTool extends Configured implements Tool {
           throw new IllegalArgumentException(
             String.format(" %s is not an index table for %s ", indexTable, qDataTable));
         }
+        String qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+        if (connection.unwrap(PhoenixConnection.class).getTable(qIndexTable).isVectorIndex()) {
+          throw new IllegalArgumentException(String.format(
+            "%s is a vector index, which IndexScrutinyTool does not support; verify it with "
+              + "bin/indexfsck.py verify",
+            qIndexTable));
+        }
       }
 
       String outputFormatOption = cmdLine.getOptionValue(OUTPUT_FORMAT_OPTION.getOpt());

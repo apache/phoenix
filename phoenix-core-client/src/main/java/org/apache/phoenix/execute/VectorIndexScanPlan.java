@@ -244,7 +244,7 @@ public class VectorIndexScanPlan extends ScanPlan {
   }
 
   /** Alternates the elements of two arrays, appending the remainder of the longer one. */
-  static int[] interleave(int[] a, int[] b) {
+  public static int[] interleave(int[] a, int[] b) {
     int[] out = new int[a.length + b.length];
     int i = 0;
     int j = 0;
