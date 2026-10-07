@@ -1636,6 +1636,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             .newBuilder(QueryConstants.CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME)
             .setPriority(priority).setProperties(Collections.emptyMap()).build());
         }
+      } else if (SchemaUtil.isProtoDescriptorsTable(tableName)) {
+        // Attach ProtobufDescriptorEndpointImpl to
+        // SYSTEM.PROTO_DESCRIPTORS so its region serves the ProtobufDescriptorService RPCs
+        // (CREATE / ALTER / DROP PROTOBUF DESCRIPTOR and CREATE PROTOBUF BUNDLE). The endpoint
+        // also reads SYSTEM.PROTO_DESC_LINK cross-region during DROP's in-use check via
+        // ServerUtil.getHTableForCoprocessorScan, so the link table needs no dedicated endpoint.
+        if (!newDesc.hasCoprocessor(QueryConstants.PROTOBUF_DESCRIPTOR_ENDPOINT_CLASSNAME)) {
+          builder.setCoprocessor(CoprocessorDescriptorBuilder
+            .newBuilder(QueryConstants.PROTOBUF_DESCRIPTOR_ENDPOINT_CLASSNAME).setPriority(priority)
+            .setProperties(Collections.emptyMap()).build());
+        }
       }
 
       if (isTransactional) {
@@ -4200,6 +4211,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
   }
 
+  // SYSTEM.PROTO_DESCRIPTORS hardcodes VERSIONS=5 so its
+  // DDL template carries only one %s for KEEP_DELETED_CELLS rather than the standard two.
+  protected String getProtoDescriptorsDDL() {
+    return String.format(QueryConstants.CREATE_PROTO_DESCRIPTORS_METADATA,
+      props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
+        QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
+  }
+
+  // SYSTEM.PROTO_DESC_LINK uses the standard two %s template (VERSIONS + KEEP_DELETED_CELLS)
+  // because the link table doesn't need cell-versioning for history — it's a pure
+  // book-keeping table (one row per descriptor↔column reference).
+  protected String getProtoDescLinkDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_PROTO_DESC_LINK_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -4538,6 +4564,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     } catch (TableAlreadyExistsException ignore) {
     }
     try {
+      metaConnection.createStatement().executeUpdate(getProtoDescriptorsDDL());
+    } catch (TableAlreadyExistsException ignore) {
+    }
+    try {
+      metaConnection.createStatement().executeUpdate(getProtoDescLinkDDL());
+    } catch (TableAlreadyExistsException ignore) {
+    }
+    try {
       // check if we have old PHOENIX_INDEX_TOOL tables
       // move data to the new tables under System, or simply create the new tables
       IndexToolTableUtil.createNewIndexToolTables(metaConnection);
@@ -4864,22 +4898,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 10,
         PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
         PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
         PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
         PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " " + PVarchar.INSTANCE.getSqlTypeName());
 
       /**
@@ -4887,16 +4921,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
        * PHOENIX_TTL Column. See PHOENIX-7023
        */
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
         PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
         PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, PhoenixDatabaseMetaData.PROTOBUF_DESCRIPTOR_NAME + " "
+          + PVarchar.INSTANCE.getSqlTypeName());
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
@@ -5124,6 +5162,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
     metaConnection = upgradeSystemCDCStream(metaConnection);
     metaConnection = upgradeSystemIdxCdcTracker(metaConnection);
+    metaConnection = upgradeSystemProtoDescriptors(metaConnection);
+    metaConnection = upgradeSystemProtoDescLink(metaConnection);
 
     // As this is where the most time will be spent during an upgrade,
     // especially when there are large number of views.
@@ -5450,6 +5490,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     throws SQLException {
     try {
       metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
+    } catch (TableAlreadyExistsException ignored) {
+    }
+    return metaConnection;
+  }
+
+  // Bootstrap SYSTEM.PROTO_DESCRIPTORS on existing clusters during upgrade. The table is
+  // brand new in this Phoenix release (PROTOBUF data type), so there is no pre-existing
+  // version to migrate from and no data to back-fill. Modeled after the simplest
+  // "create-if-not-exists" upgrade hooks above (e.g. upgradeSystemIdxCdcTracker).
+  // See the upgrade-path placement in this class's SYSTEM-table create sequence.
+  private PhoenixConnection upgradeSystemProtoDescriptors(PhoenixConnection metaConnection)
+    throws SQLException {
+    try {
+      metaConnection.createStatement().executeUpdate(getProtoDescriptorsDDL());
+    } catch (TableAlreadyExistsException ignored) {
+    }
+    return metaConnection;
+  }
+
+  // Bootstrap SYSTEM.PROTO_DESC_LINK on existing clusters during upgrade. Same shape as
+  // upgradeSystemProtoDescriptors and upgradeSystemChildLink — both reference tables that
+  // are book-keeping aids and have no pre-existing data to migrate.
+  private PhoenixConnection upgradeSystemProtoDescLink(PhoenixConnection metaConnection)
+    throws SQLException {
+    try {
+      metaConnection.createStatement().executeUpdate(getProtoDescLinkDDL());
     } catch (TableAlreadyExistsException ignored) {
     }
     return metaConnection;

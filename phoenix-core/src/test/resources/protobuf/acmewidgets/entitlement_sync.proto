@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.billing.v1;
+
+option java_package = "com.example.acmewidgets.billing.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+
+message Entitlement {
+  reserved 4, 11;
+  reserved "enabling_org_perm", "is_metered_pricing_allowed";
+  EntitlementKey key = 1;
+  EntitlementVersion version = 2;
+  EntitlementTarget target = 3;
+  map<string, PolicyToggle> policy_toggles = 5;
+  map<string, PreferenceToggle> preference_toggles = 6;
+  map<string, StringOrgValue> string_values = 7;
+  map<string, NumericOrgValue> numeric_values = 8;
+  map<string, NumericOrgValue> rate_limits = 9;
+  map<string, NumericOrgValue> resource_limits = 10;
+  EntitlementStateWrapper.StateEnum state = 12;
+  MeteredStatusWrapper.StatusEnum metered_pricing_status = 13;
+  string source_warehouse = 14;
+  google.protobuf.Timestamp deleted_time = 15;
+  google.protobuf.Timestamp updated_time = 16;
+}
+
+message EntitlementKey {
+  string entitlement_name = 1;
+  string tenant_key = 2;
+  string entitlement_id = 3;
+}
+
+message EntitlementVersion {
+  uint64 version = 1;
+}
+
+message EntitlementTarget {
+  string warehouse_id = 1;
+  string functional_area = 2;
+  string warehouse_cell = 3;
+}
+
+message PolicyToggle {
+  string toggle_name = 1;
+  bool enabled = 2;
+}
+
+message PreferenceToggle {
+  string preference_name = 1;
+  bool enabled = 2;
+}
+
+message StringOrgValue {
+  string parameter_name = 1;
+  string value = 2;
+}
+
+message NumericOrgValue {
+  string parameter_name = 1;
+  int64 value = 2;
+}
+
+message EntitlementStateWrapper {
+  enum StateEnum {
+    NOT_AVAILABLE = 0;
+    AVAILABLE = 1;
+    ENABLED = 2;
+  }
+}
+
+message MeteredStatusWrapper {
+  enum StatusEnum {
+    DISABLED = 0;
+    ENABLED = 1;
+    NOT_AVAILABLE = 2;
+    NOT_SUPPORTED = 3;
+  }
+}
+
+message EntitlementSyncResponse {
+  com.example.acmewidgets.common.v1.CatalogSyncHeader header = 1;
+  repeated Entitlement entitlements = 2;
+}

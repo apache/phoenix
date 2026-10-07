@@ -1154,11 +1154,11 @@ public class JoinCompiler {
       return TupleProjectionCompiler.createProjectedTable(tableRef, sourceColumns, retainPKColumns);
     }
 
-    public PTable createProjectedTable(RowProjector rowProjector) throws SQLException {
+    public PTable createProjectedTable(QueryPlan subqueryPlan) throws SQLException {
       assert (isSubselect());
       TableRef tableRef =
         FromCompiler.getResolverForCompiledDerivedTable(phoenixStatement.getConnection(),
-          this.tableRef, rowProjector).getTables().get(0);
+          this.tableRef, subqueryPlan).getTables().get(0);
       List<ColumnRef> sourceColumns = new ArrayList<ColumnRef>();
       PTable table = tableRef.getTable();
       for (PColumn column : table.getColumns()) {

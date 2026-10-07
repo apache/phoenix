@@ -126,6 +126,7 @@ public class PDataTypeFactory {
     types.add(PJson.INSTANCE);
     types.add(PBson.INSTANCE);
     types.add(PVarbinaryEncoded.INSTANCE);
+    types.add(PProtobuf.INSTANCE);
 
     classToInstance = new HashMap<>(types.size());
     for (PDataType t : types) {

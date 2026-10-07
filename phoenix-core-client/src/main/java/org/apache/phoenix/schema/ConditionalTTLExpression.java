@@ -247,11 +247,11 @@ public class ConditionalTTLExpression implements TTLExpression {
             .newName(defaultFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : defaultFamily);
         }
       }
-      PColumn pColumn =
-        new PColumnImpl(PNameFactory.newName(columnName), familyName, colDef.getDataType(),
-          colDef.getMaxLength(), colDef.getScale(), colDef.isNull(), pos++, colDef.getSortOrder(),
-          colDef.getArraySize(), null, false, colDef.getExpression(), colDef.isRowTimestamp(),
-          false, Bytes.toBytes(columnName), EnvironmentEdgeManager.currentTimeMillis());
+      PColumn pColumn = new PColumnImpl(PNameFactory.newName(columnName), familyName,
+        colDef.getDataType(), colDef.getMaxLength(), colDef.getScale(), colDef.isNull(), pos++,
+        colDef.getSortOrder(), colDef.getArraySize(), null, false, colDef.getExpression(),
+        colDef.isRowTimestamp(), false, Bytes.toBytes(columnName),
+        EnvironmentEdgeManager.currentTimeMillis(), false, colDef.getProtoMessageName());
       allCols.add(pColumn);
       if (isPK) {
         pkCols.add(pColumn);

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.account.v1;
+
+option java_package = "com.example.acmewidgets.account.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+
+message Account {
+  string tenant_key = 1;
+  string display_name = 2;
+  string status = 3;
+  bool active = 4;
+  string current_storefront_domain = 5;
+  string current_storefront_url = 6;
+  string previous_storefront_domain = 7;
+  string provisioning_storefront_domain = 8;
+  string home_warehouse = 9;
+  google.protobuf.Timestamp deleted_time = 10;
+  google.protobuf.Timestamp updated_time = 11;
+}
+
+message AccountSyncResponse {
+  com.example.acmewidgets.common.v1.CatalogSyncHeader header = 1;
+  repeated Account accounts = 2;
+}

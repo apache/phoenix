@@ -1086,4 +1086,367 @@ public class QueryParserTest {
     parseQueryThatShouldFail(
       "SELECT b, x from x WHERE x = " + "b'0 10 ' --comment \n /* comment */ '00 000' \n \n ''");
   }
+
+  private void assertSqlExceptionCode(String sql, SQLExceptionCode expectedCode)
+    throws IOException {
+    try {
+      parseQuery(sql);
+      fail("Expected SQLException with code " + expectedCode.getErrorCode() + " (" + expectedCode
+        + ") parsing: " + sql);
+    } catch (SQLException e) {
+      assertEquals("Wrong SQLException code for: " + sql + " (got: " + e.getMessage() + ")",
+        expectedCode.getErrorCode(), e.getErrorCode());
+    }
+  }
+
+  private void assertProtobufColumnParses(String sql, String expectedMessageName)
+    throws IOException, SQLException {
+    CreateTableStatement stmt = parseQuery(sql, CreateTableStatement.class);
+    assertNotNull("CREATE TABLE parse returned null for: " + sql, stmt);
+    ColumnDef found = null;
+    for (ColumnDef def : stmt.getColumnDefs()) {
+      if (def.getProtoMessageName() != null) {
+        found = def;
+        break;
+      }
+    }
+    assertNotNull("No PROTOBUF column def found in parsed statement for: " + sql, found);
+    assertEquals(
+      "Parsed proto message name should preserve the source spelling exactly for: " + sql,
+      expectedMessageName, found.getProtoMessageName());
+  }
+
+  private void assertAlterAddProtobufColumnParses(String sql, String expectedMessageName)
+    throws IOException, SQLException {
+    AddColumnStatement stmt = parseQuery(sql, AddColumnStatement.class);
+    assertNotNull("ALTER TABLE parse returned null for: " + sql, stmt);
+    ColumnDef found = null;
+    for (ColumnDef def : stmt.getColumnDefs()) {
+      if (def.getProtoMessageName() != null) {
+        found = def;
+        break;
+      }
+    }
+    assertNotNull("No PROTOBUF column def found in parsed ALTER statement for: " + sql, found);
+    assertEquals(
+      "Parsed proto message name should preserve the source spelling exactly for: " + sql,
+      expectedMessageName, found.getProtoMessageName());
+  }
+
+  @Test
+  public void testProtobufWithoutMessageNameRejects() throws Exception {
+    assertSqlExceptionCode("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, payload PROTOBUF)",
+      SQLExceptionCode.PROTOBUF_MESSAGE_NAME_REQUIRED);
+  }
+
+  @Test
+  public void testProtobufEmptyAngleBracketsRejects() throws Exception {
+    assertSqlExceptionCode("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, payload PROTOBUF<>)",
+      SQLExceptionCode.PROTOBUF_MESSAGE_NAME_REQUIRED);
+  }
+
+  @Test
+  public void testProtobufStringLiteralAsNameRejects() throws Exception {
+    assertSqlExceptionCode("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, payload PROTOBUF<'x'>)",
+      SQLExceptionCode.PARSER_ERROR);
+  }
+
+  @Test
+  public void testProtobufArrayRejected() throws Exception {
+    assertSqlExceptionCode(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, payloads PROTOBUF<my.org.X> ARRAY)",
+      SQLExceptionCode.PROTOBUF_NOT_ALLOWED_IN_ARRAY);
+    assertSqlExceptionCode(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, payloads PROTOBUF<my.org.X>[])",
+      SQLExceptionCode.PROTOBUF_NOT_ALLOWED_IN_ARRAY);
+  }
+
+  @Test
+  public void testProtobufRejectedAsPrimaryKey() throws Exception {
+    assertSqlExceptionCode("CREATE TABLE t (payload PROTOBUF<my.org.X> PRIMARY KEY)",
+      SQLExceptionCode.PROTOBUF_NOT_ALLOWED_AS_PRIMARY_KEY);
+  }
+
+  @Test
+  public void testAlterTableAddColumnProtobufHitsSameParseAndRejectionPaths() throws Exception {
+    assertAlterAddProtobufColumnParses("ALTER TABLE t ADD payload PROTOBUF<my.org.OrderV1>",
+      "my.org.OrderV1");
+    assertSqlExceptionCode("ALTER TABLE t ADD payload PROTOBUF",
+      SQLExceptionCode.PROTOBUF_MESSAGE_NAME_REQUIRED);
+    assertSqlExceptionCode("ALTER TABLE t ADD payloads PROTOBUF<my.org.X> ARRAY",
+      SQLExceptionCode.PROTOBUF_NOT_ALLOWED_IN_ARRAY);
+  }
+
+  @Test
+  public void testProtobufKeywordIsCaseInsensitive() throws Exception {
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p Protobuf<my.org.X>)", "my.org.X");
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p protobuf<my.org.X>)", "my.org.X");
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p pRoToBuF<my.org.X>)", "my.org.X");
+  }
+
+  @Test
+  public void testProtobufWithPrecisionParensParses() throws Exception {
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<my.org.X>(10))", "my.org.X");
+  }
+
+  @Test
+  public void testProtobufArrayWithExplicitSizeRejects() throws Exception {
+    assertSqlExceptionCode(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, ps PROTOBUF<my.org.X>[5])",
+      SQLExceptionCode.PROTOBUF_NOT_ALLOWED_IN_ARRAY);
+  }
+
+  @Test
+  public void testProtobufMessageNameIsCasePreservedEndToEnd() throws Exception {
+    String[] proofs = { "my.org.OrderV1", "MY.ORG.ORDER", "my.org.order", "MyOrg.MyMessage_Type_v2",
+      "alllower", "ALLUPPER", "Mix_Of_Cases_AND_digits_123" };
+    for (String name : proofs) {
+      String sql = "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<" + name + ">)";
+      assertProtobufColumnParses(sql, name);
+    }
+  }
+
+  @Test
+  public void testProtobufKeywordCaseFoldsButMessageNameDoesNot() throws Exception {
+    String sql =
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, " + "payload pRoToBuF<MyMixedCaseName>)";
+    assertProtobufColumnParses(sql, "MyMixedCaseName");
+  }
+
+  @Test
+  public void testProtobufWithReservedKeywordIdentifiersInName() throws Exception {
+    String[] names =
+      { "Group", "Order", "Type", "Name", "Index", "View", "Default", "True", "False" };
+    for (String name : names) {
+      assertProtobufColumnParses(
+        "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<my." + name + ">)",
+        "my." + name);
+    }
+  }
+
+  @Test
+  public void testProtobufAcceptsBroadSamplingOfPhoenixReservedKeywords() throws Exception {
+    String[] keywords = { "Select", "Insert", "Upsert", "Update", "Delete", "Create", "Drop",
+      "Alter", "Truncate",
+
+      "From", "Where", "Group", "Having", "Order", "Limit", "Offset", "Fetch", "Union", "Distinct",
+      "Join", "Inner", "Outer", "Left", "Right", "Full", "On", "Between", "In", "Exists",
+
+      "Null", "True", "False",
+
+      "Table", "Column", "Index", "View", "Schema", "Constraint", "Primary", "Key", "Sequence",
+      "Function", "Cursor", "Trace", "Cast", "Default",
+
+      "Type", "Name", "Value", "Values", "Row", "Rows", "Array", "Some", "Any", "All",
+
+      "Row_Timestamp", "Encoded_Qualifier", "Column_Qualifier_Counter", "Update_Only",
+      "Idx_Mutations", "Data_Row_State", "Defaultvalue",
+
+      "Hint", "Async", "Disable", "Rebuild", "Local", "Constant", "Replace", "List", "Immutable",
+      "Grant", "Revoke", "Show", "Uncovered", "Regions", "Noverify", "Cdc", "Preserve", "Splits",
+      "Consistency", "Eventual", "Strong" };
+    for (String keyword : keywords) {
+      String sql =
+        "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<my.org." + keyword + ">)";
+      assertProtobufColumnParses(sql, "my.org." + keyword);
+    }
+  }
+
+  @Test
+  public void testAlterProtobufDescriptorIfExistsParses() throws Exception {
+    AlterProtobufDescriptorStatement stmt =
+      parseQuery("ALTER PROTOBUF DESCRIPTOR IF EXISTS my.org.OrderV1 FROM 'file:///x.desc'",
+        AlterProtobufDescriptorStatement.class);
+    assertEquals("my.org.OrderV1", stmt.getProtoMessageName());
+    assertTrue("IF EXISTS must propagate to AST", stmt.isIfExists());
+    assertEquals("file:///x.desc", stmt.getSourceUrl());
+  }
+
+  @Test
+  public void testProtobufDescriptorMissingFromRejected() throws Exception {
+    parseQueryThatShouldFailWithSQLException("CREATE PROTOBUF DESCRIPTOR my.org.X");
+    parseQueryThatShouldFailWithSQLException("ALTER PROTOBUF DESCRIPTOR my.org.X");
+  }
+
+  @Test
+  public void testAlterProtobufDescriptorRejectsIfNotExists() throws Exception {
+    parseQueryThatShouldFailWithSQLException(
+      "ALTER PROTOBUF DESCRIPTOR IF NOT EXISTS my.org.X FROM 'file:///x.desc'");
+  }
+
+  @Test
+  public void testProtobufDescriptorStatementsHaveCorrectOperationKind() throws Exception {
+    CreateProtobufDescriptorStatement create =
+      parseQuery("CREATE PROTOBUF DESCRIPTOR my.org.X FROM 'file:///x.desc'",
+        CreateProtobufDescriptorStatement.class);
+    assertEquals("CREATE PROTOBUF DESCRIPTOR maps to UPSERT (matches CreateSchemaStatement)",
+      Operation.UPSERT, create.getOperation());
+
+    AlterProtobufDescriptorStatement alter =
+      parseQuery("ALTER PROTOBUF DESCRIPTOR my.org.X FROM 'file:///x.desc'",
+        AlterProtobufDescriptorStatement.class);
+    assertEquals("ALTER PROTOBUF DESCRIPTOR maps to UPSERT (matches AlterTableStatement)",
+      Operation.UPSERT, alter.getOperation());
+
+    DropProtobufDescriptorStatement drop =
+      parseQuery("DROP PROTOBUF DESCRIPTOR my.org.X", DropProtobufDescriptorStatement.class);
+    assertEquals("DROP PROTOBUF DESCRIPTOR must map to DELETE (matches DropTable/Schema/Index)",
+      Operation.DELETE, drop.getOperation());
+  }
+
+  @Test
+  public void testDropProtobufDescriptorParses() throws Exception {
+    DropProtobufDescriptorStatement basic =
+      parseQuery("DROP PROTOBUF DESCRIPTOR my.org.OrderV1", DropProtobufDescriptorStatement.class);
+    assertEquals("my.org.OrderV1", basic.getProtoMessageName());
+    assertFalse(basic.isIfExists());
+
+    DropProtobufDescriptorStatement ifExists = parseQuery(
+      "DROP PROTOBUF DESCRIPTOR IF EXISTS my.org.OrderV1", DropProtobufDescriptorStatement.class);
+    assertEquals("my.org.OrderV1", ifExists.getProtoMessageName());
+    assertTrue(ifExists.isIfExists());
+  }
+
+  @Test
+  public void testCreateProtobufBundleParses() throws Exception {
+    String sql = "CREATE PROTOBUF BUNDLE (my.org.OrderV1) FROM 'hdfs:///descriptors/orders.desc'";
+    CreateProtobufBundleStatement stmt = parseQuery(sql, CreateProtobufBundleStatement.class);
+    assertEquals(1, stmt.getProtoMessageNames().size());
+    assertEquals("my.org.OrderV1", stmt.getProtoMessageNames().get(0));
+    assertFalse(stmt.isIfNotExists());
+    assertEquals("hdfs:///descriptors/orders.desc", stmt.getSourceUrl());
+  }
+
+  @Test
+  public void testCreateProtobufBundleNamesPreserveCase() throws Exception {
+    String sql =
+      "CREATE PROTOBUF BUNDLE (" + "  My.Org.MixedCase_V1, ALLUPPER.X, alllower.y, Mix_Of_Cases_123"
+        + ") FROM 'file:///x.desc'";
+    CreateProtobufBundleStatement stmt = parseQuery(sql, CreateProtobufBundleStatement.class);
+    assertEquals("My.Org.MixedCase_V1", stmt.getProtoMessageNames().get(0));
+    assertEquals("ALLUPPER.X", stmt.getProtoMessageNames().get(1));
+    assertEquals("alllower.y", stmt.getProtoMessageNames().get(2));
+    assertEquals("Mix_Of_Cases_123", stmt.getProtoMessageNames().get(3));
+  }
+
+  @Test
+  public void testCreateProtobufBundleHasCorrectOperationKind() throws Exception {
+    CreateProtobufBundleStatement stmt =
+      parseQuery("CREATE PROTOBUF BUNDLE (my.org.X) FROM 'file:///x.desc'",
+        CreateProtobufBundleStatement.class);
+    assertEquals(
+      "CREATE PROTOBUF BUNDLE maps to UPSERT (matches CreateProtobufDescriptorStatement)",
+      Operation.UPSERT, stmt.getOperation());
+  }
+
+  @Test
+  public void testCreateProtobufBundleEmptyListRejected() throws Exception {
+    parseQueryThatShouldFailWithSQLException("CREATE PROTOBUF BUNDLE () FROM 'file:///x.desc'");
+  }
+
+  @Test
+  public void testCreateProtobufBundleMissingFromRejected() throws Exception {
+    parseQueryThatShouldFailWithSQLException("CREATE PROTOBUF BUNDLE (my.org.X)");
+  }
+
+  @Test
+  public void testCreateProtobufBundleMissingParensRejected() throws Exception {
+    parseQueryThatShouldFailWithSQLException(
+      "CREATE PROTOBUF BUNDLE my.org.X FROM 'file:///x.desc'");
+  }
+
+  @Test
+  public void testCreateProtobufBundleAllowsTrailingNoComma() throws Exception {
+    parseQueryThatShouldFailWithSQLException(
+      "CREATE PROTOBUF BUNDLE (a.b.X,) FROM 'file:///x.desc'");
+  }
+
+  @Test
+  public void testCreateProtobufBundleSingleNameStillParsesAsBundle() throws Exception {
+    CreateProtobufBundleStatement bundleStmt =
+      parseQuery("CREATE PROTOBUF BUNDLE (my.org.OnlyOne) FROM 'file:///x.desc'",
+        CreateProtobufBundleStatement.class);
+    assertEquals(1, bundleStmt.getProtoMessageNames().size());
+
+    CreateProtobufDescriptorStatement singleStmt =
+      parseQuery("CREATE PROTOBUF DESCRIPTOR my.org.OnlyOne FROM 'file:///x.desc'",
+        CreateProtobufDescriptorStatement.class);
+    assertEquals("my.org.OnlyOne", singleStmt.getProtoMessageName());
+  }
+
+  @Test
+  public void testCreateProtobufBundleAcceptsKeywordSegmentNames() throws Exception {
+    String sql = "CREATE PROTOBUF BUNDLE (" + "  my.Group.Order, my.Type.Index, my.View.Cast"
+      + ") FROM 'file:///x.desc'";
+    CreateProtobufBundleStatement stmt = parseQuery(sql, CreateProtobufBundleStatement.class);
+    assertEquals(3, stmt.getProtoMessageNames().size());
+    assertEquals("my.Group.Order", stmt.getProtoMessageNames().get(0));
+    assertEquals("my.Type.Index", stmt.getProtoMessageNames().get(1));
+    assertEquals("my.View.Cast", stmt.getProtoMessageNames().get(2));
+  }
+
+  @Test
+  public void testReservedProtobufKeywordsUsableAsDoubleQuotedIdentifiers() throws Exception {
+    parseQuery("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, \"protobuf\" VARCHAR)");
+    parseQuery("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, \"descriptor\" VARCHAR)");
+    parseQuery("CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, \"bundle\" VARCHAR)");
+
+    parseQuery("CREATE TABLE \"protobuf\" (id BIGINT NOT NULL PRIMARY KEY)");
+    parseQuery("CREATE TABLE \"descriptor\" (id BIGINT NOT NULL PRIMARY KEY)");
+    parseQuery("CREATE TABLE \"bundle\" (id BIGINT NOT NULL PRIMARY KEY)");
+
+    parseQuery("CREATE TABLE \"protobuf\".\"descriptor\" (id BIGINT NOT NULL PRIMARY KEY)");
+
+    parseQuery("SELECT col AS \"protobuf\" FROM t");
+    parseQuery("SELECT col AS \"descriptor\" FROM t");
+    parseQuery("SELECT col AS \"bundle\" FROM t");
+  }
+
+  @Test
+  public void testProtobufNameMayConsistEntirelyOfReservedKeywords() throws Exception {
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<Select.From.Where>)",
+      "Select.From.Where");
+
+    assertProtobufColumnParses(
+      "CREATE TABLE t (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<PROTOBUF>)", "PROTOBUF");
+  }
+
+  /**
+   * oneStatement pushes a ParseContext in @init and must pop it in its own finally. Parsing many
+   * mixed statements (PROTOBUF DDL and others) on one long-lived parser must leave the stack empty
+   * after every statement: no leaked frames, no pops of frames that were never pushed.
+   */
+  @Test
+  public void testContextStackBalancedAcrossMixedStatements() throws Exception {
+    String[] stmts = { "SELECT a FROM t",
+      "CREATE PROTOBUF DESCRIPTOR my.org.X FROM 'file:///x.desc'", "UPSERT INTO t (a) VALUES (1)",
+      "CREATE PROTOBUF BUNDLE (my.org.A, my.org.B) FROM 'file:///b.desc'",
+      "CREATE TABLE t2 (id BIGINT NOT NULL PRIMARY KEY, p PROTOBUF<my.org.X>)",
+      "ALTER PROTOBUF DESCRIPTOR my.org.X FROM 'file:///y.desc'", "DELETE FROM t WHERE a = 1",
+      "DROP PROTOBUF DESCRIPTOR IF EXISTS my.org.X", "SELECT a FROM t UNION ALL SELECT b FROM u",
+      "EXPLAIN SELECT count(*) FROM t", "DROP TABLE t2" };
+    int rounds = 5;
+    StringBuilder script = new StringBuilder();
+    for (int r = 0; r < rounds; r++) {
+      for (String stmt : stmts) {
+        script.append(stmt).append(";\n");
+      }
+    }
+    SQLParser parser = new SQLParser(new StringReader(script.toString()));
+    assertEquals(0, parser.getContextStackDepth());
+    int parsed = 0;
+    BindableStatement stmt;
+    while ((stmt = parser.nextStatement(new ParseNodeFactory())) != null) {
+      parsed++;
+      assertEquals("ParseContext stack not empty after statement #" + parsed + ": " + stmt, 0,
+        parser.getContextStackDepth());
+    }
+    assertEquals(rounds * stmts.length, parsed);
+    assertEquals(0, parser.getContextStackDepth());
+  }
 }

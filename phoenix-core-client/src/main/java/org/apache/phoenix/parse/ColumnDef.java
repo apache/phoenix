@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.DelegateSQLException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PProtobuf;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -56,6 +57,11 @@ public class ColumnDef {
   private final String expressionStr;
   private final Integer encodedQualifier;
   private final boolean isRowTimestamp;
+  /**
+   * For PROTOBUF columns: the fully-qualified protobuf message name as written between the angle
+   * brackets of {@code PROTOBUF<my.org.OrderV1>}. {@code null} for every other type.
+   */
+  private final String protoMessageName;
 
   public ColumnDef(ColumnDef def, String expressionStr) {
     this.columnDefName = def.columnDefName;
@@ -70,11 +76,20 @@ public class ColumnDef {
     this.encodedQualifier = def.encodedQualifier;
     this.isRowTimestamp = def.isRowTimestamp;
     this.expressionStr = expressionStr;
+    this.protoMessageName = def.protoMessageName;
   }
 
   ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize,
     Boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder,
     String expressionStr, Integer encodedQualifier, boolean isRowTimestamp) {
+    this(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder,
+      expressionStr, encodedQualifier, isRowTimestamp, null);
+  }
+
+  ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize,
+    Boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder,
+    String expressionStr, Integer encodedQualifier, boolean isRowTimestamp,
+    String protoMessageName) {
     try {
       Preconditions.checkNotNull(sortOrder);
       PDataType baseType;
@@ -85,6 +100,19 @@ public class ColumnDef {
       // fixed size or like postgres allow infinite. May be the data types max limit can
       // be used for the array size (May be too big)
       if (isArray) {
+        // Catch PROTOBUF arrays *before* PDataType.sqlArrayType(...) calls fromTypeId on the
+        // synthetic PROTOBUF-array slot (which would surface as a generic "Unsupported sql
+        // type: 12500" IllegalDataException). PROTOBUF wire format has no canonical
+        // inter-element separator, so array encoding is not safe. Compare against the
+        // canonical type-name on PProtobuf.INSTANCE rather than a hardcoded "PROTOBUF" literal
+        // so this stays in sync if the singleton's getSqlTypeName() ever moves.
+        if (
+          sqlTypeName != null && PProtobuf.INSTANCE.getSqlTypeName()
+            .equals(SchemaUtil.normalizeIdentifier(sqlTypeName))
+        ) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_NOT_ALLOWED_IN_ARRAY)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
         this.isArray = true;
         dataType = sqlTypeName == null
           ? null
@@ -149,11 +177,32 @@ public class ColumnDef {
           }
         }
       }
+      if (dataType == PProtobuf.INSTANCE && isPK) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_NOT_ALLOWED_AS_PRIMARY_KEY)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+      }
       if (dataType != null && !dataType.canBePrimaryKey() && isPK) {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_PRIMARY_KEY_CONSTRAINT)
           .setColumnName(columnDefName.getColumnName())
           .setMessage("," + dataType.toString() + " is not supported as primary key,").build()
           .buildException();
+      }
+      // PROTOBUF<msg> — syntax-only check here: the angle-bracketed name must be present
+      // (PROTOBUF on its own — or PROTOBUF<> which the lexer collapses to NOEQ2 — leaves
+      // protoMessageName null/empty). Descriptor-existence validation happens later in
+      // MetaDataClient (which has the connection needed to look up the per-connection
+      // ProtoDescriptorRegistry against SYSTEM.PROTO_DESCRIPTORS).
+      if (dataType == PProtobuf.INSTANCE) {
+        if (protoMessageName == null || protoMessageName.isEmpty()) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_MESSAGE_NAME_REQUIRED)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+      }
+      if (
+        dataType != PProtobuf.INSTANCE && protoMessageName != null && !protoMessageName.isEmpty()
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_MESSAGE_NAME_NOT_ALLOWED)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
       }
       this.maxLength = maxLength;
       this.scale = scale;
@@ -163,6 +212,7 @@ public class ColumnDef {
       this.expressionStr = expressionStr;
       this.encodedQualifier = encodedQualifier;
       this.isRowTimestamp = isRowTimestamp;
+      this.protoMessageName = protoMessageName;
     } catch (SQLException e) {
       throw new ParseException(e);
     }
@@ -229,6 +279,14 @@ public class ColumnDef {
     return isRowTimestamp;
   }
 
+  /**
+   * For PROTOBUF columns, the fully-qualified protobuf message name as written between the angle
+   * brackets of {@code PROTOBUF<my.org.OrderV1>}. Returns {@code null} for every other type.
+   */
+  public String getProtoMessageName() {
+    return protoMessageName;
+  }
+
   public void setIsPK(boolean isPK) {
     this.isPK = isPK;
   }
@@ -245,6 +303,11 @@ public class ColumnDef {
     StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());
     buf.append(' ');
     buf.append(dataType.getSqlTypeName());
+    if (protoMessageName != null) {
+      buf.append('<');
+      buf.append(protoMessageName);
+      buf.append('>');
+    }
     if (maxLength != null) {
       buf.append('(');
       buf.append(maxLength);

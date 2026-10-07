@@ -29,6 +29,7 @@ import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
+import java.net.URL;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -1704,6 +1705,106 @@ public abstract class BasePermissionsIT extends BaseTest {
     verifyAllowed(readTable(phoenixTableName), unprivilegedUser);
   }
 
+  private static final String PROTO_DESC_BUNDLE_RESOURCE =
+    "/protobuf/acmewidgets/acmewidgets_v1.desc";
+  private static final String PROTO_DESC_ACCOUNT = "com.example.acmewidgets.account.v1.Account";
+  private static final String PROTO_DESC_CUSTOMER = "com.example.acmewidgets.orders.v1.Customer";
+
+  private static String protoDescFixtureUrl() {
+    URL res = BasePermissionsIT.class.getResource(PROTO_DESC_BUNDLE_RESOURCE);
+    assertTrue("missing test fixture " + PROTO_DESC_BUNDLE_RESOURCE, res != null);
+    return res.toString();
+  }
+
+  private String protoDescTable() {
+    return isNamespaceMapped
+      ? SchemaUtil
+        .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES, true)
+        .getNameAsString()
+      : PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME;
+  }
+
+  private AccessTestAction protoDescLinkCount(final String tableName, final int expected) {
+    return () -> {
+      try (Connection conn = getConnection(); ResultSet rs = conn.createStatement().executeQuery(
+        "SELECT COUNT(*) FROM SYSTEM.PROTO_DESC_LINK WHERE TABLE_NAME = '" + tableName + "'")) {
+        assertTrue(rs.next());
+        assertEquals(expected, rs.getInt(1));
+      }
+      return null;
+    };
+  }
+
+  private AccessTestAction protoDescDdl(final String sql) {
+    return new AccessTestAction() {
+      @Override
+      public Object run() throws Exception {
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+          assertFalse(stmt.execute(sql));
+        }
+        return null;
+      }
+    };
+  }
+
+  @Test
+  public void testProtobufDescriptorDdlRequiresGlobalAdmin() throws Throwable {
+    final String url = protoDescFixtureUrl();
+    final String create =
+      "CREATE PROTOBUF DESCRIPTOR " + PROTO_DESC_ACCOUNT + " FROM '" + url + "'";
+    final String alter = "ALTER PROTOBUF DESCRIPTOR " + PROTO_DESC_ACCOUNT + " FROM '" + url + "'";
+    final String drop = "DROP PROTOBUF DESCRIPTOR " + PROTO_DESC_ACCOUNT;
+    final String dropIfExists = "DROP PROTOBUF DESCRIPTOR IF EXISTS " + PROTO_DESC_CUSTOMER;
+    final String bundle =
+      "CREATE PROTOBUF BUNDLE IF NOT EXISTS (" + PROTO_DESC_CUSTOMER + ") FROM '" + url + "'";
+
+    grantSystemTableAccess(superUser1, regularUser1, unprivilegedUser);
+    // Full rights on the descriptor table are not enough; only global ADMIN passes.
+    String descTable = protoDescTable();
+    grantPermissions(unprivilegedUser.getShortName(), Collections.singleton(descTable),
+      Permission.Action.READ, Permission.Action.WRITE, Permission.Action.EXEC,
+      Permission.Action.CREATE, Permission.Action.ADMIN);
+    grantPermissions(regularUser1.getShortName(), Collections.singleton(descTable),
+      Permission.Action.READ, Permission.Action.WRITE, Permission.Action.EXEC);
+
+    verifyAllowed(protoDescDdl(create), superUser1);
+
+    // IF [NOT] EXISTS forms are denied too: authorization runs before the existence check.
+    for (String sql : Arrays.asList(create, alter, drop, dropIfExists, bundle)) {
+      verifyDenied(protoDescDdl(sql), AccessDeniedException.class, unprivilegedUser, regularUser1);
+    }
+
+    verifyAllowed(grantPermissions("A", regularUser1), superUser1);
+    verifyAllowed(protoDescDdl(alter), regularUser1);
+    verifyAllowed(protoDescDdl(bundle), regularUser1);
+    verifyAllowed(protoDescDdl(dropIfExists), regularUser1);
+    verifyAllowed(protoDescDdl(drop), regularUser1);
+    verifyAllowed(revokePermissions(regularUser1), superUser1);
+  }
+
+  @Test
+  public void testProtobufColumnDdlNeedsNoProtoDescLinkAccess() throws Throwable {
+    final String table = generateUniqueName();
+    // Runs before the grants so the SYSTEM regions it creates exist when ACLs are awaited.
+    verifyAllowed(protoDescDdl("CREATE PROTOBUF DESCRIPTOR IF NOT EXISTS " + PROTO_DESC_ACCOUNT
+      + " FROM '" + protoDescFixtureUrl() + "'"), superUser1);
+    grantSystemTableAccess(superUser1, regularUser1);
+    grantPermissions(regularUser1.getShortName(), Collections.singleton(protoDescTable()),
+      Permission.Action.READ, Permission.Action.EXEC);
+    grantPermissions(regularUser1.getShortName(), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(),
+      Permission.Action.CREATE);
+
+    verifyAllowed(protoDescDdl("CREATE TABLE " + table
+      + " (ID BIGINT NOT NULL PRIMARY KEY, A PROTOBUF<" + PROTO_DESC_ACCOUNT + ">)"), regularUser1);
+    verifyAllowed(
+      protoDescDdl("ALTER TABLE " + table + " ADD B PROTOBUF<" + PROTO_DESC_ACCOUNT + ">"),
+      regularUser1);
+    verifyAllowed(protoDescLinkCount(table, 2), superUser1);
+    verifyAllowed(protoDescDdl("ALTER TABLE " + table + " DROP COLUMN A, B"), regularUser1);
+    verifyAllowed(protoDescLinkCount(table, 0), superUser1);
+    verifyAllowed(protoDescDdl("DROP PROTOBUF DESCRIPTOR " + PROTO_DESC_ACCOUNT), superUser1);
+  }
+
   AccessTestAction onlyCreateImmutableTable(final String tableName) throws SQLException {
     return new AccessTestAction() {
       @Override
@@ -1781,6 +1882,9 @@ public abstract class BasePermissionsIT extends BaseTest {
             request.hasNamespaceName() ? request.getNamespaceName().toStringUtf8() : null;
           perms.addAll(
             AccessControlClient.getUserPermissions(connection, AuthUtil.toGroupEntry(namespace)));
+        } else if (request.getType() == AccessControlProtos.Permission.Type.Global) {
+          // An empty table regex returns the GLOBAL-scope grants.
+          perms.addAll(AccessControlClient.getUserPermissions(connection, ""));
         }
         response = AccessControlUtil.buildGetUserPermissionsResponse(perms);
       } catch (Throwable ioe) {

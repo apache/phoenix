@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.delivery.v1;
+
+option java_package = "com.example.acmewidgets.delivery.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+
+message DeliveryWindowRecord {
+  string window_pattern = 1;
+}
+
+message DeliveryWindowSync {
+  string tenant_key = 1;
+  repeated DeliveryWindowRecord records = 2;
+  string source_warehouse = 3;
+  google.protobuf.Timestamp deleted_time = 4;
+  google.protobuf.Timestamp updated_time = 5;
+}
+
+message DeliveryWindowSyncResponse {
+  com.example.acmewidgets.common.v1.CatalogSyncHeader header = 1;
+  repeated DeliveryWindowSync windows = 2;
+}

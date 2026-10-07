@@ -216,6 +216,15 @@
       <groupId>org.apache.phoenix.thirdparty</groupId>
       <artifactId>phoenix-shaded-commons-cli</artifactId>
     </dependency>
+    <!-- phoenix-shaded-protobuf is the relocated protobuf-java 4.x runtime used by the
+         PROTOBUF data type's descriptor parsing / evolution validation paths. Coexists with
+         the unshaded com.google.protobuf 2.5.x that HBase 2.x ships for its coprocessor RPC.
+         The banned-imports rule in the root pom restricts new code under
+         org.apache.phoenix.protobuf.** to the relocated package. -->
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-protobuf</artifactId>
+    </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>

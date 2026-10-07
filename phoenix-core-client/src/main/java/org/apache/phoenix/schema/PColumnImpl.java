@@ -45,6 +45,7 @@ public class PColumnImpl implements PColumn {
   private byte[] columnQualifierBytes;
   private boolean derived;
   private long timestamp;
+  private String protoMessageName;
 
   public PColumnImpl() {
   }
@@ -58,7 +59,7 @@ public class PColumnImpl implements PColumn {
       column.getScale(), column.isNullable(), column.getPosition(), column.getSortOrder(),
       column.getArraySize(), viewConstant, isViewReferenced, column.getExpressionStr(),
       column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
-      column.getTimestamp(), column.isDerived());
+      column.getTimestamp(), column.isDerived(), column.getProtoMessageName());
   }
 
   public PColumnImpl(PColumn column, boolean derivedColumn, int position) {
@@ -70,7 +71,7 @@ public class PColumnImpl implements PColumn {
       column.getScale(), column.isNullable(), position, column.getSortOrder(),
       column.getArraySize(), viewConstant, column.isViewReferenced(), column.getExpressionStr(),
       column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
-      column.getTimestamp(), derivedColumn);
+      column.getTimestamp(), derivedColumn, column.getProtoMessageName());
   }
 
   public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength,
@@ -79,16 +80,26 @@ public class PColumnImpl implements PColumn {
     boolean isDynamic, byte[] columnQualifierBytes, long timestamp) {
     this(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize,
       viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic,
-      columnQualifierBytes, timestamp, false);
+      columnQualifierBytes, timestamp, false, null);
   }
 
   public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength,
     Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
     byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
     boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived) {
+    this(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize,
+      viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic,
+      columnQualifierBytes, timestamp, derived, null);
+  }
+
+  public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength,
+    Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
+    byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
+    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived,
+    String protoMessageName) {
     init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize,
       viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic,
-      columnQualifierBytes, timestamp, derived);
+      columnQualifierBytes, timestamp, derived, protoMessageName);
   }
 
   private PColumnImpl(PName familyName, PName columnName, Long timestamp) {
@@ -110,7 +121,8 @@ public class PColumnImpl implements PColumn {
   private void init(PName name, PName familyName, PDataType dataType, Integer maxLength,
     Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
     byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
-    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived) {
+    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived,
+    String protoMessageName) {
     Preconditions.checkNotNull(sortOrder);
     this.dataType = dataType;
     if (familyName == null) {
@@ -138,6 +150,7 @@ public class PColumnImpl implements PColumn {
     this.columnQualifierBytes = columnQualifierBytes;
     this.timestamp = timestamp;
     this.derived = derived;
+    this.protoMessageName = protoMessageName;
   }
 
   @Override
@@ -267,6 +280,11 @@ public class PColumnImpl implements PColumn {
     return columnQualifierBytes;
   }
 
+  @Override
+  public String getProtoMessageName() {
+    return protoMessageName;
+  }
+
   /**
    * Create a PColumn instance from PBed PColumn instance
    */
@@ -323,9 +341,13 @@ public class PColumnImpl implements PColumn {
     if (column.hasDerived()) {
       derived = column.getDerived();
     }
+    String protoMessageName = null;
+    if (column.hasProtoMessageName()) {
+      protoMessageName = column.getProtoMessageName();
+    }
     return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position,
       sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp,
-      isDynamic, columnQualifierBytes, timestamp, derived);
+      isDynamic, columnQualifierBytes, timestamp, derived, protoMessageName);
   }
 
   public static PTableProtos.PColumn toProto(PColumn column) {
@@ -367,6 +389,9 @@ public class PColumnImpl implements PColumn {
       builder.setTimestamp(column.getTimestamp());
     }
     builder.setDerived(column.isDerived());
+    if (column.getProtoMessageName() != null) {
+      builder.setProtoMessageName(column.getProtoMessageName());
+    }
     return builder.build();
   }
 

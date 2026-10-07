@@ -223,6 +223,20 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
   }
 
+  // SYSTEM.PROTO_DESCRIPTORS hardcodes VERSIONS=5 so its
+  // DDL template carries only one %s for KEEP_DELETED_CELLS rather than the standard two.
+  protected String getProtoDescriptorsDDL() {
+    return String.format(QueryConstants.CREATE_PROTO_DESCRIPTORS_METADATA,
+      props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
+        QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
+  }
+
+  // SYSTEM.PROTO_DESC_LINK uses the standard two %s template (VERSIONS + KEEP_DELETED_CELLS)
+  // via setSystemDDLProperties.
+  protected String getProtoDescLinkDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_PROTO_DESC_LINK_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,

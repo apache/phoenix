@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package com.example.acmewidgets.auth.v1.proto2;
+
+option java_package = "com.example.acmewidgets.auth.v1.proto2";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+message TokenRevocation {
+  required string tenant_id = 1;
+  required string token_id = 2;
+  optional string reason = 3 [default = "rotated"];
+  optional bool soft_revoke = 4 [default = false];
+  extensions 100 to 199;
+  extensions 200 to 299;
+}
+
+message AppUserRevocation {
+  required string tenant_id = 1;
+  required string user_id = 2;
+  required string consumer_key = 3;
+  optional google.protobuf.Timestamp revoke_before_time = 4;
+}
+
+extend TokenRevocation {
+  optional string partner_revocation_source = 100;
+  optional int64 partner_revocation_epoch_ms = 101;
+}
+
+message TokenRevocationSyncResponse {
+  repeated TokenRevocation revocations = 1;
+  optional string bookmark = 2;
+  optional bool more_available = 3 [default = false];
+}
+
+message AppUserRevocationSyncResponse {
+  repeated AppUserRevocation revocations = 1;
+  optional string bookmark = 2;
+  optional bool more_available = 3 [default = false];
+}

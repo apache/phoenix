@@ -39,4 +39,65 @@ limitations under the License.
     <Method name="sendMutations" />
     <BugPattern name="REC_CATCH_EXCEPTION" />
   </Match>
+  <Match>
+    <!-- ANTLR-generated parser and its inner DFA classes; all findings come from the grammar -->
+    <Class name="~org\.apache\.phoenix\.parse\.PhoenixSQLParser(\$.*)?" />
+    <Or>
+      <BugPattern name="DLS_DEAD_LOCAL_STORE" />
+      <BugPattern name="EI_EXPOSE_REP" />
+      <BugPattern name="EI_EXPOSE_REP2" />
+    </Or>
+  </Match>
+  <Match>
+    <!-- PROTOBUF plan/statement/descriptor holders are immutable by convention and only handed
+         to Phoenix-internal callers; the exposed collections and descriptors are never mutated -->
+    <Or>
+      <Class name="org.apache.phoenix.expression.util.proto.TagPathPlan" />
+      <Class name="org.apache.phoenix.parse.CreateProtobufBundleStatement" />
+      <Class name="org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry$CachedDescriptor" />
+    </Or>
+    <Or>
+      <BugPattern name="EI_EXPOSE_REP" />
+      <BugPattern name="EI_EXPOSE_REP2" />
+    </Or>
+  </Match>
+  <Match>
+    <!-- System table name byte[] constants follow the existing PhoenixDatabaseMetaData pattern -->
+    <Class name="org.apache.phoenix.jdbc.PhoenixDatabaseMetaData" />
+    <Field name="~SYSTEM_PROTO_DESC.*_NAME_BYTES" />
+    <BugPattern name="MS_MUTABLE_ARRAY" />
+  </Match>
+  <Match>
+    <!-- Column definition validation intentionally throws from the constructor -->
+    <Class name="org.apache.phoenix.parse.ColumnDef" />
+    <Or>
+      <BugPattern name="CT_CONSTRUCTOR_THROW" />
+      <BugPattern name="BX_UNBOXING_IMMEDIATELY_REBOXED" />
+    </Or>
+  </Match>
+  <Match>
+    <Class name="org.apache.phoenix.protobuf.descriptor.ProtoEvolutionValidator" />
+    <Method name="checkFields" />
+    <BugPattern name="UC_USELESS_OBJECT" />
+  </Match>
+  <Match>
+    <!-- Connections created for system table creation/upgrade are closed by the callers' scope -->
+    <Class name="org.apache.phoenix.query.ConnectionQueryServicesImpl" />
+    <Or>
+      <Method name="createOtherSystemTables" />
+      <Method name="upgradeSystemProtoDescLink" />
+      <Method name="upgradeSystemProtoDescriptors" />
+    </Or>
+    <BugPattern name="OBL_UNSATISFIED_OBLIGATION" />
+  </Match>
+  <Match>
+    <Class name="org.apache.phoenix.schema.types.PBinary" />
+    <Method name="coerceBytes" />
+    <BugPattern name="RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE" />
+  </Match>
+  <Match>
+    <!-- PProtobuf is a data type singleton that compares by identity via PDataType -->
+    <Class name="org.apache.phoenix.schema.types.PProtobuf" />
+    <BugPattern name="HE_INHERITS_EQUALS_USE_HASHCODE" />
+  </Match>
 </FindBugsFilter>

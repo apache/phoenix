@@ -1,0 +1,146 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Coprocessor RPC envelope for the PROTOBUF DDL surface. Defines the wire contract between
+// MetaDataClient (client-side) and MetaDataEndpointImpl (server-side coprocessor)
+// for the four DDL forms:
+//   CREATE PROTOBUF DESCRIPTOR <name> FROM '<url>'
+//   ALTER  PROTOBUF DESCRIPTOR <name> FROM '<url>'
+//   DROP   PROTOBUF DESCRIPTOR <name>
+//   CREATE PROTOBUF BUNDLE (n1, n2, ...) FROM '<url>'
+//
+// Uses the unshaded com.google.protobuf:protobuf-java:2.5.0 runtime that HBase 2.x
+// ships for its coprocessor RPC ABI — NOT phoenix-shaded-protobuf.
+// The shaded runtime is for user-data PROTOBUF column processing (FileDescriptorSet
+// parsing in ProtobufDescriptorFetcher); the RPC envelope
+// stays on the same unshaded pb 2.5 footing as every other Phoenix coprocessor
+// service. This is the same split as the existing MetaDataService /
+// ChildLinkMetaDataService / TaskMetaDataService.
+//
+// Why a dedicated ProtobufDescriptorMutationResponse (rather than reusing
+// MetaDataResponse like ChildLinkMetaDataService and TaskMetaDataService do):
+// protobuf-descriptor failures (bundle-level atomic failure, descriptor in use,
+// FileDescriptorSet fetch failures, per-rule evolution rejections) don't map onto
+// the existing MutationCode enum, so the response carries the SQLExceptionCode
+// directly instead of growing MutationCode with PROTOBUF_* values.
+
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "ProtobufDescriptorProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+// All four RPCs use the same response message. A response without `errorCode`
+// is a success; otherwise the client rebuilds the SQLException from it.
+message ProtobufDescriptorMutationResponse {
+  // SQLExceptionCode.getErrorCode() of the failure; unset on success. An
+  // unexpected server-side error is sent as PROTOBUF_DESCRIPTOR_INTERNAL_ERROR.
+  optional int32 errorCode = 1;
+
+  // Affected descriptor full names. On success, this is the list that was
+  // registered / updated / dropped (single-entry for CREATE/ALTER/DROP DESCRIPTOR;
+  // multi-entry for CREATE BUNDLE). On a no-op (IF [NOT] EXISTS hit), empty.
+  repeated string registeredNames = 2;
+
+  // On failure, the descriptor name the error is about.
+  optional string offendingName = 3;
+
+  // On failure, the server-side detail for the client to embed in the
+  // SQLException. Deliberately unset when the server failed with something other
+  // than a SQLException: the underlying throwable could leak server internals (paths, hostnames) to
+  // any client able to issue the DDL. The region server logs the full detail.
+  optional string errorMessage = 4;
+}
+
+//
+// Descriptor fetch:
+//   - `sourceUrl` must be a local `file:///` URL. The JDBC client reads the bytes via
+//     ProtobufDescriptorFetcher and ships them in `inlineDescriptorBytes`. Schemeless
+//     paths and distributed schemes (`hdfs`, `s3a`, `gs`, `abfs`, ...) are rejected on
+//     the client with PROTOBUF_DESCRIPTOR_URL_NOT_ALLOWED.
+//   - Server contract: `inlineDescriptorBytes` is required; a request without it is
+//     rejected with PROTOBUF_DESCRIPTOR_URL_NOT_ALLOWED. The server never fetches
+//     `sourceUrl` (that would read with the region server's own credentials or local
+//     disk), and still re-parses the inline bytes for defense-in-depth. `sourceUrl` is
+//     kept for audit/log attribution only.
+
+// `CREATE PROTOBUF DESCRIPTOR [IF NOT EXISTS] <protobufName> FROM '<sourceUrl>'`
+message CreateProtobufDescriptorRequest {
+  // Fully-qualified protobuf message name, e.g. "my.org.OrderV1".
+  required string protobufName = 1;
+  // Local URL of the FileDescriptorSet, e.g. "file:///home/alice/order_v1.desc".
+  // Recorded for audit only; the server never fetches it.
+  required string sourceUrl = 2;
+  // True if `IF NOT EXISTS` was specified in the SQL.
+  required bool ifNotExists = 3;
+  // FileDescriptorSet bytes the client read from the local `file:///` URL. Required:
+  // the server rejects the request without them (and still re-parses them for
+  // defense-in-depth). See ProtobufDescriptorFetcher.fetchAndParse.
+  optional bytes inlineDescriptorBytes = 4;
+}
+
+// `ALTER PROTOBUF DESCRIPTOR [IF EXISTS] <protobufName> FROM '<sourceUrl>'`
+message AlterProtobufDescriptorRequest {
+  required string protobufName = 1;
+  required string sourceUrl = 2;
+  // True if `IF EXISTS` was specified in the SQL.
+  required bool ifExists = 3;
+  // Required inline bytes; see CreateProtobufDescriptorRequest.
+  optional bytes inlineDescriptorBytes = 4;
+}
+
+// `DROP PROTOBUF DESCRIPTOR [IF EXISTS] <protobufName>`
+//
+// DROP carries no descriptor payload — there is no FROM clause and nothing to fetch —
+// so the fetch rule above doesn't apply. No `inlineDescriptorBytes` field.
+message DropProtobufDescriptorRequest {
+  required string protobufName = 1;
+  required bool ifExists = 2;
+}
+
+// `CREATE PROTOBUF BUNDLE [IF NOT EXISTS] (n1, n2, ...) FROM '<sourceUrl>'`
+//
+// Atomicity: all names register together or none do. If any name fails resolution
+// against the loaded FileDescriptorSet, the whole bundle is rejected with
+// PROTOBUF_DESCRIPTOR_TYPE_NOT_FOUND_IN_FILE naming the offender.
+// IF NOT EXISTS is per-name: already-registered names are skipped without
+// overwrite; new names are registered.
+message CreateProtobufBundleRequest {
+  // List of fully-qualified protobuf message names to register from this bundle.
+  // Order matches SQL source-text order for deterministic error messages; the
+  // registration itself is not order-sensitive.
+  repeated string protobufNames = 1;
+  required string sourceUrl = 2;
+  required bool ifNotExists = 3;
+  // Required inline bytes; see CreateProtobufDescriptorRequest.
+  optional bytes inlineDescriptorBytes = 4;
+}
+
+service ProtobufDescriptorService {
+  rpc createProtobufDescriptor(CreateProtobufDescriptorRequest)
+      returns (ProtobufDescriptorMutationResponse);
+
+  rpc alterProtobufDescriptor(AlterProtobufDescriptorRequest)
+      returns (ProtobufDescriptorMutationResponse);
+
+  rpc dropProtobufDescriptor(DropProtobufDescriptorRequest)
+      returns (ProtobufDescriptorMutationResponse);
+
+  rpc createProtobufBundle(CreateProtobufBundleRequest)
+      returns (ProtobufDescriptorMutationResponse);
+}
