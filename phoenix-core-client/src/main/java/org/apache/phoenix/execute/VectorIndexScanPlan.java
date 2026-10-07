@@ -273,7 +273,7 @@ public class VectorIndexScanPlan extends ScanPlan {
    * Merges two arrays in alternate order: {@code a[0]}, {@code b[0]}, {@code a[1]}, and so on. The
    * other elements of the longer array go at the end.
    */
-  static int[] interleave(int[] a, int[] b) {
+  public static int[] interleave(int[] a, int[] b) {
     int[] out = new int[a.length + b.length];
     int i = 0;
     int j = 0;

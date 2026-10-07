@@ -143,6 +143,11 @@ public class PhoenixIndexImportDirectReducer
         context
           .getCounter(PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT)
           .setValue(verificationResult.getAfterRepairExtraUnverifiedIndexRowCount());
+        if (verificationResult.getBeforeRepairExtraVerifiedIndexRowCount() > 0) {
+          context
+            .getCounter(PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT)
+            .setValue(verificationResult.getBeforeRepairExtraVerifiedIndexRowCount());
+        }
       }
       if (verificationResult.isVerificationFailed()) {
         throw new IOException("Index verification failed! " + verificationResult);
