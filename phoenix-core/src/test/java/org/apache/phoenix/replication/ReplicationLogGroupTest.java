@@ -26,6 +26,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -3201,5 +3202,67 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       eq(HAGroupState.ACTIVE_NOT_IN_SYNC), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
     verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupName),
       eq(HAGroupState.ACTIVE_IN_SYNC), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+  }
+
+  private static final String PEER_FS_PREFIX = ReplicationLogGroup.REPLICATION_PEER_FS_CONF_PREFIX;
+  private static final String FAILOVER_MAX_ATTEMPTS = "dfs.client.failover.max.attempts";
+  // Both peer and local URIs are file:// with the same authority, so FileSystem.get would hand back
+  // a single shared cached instance (built with whichever conf opened it first) and the end-to-end
+  // assertions below could not tell peerConf from conf. Disable the file FS cache in these tests so
+  // each path gets a fresh instance carrying its own conf.
+  private static final String DISABLE_FILE_FS_CACHE = "fs.file.impl.disable.cache";
+
+  /**
+   * A {@code phoenix.replication.peer.fs.<key>} override reaches the peer FileSystem end-to-end
+   * (prefix stripped), for every key set — not just the intermediate {@code peerConf} field.
+   */
+  @Test
+  public void testPeerFsConfAppliesStrippedPrefixOverride() throws Exception {
+    conf.set(FAILOVER_MAX_ATTEMPTS, "15"); // concrete baseline so the assert is not vacuous
+    conf.setBoolean(DISABLE_FILE_FS_CACHE, true);
+    conf.set(PEER_FS_PREFIX + FAILOVER_MAX_ATTEMPTS, "2");
+    conf.set(PEER_FS_PREFIX + "dfs.client.failover.sleep.max.millis", "2000");
+    recreateLogGroup();
+
+    Configuration peerFsConf = logGroup.getOrCreatePeerShardManager().getFileSystem().getConf();
+    assertEquals("2", peerFsConf.get(FAILOVER_MAX_ATTEMPTS));
+    assertEquals("2000", peerFsConf.get("dfs.client.failover.sleep.max.millis"));
+  }
+
+  /**
+   * Bulkheading + wiring: a peer override does NOT reach the local FS (keeps the base value), while
+   * the peer FS does take it. Guards against the local/peer conf being swapped at the call sites.
+   */
+  @Test
+  public void testLocalFsConfUntouchedByPeerOverride() throws Exception {
+    conf.set(FAILOVER_MAX_ATTEMPTS, "15");
+    conf.setBoolean(DISABLE_FILE_FS_CACHE, true);
+    conf.set(PEER_FS_PREFIX + FAILOVER_MAX_ATTEMPTS, "2"); // override the base value
+    recreateLogGroup();
+
+    assertEquals("15",
+      logGroup.getLocalShardManager().getFileSystem().getConf().get(FAILOVER_MAX_ATTEMPTS));
+    assertEquals("2",
+      logGroup.getOrCreatePeerShardManager().getFileSystem().getConf().get(FAILOVER_MAX_ATTEMPTS));
+  }
+
+  /** With no prefixed keys the peer FS inherits the base value unchanged (pure mechanism). */
+  @Test
+  public void testNoPeerOverridesPeerFsMatchesGroupConf() throws Exception {
+    conf.set(FAILOVER_MAX_ATTEMPTS, "15");
+    conf.setBoolean(DISABLE_FILE_FS_CACHE, true);
+    recreateLogGroup();
+
+    assertEquals("15",
+      logGroup.getOrCreatePeerShardManager().getFileSystem().getConf().get(FAILOVER_MAX_ATTEMPTS));
+  }
+
+  /** A bare prefix with no key after it is ignored (guards the length check). */
+  @Test
+  public void testPrefixOnlyKeyIgnored() throws Exception {
+    conf.set(PEER_FS_PREFIX, "garbage");
+    recreateLogGroup();
+
+    assertNull(logGroup.peerConf.get(""));
   }
 }

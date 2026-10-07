@@ -48,6 +48,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -184,6 +185,18 @@ public class ReplicationLogGroup {
   public static final String REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY =
     "phoenix.replication.log.peer.init.timeout.ms";
   public static final long DEFAULT_REPLICATION_LOG_PEER_INIT_TIMEOUT_MS = 10_000L;
+  /**
+   * Prefix for config keys applied to the peer (standby) FileSystem client only. A key
+   * {@code phoenix.replication.peer.fs.<hdfs-key>} is stripped to {@code <hdfs-key>} and set on the
+   * peer-scoped {@link Configuration}, leaving the local FS client's {@link #conf} untouched. This
+   * bulkheads the standby failure domain: operators can fast-fail the peer HDFS client (e.g.
+   * {@code dfs.client.failover.max.attempts}) without affecting local writes, and without a Phoenix
+   * rebuild. A key equal to the bare prefix (no {@code <hdfs-key>} after it) is ignored. Note: only
+   * settings read when the FS client builds its RetryPolicy/FailoverProxyProvider scope per-FS;
+   * {@code ipc.client.connect.timeout} does NOT (the IPC Client is cached JVM-wide by
+   * SocketFactory).
+   */
+  public static final String REPLICATION_PEER_FS_CONF_PREFIX = "phoenix.replication.peer.fs.";
   public static final String WAL_SYNC_TIMEOUT_MS_KEY = "hbase.regionserver.wal.sync.timeout";
   public static final long DEFAULT_WAL_SYNC_TIMEOUT_MS = 5 * 60 * 1000L;
   public static final String REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS_KEY =
@@ -263,6 +276,10 @@ public class ReplicationLogGroup {
   }
 
   protected final Configuration conf;
+  /**
+   * Peer (standby) FileSystem configuration — see {@link #REPLICATION_PEER_FS_CONF_PREFIX}.
+   */
+  protected final Configuration peerConf;
   protected final ServerName serverName;
   protected final String haGroupName;
   protected final HAGroupStoreManager haGroupStoreManager;
@@ -608,12 +625,23 @@ public class ReplicationLogGroup {
     // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
     // we send rpc to namenode so copying it
     // Clone configuration by iterating all entries because ReadOnlyConfiguration wraps the
-    // original config so you can't use the Configuration(other) constructor to create a clone
+    // original config so you can't use the Configuration(other) constructor to create a clone.
+    // Collect peer-FS overrides in the same pass (see REPLICATION_PEER_FS_CONF_PREFIX).
     Configuration clonedConf = new Configuration();
+    Map<String, String> peerOverrides = new TreeMap<>();
     for (Map.Entry<String, String> entry : conf) {
       clonedConf.set(entry.getKey(), entry.getValue());
+      String key = entry.getKey();
+      if (
+        key.startsWith(REPLICATION_PEER_FS_CONF_PREFIX)
+          && key.length() > REPLICATION_PEER_FS_CONF_PREFIX.length()
+      ) {
+        peerOverrides.put(key.substring(REPLICATION_PEER_FS_CONF_PREFIX.length()),
+          entry.getValue());
+      }
     }
     this.conf = clonedConf;
+    this.peerConf = buildPeerConf(clonedConf, peerOverrides, haGroupName);
     this.serverName = serverName;
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
@@ -623,6 +651,29 @@ public class ReplicationLogGroup {
       DEFAULT_REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS);
     this.metrics = createMetricsSource();
     this.mode = new AtomicReference<>(INIT);
+  }
+
+  /**
+   * Build the peer (standby) FS configuration: a clone of {@code base} with the given overrides
+   * (prefix already stripped) applied on top. The applied override keys are logged so an operator
+   * can confirm which overrides were picked up (or that none matched the prefix); a logged key is
+   * not a guarantee it names a real HDFS setting — a typo is applied verbatim and ignored by HDFS.
+   */
+  private static Configuration buildPeerConf(Configuration base, Map<String, String> peerOverrides,
+    String haGroupName) {
+    Configuration peer = new Configuration(base);
+    for (Map.Entry<String, String> override : peerOverrides.entrySet()) {
+      peer.set(override.getKey(), override.getValue());
+    }
+    if (peerOverrides.isEmpty()) {
+      LOG.info("HAGroup {} no {}* overrides; peer FS conf matches group conf", haGroupName,
+        REPLICATION_PEER_FS_CONF_PREFIX);
+    } else {
+      // Log keys only, not values — the prefix accepts any HDFS key, which could carry a secret.
+      LOG.info("HAGroup {} applied {} peer FS conf override(s): {}", haGroupName,
+        peerOverrides.size(), peerOverrides.keySet());
+    }
+    return peer;
   }
 
   /**
@@ -1194,11 +1245,11 @@ public class ReplicationLogGroup {
    * @param uri        HDFS uri
    * @param logDirName Top level directory underneath which the shards will be created
    */
-  private ReplicationShardDirectoryManager createShardManager(String uri, String logDirName)
-    throws IOException {
+  private ReplicationShardDirectoryManager createShardManager(String uri, String logDirName,
+    Configuration fsConf) throws IOException {
     try {
       URI rootURI = new URI(uri);
-      FileSystem fs = getFileSystem(rootURI);
+      FileSystem fs = getFileSystem(rootURI, fsConf);
       LOG.info("HAGroup {} initialized filesystem at {}", this, rootURI);
       // root dir path is <URI>/<HAGroupName>/[in|out]
       Path rootDirPath = new Path(new Path(rootURI.getPath(), getHAGroupName()), logDirName);
@@ -1208,7 +1259,7 @@ public class ReplicationLogGroup {
           throw new IOException("Failed to create directory: " + rootDirPath);
         }
       }
-      return new ReplicationShardDirectoryManager(conf, fs, rootDirPath);
+      return new ReplicationShardDirectoryManager(fsConf, fs, rootDirPath);
     } catch (URISyntaxException e) {
       throw new IOException("Invalid HDFS URI: " + uri, e);
     }
@@ -1216,7 +1267,7 @@ public class ReplicationLogGroup {
 
   /** create shard manager for the fallback cluster */
   protected ReplicationShardDirectoryManager createLocalShardManager() throws IOException {
-    return createShardManager(haGroupStoreRecord.getHdfsUrl(), FALLBACK_DIR);
+    return createShardManager(haGroupStoreRecord.getHdfsUrl(), FALLBACK_DIR, conf);
   }
 
   /**
@@ -1268,7 +1319,7 @@ public class ReplicationLogGroup {
 
   /** Create a new peer shard manager for the standby cluster */
   protected ReplicationShardDirectoryManager createPeerShardManager() throws IOException {
-    return createShardManager(haGroupStoreRecord.getPeerHdfsUrl(), STANDBY_DIR);
+    return createShardManager(haGroupStoreRecord.getPeerHdfsUrl(), STANDBY_DIR, peerConf);
   }
 
   /** return shard manager for the fallback cluster */
@@ -1276,8 +1327,8 @@ public class ReplicationLogGroup {
     return localShardManager;
   }
 
-  private FileSystem getFileSystem(URI uri) throws IOException {
-    return FileSystem.get(uri, conf);
+  private FileSystem getFileSystem(URI uri, Configuration fsConf) throws IOException {
+    return FileSystem.get(uri, fsConf);
   }
 
   /** Create a replication log using the given shard manager */
