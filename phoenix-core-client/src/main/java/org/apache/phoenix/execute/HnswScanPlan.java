@@ -57,12 +57,16 @@ public class HnswScanPlan extends ScanPlan {
     int efSearch = VectorIndexScanPlan.getHintInt(statement.getHint(), Hint.HNSW_EF_SEARCH,
       context.getConnection().getQueryServices().getProps()
         .getInt(QueryServices.HNSW_EF_SEARCH_ATTRIB, QueryServicesOptions.DEFAULT_HNSW_EF_SEARCH));
-    this.candidates = Math.max(efSearch, limit + (offset != null ? offset : 0));
+    int target = limit + (offset != null ? offset : 0);
+    this.candidates = Math.max(efSearch, target);
     float[] query = queryVector(orderBy);
-    byte[] search = new byte[Bytes.SIZEOF_INT * (1 + query.length)];
+    // Serialized search attribute layout: candidate count, target pass count, and float query
+    // vector
+    byte[] search = new byte[Bytes.SIZEOF_INT * (2 + query.length)];
     Bytes.putInt(search, 0, candidates);
+    Bytes.putInt(search, Bytes.SIZEOF_INT, target);
     for (int i = 0; i < query.length; i++) {
-      Bytes.putFloat(search, Bytes.SIZEOF_INT * (1 + i), query[i]);
+      Bytes.putFloat(search, Bytes.SIZEOF_INT * (2 + i), query[i]);
     }
     context.getScan().setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX,
       Bytes.toBytes(index.getName().getString()));

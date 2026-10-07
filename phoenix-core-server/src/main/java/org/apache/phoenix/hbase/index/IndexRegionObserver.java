@@ -73,9 +73,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.MultiRowRangeFilter;
-import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange;
-import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -119,6 +116,7 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.vector.HnswCandidateProbe;
 import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
 import org.apache.phoenix.hbase.index.vector.VectorIndexManager;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
@@ -697,25 +695,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     index = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX);
     if (index != null) {
+      // Serialized search parameters: candidate count, target pass count, and float query vector
       byte[] query = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY);
       int candidates = Bytes.toInt(query, 0);
-      float[] vector = new float[query.length / Bytes.SIZEOF_INT - 1];
+      int target = Bytes.toInt(query, Bytes.SIZEOF_INT);
+      float[] vector = new float[query.length / Bytes.SIZEOF_INT - 2];
       for (int i = 0; i < vector.length; i++) {
-        vector[i] = Bytes.toFloat(query, Bytes.SIZEOF_INT * (1 + i));
+        vector[i] = Bytes.toFloat(query, Bytes.SIZEOF_INT * (2 + i));
       }
-      List<byte[]> keys = ((HnswIndexManager) getVectorIndexManager(Bytes.toString(index)))
-        .search(vector, candidates, candidates);
-      // Filter candidate keys to match the boundaries of the current scan
-      List<RowRange> rows = new ArrayList<>(keys.size());
-      for (byte[] key : keys) {
-        if (
-          Bytes.compareTo(key, scan.getStartRow()) >= 0
-            && (scan.getStopRow().length == 0 || Bytes.compareTo(key, scan.getStopRow()) < 0)
-        ) {
-          rows.add(new RowRange(key, true, key, true));
-        }
+      Filter candidateFilter = HnswCandidateProbe.candidateFilter(c.getEnvironment(),
+        (HnswIndexManager) getVectorIndexManager(Bytes.toString(index)), scan, vector, candidates,
+        target);
+      if (candidateFilter == null) {
+        return;
       }
-      Filter candidateFilter = rows.isEmpty() ? new PageFilter(0) : new MultiRowRangeFilter(rows);
       Filter filter = scan.getFilter();
       if (filter instanceof PagingFilter) {
         PagingFilter paging = (PagingFilter) filter;

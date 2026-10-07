@@ -813,9 +813,10 @@ public class QueryOptimizer {
 
   /**
    * Plans a nearest neighbor query using an HNSW vector index. Scans the data table restricted to
-   * candidate rows returned by region local graph indexes. Queries with filters, partial scan
-   * ranges, or SCN reads are rejected because graph search candidates currently cover the entire
-   * region at the current timestamp.
+   * candidate rows returned by region local graph indexes. Each region applies the query key range
+   * and filters during its search, widening candidates adaptively until sufficient rows pass.
+   * Point-in-time reads (SCN) are rejected because graph indexes reflect only current committed
+   * data.
    */
   private AddPlanResult addHnswPlan(PhoenixStatement statement, PTable index, QueryPlan dataPlan,
     SelectStatement indexSelect, List<? extends PDatum> targetColumns,
@@ -829,14 +830,13 @@ public class QueryOptimizer {
     if (reason != null) {
       return AddPlanResult.rejected(index, reason);
     }
-    SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
-    if (
-      dataSelect.getWhere() != null || !dataPlan.getContext().getScanRanges().isEverything()
-        || statement.getConnection().getSCN() != null
-        || HnswScanPlan.queryVector(dataPlan.getOrderBy()) == null
-    ) {
-      return AddPlanResult.rejected(index, OptimizerReasons.REASON_HNSW_FILTERED_SEARCH);
+    if (statement.getConnection().getSCN() != null) {
+      return AddPlanResult.rejected(index, OptimizerReasons.REASON_HNSW_POINT_IN_TIME);
     }
+    if (HnswScanPlan.queryVector(dataPlan.getOrderBy()) == null) {
+      return AddPlanResult.rejected(index, OptimizerReasons.REASON_NOT_A_VECTOR_SEARCH);
+    }
+    SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
     // Compile using the data plan statement and a new resolver configured with the HNSW index
     return AddPlanResult.success(new QueryCompiler(statement, dataSelect,
       FromCompiler.getResolverForQuery(dataSelect, statement.getConnection()), targetColumns,

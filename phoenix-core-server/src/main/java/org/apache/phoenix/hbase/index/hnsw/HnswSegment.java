@@ -21,13 +21,15 @@ import io.github.jbellis.jvector.disk.ByteBufferReader;
 import io.github.jbellis.jvector.graph.GraphIndexBuilder;
 import io.github.jbellis.jvector.graph.GraphSearcher;
 import io.github.jbellis.jvector.graph.ImmutableGraphIndex;
+import io.github.jbellis.jvector.graph.ListRandomAccessVectorValues;
 import io.github.jbellis.jvector.graph.RandomAccessVectorValues;
 import io.github.jbellis.jvector.graph.SearchResult;
 import io.github.jbellis.jvector.graph.disk.OnDiskGraphIndex;
-import io.github.jbellis.jvector.graph.disk.OnDiskGraphIndexWriter;
+import io.github.jbellis.jvector.graph.disk.OnDiskSequentialGraphIndexWriter;
 import io.github.jbellis.jvector.graph.disk.feature.Feature;
 import io.github.jbellis.jvector.graph.disk.feature.FeatureId;
 import io.github.jbellis.jvector.graph.disk.feature.FusedPQ;
+import io.github.jbellis.jvector.graph.disk.feature.InlineVectors;
 import io.github.jbellis.jvector.graph.disk.feature.NVQ;
 import io.github.jbellis.jvector.graph.similarity.DefaultSearchScoreProvider;
 import io.github.jbellis.jvector.graph.similarity.SearchScoreProvider;
@@ -43,8 +45,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -71,7 +71,10 @@ import org.apache.phoenix.schema.PTable;
  * ordinals to data table primary keys.
  * <p>
  * Payload layout: {@code [graph][mapping][mapping length (int)][MAGIC (int)]}, where the mapping is
- * {@code [count (int)] ([key length (int)][key])*} in ordinal order. Ordinals are dense.
+ * {@code [count (int)] ([key length (int)][key])*} stored in ordinal order. Graph node ordinals are
+ * dense and sorted lexicographically by row key to enable mapping row key ranges directly to
+ * contiguous ordinal intervals. Graph serialization is performed sequentially using an
+ * {@link HnswBufferWriter} with graph headers appended.
  * <p>
  * Base segments are produced by full rebuilds. Delta segments are produced by flushes and stacked
  * onto a base segment, recording updated rows, tombstones for deletions, and the base segment
@@ -99,6 +102,8 @@ public final class HnswSegment {
   public static final byte[] TOMBSTONES_QUALIFIER = Bytes.toBytes("T");
   private static final int MAGIC = 0x484E5357; // "HNSW"
   private static final float NEIGHBOR_OVERFLOW = 1.2f;
+  // Fixed byte overhead for JVector graph index headers excluding dynamic feature headers
+  private static final int GRAPH_HEADER_BYTES = 4096;
 
   private final Connection connection;
   private final TableName indexTable;
@@ -292,8 +297,9 @@ public final class HnswSegment {
   }
 
   /**
-   * Builds an HNSW graph index for the supplied vectors and primary keys, returning the serialized
-   * segment payload.
+   * Constructs an immutable HNSW graph segment from vector data and primary keys, returning the
+   * serialized segment payload. Input rows are sorted lexicographically so that graph ordinals
+   * align strictly with primary key order.
    * @param vi      vector index metadata
    * @param vectors vector dataset
    * @param keys    corresponding data table row keys
@@ -305,59 +311,73 @@ public final class HnswSegment {
     if (vectors.size() != keys.length) {
       throw new IllegalArgumentException(vectors.size() + " vectors but " + keys.length + " keys");
     }
+    Integer[] order = new Integer[keys.length];
+    for (int i = 0; i < order.length; i++) {
+      order[i] = i;
+    }
+    Arrays.sort(order, (a, b) -> Bytes.compareTo(keys[a], keys[b]));
+    List<VectorFloat<?>> sortedVectors = new ArrayList<>(order.length);
+    byte[][] sortedKeys = new byte[order.length][];
+    for (int i = 0; i < order.length; i++) {
+      VectorFloat<?> v = vectors.getVector(order[i]);
+      sortedVectors.add(vectors.isValueShared() ? v.copy() : v);
+      sortedKeys[i] = keys[order[i]];
+    }
+    RandomAccessVectorValues sorted =
+      new ListRandomAccessVectorValues(sortedVectors, vectors.dimension());
     VectorSimilarityFunction similarity = similarityFunction(vi.getDistanceMetric());
-    try (GraphIndexBuilder builder = new GraphIndexBuilder(vectors, similarity, vi.getHnswM(),
+    try (GraphIndexBuilder builder = new GraphIndexBuilder(sorted, similarity, vi.getHnswM(),
       vi.getHnswEfConstruction(), NEIGHBOR_OVERFLOW, vi.getHnswAlpha().floatValue(), true, true)) {
-      ImmutableGraphIndex graph = builder.build(vectors);
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      out.write(writeGraph(graph, vectors, vi));
-      byte[] mapping = encodeKeys(keys);
-      DataOutputStream trailer = new DataOutputStream(out);
-      trailer.write(mapping);
-      trailer.writeInt(mapping.length);
-      trailer.writeInt(MAGIC);
-      trailer.flush();
+      ImmutableGraphIndex graph = builder.build(sorted);
+      byte[] mapping = encodeKeys(sortedKeys);
+      HnswBufferWriter out = writeGraph(graph, sorted, vi, mapping.length + 2 * Bytes.SIZEOF_INT);
+      out.write(mapping);
+      out.writeInt(mapping.length);
+      out.writeInt(MAGIC);
       return out.toByteArray();
     }
   }
 
-  private static byte[] writeGraph(ImmutableGraphIndex graph, RandomAccessVectorValues vectors,
-    PTable.VectorIndex vi) throws IOException {
-    Path path = Files.createTempFile("hnsw-segment-", ".graph");
-    try {
-      String quantization = vi.getQuantizationType();
-      // Fall back to unquantized vectors when the dataset is smaller than the PQ training threshold
-      if ("PQ".equals(quantization) && vectors.size() < 256) {
-        quantization = "NONE";
-      }
+  // Serializes the graph index into direct memory pre-sized to accommodate the graph and trailer
+  private static HnswBufferWriter writeGraph(ImmutableGraphIndex graph,
+    RandomAccessVectorValues vectors, PTable.VectorIndex vi, int trailerBytes) throws IOException {
+    String quantization = vi.getQuantizationType();
+    // Datasets below the minimum centroid training threshold fall back to unquantized vectors
+    if ("PQ".equals(quantization) && vectors.size() < 256) {
+      quantization = "NONE";
+    }
+    List<Feature> features = new ArrayList<>(2);
+    Map<FeatureId, IntFunction<Feature.State>> states = new EnumMap<>(FeatureId.class);
+    try (ImmutableGraphIndex.View view = graph.getView()) {
       if ("NONE".equals(quantization)) {
-        OnDiskGraphIndex.write(graph, vectors, path);
+        features.add(new InlineVectors(vectors.dimension()));
+        states.put(FeatureId.INLINE_VECTORS,
+          node -> new InlineVectors.State(vectors.getVector(node)));
       } else {
-        Map<FeatureId, IntFunction<Feature.State>> states = new EnumMap<>(FeatureId.class);
-        OnDiskGraphIndexWriter.Builder writer = new OnDiskGraphIndexWriter.Builder(graph, path);
-        writer.withMap(OnDiskGraphIndexWriter.sequentialRenumbering(graph));
-        try (ImmutableGraphIndex.View view = graph.getView()) {
-          // Compute scalar quantization for compressed vector representations and candidate
-          // reranking
-          NVQuantization nvq = NVQuantization.compute(vectors, 1);
-          writer.with(new NVQ(nvq));
-          states.put(FeatureId.NVQ_VECTORS,
-            node -> new NVQ.State(nvq.encode(vectors.getVector(node))));
-          if ("PQ".equals(quantization)) {
-            ProductQuantization pq =
-              ProductQuantization.compute(vectors, vi.getPqSegments(), 256, true);
-            PQVectors codes = (PQVectors) pq.encodeAll(vectors);
-            writer.with(new FusedPQ(graph.maxDegree(), pq));
-            states.put(FeatureId.FUSED_PQ, node -> new FusedPQ.State(view, codes, node));
-          }
-          try (OnDiskGraphIndexWriter w = writer.build()) {
-            w.write(states);
-          }
+        // Generate scalar quantization (NVQ) for compact vector encoding and initial candidate
+        // scoring
+        NVQuantization nvq = NVQuantization.compute(vectors, 1);
+        features.add(new NVQ(nvq));
+        states.put(FeatureId.NVQ_VECTORS,
+          node -> new NVQ.State(nvq.encode(vectors.getVector(node))));
+        if ("PQ".equals(quantization)) {
+          ProductQuantization pq =
+            ProductQuantization.compute(vectors, vi.getPqSegments(), 256, true);
+          PQVectors codes = (PQVectors) pq.encodeAll(vectors);
+          features.add(new FusedPQ(graph.maxDegree(), pq));
+          states.put(FeatureId.FUSED_PQ, node -> new FusedPQ.State(view, codes, node));
         }
       }
-      return Files.readAllBytes(path);
-    } finally {
-      Files.deleteIfExists(path);
+      HnswBufferWriter out = new HnswBufferWriter(estimateSize(graph, features, trailerBytes));
+      OnDiskSequentialGraphIndexWriter.Builder writer =
+        new OnDiskSequentialGraphIndexWriter.Builder(graph, out);
+      for (Feature feature : features) {
+        writer.with(feature);
+      }
+      try (OnDiskSequentialGraphIndexWriter w = writer.build()) {
+        w.write(states);
+      }
+      return out;
     }
   }
 
@@ -368,6 +388,30 @@ public final class HnswSegment {
     NotFoundException(byte[] rowKey, TableName indexTable) {
       super("HNSW segment " + Bytes.toStringBinary(rowKey) + " not found in " + indexTable);
     }
+  }
+
+  /**
+   * Computes an upper bound estimate of serialized segment byte size to minimize buffer
+   * reallocation during serialization. Accounts for duplicate graph headers in the header and
+   * footer, base layer nodes with inline features and full adjacency lists, upper layer index
+   * hierarchies, fused feature codes, and trailer metadata.
+   */
+  static int estimateSize(ImmutableGraphIndex graph, List<Feature> features, int trailerBytes) {
+    long headers = GRAPH_HEADER_BYTES;
+    long inline = 0;
+    for (Feature feature : features) {
+      headers += feature.headerSize();
+      inline += feature.featureSize();
+    }
+    long base =
+      graph.size(0) * (2L * Integer.BYTES + inline + (long) Integer.BYTES * graph.getDegree(0));
+    long upper = 0;
+    for (int level = 1; level <= graph.getMaxLevel(); level++) {
+      upper +=
+        graph.size(level) * (2L * Integer.BYTES + (long) Integer.BYTES * graph.getDegree(level));
+    }
+    return (int) Math.min(Integer.MAX_VALUE - 8,
+      2 * headers + base + base / 16 + upper + trailerBytes);
   }
 
   /**
@@ -504,6 +548,29 @@ public final class HnswSegment {
   /** Returns deleted row keys recorded as tombstones in this segment. */
   public byte[][] getTombstones() {
     return tombstones;
+  }
+
+  /**
+   * Locates the lowest ordinal whose row key is greater than or equal to the specified key. Because
+   * ordinals follow sorted row key order, {@code [ceiling(start), ceiling(stop))} defines the
+   * ordinal slice covering the range {@code [start, stop)}.
+   */
+  public int ceiling(byte[] key) {
+    return ceiling(keys, key);
+  }
+
+  static int ceiling(byte[][] keys, byte[] key) {
+    int low = 0;
+    int high = keys.length;
+    while (low < high) {
+      int mid = (low + high) >>> 1;
+      if (Bytes.compareTo(keys[mid], key) < 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low;
   }
 
   /** Returns the vector ordinal corresponding to the specified row key, or -1 if not present. */

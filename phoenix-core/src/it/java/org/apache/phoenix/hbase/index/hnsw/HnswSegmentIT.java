@@ -176,8 +176,14 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     Set<String> stored = new HashSet<>();
     for (int i = 0; i < COUNT; i++) {
       stored.add(Bytes.toString(segment.getKey(i)));
+      // Ordinals must strictly maintain lexicographical row key order
+      if (i > 0) {
+        assertTrue(Bytes.compareTo(segment.getKey(i - 1), segment.getKey(i)) < 0);
+      }
     }
     assertEquals(COUNT, stored.size());
+    assertEquals(0, segment.ceiling(new byte[0]));
+    assertEquals(COUNT, segment.ceiling(Bytes.toBytes("s")));
     double recall = recall(segment);
     assertTrue("recall " + recall, recall >= 0.95);
   }
@@ -220,7 +226,8 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     assertArrayEquals(before, nodes(a.search(query, TOP_K, 64, Bits.ALL)));
     assertEquals("Accessing the first segment should trigger reload and evict the second", sizeA,
       allocator.getAllocatedBytes());
-    assertEquals(3, a.search(query, 1, 64, Bits.ALL).getNodes()[0].node);
+    assertEquals("row-3",
+      Bytes.toString(a.getKey(a.search(query, 1, 64, Bits.ALL).getNodes()[0].node)));
     b.search(query, 1, 64, Bits.ALL);
   }
 

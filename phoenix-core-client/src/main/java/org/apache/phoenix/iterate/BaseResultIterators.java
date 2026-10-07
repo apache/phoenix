@@ -73,6 +73,7 @@ import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -618,8 +619,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         .toString();
 
     initializeScan(plan, perScanLimit, offset, scan);
+    // Disable guidepost splitting for HNSW index plans
     this.useStatsForParallelization =
-      ScanUtil.getStatsForParallelizationProp(context.getConnection(), table);
+      ScanUtil.getStatsForParallelizationProp(context.getConnection(), table)
+        && !(plan instanceof HnswScanPlan);
     ScansWithRegionLocations scansWithRegionLocations = getParallelScans();
     this.scans = scansWithRegionLocations.getScans();
     this.regionLocations = scansWithRegionLocations.getRegionLocations();

@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -128,7 +130,10 @@ public final class HnswIndexManager implements VectorIndexManager {
   private final VectorSimilarityFunction similarity;
   private final HnswOffheapAllocator allocator;
 
-  /** Readable segment source with its mutation mask and boundary scope. */
+  /**
+   * Readable segment source with its mutation mask. A segment may cover rows outside this region (a
+   * split parent or merge input); searches are clipped to the region's key range.
+   */
   private static final class Source {
     final HnswSegment segment;
     final HnswSegment.Descriptor descriptor;
@@ -136,15 +141,11 @@ public final class HnswIndexManager implements VectorIndexManager {
     final int changes;
     // Segment row ordinals invalidated by subsequent updates or deletions
     final Set<Integer> mask = ConcurrentHashMap.newKeySet();
-    // Indicates whether the segment covers rows outside this region (e.g., split parent or merge
-    // input)
-    final boolean wider;
 
-    Source(HnswSegment segment, HnswSegment.Descriptor descriptor, boolean wider) {
+    Source(HnswSegment segment, HnswSegment.Descriptor descriptor) {
       this.segment = segment;
       this.descriptor = descriptor;
       this.changes = segment.size() + segment.getTombstones().length;
-      this.wider = wider;
     }
   }
 
@@ -385,7 +386,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         Source source = open.get(new ImmutableBytesPtr(d.rowKey));
         if (source == null && (d.count > 0 || d.isDelta())) {
           source = new Source(HnswSegment.open(env.getConnection(), indexTable, family, d.rowKey,
-            allocator, vectorIndex.getDistanceMetric()), d, !d.covers(startKey, endKey));
+            allocator, vectorIndex.getDistanceMetric()), d);
           opened.add(source);
         }
         if (source != null) {
@@ -724,7 +725,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     List<Source> sources = new ArrayList<>(isDelta ? s.sources.size() + 1 : 1);
     if (segment != null) {
-      Source source = new Source(segment, written, false);
+      Source source = new Source(segment, written);
       for (ImmutableBytesPtr key : s.changedSinceSwap) {
         int ordinal = segment.ordinalOf(key);
         if (ordinal >= 0) {
@@ -858,28 +859,62 @@ public final class HnswIndexManager implements VectorIndexManager {
    * @throws IOException if search execution fails
    */
   public List<byte[]> search(float[] query, int topK, int efSearch) throws IOException {
+    return search(query, topK, efSearch, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+      null);
+  }
+
+  /**
+   * Executes approximate nearest neighbor search for the query vector constrained to primary keys
+   * in {@code [startRow, stopRow)} matching {@code keyFilter}. Key predicates are evaluated
+   * dynamically during graph traversal, retaining filtered out vertices as routing nodes to
+   * preserve graph connectivity. If the total indexed row count within the key range does not
+   * exceed {@code topK}, all qualifying keys are returned directly, bypassing graph traversal.
+   * @param query     query vector values
+   * @param topK      maximum candidate row keys to return
+   * @param efSearch  size of the dynamic candidate list evaluated during traversal
+   * @param startRow  inclusive lower bound of the scan key range, or empty for region start
+   * @param stopRow   exclusive upper bound of the scan key range, or empty for region end
+   * @param keyFilter optional row key predicate evaluated during traversal, or null
+   * @return candidate primary keys matching the range and filter criteria
+   * @throws IOException if graph index search fails
+   */
+  public List<byte[]> search(float[] query, int topK, int efSearch, byte[] startRow, byte[] stopRow,
+    Predicate<byte[]> keyFilter) throws IOException {
     State s = state;
+    byte[] from = Bytes.compareTo(startRow, startKey) > 0 ? startRow : startKey;
+    byte[] to = minStop(stopRow, endKey);
+    Predicate<byte[]> accept =
+      key -> inRange(key, from, to) && (keyFilter == null || keyFilter.test(key));
+    if (count(s, from, to) <= topK) {
+      return all(s, from, to, accept, keyFilter);
+    }
     VectorFloat<?> q = VTS.createFloatVector(query);
-    // Evaluate sources in reverse chronological order: active mutable graph, in-flight flush
-    // graph (excluding keys modified since swap), and segment sources (filtering masked ordinals
-    // and keys outside the region boundary)
+    // Search index sources in reverse chronological order: active mutable graph, in-flight flush
+    // snapshot (omitting keys modified post-swap), and immutable disk segments (omitting masked
+    // ordinals)
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    s.mutable.search(q, topK, efSearch, scores, null);
+    s.mutable.search(q, topK, efSearch, scores, null, accept);
     if (s.flushing != null) {
-      s.flushing.search(q, topK, efSearch, scores, s.changedSinceSwap);
+      s.flushing.search(q, topK, efSearch, scores, s.changedSinceSwap, accept);
     }
     for (Source source : s.sources) {
       HnswSegment segment = source.segment;
+      int low = segment.ceiling(from);
+      int high = to.length == 0 ? segment.size() : segment.ceiling(to);
+      if (low >= high) {
+        continue;
+      }
       SearchResult result;
       try {
-        result = segment.search(q, topK, efSearch, ordinal -> !source.mask.contains(ordinal)
-          && (!source.wider || region.getRegionInfo().containsRow(segment.getKey(ordinal))));
+        result = segment.search(q, topK, efSearch,
+          ordinal -> ordinal >= low && ordinal < high && !source.mask.contains(ordinal)
+            && (keyFilter == null || keyFilter.test(segment.getKey(ordinal))));
       } catch (HnswSegment.NotFoundException e) {
         // An evicted segment reloads its payload; if its row was retired, search its replacements
         if (!replaceRetired(s.sources, source)) {
           throw e;
         }
-        return search(query, topK, efSearch);
+        return search(query, topK, efSearch, startRow, stopRow, keyFilter);
       }
       for (SearchResult.NodeScore ns : result.getNodes()) {
         scores.putIfAbsent(new ImmutableBytesPtr(segment.getKey(ns.node)), ns.score);
@@ -892,6 +927,66 @@ public final class HnswIndexManager implements VectorIndexManager {
       keys.add(ranked.get(i).getKey().copyBytesIfNecessary());
     }
     return keys;
+  }
+
+  /**
+   * Estimates an upper bound on indexed row keys spanning {@code [startRow, stopRow)} within this
+   * region. Masked segment ordinals are included in segment range spans for efficiency, so the
+   * returned estimate may exceed the true live key count.
+   */
+  public int count(byte[] startRow, byte[] stopRow) {
+    return count(state, Bytes.compareTo(startRow, startKey) > 0 ? startRow : startKey,
+      minStop(stopRow, endKey));
+  }
+
+  private static int count(State s, byte[] from, byte[] to) {
+    long count = s.mutable.count(from, to);
+    if (s.flushing != null) {
+      count += s.flushing.count(from, to);
+    }
+    for (Source source : s.sources) {
+      int high = to.length == 0 ? source.segment.size() : source.segment.ceiling(to);
+      count += Math.max(0, high - source.segment.ceiling(from));
+    }
+    return (int) Math.min(Integer.MAX_VALUE, count);
+  }
+
+  // Collects all qualifying live keys across active memory and immutable segments in reverse
+  // chronological order
+  private static List<byte[]> all(State s, byte[] from, byte[] to, Predicate<byte[]> accept,
+    Predicate<byte[]> keyFilter) {
+    Set<ImmutableBytesPtr> keys = new LinkedHashSet<>();
+    s.mutable.collect(keys, null, accept);
+    if (s.flushing != null) {
+      s.flushing.collect(keys, s.changedSinceSwap, accept);
+    }
+    for (Source source : s.sources) {
+      HnswSegment segment = source.segment;
+      int high = to.length == 0 ? segment.size() : segment.ceiling(to);
+      for (int ordinal = segment.ceiling(from); ordinal < high; ordinal++) {
+        byte[] key = segment.getKey(ordinal);
+        if (!source.mask.contains(ordinal) && (keyFilter == null || keyFilter.test(key))) {
+          keys.add(new ImmutableBytesPtr(key));
+        }
+      }
+    }
+    List<byte[]> list = new ArrayList<>(keys.size());
+    for (ImmutableBytesPtr key : keys) {
+      list.add(key.copyBytesIfNecessary());
+    }
+    return list;
+  }
+
+  // Resolves the tighter of two exclusive upper bounds, treating empty byte arrays as unbounded
+  private static byte[] minStop(byte[] a, byte[] b) {
+    if (a.length == 0) {
+      return b;
+    }
+    return b.length == 0 || Bytes.compareTo(a, b) < 0 ? a : b;
+  }
+
+  private static boolean inRange(byte[] key, byte[] from, byte[] to) {
+    return Bytes.compareTo(key, from) >= 0 && (to.length == 0 || Bytes.compareTo(key, to) < 0);
   }
 
   @Override
@@ -1009,18 +1104,47 @@ public final class HnswIndexManager implements VectorIndexManager {
       }
     }
 
-    // Searches the in-memory graph and records scores for eligible row keys
+    // Searches the in-memory graph using JVector GraphSearcher, collecting candidate similarity
+    // scores for passing keys
     void search(VectorFloat<?> query, int topK, int efSearch, Map<ImmutableBytesPtr, Float> scores,
-      Set<ImmutableBytesPtr> excluded) {
+      Set<ImmutableBytesPtr> excluded, Predicate<byte[]> accept) {
       if (ordinals.isEmpty() || builder == null) {
         return;
       }
+      Bits bits = ordinal -> {
+        ImmutableBytesPtr key = keys.get(ordinal);
+        return key != null && (excluded == null || !excluded.contains(key))
+          && accept.test(key.copyBytesIfNecessary());
+      };
       SearchResult result = GraphSearcher.search(query, topK, Math.max(efSearch, topK), ravv,
-        similarity, builder.getGraph(), Bits.ALL);
+        similarity, builder.getGraph(), bits);
       for (SearchResult.NodeScore ns : result.getNodes()) {
         ImmutableBytesPtr key = keys.get(ns.node);
-        if (key != null && (excluded == null || !excluded.contains(key))) {
+        if (key != null) {
           scores.putIfAbsent(key, ns.score);
+        }
+      }
+    }
+
+    // Returns the count of live in-memory keys falling within [from, to)
+    int count(byte[] from, byte[] to) {
+      int count = 0;
+      for (ImmutableBytesPtr key : live.keySet()) {
+        if (inRange(key.copyBytesIfNecessary(), from, to)) {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    // Collects non-excluded live keys matching the acceptance predicate into the destination set
+    void collect(Set<ImmutableBytesPtr> into, Set<ImmutableBytesPtr> excluded,
+      Predicate<byte[]> accept) {
+      for (ImmutableBytesPtr key : live.keySet()) {
+        if (
+          (excluded == null || !excluded.contains(key)) && accept.test(key.copyBytesIfNecessary())
+        ) {
+          into.add(key);
         }
       }
     }

@@ -196,7 +196,7 @@ public class BaseScannerRegionObserverConstants {
   public static final String HNSW_BUILD = "_HnswBuild";
   /** Scan attribute specifying the target HNSW index for nearest neighbor search. */
   public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
-  /** Scan attribute specifying the candidate count and query vector for HNSW search. */
+  /** Scan attribute specifying the candidate count, target row count, and HNSW query vector. */
   public static final String HNSW_SEARCH_QUERY = "_HnswSearchQuery";
 
   /**
