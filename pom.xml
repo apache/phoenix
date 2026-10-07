@@ -69,7 +69,7 @@
     along with hbase.version (defined in profiles) -->
     <hadoop.version>3.4.2</hadoop.version>
 
-    <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
+    <phoenix.thirdparty.version>2.2.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
@@ -1344,6 +1344,11 @@
         <version>${phoenix.thirdparty.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-protobuf</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
+      </dependency>
+      <dependency>
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${jodatime.version}</version>
@@ -1777,6 +1782,29 @@
                     <bannedImports>
                       <bannedImport>org.apache.commons.cli.**</bannedImport>
                       <bannedImport>org.apache.hbase.thirdparty.org.apache.commons.cli.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>New PROTOBUF feature code must use the relocated phoenix-shaded-protobuf runtime
+                      (org.apache.phoenix.thirdparty.com.google.protobuf.*). The unshaded com.google.protobuf
+                      is reserved for the legacy HBase 2.x coprocessor RPC surface and existing Phoenix
+                      coprocessor stubs only; org.apache.hbase.thirdparty.com.google.protobuf belongs to
+                      HBase's internal RPC framework and has no legitimate use in Phoenix code.
+                      org.apache.phoenix.protobuf.ProtobufUtil is grandfathered because it is the legacy
+                      pb-2.5 marshalling helper for HBase coprocessor RPC and predates this rule.
+                      ProtobufDescriptorServiceWireTest is excluded because it tests the
+                      unshaded pb-2.5 coprocessor RPC envelope of ProtobufDescriptorService,
+                      and the generated stub's bytes-field setters require com.google.protobuf.ByteString
+                      to construct the inlineDescriptorBytes payload for round-trip testing.</reason>
+                    <basePackage>org.apache.phoenix.protobuf.**</basePackage>
+                    <exclusions>
+                      <exclusion>org.apache.phoenix.protobuf.ProtobufUtil</exclusion>
+                      <exclusion>org.apache.phoenix.protobuf.text.ProtobufDescriptorServiceWireTest</exclusion>
+                    </exclusions>
+                    <bannedImports>
+                      <bannedImport>com.google.protobuf.**</bannedImport>
+                      <bannedImport>org.apache.hbase.thirdparty.com.google.protobuf.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                   <RestrictImports>

@@ -211,7 +211,12 @@ public enum ExpressionType {
   RawRowSizeFunction(RawRowSizeFunction.class),
   RegexpLikeFunction(RegexpLikeFunction.class),
   ByteBasedRegexpLikeFunction(ByteBasedRegexpLikeFunction.class),
-  StringBasedRegexpLikeFunction(StringBasedRegexpLikeFunction.class);
+  StringBasedRegexpLikeFunction(StringBasedRegexpLikeFunction.class),
+  ProtoValueFunction(ProtoValueFunction.class),
+  ProtoExistsFunction(ProtoExistsFunction.class),
+  ProtoArrayLengthFunction(ProtoArrayLengthFunction.class),
+  ProtoFieldTypeFunction(ProtoFieldTypeFunction.class),
+  ProtoValueAtTagFunction(ProtoValueAtTagFunction.class);
 
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;

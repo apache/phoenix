@@ -21,7 +21,12 @@ import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Properties;
+import java.util.function.Supplier;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
@@ -36,10 +41,15 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistryHolder;
+import org.apache.phoenix.protobuf.descriptor.SystemProtoDescriptorsJdbcLoader;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -63,6 +73,36 @@ public class PhoenixRegionServerEndpoint extends
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     initUncoveredIndexThreadPool(this.conf);
+    registerProtoDescriptorRegistryFactory(this.conf);
+  }
+
+  /**
+   * Registers a lazy {@link ProtoDescriptorRegistry} factory on every RegionServer.
+   */
+  public static void registerProtoDescriptorRegistryFactory(final Configuration conf) {
+    ProtoDescriptorRegistryHolder.setFactory(() -> {
+      final Properties serverProps = new Properties();
+      QueryUtil.setServerConnection(serverProps);
+      final String url;
+      try {
+        url = QueryUtil.getConnectionUrl(serverProps, conf);
+      } catch (SQLException e) {
+        LOGGER.error("Something went wrong with retrieval of JDBC url.", e);
+        throw new RuntimeException(e);
+      }
+      LOGGER.info("PROTOBUF descriptor registry will load descriptors using {}", url);
+      Supplier<Connection> connectionSupplier = () -> {
+        try {
+          Connection conn = DriverManager.getConnection(url, serverProps);
+          conn.unwrap(PhoenixConnection.class).getQueryServices().clearUpgradeRequired();
+          return conn;
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      };
+      return new ProtoDescriptorRegistry(conf,
+        new SystemProtoDescriptorsJdbcLoader(connectionSupplier));
+    });
   }
 
   @Override

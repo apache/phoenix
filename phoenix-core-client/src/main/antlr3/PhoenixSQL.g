@@ -278,6 +278,11 @@ package org.apache.phoenix.parse;
     public void setParseNodeFactory(ParseNodeFactory factory) {
         this.factory = factory;
     }
+
+    /** Test-only: number of ParseContext frames currently on the stack. */
+    int getContextStackDepth() {
+        return contextStack.size();
+    }
     
     public boolean isCountFunction(String field) {
         return CountAggregateFunction.NORMALIZED_NAME.equals(SchemaUtil.normalizeIdentifier(field));
@@ -298,6 +303,17 @@ package org.apache.phoenix.parse;
         e.charPositionInLine = t.getCharPositionInLine();
         e.input = input;
         throw e;
+    }
+
+    // PROTOBUF / DESCRIPTOR / BUNDLE are matched as NAME, not tokens, so they stay valid identifiers.
+    private boolean isKw(Token t, String word) {
+        return word.equalsIgnoreCase(t.getText());
+    }
+
+    private void matchKw(Token t, String word) throws RecognitionException {
+        if (!isKw(t, word)) {
+            throwRecognitionException(t);
+        }
     }
     
     public int getBindCount() {
@@ -536,9 +552,25 @@ oneStatement returns [BindableStatement ret]
     |	s=use_schema_node
     |   s=update_statistics_node
     |   s=execute_upgrade_node
+    |   s=protobuf_descriptor_node
     |   s=explain_node) { $ret = s; }
     ;
 finally{ contextStack.pop(); }
+
+// Sub-rule so PROTOBUF DDL alternatives do not push oneStatement past javac's 64KB method limit.
+protobuf_descriptor_node returns [BindableStatement ret]
+    :   ( cp=create_protobuf_node            { $ret = cp; }
+        | a=alter_protobuf_descriptor_node   { $ret = a; }
+        | d=drop_protobuf_descriptor_node    { $ret = d; }
+        )
+    ;
+
+// Disambiguates `CREATE PROTOBUF DESCRIPTOR ...` vs `CREATE PROTOBUF BUNDLE ...` by the third token.
+create_protobuf_node returns [BindableStatement ret]
+    :   ( {isKw(input.LT(3), "bundle")}?=> b=create_protobuf_bundle_node { $ret = b; }
+        | c=create_protobuf_descriptor_node { $ret = c; }
+        )
+    ;
     
 explain_node returns [BindableStatement ret]
 @init { ExplainOptsAcc opts = new ExplainOptsAcc(); }
@@ -781,6 +813,50 @@ drop_schema_node returns [DropSchemaStatement ret]
         {ret = factory.dropSchema(s, ex!=null, c!=null); }
     ;
 
+// No inline .proto text; FROM is a pre-compiled FileDescriptorSet URL.
+create_protobuf_descriptor_node returns [CreateProtobufDescriptorStatement ret]
+    :   CREATE p=NAME k=NAME { matchKw(p, "protobuf"); matchKw(k, "descriptor"); } (IF NOT ex=EXISTS)? pn=proto_message_name
+        FROM url=STRING_LITERAL
+        {
+            $ret = factory.createProtobufDescriptor(pn, ex != null, url.getText());
+        }
+    ;
+
+// IF EXISTS is a silent no-op; IF NOT EXISTS is not valid on ALTER.
+alter_protobuf_descriptor_node returns [AlterProtobufDescriptorStatement ret]
+    :   ALTER p=NAME k=NAME { matchKw(p, "protobuf"); matchKw(k, "descriptor"); } (IF ex=EXISTS)? pn=proto_message_name
+        FROM url=STRING_LITERAL
+        {
+            $ret = factory.alterProtobufDescriptor(pn, ex != null, url.getText());
+        }
+    ;
+
+// In-use check is a PROTO_DESC_LINK prefix scan, never SYSTEM.CATALOG.
+drop_protobuf_descriptor_node returns [DropProtobufDescriptorStatement ret]
+    :   DROP p=NAME k=NAME { matchKw(p, "protobuf"); matchKw(k, "descriptor"); } (IF ex=EXISTS)? pn=proto_message_name
+        { $ret = factory.dropProtobufDescriptor(pn, ex != null); }
+    ;
+
+// Registers every listed name from one FileDescriptorSet, atomically.
+create_protobuf_bundle_node returns [CreateProtobufBundleStatement ret]
+    :   CREATE p=NAME k=NAME { matchKw(p, "protobuf"); matchKw(k, "bundle"); } (IF NOT ex=EXISTS)?
+        LPAREN nl=proto_message_name_list RPAREN
+        FROM url=STRING_LITERAL
+        {
+            $ret = factory.createProtobufBundle(nl, ex != null, url.getText());
+        }
+    ;
+
+// Comma-separated list of qualified proto message names. List order matches source-text
+// order (used for deterministic error messages); registration semantics are order-
+// independent. The list must be non-empty (the LPAREN/RPAREN around it makes the grammar
+// require at least one name).
+proto_message_name_list returns [java.util.List<String> ret]
+@init { $ret = new java.util.ArrayList<String>(); }
+    :   first=proto_message_name { $ret.add($first.ret); }
+        (COMMA next=proto_message_name { $ret.add($next.ret); })*
+    ;
+
 
 // Parse a drop index statement
 drop_index_node returns [DropIndexStatement ret]
@@ -887,10 +963,11 @@ indexes returns [List<NamedNode> ret]
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+    :   c=column_name dt=identifier (LT pn=proto_message_name GT)? (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
             dt,
+            pn,
             ar != null || lsq != null,
             a == null ? null :  Integer.parseInt( a.getText() ),
             nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
@@ -901,6 +978,36 @@ column_def returns [ColumnDef ret]
             df == null ? null : df.toString(),
             eq == null ? null : Integer.parseInt( eq.getText() ),
             rr != null); }
+    ;
+
+// Case-preserving parts so reserved words like Order stay valid in PROTOBUF<...>.
+proto_message_name returns [String ret]
+@init{StringBuilder buf = new StringBuilder();}
+    :   first=proto_message_name_part {buf.append(first);}
+        (DOT next=proto_message_name_part {buf.append('.').append(next);})*
+        {$ret = buf.toString();}
+    ;
+
+proto_message_name_part returns [String ret]
+    :   any=~(EOF) {
+            // STRING_LITERAL text has quotes stripped; reject literals so PROTOBUF<'x'>
+            // cannot parse as PROTOBUF<x>. Accept NAME or reserved-word tokens only.
+            int tt = $any.getType();
+            if (tt == STRING_LITERAL || tt == NUMBER || tt == DECIMAL || tt == DOUBLE
+                    || tt == HEX_LITERAL || tt == BIN_LITERAL || tt == BIND_NAME) {
+                throw new RuntimeException(
+                    "Invalid PROTOBUF message-name part: literals (" + $any.getText()
+                        + ") are not allowed. Each dot-separated part must be an unquoted "
+                        + "identifier matching [A-Za-z_][A-Za-z0-9_]*.");
+            }
+            String text = $any.getText();
+            if (text == null || !text.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                throw new RuntimeException(
+                    "Invalid PROTOBUF message-name part: '" + text
+                        + "'. Each dot-separated part must match [A-Za-z_][A-Za-z0-9_]*.");
+            }
+            $ret = text;
+        }
     ;
 
 dyn_column_defs returns [List<ColumnDef> ret]

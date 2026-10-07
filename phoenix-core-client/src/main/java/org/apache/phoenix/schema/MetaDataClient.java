@@ -147,6 +147,9 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLi
 import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 import static org.apache.phoenix.util.MetaDataUtil.getCompatibleTTLExpression;
 
+import com.google.protobuf.ByteString;
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -177,6 +180,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.Consumer;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -189,6 +193,9 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
@@ -206,6 +213,12 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ServerBuildIndexCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.AlterProtobufDescriptorRequest;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.CreateProtobufBundleRequest;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.CreateProtobufDescriptorRequest;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.DropProtobufDescriptorRequest;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.ProtobufDescriptorMutationResponse;
+import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.ProtobufDescriptorService;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
@@ -227,6 +240,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.AlterProtobufDescriptorStatement;
 import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -235,6 +249,8 @@ import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.CreateProtobufBundleStatement;
+import org.apache.phoenix.parse.CreateProtobufDescriptorStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
@@ -243,6 +259,7 @@ import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
+import org.apache.phoenix.parse.DropProtobufDescriptorStatement;
 import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
@@ -260,6 +277,9 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistryHolder;
+import org.apache.phoenix.protobuf.descriptor.ProtobufDescriptorFetcher;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
@@ -285,6 +305,7 @@ import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PProtobuf;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -1827,9 +1848,13 @@ public class MetaDataClient {
           colName = ColumnName.caseSensitiveColumnName(isLocalIndex
             ? IndexUtil.getLocalIndexColumnFamily(col.getFamilyName().getString())
             : col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
+          // Preserve col.getProtoMessageName() so that INCLUDE(PROTOBUF<my.org.X>-column)
+          // rebuilds an index-side column def carrying the FQ message name; otherwise
+          // ColumnDef's PROTOBUF_MESSAGE_NAME_REQUIRED guard rejects the derived def.
           columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(),
-            col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(),
-            col.getExpressionStr(), col.isRowTimestamp()));
+            col.getProtoMessageName(), false, null, col.isNullable(), col.getMaxLength(),
+            col.getScale(), false, col.getSortOrder(), col.getExpressionStr(), null,
+            col.isRowTimestamp()));
         }
       }
 
@@ -2295,6 +2320,30 @@ public class MetaDataClient {
       }
     }
     return null;
+  }
+
+  private void validateProtobufColumnRefs(List<ColumnDef> colDefs) throws SQLException {
+    if (colDefs == null || colDefs.isEmpty()) {
+      return;
+    }
+    ProtoDescriptorRegistry registry = null;
+    for (ColumnDef def : colDefs) {
+      if (def == null || def.getDataType() != PProtobuf.INSTANCE) {
+        continue;
+      }
+      String name = def.getProtoMessageName();
+      if (name == null || name.isEmpty()) {
+        continue;
+      }
+      if (registry == null) {
+        registry = connection.getProtoDescriptorRegistry();
+      }
+      if (registry.lookup(name) == null) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_DESCRIPTOR_NOT_FOUND)
+          .setColumnName(def.getColumnDefName().getColumnName())
+          .setMessage(", descriptor: '" + name + "'").build().buildException();
+      }
+    }
   }
 
   private static boolean checkAndValidateRowTimestampCol(ColumnDef colDef,
@@ -2933,6 +2982,7 @@ public class MetaDataClient {
       }
 
       List<ColumnDef> colDefs = statement.getColumnDefs();
+      validateProtobufColumnRefs(colDefs);
       LinkedHashMap<PColumn, PColumn> columns;
       LinkedHashSet<PColumn> pkColumns;
 
@@ -4041,6 +4091,10 @@ public class MetaDataClient {
           .setSchemaName(schemaName).setTableName(tableName).build().buildException();
       case CANNOT_COERCE_AUTO_PARTITION_ID:
       case UNABLE_TO_CREATE_CHILD_LINK:
+      case PROTO_DESCRIPTOR_NOT_FOUND:
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_DESCRIPTOR_NOT_FOUND)
+          .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+      case UNABLE_TO_WRITE_PROTO_DESC_LINK:
       case PARENT_TABLE_NOT_FOUND:
       case TABLE_NOT_IN_REGION:
         throwsSQLExceptionUtil(String.valueOf(code), schemaName, tableName);
@@ -4554,6 +4608,12 @@ public class MetaDataClient {
       case ERROR_WRITING_TO_SCHEMA_REGISTRY:
         throw new SQLExceptionInfo.Builder(ERROR_WRITING_TO_SCHEMA_REGISTRY)
           .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+      case UNABLE_TO_WRITE_PROTO_DESC_LINK:
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_WRITE_PROTO_DESC_LINK)
+          .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+      case PROTO_DESCRIPTOR_NOT_FOUND:
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_DESCRIPTOR_NOT_FOUND)
+          .setSchemaName(schemaName).setTableName(tableName).build().buildException();
       default:
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNEXPECTED_MUTATION_CODE)
           .setSchemaName(schemaName).setTableName(tableName)
@@ -4866,6 +4926,7 @@ public class MetaDataClient {
       } else {
         columnDefs = origColumnDefs == null ? Collections.<ColumnDef> emptyList() : origColumnDefs;
       }
+      validateProtobufColumnRefs(columnDefs);
 
       boolean retried = false;
       boolean changingPhoenixTableProperty = false;
@@ -7176,5 +7237,183 @@ public class MetaDataClient {
       AccessControlClient.revoke(hConnection, changePermsStatement.getName(),
         Permission.Action.values());
     }
+  }
+
+  /**
+   * Selects which {@code ProtobufDescriptorService} RPC to invoke from {@link #invokeProtobufRpc}.
+   */
+  private interface ProtobufRpcDispatch<R> {
+    void dispatch(ProtobufDescriptorService instance, RpcController controller, R request,
+      RpcCallback<ProtobufDescriptorMutationResponse> done);
+  }
+
+  public MutationState createProtobufDescriptor(CreateProtobufDescriptorStatement stmt)
+    throws SQLException {
+    if (isConnectionless()) {
+      return new MutationState(0, 0, connection);
+    }
+    String name = stmt.getProtoMessageName();
+    String url = stmt.getSourceUrl();
+    CreateProtobufDescriptorRequest.Builder builder = CreateProtobufDescriptorRequest.newBuilder()
+      .setProtobufName(name).setSourceUrl(url).setIfNotExists(stmt.isIfNotExists());
+    attachInlineBytes(url, builder::setInlineDescriptorBytes);
+    CreateProtobufDescriptorRequest request = builder.build();
+    ProtobufDescriptorMutationResponse response = invokeProtobufRpc(Bytes.toBytes(name), request,
+      ProtobufDescriptorService::createProtobufDescriptor);
+    return handleResponse(response, name);
+  }
+
+  public MutationState alterProtobufDescriptor(AlterProtobufDescriptorStatement stmt)
+    throws SQLException {
+    if (isConnectionless()) {
+      return new MutationState(0, 0, connection);
+    }
+    String name = stmt.getProtoMessageName();
+    String url = stmt.getSourceUrl();
+    AlterProtobufDescriptorRequest.Builder builder = AlterProtobufDescriptorRequest.newBuilder()
+      .setProtobufName(name).setSourceUrl(url).setIfExists(stmt.isIfExists());
+    attachInlineBytes(url, builder::setInlineDescriptorBytes);
+    AlterProtobufDescriptorRequest request = builder.build();
+    ProtobufDescriptorMutationResponse response = invokeProtobufRpc(Bytes.toBytes(name), request,
+      ProtobufDescriptorService::alterProtobufDescriptor);
+    MutationState result = handleResponse(response, name);
+    invalidateClientDescriptorCache(name);
+    return result;
+  }
+
+  public MutationState dropProtobufDescriptor(DropProtobufDescriptorStatement stmt)
+    throws SQLException {
+    if (isConnectionless()) {
+      return new MutationState(0, 0, connection);
+    }
+    String name = stmt.getProtoMessageName();
+    DropProtobufDescriptorRequest request = DropProtobufDescriptorRequest.newBuilder()
+      .setProtobufName(name).setIfExists(stmt.isIfExists()).build();
+    ProtobufDescriptorMutationResponse response = invokeProtobufRpc(Bytes.toBytes(name), request,
+      ProtobufDescriptorService::dropProtobufDescriptor);
+    MutationState result = handleResponse(response, name);
+    invalidateClientDescriptorCache(name);
+    return result;
+  }
+
+  private void invalidateClientDescriptorCache(String protobufName) {
+    ProtoDescriptorRegistry registry = ProtoDescriptorRegistryHolder.getIfInstalled();
+    if (registry != null) {
+      registry.invalidate(protobufName);
+    }
+  }
+
+  public MutationState createProtobufBundle(CreateProtobufBundleStatement stmt)
+    throws SQLException {
+    if (isConnectionless()) {
+      return new MutationState(0, 0, connection);
+    }
+    List<String> names = stmt.getProtoMessageNames();
+    if (names.isEmpty()) {
+      // Parser already rejects empty lists; keep a programmatic-construction guard.
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.PROTOBUF_MESSAGE_NAME_REQUIRED).build()
+        .buildException();
+    }
+    String url = stmt.getSourceUrl();
+    CreateProtobufBundleRequest.Builder builder = CreateProtobufBundleRequest.newBuilder()
+      .setSourceUrl(url).setIfNotExists(stmt.isIfNotExists()).addAllProtobufNames(names);
+    attachInlineBytes(url, builder::setInlineDescriptorBytes);
+    CreateProtobufBundleRequest request = builder.build();
+    // Anchor on the first name; SystemProtoDescriptorsSplitPolicy keeps all rows in one region.
+    ProtobufDescriptorMutationResponse response = invokeProtobufRpc(Bytes.toBytes(names.get(0)),
+      request, ProtobufDescriptorService::createProtobufBundle);
+    return handleResponse(response, names.get(0));
+  }
+
+  /**
+   * Dispatches one {@code ProtobufDescriptorService} RPC to the region that owns {@code rowKey}.
+   * IOExceptions are translated via {@link ClientUtil#parseServerException}.
+   */
+  private <R> ProtobufDescriptorMutationResponse invokeProtobufRpc(final byte[] rowKey,
+    final R request, final ProtobufRpcDispatch<R> dispatch) throws SQLException {
+    org.apache.hadoop.hbase.TableName tableName =
+      SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES,
+        connection.getQueryServices().getProps());
+    try (Table table = connection.getQueryServices().getTable(tableName.getName())) {
+      Map<byte[], ProtobufDescriptorMutationResponse> results =
+        table.coprocessorService(ProtobufDescriptorService.class, rowKey, rowKey,
+          new Batch.Call<ProtobufDescriptorService, ProtobufDescriptorMutationResponse>() {
+            @Override
+            public ProtobufDescriptorMutationResponse call(ProtobufDescriptorService instance)
+              throws IOException {
+              ServerRpcController controller = new ServerRpcController();
+              CoprocessorRpcUtils.BlockingRpcCallback<ProtobufDescriptorMutationResponse> cb =
+                new CoprocessorRpcUtils.BlockingRpcCallback<>();
+              dispatch.dispatch(instance, controller, request, cb);
+              if (controller.getFailedOn() != null) {
+                throw controller.getFailedOn();
+              }
+              return cb.get();
+            }
+          });
+      if (results.size() != 1) {
+        throw new SQLException("Expected exactly one ProtobufDescriptorService response, got "
+          + results.size() + " (the descriptor system table should be single-region)");
+      }
+      return results.values().iterator().next();
+    } catch (IOException e) {
+      throw ClientUtil.parseServerException(e);
+    } catch (Throwable t) {
+      throw new SQLException(t);
+    }
+  }
+
+  /**
+   * Reads the descriptor bytes from the local {@code file:///} URL on the JDBC client and attaches
+   * them to the request. Any other URL (schemeless, hdfs, s3a, ...) is rejected.
+   */
+  private void attachInlineBytes(String sourceUrl, Consumer<ByteString> sink) throws SQLException {
+    sink.accept(ByteString.copyFrom(new ProtobufDescriptorFetcher().fetch(sourceUrl)));
+  }
+
+  /**
+   * Maps the RPC response to a {@link MutationState} or {@link SQLException}.
+   * {@code executeUpdate()} is 1 when at least one descriptor changed, 0 on IF EXISTS / IF NOT
+   * EXISTS no-ops.
+   */
+  private MutationState handleResponse(ProtobufDescriptorMutationResponse response,
+    String requestName) throws SQLException {
+    if (!response.hasErrorCode()) {
+      return response.getRegisteredNamesCount() > 0
+        ? new MutationState(1, 1000, connection)
+        : new MutationState(0, 0, connection);
+    }
+    throw buildSqlException(response, requestName);
+  }
+
+  private static SQLException buildSqlException(ProtobufDescriptorMutationResponse response,
+    String requestName) {
+    SQLExceptionCode code = SQLExceptionCode.fromErrorCode(response.getErrorCode());
+    if (code == SQLExceptionCode.UNKNOWN_ERROR_CODE) {
+      code = SQLExceptionCode.PROTOBUF_DESCRIPTOR_INTERNAL_ERROR;
+    }
+    StringBuilder msg = new StringBuilder("descriptor=").append(requestName);
+    if (response.hasOffendingName() && !requestName.equals(response.getOffendingName())) {
+      msg.append(", offending=").append(response.getOffendingName());
+    }
+    if (response.hasErrorMessage() && !response.getErrorMessage().isEmpty()) {
+      msg.append(", detail: ").append(response.getErrorMessage());
+    }
+    return new SQLExceptionInfo.Builder(code).setMessage(msg.toString()).build().buildException();
+  }
+
+  /**
+   * Connectionless mode has no live HBase regions, so descriptor DDL is a no-op.
+   */
+  private boolean isConnectionless() {
+    Object svcs = connection.getQueryServices();
+    if (svcs instanceof ConnectionlessQueryServicesImpl) {
+      return true;
+    }
+    if (svcs instanceof DelegateQueryServices) {
+      return ((DelegateQueryServices) svcs)
+        .getDelegate() instanceof ConnectionlessQueryServicesImpl;
+    }
+    return false;
   }
 }

@@ -74,4 +74,17 @@ public interface MetaDataEndpointObserver extends Coprocessor {
 
   void preUpsertTaskDetails(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
     String tableName) throws IOException;
+
+  default void preCreateProtobufDescriptor(
+    ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, List<String> protobufNames)
+    throws IOException {
+  }
+
+  default void preAlterProtobufDescriptor(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String protobufName) throws IOException {
+  }
+
+  default void preDropProtobufDescriptor(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String protobufName) throws IOException {
+  }
 }

@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.orders.v1;
+
+option java_package = "com.example.acmewidgets.orders.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+
+message Money {
+  string currency_code = 1;
+  int64 units = 2;
+  int32 nanos = 3;
+}
+
+message Category {
+  string id = 1;
+  string name = 2;
+  Category parent = 3;
+  repeated Category children = 4;
+  map<string, string> attributes = 5;
+}
+
+message ContactInfo {
+  string email = 1;
+  string phone = 2;
+  message Address {
+    string street = 1;
+    string city = 2;
+    string region = 3;
+    string postal_code = 4;
+    string country_code = 5;
+    message GeoPoint {
+      double latitude = 1;
+      double longitude = 2;
+    }
+    GeoPoint geo = 6;
+  }
+  repeated Address addresses = 3;
+}
+
+message LineItem {
+  string line_id = 1;
+  string sku = 2;
+  Category category = 3;
+  int32 quantity = 4;
+  Money unit_price = 5;
+  Money line_total = 6;
+  map<string, Money> regional_prices = 7;
+  message Modifier {
+    string modifier_id = 1;
+    string display_name = 2;
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      DISCOUNT = 1;
+      SURCHARGE = 2;
+      GIFT_WRAP = 3;
+    }
+    Kind kind = 3;
+    Money amount = 4;
+    repeated Modifier sub_modifiers = 5;
+  }
+  repeated Modifier modifiers = 8;
+  map<string, Modifier> named_modifiers = 9;
+}
+
+message PaymentMethod {
+  string payment_id = 1;
+  Money amount = 2;
+  message CreditCard {
+    string masked_pan = 1;
+    string card_network = 2;
+    int32 exp_year = 3;
+    int32 exp_month = 4;
+  }
+  message BankAccount {
+    string masked_iban = 1;
+    string bank_code = 2;
+  }
+  message DigitalWallet {
+    string wallet_type = 1;
+    string account_id = 2;
+  }
+  oneof method_kind {
+    CreditCard credit_card = 3;
+    BankAccount bank_account = 4;
+    DigitalWallet digital_wallet = 5;
+  }
+}
+
+message Customer {
+  string customer_id = 1;
+  string display_name = 2;
+  ContactInfo contact = 3;
+  com.example.acmewidgets.common.v1.WarehouseEndpoint home_warehouse = 4;
+  map<string, string> preferences = 5;
+}
+
+message Order {
+  string order_id = 1;
+  Customer customer = 2;
+  repeated LineItem line_items = 3;
+  repeated PaymentMethod payments = 4;
+  Money subtotal = 5;
+  Money tax_total = 6;
+  Money grand_total = 7;
+  google.protobuf.Timestamp created_time = 8;
+  message Event {
+    google.protobuf.Timestamp when = 1;
+    string kind = 2;
+    map<string, string> payload = 3;
+  }
+  repeated Event history = 9;
+}

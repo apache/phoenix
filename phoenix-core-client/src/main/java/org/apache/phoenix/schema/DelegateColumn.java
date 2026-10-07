@@ -119,4 +119,9 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
   public byte[] getColumnQualifierBytes() {
     return getDelegate().getColumnQualifierBytes();
   }
+
+  @Override
+  public String getProtoMessageName() {
+    return getDelegate().getProtoMessageName();
+  }
 }

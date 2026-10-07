@@ -49,6 +49,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXCEPTION_TRACE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXPLAIN_PLAN;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FILE_DESCRIPTOR_SET;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GLOBAL_SCAN_DETAILS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT;
@@ -104,6 +105,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PROTOBUF_DESCRIPTOR_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PROTOBUF_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
@@ -140,6 +143,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_IDX_CDC_TRACKER_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_TABLE;
@@ -336,6 +341,14 @@ public interface QueryConstants {
     "org.apache.phoenix.schema.SystemTaskSplitPolicy";
   final String INDEX_REGION_SPLIT_POLICY_CLASSNAME =
     "org.apache.phoenix.hbase.index.IndexRegionSplitPolicy";
+  // Pins SYSTEM.PROTO_DESCRIPTORS to a single region (CREATE PROTOBUF BUNDLE's atomic
+  // batch-write requires all N descriptor rows to live in one region; the table is a
+  // small bounded registry of descriptors, not a scale-out data table). Phoenix-owned
+  // thin extension of DisabledRegionSplitPolicy — same convention as the other
+  // System*SplitPolicy entries above (matches the SystemTaskSplitPolicy / SystemFunction
+  // SplitPolicy pattern for searchability + consistency).
+  final String SYSTEM_PROTO_DESCRIPTORS_SPLIT_POLICY_CLASSNAME =
+    "org.apache.phoenix.schema.SystemProtoDescriptorsSplitPolicy";
 
   final String GLOBAL_INDEX_CHECKER_CLASSNAME = "org.apache.phoenix.index.GlobalIndexChecker";
   final String INDEX_REGION_OBSERVER_CLASSNAME =
@@ -369,6 +382,11 @@ public interface QueryConstants {
     "org.apache.phoenix.coprocessor.TaskMetaDataEndpoint";
   final String CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME =
     "org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint";
+  // Coprocessor endpoint for SYSTEM.PROTO_DESCRIPTORS — serves ProtobufDescriptorService
+  // Attached to the descriptor region by
+  // ConnectionQueryServicesImpl.addCoprocessors when the system table is created or upgraded.
+  final String PROTOBUF_DESCRIPTOR_ENDPOINT_CLASSNAME =
+    "org.apache.phoenix.coprocessor.ProtobufDescriptorEndpointImpl";
   final String PHOENIX_TTL_REGION_OBSERVER_CLASSNAME =
     "org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver";
   final String SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME =
@@ -421,10 +439,10 @@ public interface QueryConstants {
       + " VARCHAR, \n" + TTL + " VARCHAR, \n" + ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n"
       + IS_STRICT_TTL + " BOOLEAN, \n" + INDEX_CONSISTENCY + " CHAR(1), \n" +
       // Column metadata (will be null for table row)
-      DATA_TYPE + " INTEGER," + COLUMN_SIZE + " INTEGER," + DECIMAL_DIGITS + " INTEGER," + NULLABLE
-      + " INTEGER," + ORDINAL_POSITION + " INTEGER," + SORT_ORDER + " INTEGER," + ARRAY_SIZE
-      + " INTEGER,\n" + VIEW_CONSTANT + " VARBINARY,\n" + IS_VIEW_REFERENCED + " BOOLEAN,\n"
-      + KEY_SEQ + " SMALLINT,\n" +
+      DATA_TYPE + " INTEGER," + PROTOBUF_DESCRIPTOR_NAME + " VARCHAR," + COLUMN_SIZE + " INTEGER,"
+      + DECIMAL_DIGITS + " INTEGER," + NULLABLE + " INTEGER," + ORDINAL_POSITION + " INTEGER,"
+      + SORT_ORDER + " INTEGER," + ARRAY_SIZE + " INTEGER,\n" + VIEW_CONSTANT + " VARBINARY,\n"
+      + IS_VIEW_REFERENCED + " BOOLEAN,\n" + KEY_SEQ + " SMALLINT,\n" +
       // Link metadata (only set on rows linking table to index or view)
       LINK_TYPE + " UNSIGNED_TINYINT,\n" +
       // Unused
@@ -611,4 +629,21 @@ public interface QueryConstants {
       + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000" + ",\n"
       + ColumnFamilyDescriptorBuilder.TTL + "=" + IDX_CDC_TRACKER_TTL + ",\n"
       + "\"phoenix.max.lookback.age.seconds\"=0";
+
+  String CREATE_PROTO_DESCRIPTORS_METADATA =
+    "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_PROTO_DESCRIPTORS_TABLE + "\"(\n"
+      + PROTOBUF_NAME + " VARCHAR NOT NULL,\n" + FILE_DESCRIPTOR_SET + " VARBINARY,\n"
+      + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + PROTOBUF_NAME + "))\n"
+      + HConstants.VERSIONS + "=5,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
+      + TableDescriptorBuilder.SPLIT_POLICY + "='" + SYSTEM_PROTO_DESCRIPTORS_SPLIT_POLICY_CLASSNAME
+      + "',\n" + TRANSACTIONAL + "=" + Boolean.FALSE;
+
+  String CREATE_PROTO_DESC_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\""
+    + SYSTEM_PROTO_DESC_LINK_TABLE + "\"(\n" + PROTOBUF_NAME + " VARCHAR NOT NULL,\n" + TENANT_ID
+    + " VARCHAR NULL,\n" + TABLE_SCHEM + " VARCHAR NULL,\n" + TABLE_NAME + " VARCHAR NOT NULL,\n"
+    + COLUMN_FAMILY + " VARCHAR NULL,\n" + COLUMN_NAME + " VARCHAR NOT NULL,\n" + "CONSTRAINT "
+    + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + PROTOBUF_NAME + "," + TENANT_ID + "," + TABLE_SCHEM
+    + "," + TABLE_NAME + "," + COLUMN_FAMILY + "," + COLUMN_NAME + "))\n" + HConstants.VERSIONS
+    + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + TRANSACTIONAL + "="
+    + Boolean.FALSE;
 }

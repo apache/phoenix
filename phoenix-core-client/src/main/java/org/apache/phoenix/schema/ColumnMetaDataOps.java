@@ -32,6 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PROTOBUF_DESCRIPTOR_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
@@ -83,8 +84,9 @@ public class ColumnMetaDataOps {
                                                                                         // access by
                                                                                         // metadata
                                                                                         // APIs
-    KEY_SEQ + "," + COLUMN_DEF + "," + COLUMN_QUALIFIER + ", " + IS_ROW_TIMESTAMP
-    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    KEY_SEQ + "," + COLUMN_DEF + "," + COLUMN_QUALIFIER + "," + IS_ROW_TIMESTAMP + ","
+    + PROTOBUF_DESCRIPTOR_NAME
+    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   public static void addColumnMutation(PhoenixConnection connection, String tenantId,
     String schemaName, String tableName, PColumn column, String parentTableName, String pkName,
@@ -157,6 +159,11 @@ public class ColumnMetaDataOps {
           colUpsert.setBytes(19, column.getColumnQualifierBytes());
         }
         colUpsert.setBoolean(20, column.isRowTimestamp());
+        if (column.getProtoMessageName() == null) {
+          colUpsert.setNull(21, Types.VARCHAR);
+        } else {
+          colUpsert.setString(21, column.getProtoMessageName());
+        }
       }
       colUpsert.execute();
     }
@@ -213,10 +220,11 @@ public class ColumnMetaDataOps {
         }
         isNull = false;
       }
-      PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName,
-        def.getDataType(), def.getMaxLength(), def.getScale(), isNull, position, sortOrder,
-        def.getArraySize(), null, false, def.getExpression(), isRowTimestamp, false,
-        columnQualifierBytes, EnvironmentEdgeManager.currentTimeMillis());
+      PColumn column =
+        new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
+          def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null,
+          false, def.getExpression(), isRowTimestamp, false, columnQualifierBytes,
+          EnvironmentEdgeManager.currentTimeMillis(), false, def.getProtoMessageName());
       return column;
     } catch (IllegalArgumentException e) { // Based on precondition check in constructor
       throw new SQLException(e);

@@ -632,6 +632,21 @@ public class SchemaUtil {
         SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, true).getName()) == 0;
   }
 
+  /**
+   * True iff {@code tableName} refers to {@code SYSTEM.PROTO_DESCRIPTORS} — either by its logical
+   * Phoenix table name or its underlying HBase physical table name (which differs when namespace
+   * mapping is enabled). Used by {@code ConnectionQueryServicesImpl.addCoprocessors} to attach
+   * {@code ProtobufDescriptorEndpointImpl} when the descriptor system table is created / upgraded.
+   */
+  public static boolean isProtoDescriptorsTable(byte[] tableName) {
+    return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES)
+        == 0
+      || Bytes.compareTo(tableName,
+        SchemaUtil
+          .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES, true)
+          .getName()) == 0;
+  }
+
   public static boolean isSequenceTable(PTable table) {
     return PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME.equals(table.getName().getString());
   }

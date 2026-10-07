@@ -140,7 +140,8 @@ def setPath():
     hbase_site_file = os.path.join(hbase_conf_dir, "hbase-site.xml")
     try:
         global zk_tls_args
-        root = ET.parse(hbase_site_file).getroot()
+        # hbase-site.xml is optional; without it there are no ZK TLS properties to apply
+        root = ET.parse(hbase_site_file).getroot() if os.path.isfile(hbase_site_file) else ET.Element("configuration")
         zk_hbase_prefix = "hbase.zookeeper.property."
         zkcfg = {
             prop.find("name").text[len(zk_hbase_prefix):]: prop.find("value").text

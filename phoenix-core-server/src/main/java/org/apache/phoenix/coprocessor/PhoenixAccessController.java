@@ -25,6 +25,7 @@ import java.net.InetAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -60,7 +61,9 @@ import org.apache.hadoop.hbase.security.access.AccessChecker;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.AccessControlConstants;
 import org.apache.hadoop.hbase.security.access.AccessControlUtil;
+import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.AuthResult;
+import org.apache.hadoop.hbase.security.access.GlobalPermission;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.hadoop.hbase.security.access.UserPermission;
@@ -102,10 +105,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
       for (RegionCoprocessor cp : cpHost.findCoprocessors(RegionCoprocessor.class)) {
         if (cp instanceof AccessControlService.Interface && cp instanceof MasterObserver) {
           oldAccessControllers.add((MasterObserver) cp);
-          if (
-            cp.getClass().getName()
-              .equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())
-          ) {
+          if (cp.getClass().getName().equals(AccessController.class.getName())) {
             hbaseAccessControllerEnabled = true;
           }
         }
@@ -484,6 +484,109 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     }
   }
 
+  @Override
+  public void preCreateProtobufDescriptor(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    List<String> protobufNames) throws IOException {
+    if (!accessCheckEnabled) {
+      return;
+    }
+    requireGlobalAdmin("CreateProtobufDescriptor " + protobufNames);
+  }
+
+  @Override
+  public void preAlterProtobufDescriptor(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String protobufName) throws IOException {
+    if (!accessCheckEnabled) {
+      return;
+    }
+    requireGlobalAdmin("AlterProtobufDescriptor " + protobufName);
+  }
+
+  @Override
+  public void preDropProtobufDescriptor(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String protobufName) throws IOException {
+    if (!accessCheckEnabled) {
+      return;
+    }
+    requireGlobalAdmin("DropProtobufDescriptor " + protobufName);
+  }
+
+  /** Descriptors are global, so DDL on them needs superuser or a GLOBAL-scope ADMIN grant. */
+  private void requireGlobalAdmin(String request) throws IOException {
+    User user = getActiveUser();
+    AuthResult result;
+    if (Superusers.isSuperUser(user) || hasGlobalPermission(user, Action.ADMIN)) {
+      result =
+        AuthResult.allow(request, "Global check allowed", user, Action.ADMIN, null, null, null);
+      logResult(result);
+      return;
+    }
+    result = AuthResult.deny(request, "Global check failed", user, Action.ADMIN, null, null, null);
+    logResult(result);
+    throw new AccessDeniedException("Insufficient permissions "
+      + authString(user.getName(), null, Collections.singleton(Action.ADMIN)));
+  }
+
+  private boolean hasGlobalPermission(User user, Action action) throws IOException {
+    Set<String> principals = new HashSet<>();
+    principals.add(user.getShortName());
+    String[] groupNames = user.getGroupNames();
+    if (groupNames != null) {
+      for (String group : groupNames) {
+        principals.add(AuthUtil.toGroupEntry(group));
+      }
+    }
+    for (UserPermission perm : getGlobalUserPermissions()) {
+      if (
+        perm.getPermission() instanceof GlobalPermission && principals.contains(perm.getUser())
+          && perm.getPermission().implies(action)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** GLOBAL-scope grants from every access controller loaded on this region. */
+  private List<UserPermission> getGlobalUserPermissions() throws IOException {
+    return User.runAsLoginUser(() -> {
+      final List<UserPermission> userPermissions = new ArrayList<>();
+      final RpcCall rpcContext = RpcUtil.getRpcContext();
+      try {
+        // Clear the RPC context so the calls below run as the login user.
+        RpcUtil.setRpcContext(null);
+        for (MasterObserver service : getAccessControllers()) {
+          if (service.getClass().getName().equals(AccessController.class.getName())) {
+            // An empty table regex returns the GLOBAL-scope grants.
+            userPermissions.addAll(AccessControlClient.getUserPermissions(serverConnection, ""));
+          } else {
+            AccessControlProtos.GetUserPermissionsRequest request =
+              AccessControlProtos.GetUserPermissionsRequest.newBuilder()
+                .setType(AccessControlProtos.Permission.Type.Global).build();
+            ((AccessControlService.Interface) service).getUserPermissions(new ServerRpcController(),
+              request, message -> {
+                if (message != null) {
+                  for (AccessControlProtos.UserPermission perm : message.getUserPermissionList()) {
+                    userPermissions.add(AccessControlUtil.toUserPermission(perm));
+                  }
+                }
+              });
+          }
+        }
+      } catch (Throwable e) {
+        if (e instanceof Exception) {
+          throw (Exception) e;
+        } else if (e instanceof Error) {
+          throw (Error) e;
+        }
+        throw new Exception(e);
+      } finally {
+        RpcUtil.setRpcContext(rpcContext);
+      }
+      return userPermissions;
+    });
+  }
+
   /**
    * Gets all the permissions for a given tableName for all the users Also, get the permissions at
    * table's namespace level and merge all of them
@@ -502,10 +605,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             for (MasterObserver service : getAccessControllers()) {
               // Use AccessControlClient API's if the accessController is an instance of
               // org.apache.hadoop.hbase.security.access.AccessController
-              if (
-                service.getClass().getName()
-                  .equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())
-              ) {
+              if (service.getClass().getName().equals(AccessController.class.getName())) {
                 userPermissions.addAll(AccessControlClient.getUserPermissions(serverConnection,
                   tableName.getNameWithNamespaceInclAsString()));
                 userPermissions.addAll(AccessControlClient.getUserPermissions(serverConnection,
@@ -540,10 +640,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
           // Setting RPC context as null so that user can be resetted
           RpcUtil.setRpcContext(null);
           for (MasterObserver service : getAccessControllers()) {
-            if (
-              service.getClass().getName()
-                .equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())
-            ) {
+            if (service.getClass().getName().equals(AccessController.class.getName())) {
               continue;
             } else {
               getUserPermsFromUserDefinedAccessController(userPermissions,

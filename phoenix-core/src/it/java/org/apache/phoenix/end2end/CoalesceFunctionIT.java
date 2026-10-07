@@ -138,6 +138,27 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void coalesceWithSecondParamAsExpressionUsingProtobufKeywords() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    String tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName
+      + "(bundle BIGINT NOT NULL, descriptor BIGINT CONSTRAINT pk PRIMARY KEY(bundle))";
+    conn.createStatement().execute(ddl);
+
+    conn.createStatement()
+      .execute("UPSERT INTO " + tableName + "(bundle, descriptor) VALUES(2, null)");
+    conn.commit();
+
+    ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT COALESCE(SUM(protobuf.descriptor), SUM(protobuf.bundle)) FROM "
+        + tableName + " protobuf GROUP BY protobuf.bundle");
+
+    assertTrue(rs.next());
+    assertEquals(2, rs.getLong(1));
+    assertFalse(rs.wasNull());
+  }
+
+  @Test
   public void nonTypedSecondParameterLong() throws Exception {
     Connection conn = DriverManager.getConnection(getUrl());
     String tableName = generateUniqueName();

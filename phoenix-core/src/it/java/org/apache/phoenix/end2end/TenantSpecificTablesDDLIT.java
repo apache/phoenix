@@ -587,6 +587,12 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
       assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
         PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME, PTableType.SYSTEM);
       assertTrue(rs.next());
+      assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA,
+        PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_TABLE, PTableType.SYSTEM);
+      assertTrue(rs.next());
+      assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA,
+        PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_TABLE, PTableType.SYSTEM);
+      assertTrue(rs.next());
       assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
         PhoenixDatabaseMetaData.TYPE_SEQUENCE, PTableType.SYSTEM);
       assertTrue(rs.next());

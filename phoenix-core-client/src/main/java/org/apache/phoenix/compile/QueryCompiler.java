@@ -378,7 +378,7 @@ public class QueryCompiler {
           false);
       }
       QueryPlan plan = compileSubquery(subquery, false);
-      PTable projectedTable = table.createProjectedTable(plan.getProjector());
+      PTable projectedTable = table.createProjectedTable(plan);
       context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable,
         context.getConnection(), subquery.getUdfParseNodes()));
       return new TupleProjectionPlan(plan, new TupleProjector(plan.getProjector()), context, null);
@@ -436,7 +436,7 @@ public class QueryCompiler {
         } else {
           SelectStatement subquery = table.getAsSubquery(orderBy);
           QueryPlan plan = compileSubquery(subquery, false);
-          initialProjectedTable = table.createProjectedTable(plan.getProjector());
+          initialProjectedTable = table.createProjectedTable(plan);
           tableRef = plan.getTableRef();
           context.getScan().setFamilyMap(plan.getContext().getScan().getFamilyMap());
           query = joinTable.getAsSingleSubquery((SelectStatement) plan.getStatement(), asSubquery);
@@ -541,7 +541,7 @@ public class QueryCompiler {
         } else {
           SelectStatement subquery = rhsTable.getAsSubquery(orderBy);
           QueryPlan plan = compileSubquery(subquery, false);
-          rhsProjTable = rhsTable.createProjectedTable(plan.getProjector());
+          rhsProjTable = rhsTable.createProjectedTable(plan);
           rhsTableRef = plan.getTableRef();
           context.getScan().setFamilyMap(plan.getContext().getScan().getFamilyMap());
           rhs = rhsJoinTable.getAsSingleSubquery((SelectStatement) plan.getStatement(), asSubquery);
@@ -771,8 +771,8 @@ public class QueryCompiler {
 
     // Replace the original resolver and table with those having compiled type info.
     TableRef tableRef = context.getResolver().getTables().get(0);
-    ColumnResolver resolver = FromCompiler.getResolverForCompiledDerivedTable(
-      statement.getConnection(), tableRef, innerQueryPlanRowProjector);
+    ColumnResolver resolver = FromCompiler
+      .getResolverForCompiledDerivedTable(statement.getConnection(), tableRef, innerPlan);
     context.setResolver(resolver);
     tableRef = resolver.getTables().get(0);
     context.setCurrentTable(tableRef);

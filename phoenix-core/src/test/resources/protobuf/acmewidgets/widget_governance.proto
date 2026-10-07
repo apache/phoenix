@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.governance.v1;
+
+option java_package = "com.example.acmewidgets.governance.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+import "widget_endpoint_types.proto";
+
+enum RuleMode {
+  ALL_OF = 0;
+  ANY_OF = 1;
+}
+
+enum TypedHeader {
+  BOT = 0;
+}
+
+enum HttpVerb {
+  GET = 0;
+  POST = 1;
+  PUT = 2;
+  PATCH = 3;
+  DELETE = 4;
+  HEAD = 5;
+  OPTIONS = 6;
+  TRACE = 7;
+}
+
+message Matcher {
+  oneof matcher {
+    HttpHeaderMatcher http_header_matcher = 1;
+    HttpResourceMatcher http_resource_matcher = 2;
+  }
+}
+
+message Condition {
+  RuleMode mode = 1;
+  repeated Matcher matchers = 2;
+}
+
+message HttpHeaderMatcher {
+  oneof key {
+    string name = 1;
+    TypedHeader typed_header = 2;
+  }
+  string value_regex = 3;
+}
+
+message HttpResourceMatcher {
+  repeated HttpVerb method = 1;
+  string path_regex = 2;
+}
+
+message PolicyTemplate {
+  string name = 1;
+}
+
+message Policy {
+  uint64 version = 1;
+  string name = 2;
+  PolicyTemplate template = 3;
+  string config_json = 4;
+  int64 execution_order = 5;
+  Condition condition = 6;
+}
+
+message WidgetEndpoint {
+  string tenant_key = 1;
+  uint64 version = 2;
+  string name = 3;
+  repeated Policy policies = 4;
+  oneof endpoint_kind {
+    .com.example.acmewidgets.governance.v1.endpointtypes.CatalogQuery  catalog_query  = 5;
+    .com.example.acmewidgets.governance.v1.endpointtypes.BulkOrder     bulk_order     = 6;
+    .com.example.acmewidgets.governance.v1.endpointtypes.FlashSale     flash_sale     = 7;
+    .com.example.acmewidgets.governance.v1.endpointtypes.PreSaleSignup pre_sale_signup = 8;
+  }
+}
+
+message WidgetGovernanceSync {
+  WidgetEndpoint endpoint = 1;
+  google.protobuf.Timestamp deleted_time = 2;
+  string source_warehouse = 3;
+  google.protobuf.Timestamp updated_time = 4;
+}
+
+message WidgetGovernanceSyncResponse {
+  com.example.acmewidgets.common.v1.CatalogSyncHeader header = 1;
+  repeated WidgetGovernanceSync records = 2;
+}

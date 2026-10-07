@@ -42,6 +42,8 @@ class MetadataRpcController extends DelegatingHBaseRpcController {
     .add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
     .add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME)
     .add(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_NAME)
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true)
       .getNameAsString())
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, true)
@@ -51,6 +53,12 @@ class MetadataRpcController extends DelegatingHBaseRpcController {
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES, true)
       .getNameAsString())
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil
+      .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil
+      .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_NAME_BYTES, true)
       .getNameAsString())
     .build();
 

@@ -49,6 +49,7 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.ProtoValueParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SingleTableStatement;
 import org.apache.phoenix.parse.TableName;
@@ -306,18 +307,23 @@ public class FromCompiler {
   }
 
   public static ColumnResolver getResolverForCompiledDerivedTable(PhoenixConnection connection,
-    TableRef tableRef, RowProjector projector) throws SQLException {
+    TableRef tableRef, QueryPlan innerPlan) throws SQLException {
+    RowProjector projector = innerPlan.getProjector();
+    ColumnResolver innerResolver = innerPlan.getContext().getResolver();
     List<PColumn> projectedColumns = new ArrayList<PColumn>();
     PTable table = tableRef.getTable();
     for (PColumn column : table.getColumns()) {
       Expression sourceExpression =
         projector.getColumnProjector(column.getPosition()).getExpression();
+      // Derived-table columns are untyped placeholders; the descriptor binding lives on the source.
+      PColumn source = ProtoValueParseNode.resolveSourceColumn(innerResolver, sourceExpression);
       PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(),
         sourceExpression.getDataType(), sourceExpression.getMaxLength(),
         sourceExpression.getScale(), sourceExpression.isNullable(), column.getPosition(),
         sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(),
         column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(),
-        column.isDynamic(), column.getColumnQualifierBytes(), column.getTimestamp());
+        column.isDynamic(), column.getColumnQualifierBytes(), column.getTimestamp(), false,
+        source == null ? null : source.getProtoMessageName());
       projectedColumns.add(projectedColumn);
     }
     PTable t = PTableImpl.builderWithColumns(table, projectedColumns).build();

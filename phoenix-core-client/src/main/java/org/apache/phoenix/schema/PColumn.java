@@ -57,4 +57,8 @@ public interface PColumn extends PDatum {
   boolean isDynamic();
 
   byte[] getColumnQualifierBytes();
+
+  default String getProtoMessageName() {
+    return null;
+  }
 }

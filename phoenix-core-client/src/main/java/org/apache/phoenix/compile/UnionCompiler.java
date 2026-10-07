@@ -37,6 +37,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.OrderByNode;
+import org.apache.phoenix.parse.ProtoValueParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -92,11 +93,12 @@ public class UnionCompiler {
       ColumnProjector colProj = plan.getProjector().getColumnProjector(i);
       String name = selectNodes == null ? colProj.getLabel() : selectNodes.get(i).getAlias();
       PName colName = PNameFactory.newName(name);
-      PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(name), UNION_FAMILY_NAME,
-        targetTypes.get(i).getType(), targetTypes.get(i).getMaxLength(),
-        targetTypes.get(i).getScale(), colProj.getExpression().isNullable(), i,
-        targetTypes.get(i).getSortOrder(), 500, null, false, colProj.getExpression().toString(),
-        false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
+      PColumnImpl projectedColumn =
+        new PColumnImpl(PNameFactory.newName(name), UNION_FAMILY_NAME, targetTypes.get(i).getType(),
+          targetTypes.get(i).getMaxLength(), targetTypes.get(i).getScale(),
+          colProj.getExpression().isNullable(), i, targetTypes.get(i).getSortOrder(), 500, null,
+          false, colProj.getExpression().toString(), false, false, colName.getBytes(),
+          HConstants.LATEST_TIMESTAMP, false, commonProtoMessageName(plans, i));
       projectedColumns.add(projectedColumn);
     }
     Long scn = statement.getConnection().getSCN();
@@ -116,6 +118,24 @@ public class UnionCompiler {
       .setRowKeyOrderOptimizable(false).setIndexes(Collections.emptyList())
       .setPhysicalNames(ImmutableList.of()).setColumns(projectedColumns).build();
     return new TableRef(null, tempTable, 0, false);
+  }
+
+  /**
+   * PROTOBUF descriptor name shared by column {@code i} of every branch, or null if any branch
+   * projects something other than a PROTOBUF column bound to that same descriptor.
+   */
+  private static String commonProtoMessageName(List<QueryPlan> plans, int i) {
+    String common = null;
+    for (QueryPlan plan : plans) {
+      PColumn source = ProtoValueParseNode.resolveSourceColumn(plan.getContext().getResolver(),
+        plan.getProjector().getColumnProjector(i).getExpression());
+      String name = source == null ? null : source.getProtoMessageName();
+      if (name == null || (common != null && !common.equals(name))) {
+        return null;
+      }
+      common = name;
+    }
+    return common;
   }
 
   @SuppressWarnings("rawtypes")

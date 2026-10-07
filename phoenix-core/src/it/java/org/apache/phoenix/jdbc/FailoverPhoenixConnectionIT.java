@@ -26,6 +26,8 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestin
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithStatement;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry.CACHE_TTL_SECONDS_ATTRIB;
+import static org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry.MIN_FORCED_REFRESH_INTERVAL_MS_ATTRIB;
 import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
@@ -42,11 +44,16 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -57,12 +64,15 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -76,6 +86,11 @@ import org.junit.rules.TestName;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.protobuf.DescriptorProtos.DescriptorProto;
+import org.apache.phoenix.thirdparty.com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
+import org.apache.phoenix.thirdparty.com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import org.apache.phoenix.thirdparty.com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 
 /**
  * Test failover basics for {@link FailoverPhoenixConnection}.
@@ -104,6 +119,11 @@ public class FailoverPhoenixConnectionIT {
       Integer.MAX_VALUE);
     CLUSTERS.getHBaseCluster2().getConfiguration().setInt(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS,
       Integer.MAX_VALUE);
+    for (HBaseTestingUtility cluster : Arrays.asList(CLUSTERS.getHBaseCluster1(),
+      CLUSTERS.getHBaseCluster2())) {
+      cluster.getConfiguration().setLong(CACHE_TTL_SECONDS_ATTRIB, 2);
+      cluster.getConfiguration().setLong(MIN_FORCED_REFRESH_INTERVAL_MS_ATTRIB, 3_600_000);
+    }
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
@@ -523,6 +543,114 @@ public class FailoverPhoenixConnectionIT {
     CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
     FailoverPhoenixConnection.failover(conn, 30_000);
     doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+  }
+
+  @Test(timeout = 300000)
+  public void testProtobufDescriptorLoadsFromActiveClusterAfterFailover() throws Exception {
+    String name = "ha." + haGroupName;
+    String table = "PB_" + tableName;
+    // f1 = "a", f2 = "b"
+    byte[] payload = { 0x0A, 0x01, 'a', 0x12, 0x01, 'b' };
+    List<Path> fixtures = new ArrayList<>();
+    try {
+      for (int cluster = 1; cluster <= 2; cluster++) {
+        Path fixture = writeDescriptorFixture(name, cluster);
+        fixtures.add(fixture);
+        try (Connection conn = CLUSTERS.getClusterConnection(cluster, haGroup)) {
+          conn.createStatement()
+            .execute("CREATE PROTOBUF DESCRIPTOR " + name + " FROM '" + fixture.toUri() + "'");
+          conn.createStatement().execute("CREATE TABLE " + table
+            + " (ID INTEGER PRIMARY KEY, PAYLOAD PROTOBUF<" + name + ">) REPLICATION_SCOPE=0");
+          PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + table + " VALUES (1, ?)");
+          ps.setBytes(1, payload);
+          ps.execute();
+          conn.commit();
+          conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
+      }
+      try (Connection conn = createFailoverConnection()) {
+        assertEquals(CLUSTERS.getJdbcUrl1(haGroup),
+          conn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
+        assertEquals("a", protoValue(conn, table, "f1"));
+        // The JVM-wide cache may still hold cluster 2's descriptor from its CREATE TABLE.
+        waitFor(() -> isFieldNotFound(conn, table, "f2"), 100, 10_000);
+
+        // The miss above used up the forced refresh, so only TTL expiry can reveal f2.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.ACTIVE);
+        FailoverPhoenixConnection.failover(conn, 30_000);
+        waitFor(() -> "b".equals(protoValueOrNull(conn, table, "f2")), 100, 10_000);
+        try (Connection newConn = createFailoverConnection()) {
+          assertEquals(CLUSTERS.getJdbcUrl2(haGroup),
+            newConn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
+          assertEquals("b", protoValue(newConn, table, "f2"));
+        }
+
+        // Cluster 2's descriptor serves until TTL expiry; every reload after that is cluster 1's.
+        CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY);
+        FailoverPhoenixConnection.failover(conn, 30_000);
+        waitFor(() -> isFieldNotFound(conn, table, "f2"), 100, 10_000);
+        long end = EnvironmentEdgeManager.currentTimeMillis() + 10_000;
+        while (EnvironmentEdgeManager.currentTimeMillis() < end) {
+          assertTrue(isFieldNotFound(conn, table, "f2"));
+          Thread.sleep(100);
+        }
+      }
+      try (Connection newConn = createFailoverConnection()) {
+        assertEquals(CLUSTERS.getJdbcUrl1(haGroup),
+          newConn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
+        assertEquals("a", protoValue(newConn, table, "f1"));
+        assertTrue(isFieldNotFound(newConn, table, "f2"));
+      }
+    } finally {
+      for (Path fixture : fixtures) {
+        Files.deleteIfExists(fixture);
+      }
+    }
+  }
+
+  private static String protoValueOrNull(Connection conn, String table, String field) {
+    try {
+      return protoValue(conn, table, field);
+    } catch (SQLException e) {
+      return null;
+    }
+  }
+
+  private static boolean isFieldNotFound(Connection conn, String table, String field) {
+    try {
+      protoValue(conn, table, field);
+      return false;
+    } catch (SQLException e) {
+      return e.getErrorCode() == SQLExceptionCode.PROTOBUF_PATH_FIELD_NOT_FOUND.getErrorCode();
+    }
+  }
+
+  /** Writes a descriptor for {@code name} with string fields f1 through f{@code fieldCount}. */
+  private static Path writeDescriptorFixture(String name, int fieldCount) throws Exception {
+    String pkg = name.substring(0, name.lastIndexOf('.'));
+    DescriptorProto.Builder message =
+      DescriptorProto.newBuilder().setName(name.substring(pkg.length() + 1));
+    for (int i = 1; i <= fieldCount; i++) {
+      message.addField(FieldDescriptorProto.newBuilder().setName("f" + i).setNumber(i)
+        .setType(FieldDescriptorProto.Type.TYPE_STRING));
+    }
+    FileDescriptorSet set = FileDescriptorSet.newBuilder().addFile(FileDescriptorProto.newBuilder()
+      .setName(name + ".proto").setPackage(pkg).setSyntax("proto3").addMessageType(message))
+      .build();
+    Path fixture = Files.createTempFile("ha-descriptor-", ".desc");
+    Files.write(fixture, set.toByteArray());
+    return fixture;
+  }
+
+  private static String protoValue(Connection conn, String table, String field)
+    throws SQLException {
+    try (ResultSet rs = conn.createStatement().executeQuery(
+      "SELECT PROTO_VALUE(PAYLOAD, '" + field + "', 'VARCHAR') FROM " + table + " ORDER BY ID")) {
+      assertTrue(rs.next());
+      String value = rs.getString(1);
+      assertFalse(rs.next());
+      return value;
+    }
   }
 
   /**
