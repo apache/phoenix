@@ -25,7 +25,8 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 
 /**
- * A minimal RecordReader that returns exactly one dummy record per InputSplit.
+ * A minimal RecordReader that returns one dummy record per {@link org.apache.phoenix.query.KeyRange
+ * KeyRange} carried by a {@link PhoenixInputSplit}.
  * <p>
  * Use this when your mapper:
  * <ul>
@@ -35,42 +36,52 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
  * </ul>
  * <p>
  * This avoids the overhead of scanning and returning all rows when the mapper only needs to be
- * triggered once per region/split. The standard {@link PhoenixRecordReader} iterates through all
- * rows, calling {@code map()} for each row - which is wasteful when the mapper ignores the row data
- * entirely.
+ * triggered per region. The standard {@link PhoenixRecordReader} iterates through all rows, calling
+ * {@code map()} for each row - which is wasteful when the mapper ignores the row data entirely.
  * <p>
  * <b>How it works:</b>
  * <ul>
- * <li>{@link #nextKeyValue()} returns {@code true} exactly once, then {@code false}</li>
- * <li>This triggers {@code map()} exactly once per InputSplit (region)</li>
- * <li>The mapper extracts region boundaries from the InputSplit, not from records</li>
+ * <li>{@link #initialize(InputSplit, TaskAttemptContext)} reads the {@link PhoenixInputSplit}'s key
+ * ranges to learn how many records to emit (one per range)</li>
+ * <li>{@link #nextKeyValue()} returns {@code true} once per range, then {@code false}</li>
+ * <li>This triggers {@code map()} once per range; for a coalesced split with N regions the mapper
+ * runs {@code map()} N times, giving the framework per-range visibility</li>
+ * <li>{@link #getProgress()} returns the fraction of ranges already consumed, so YARN sees real
+ * mapper progress instead of a 0% to 100% jump at the end</li>
  * </ul>
  * @see PhoenixSyncTableInputFormat
  * @see PhoenixRecordReader
  */
-public class PhoenixNoOpSingleRecordReader extends RecordReader<NullWritable, DBWritable> {
+public class PhoenixNoOpPerRangeRecordReader extends RecordReader<NullWritable, DBWritable> {
 
-  private boolean hasRecord = true;
+  private int totalRanges = 1;
+  private int consumedRanges = 0;
 
   /**
-   * Initialize the RecordReader. No initialization is needed since we return a single dummy record.
+   * Initialize the RecordReader. Reads the number of key ranges from the {@link PhoenixInputSplit}
+   * so subsequent {@link #nextKeyValue()} calls emit one record per range.
    * @param split   The InputSplit containing region boundaries
    * @param context The task context
    */
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context) {
-    // No initialization needed
+    if (split instanceof PhoenixInputSplit) {
+      int rangeCount = ((PhoenixInputSplit) split).getKeyRanges().size();
+      if (rangeCount > 0) {
+        this.totalRanges = rangeCount;
+      }
+    }
   }
 
   /**
-   * Returns true exactly once to trigger a single map() call per split.
-   * @return true on first call, false on subsequent calls which makes Mapper task to exit calling
-   *         map method
+   * Returns true once per key range in the split, then false.
+   * @return true while ranges remain unprocessed; false once all ranges have been emitted, which
+   *         makes the Mapper task exit calling map method
    */
   @Override
   public boolean nextKeyValue() {
-    if (hasRecord) {
-      hasRecord = false;
+    if (consumedRanges < totalRanges) {
+      consumedRanges++;
       return true;
     }
     return false;
@@ -96,12 +107,16 @@ public class PhoenixNoOpSingleRecordReader extends RecordReader<NullWritable, DB
   }
 
   /**
-   * Returns progress: 0.0 before the record is consumed, 1.0 after.
-   * @return 0.0f if record not yet consumed, 1.0f otherwise
+   * Returns the fraction of ranges already consumed, so YARN reports real mapper progress as each
+   * range completes (important for coalesced splits where a single mapper covers many regions).
+   * @return progress in [0.0, 1.0]
    */
   @Override
   public float getProgress() {
-    return hasRecord ? 0.0f : 1.0f;
+    if (totalRanges == 0) {
+      return 1.0f;
+    }
+    return ((float) consumedRanges) / totalRanges;
   }
 
   /**
