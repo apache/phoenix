@@ -59,6 +59,7 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConditionalTTLExpression;
@@ -1019,6 +1020,37 @@ public class MetaDataUtil {
 
   public static boolean propertyNotAllowedToBeOutOfSync(String colFamProp) {
     return SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(colFamProp);
+  }
+
+  /**
+   * Get the list of inheritable table descriptor properties from configuration.
+   * See PHOENIX-6868.
+   * @param conf the configuration
+   * @return list of property names that should be inherited by indexes, or empty list if none
+   */
+  public static List<String> getInheritableTableDescriptorProperties(Configuration conf) {
+    String propValue =
+      conf.get(QueryServices.INDEX_INHERITABLE_TABLE_DESCRIPTOR_PROPERTIES);
+    if (propValue == null || propValue.trim().isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<String> result = new ArrayList<>();
+    for (String prop : propValue.split(",")) {
+      String trimmed = prop.trim();
+      if (!trimmed.isEmpty()) {
+        result.add(trimmed);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Check if a table descriptor property is configured as inheritable from data tables to indexes.
+   * See PHOENIX-6868.
+   */
+  public static boolean isInheritableTableDescriptorProperty(Configuration conf,
+      String propName) {
+    return getInheritableTableDescriptorProperties(conf).contains(propName);
   }
 
   public static Map<String, Object> getSyncedProps(ColumnFamilyDescriptor defaultCFDesc) {
