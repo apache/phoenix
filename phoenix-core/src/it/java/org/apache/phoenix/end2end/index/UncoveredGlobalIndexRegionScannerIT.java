@@ -44,6 +44,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
@@ -962,6 +964,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             for (Result stale : fixture.staleRows) {
               assertTrue("Old stale index entry survived read repair",
                 index.get(new Get(stale.getRow())).isEmpty());
+              assertStaleEntryDeleteTimestamp(index, stale);
             }
           }
           assertEquals("Current index entries must survive cleanup", ROW_COUNT,
@@ -1035,6 +1038,27 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       }
       conn.commit();
     }
+  }
+
+  private void assertStaleEntryDeleteTimestamp(Table index, Result stale) throws Exception {
+    // Current index entries have different keys. Inspect the tombstone to verify that cleanup
+    // cannot delete newer versions of this same key by using the recent data-row timestamp.
+    Scan scan = new Scan().withStartRow(stale.getRow()).withStopRow(stale.getRow(), true);
+    scan.setRaw(true);
+    scan.readAllVersions();
+    boolean foundDelete = false;
+    try (ResultScanner scanner = index.getScanner(scan)) {
+      for (Result result : scanner) {
+        for (Cell cell : result.rawCells()) {
+          if (CellUtil.isDeleteFamily(cell)) {
+            foundDelete = true;
+            assertEquals("Stale-entry deletion must use the index timestamp",
+              stale.rawCells()[0].getTimestamp(), cell.getTimestamp());
+          }
+        }
+      }
+    }
+    assertTrue("Stale-entry cleanup must leave a family delete marker", foundDelete);
   }
 
   private List<Result> readPhysicalRows(String tableName) throws Exception {
