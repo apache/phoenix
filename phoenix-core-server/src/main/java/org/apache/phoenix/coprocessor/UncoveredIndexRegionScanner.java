@@ -352,11 +352,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     }
     // This is not a valid index row
     if (
-      indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)
-        && !indexMaintainer.isCDCIndex()
+      indexMaintainer.isAgedEnough(indexTimestamp, ageThreshold) && !indexMaintainer.isCDCIndex()
     ) {
-      region
-        .delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));
+      region.delete(indexMaintainer.createDelete(indexRowKey, indexTimestamp, false));
     }
     return false;
   }
