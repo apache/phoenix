@@ -393,7 +393,9 @@ public enum SQLExceptionCode {
   NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT(1057, "42Y10", "No table specified for wildcard select."),
   UNSUPPORTED_GROUP_BY_EXPRESSIONS(1058, "43A14",
     "Only a single VARBINARY, ARRAY, or nullable BINARY type may be referenced in a GROUP BY."),
-
+  NO_PROPERTIES_IN_ALTER_STMT(1059, "43A15",
+    "Provide at least 1 property to set in the ALTER statement. "
+      + "REOPEN_REGIONS cannot be the only property."),
   DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE(1069, "43A69",
     "Default column family not allowed on VIEW or shared INDEX."),
   ONLY_TABLE_MAY_BE_DECLARED_TRANSACTIONAL(1070, "44A01",
