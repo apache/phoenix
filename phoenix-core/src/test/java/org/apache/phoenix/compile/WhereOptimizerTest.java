@@ -4279,4 +4279,117 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
   }
 
+  /**
+   * Leading-PK IN lists across cardinality tiers: up to phoenix.max.inList.skipScan.size (50,000)
+   * the keys are point lookups / skip scanned; past it the scan is the bounded range [min, max]
+   * with the IN list kept as a residual filter. V2 must stay bounded past KeySpaceList's
+   * 65,536-space bound rather than widening to a full table scan.
+   */
+  @Test
+  public void testLargeLeadingPkInListScanIsBounded() throws Exception {
+    for (int k : new int[] { 1_000, 60_000, 70_000 }) {
+      List<String> values = new java.util.ArrayList<>(k);
+      for (int i = 0; i < k; i++) {
+        values.add(String.format("%06d", 100_000 + i));
+      }
+      Scan scan = compileLargeInList(SortOrder.ASC, "k1 IN (" + quoted(values) + ")");
+      assertScanCovers(scan, values, SortOrder.ASC);
+      byte[] min = Bytes.toBytes(values.get(0));
+      byte[] max = Bytes.toBytes(values.get(k - 1));
+      assertTrue("start row below min(k1) for K=" + k,
+        Bytes.compareTo(scan.getStartRow(), min) >= 0);
+      assertTrue("stop row above max(k1) for K=" + k, Bytes.compareTo(scan.getStopRow(),
+        ByteUtil.nextKey(ByteUtil.concat(max, QueryConstants.SEPARATOR_BYTE_ARRAY))) <= 0);
+      if (k <= 50_000) {
+        assertTrue("K=" + k + " should skip scan the keys",
+          scan.getFilter() instanceof SkipScanFilter);
+      } else {
+        assertNotNull("K=" + k + " must keep the IN list as a residual filter", scan.getFilter());
+      }
+    }
+  }
+
+  /**
+   * An RVC IN list whose distinct leading values exceed 65,536 widens away the trailing dim and
+   * then must bound the leading dim instead of widening it to a full scan.
+   */
+  @Test
+  public void testLargeRvcInListScanIsBounded() throws Exception {
+    List<String> values = new java.util.ArrayList<>();
+    StringBuilder tuples = new StringBuilder();
+    for (int i = 0; i < 70_000; i++) {
+      String v = String.format("%06d", 100_000 + i);
+      values.add(v);
+      tuples.append(i == 0 ? "" : ",").append("('").append(v).append("','x").append(i).append("')");
+    }
+    Scan scan = compileLargeInList(SortOrder.ASC, "(k1, k2) IN (" + tuples + ")");
+    for (int i = 0; i < values.size(); i++) {
+      assertScanCovers(scan, values.get(i), SortOrder.ASC, "x" + i);
+    }
+    assertNotNull(scan.getFilter());
+  }
+
+  /**
+   * Values that are byte prefixes of each other ('1', '10', '100', ...) order differently in the
+   * row key for ASC and DESC variable-length columns. The bounding range must still cover every
+   * key.
+   */
+  @Test
+  public void testLargeLeadingPkInListPrefixValuesScanIsBounded() throws Exception {
+    List<String> values = new java.util.ArrayList<>();
+    for (int i = 1; i <= 70_000; i++) {
+      values.add(Integer.toString(i));
+    }
+    for (SortOrder order : SortOrder.values()) {
+      Scan scan = compileLargeInList(order, "k1 IN (" + quoted(values) + ")");
+      assertScanCovers(scan, values, order);
+      assertNotNull(scan.getFilter());
+    }
+  }
+
+  private static String quoted(List<String> values) {
+    return values.stream().map(v -> "'" + v + "'").collect(Collectors.joining(","));
+  }
+
+  private static Scan compileLargeInList(SortOrder k1Order, String where) throws SQLException {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, v VARCHAR"
+          + " CONSTRAINT pk PRIMARY KEY (k1 " + k1Order + ", k2))");
+    }
+    return compileStatement("SELECT * FROM " + tableName + " WHERE " + where).getScan();
+  }
+
+  /**
+   * Asserts the scan is bounded on both ends and covers every row whose k1 is in {@code values}.
+   */
+  private static void assertScanCovers(Scan scan, List<String> values, SortOrder k1Order) {
+    for (String v : values) {
+      assertScanCovers(scan, v, k1Order, "");
+    }
+  }
+
+  /**
+   * Asserts the scan is bounded on both ends and covers the row {@code (k1, k2)}, or every row with
+   * {@code k1} when {@code k2} is empty.
+   */
+  private static void assertScanCovers(Scan scan, String k1, SortOrder k1Order, String k2) {
+    byte[] start = scan.getStartRow();
+    byte[] stop = scan.getStopRow();
+    assertTrue("unbounded start row", start.length > 0);
+    assertTrue("unbounded stop row", stop.length > 0);
+    byte[] k1Bytes = Bytes.toBytes(k1);
+    if (k1Order == SortOrder.DESC) {
+      k1Bytes = SortOrder.invert(k1Bytes, 0, k1Bytes.length);
+    }
+    byte[] lowest = ByteUtil.concat(k1Bytes,
+      new byte[] { SchemaUtil.getSeparatorByte(true, false, k1Order) }, Bytes.toBytes(k2));
+    // With k2 given the row key is complete; otherwise any k2 may follow.
+    byte[] highest =
+      k2.isEmpty() ? ByteUtil.concat(lowest, new byte[] { (byte) 0xFF, (byte) 0xFF }) : lowest;
+    assertTrue("start row excludes (" + k1 + ", " + k2 + ")", Bytes.compareTo(start, lowest) <= 0);
+    assertTrue("stop row excludes (" + k1 + ", " + k2 + ")", Bytes.compareTo(highest, stop) < 0);
+  }
+
 }

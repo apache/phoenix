@@ -22,6 +22,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * An immutable list of {@link KeySpace} instances representing one expression node's contribution
@@ -207,8 +209,13 @@ public final class KeySpaceList {
    * Widens a list down to at most {@code budget} spaces by dropping trailing dims (design rule
    * "drop trailing dims to prevent range explosion"). Each drop replaces one dim with
    * {@link KeyRange#EVERYTHING_RANGE} in every space, then re-normalizes — duplicates collapse via
-   * the merge fixpoint. Repeats until size ≤ budget or there's nothing left to drop; in the worst
-   * case returns a single all-EVERYTHING KeySpace.
+   * the merge fixpoint. Repeats until size ≤ budget.
+   * <p>
+   * When the only constrained dim left is the one to drop, dropping it would collapse the list to
+   * EVERYTHING (a full scan). Instead the spaces collapse to a single space holding the bounding
+   * hull of that dim's ranges (see {@link #boundingHull}), so e.g. a 100k-value leading-PK IN list
+   * still scans {@code [min, max]} as V1 does. The hull is a superset of every input range, so the
+   * residual filter (retained because the result is approximated) keeps the result exact.
    * <p>
    * The choice of *which* trailing dim to drop matters for residual-filter correctness. We drop the
    * highest-indexed dim that is constrained in at least one space — the leading dims do the bulk of
@@ -223,6 +230,15 @@ public final class KeySpaceList {
       if (trailing < 0) {
         return everything(n);
       }
+      if (onlyConstrainedDim(current) == trailing) {
+        List<org.apache.phoenix.query.KeyRange> ranges = new ArrayList<>(current.size());
+        for (KeySpace ks : current) {
+          ranges.add(ks.get(trailing));
+        }
+        org.apache.phoenix.query.KeyRange hull = boundingHull(ranges);
+        return new KeySpaceList(n, Collections.singletonList(KeySpace.single(trailing, hull, n)),
+          true);
+      }
       // Drop dim `trailing` from every space, then merge duplicates. We call
       // mergeToFixpoint directly (not fromNormalized) to avoid re-triggering the
       // bound-enforcement recursion — we're in the middle of enforcing it.
@@ -231,15 +247,94 @@ public final class KeySpaceList {
         dropped
           .add(ks.withDimReplaced(trailing, org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE));
       }
+      // Terminates without a progress check: dim `trailing` is now EVERYTHING in every
+      // space, so the next iteration's highest constrained dim is strictly lower.
       mergeToFixpoint(dropped);
-      if (dropped.size() >= current.size()) {
-        // No progress — bail to avoid infinite loop. Conservative but safe.
-        return everything(n);
-      }
       current = dropped;
     }
     mergeToFixpoint(current);
     return new KeySpaceList(n, current, true);
+  }
+
+  /**
+   * Single range covering every range in {@code ranges}, all on one dim. Bounds are compared as raw
+   * per-dim bytes, but a variable-length column orders in the row key as {@code value || sep}, with
+   * {@code sep} 0x00 for ASC and 0xFF for DESC, so when one bound is a strict byte prefix of
+   * another their row-key order depends on the sort order, which isn't known here. In that case the
+   * bound is moved to a key that differs from every input bound at a byte before either ends — the
+   * previous key of the minimum lower bound, the next key of the shortest upper bound that prefixes
+   * the maximum — which orders the same way under either separator. Without prefix relationships
+   * the hull is exactly {@code [min(lower), max(upper)]}.
+   */
+  private static org.apache.phoenix.query.KeyRange
+    boundingHull(List<org.apache.phoenix.query.KeyRange> ranges) {
+    byte[] unbound = org.apache.phoenix.query.KeyRange.UNBOUND;
+    byte[] lower = null;
+    boolean lowerInclusive = false;
+    byte[] upper = null;
+    boolean upperInclusive = false;
+    for (org.apache.phoenix.query.KeyRange r : ranges) {
+      if (lower != unbound) {
+        if (r.lowerUnbound()) {
+          lower = unbound;
+        } else {
+          int cmp = lower == null ? -1 : Bytes.compareTo(r.getLowerRange(), lower);
+          if (cmp < 0) {
+            lower = r.getLowerRange();
+            lowerInclusive = r.isLowerInclusive();
+          } else if (cmp == 0) {
+            lowerInclusive |= r.isLowerInclusive();
+          }
+        }
+      }
+      if (upper != unbound) {
+        if (r.upperUnbound()) {
+          upper = unbound;
+        } else {
+          int cmp = upper == null ? 1 : Bytes.compareTo(r.getUpperRange(), upper);
+          if (cmp > 0) {
+            upper = r.getUpperRange();
+            upperInclusive = r.isUpperInclusive();
+          } else if (cmp == 0) {
+            upperInclusive |= r.isUpperInclusive();
+          }
+        }
+      }
+    }
+    boolean lowerAmbiguous = false;
+    byte[] upperPrefix = null;
+    for (org.apache.phoenix.query.KeyRange r : ranges) {
+      if (lower != unbound && isStrictPrefix(lower, r.getLowerRange())) {
+        lowerAmbiguous = true;
+      }
+      if (
+        upper != unbound && isStrictPrefix(r.getUpperRange(), upper)
+          && (upperPrefix == null || r.getUpperRange().length < upperPrefix.length)
+      ) {
+        upperPrefix = r.getUpperRange();
+      }
+    }
+    if (lowerAmbiguous) {
+      lower = ByteUtil.previousKey(lower);
+      lowerInclusive = true;
+      if (lower == null) {
+        lower = unbound;
+      }
+    }
+    if (upperPrefix != null) {
+      upper = ByteUtil.nextKey(upperPrefix);
+      upperInclusive = false;
+      if (upper == null) {
+        upper = unbound;
+      }
+    }
+    return org.apache.phoenix.query.KeyRange.getKeyRange(lower, lowerInclusive, upper,
+      upperInclusive);
+  }
+
+  private static boolean isStrictPrefix(byte[] prefix, byte[] key) {
+    return prefix.length > 0 && prefix.length < key.length
+      && Bytes.compareTo(prefix, 0, prefix.length, key, 0, prefix.length) == 0;
   }
 
   /**

@@ -196,4 +196,57 @@ public class KeySpaceListTest {
     KeySpaceList full = KeySpaceList.orAll(2, branches);
     assertEquals("All 10 distinct inverted singletons must remain after OR merge", 10, full.size());
   }
+
+  /**
+   * More distinct leading-dim points than the cartesian bound collapse to one space bounding them,
+   * not to EVERYTHING.
+   */
+  @Test
+  public void overBoundLeadingPointsCollapseToBoundingRange() {
+    java.util.List<KeySpaceList> branches = new java.util.ArrayList<>();
+    for (int i = 0; i < 70_000; i++) {
+      branches.add(KeySpaceList.of(KeySpace.single(0, pt(String.format("%06d", 100_000 + i)), 2)));
+    }
+    KeySpaceList full = KeySpaceList.orAll(2, branches);
+    assertTrue(full.isApproximated());
+    assertEquals(1, full.size());
+    assertEquals(KeyRange.getKeyRange(Bytes.toBytes("100000"), true, Bytes.toBytes("169999"), true),
+      full.spaces().get(0).get(0));
+    assertEquals(KeyRange.EVERYTHING_RANGE, full.spaces().get(0).get(1));
+  }
+
+  /**
+   * Over-bound (k1, k2) points with distinct k1 drop k2, then bound k1 rather than widening it.
+   */
+  @Test
+  public void overBoundCompositePointsBoundLeadingDim() {
+    java.util.List<KeySpaceList> branches = new java.util.ArrayList<>();
+    for (int i = 0; i < 70_000; i++) {
+      branches
+        .add(KeySpaceList.of(ks2(pt(String.format("%06d", 100_000 + i)), pt(Integer.toString(i)))));
+    }
+    KeySpaceList full = KeySpaceList.orAll(2, branches);
+    assertTrue(full.isApproximated());
+    assertEquals(1, full.size());
+    assertEquals(KeyRange.getKeyRange(Bytes.toBytes("100000"), true, Bytes.toBytes("169999"), true),
+      full.spaces().get(0).get(0));
+    assertEquals(KeyRange.EVERYTHING_RANGE, full.spaces().get(0).get(1));
+  }
+
+  /**
+   * When bounds are byte prefixes of each other ('1' of '10', ...) their row-key order depends on
+   * the column's sort order, so the hull steps outside them at a byte both orders agree on.
+   */
+  @Test
+  public void overBoundPrefixPointsBoundingRangeIgnoresSeparator() {
+    java.util.List<KeySpaceList> branches = new java.util.ArrayList<>();
+    for (int i = 1; i <= 70_000; i++) {
+      branches.add(KeySpaceList.of(KeySpace.single(0, pt(Integer.toString(i)), 2)));
+    }
+    KeySpaceList full = KeySpaceList.orAll(2, branches);
+    assertEquals(1, full.size());
+    // min '1' prefixes '10'; max '9999' has prefix '9', so the hull is ['0', ':').
+    assertEquals(KeyRange.getKeyRange(Bytes.toBytes("0"), true, Bytes.toBytes(":"), false),
+      full.spaces().get(0).get(0));
+  }
 }
