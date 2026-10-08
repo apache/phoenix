@@ -17,11 +17,20 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EXPECTED_UPPER_REGION_KEY;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -514,6 +523,58 @@ public class ScanUtilTest {
 
       assertArrayEquals(expectedStartKey, startKey);
       assertArrayEquals(expectedEndKey, endKey);
+    }
+
+    private static Scan newLocalIndexScan() {
+      Scan scan = new Scan();
+      scan.setAttribute(LOCAL_INDEX, PDataType.TRUE_BYTES);
+      return scan;
+    }
+
+    @Test
+    public void testSetLocalIndexAttributesSetsExpectedUpperRegionKey() {
+      Scan scan = newLocalIndexScan();
+      ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 0, 1 }, new byte[] { 0, 2 });
+      assertArrayEquals(Bytes.toBytes("i"), scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertArrayEquals(Bytes.toBytes("e"), scan.getAttribute(SCAN_ACTUAL_START_ROW));
+      assertArrayEquals(Bytes.toBytes("e"), scan.getStartRow());
+      assertArrayEquals(Bytes.toBytes("i"), scan.getStopRow());
+    }
+
+    @Test
+    public void testExpectedUpperRegionKeyForLastOpenEndedRegion() {
+      for (boolean reversed : new boolean[] { false, true }) {
+        Scan scan = newLocalIndexScan();
+        ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("o"), HConstants.EMPTY_END_ROW,
+          new byte[] { 0, 1 }, new byte[] { 0, 2 });
+        if (reversed) {
+          ScanUtil.setReversed(scan);
+          ScanUtil.setupReverseScan(scan);
+        }
+        byte[] expectedUpper = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+        assertNotNull(expectedUpper);
+        assertArrayEquals(HConstants.EMPTY_END_ROW, expectedUpper);
+      }
+    }
+
+    @Test
+    public void testExpectedUpperRegionKeyWithKeyOffset() {
+      Scan scan = newLocalIndexScan();
+      ScanUtil.setLocalIndexAttributes(scan, 1, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 'e', 0, 1 }, new byte[] { 'e', 0, 2 });
+      assertArrayEquals(Bytes.toBytes("i"), scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertArrayEquals(new byte[] { 0, 1 }, scan.getAttribute(SCAN_START_ROW_SUFFIX));
+      assertArrayEquals(new byte[] { 0, 2 }, scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+    }
+
+    @Test
+    public void testSetLocalIndexAttributesNoopForNonLocalIndexScan() {
+      Scan scan = new Scan();
+      ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 0, 1 }, new byte[] { 0, 2 });
+      assertNull(scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertNull(scan.getAttribute(SCAN_ACTUAL_START_ROW));
     }
   }
 

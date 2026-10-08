@@ -66,6 +66,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 abstract public class BaseScannerRegionObserver implements RegionObserver {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BaseScannerRegionObserver.class);
@@ -78,8 +80,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     return this.getClass().getName();
   }
 
-  private static void throwIfScanOutOfRegion(Scan scan, Region region)
-    throws DoNotRetryIOException {
+  @VisibleForTesting
+  static void throwIfScanOutOfRegion(Scan scan, Region region) throws DoNotRetryIOException {
     boolean isLocalIndex = ScanUtil.isLocalIndex(scan);
     byte[] lowerInclusiveScanKey = scan.getStartRow();
     byte[] upperExclusiveScanKey = scan.getStopRow();
@@ -89,7 +91,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     if (isLocalIndex) {
       // For local indexes we have to abort any scan that was open during a split.
       // We detect that condition as follows:
-      // 1. The scanner's stop row has to always match the region's end key.
+      // 1. The EXPECTED_UPPER_REGION_KEY attribute has to always match the region's end key.
+      // Older clients do not set the attribute. For them, the scan's stop row is the fallback.
       // 2. Phoenix sets the SCAN_ACTUAL_START_ROW attribute to the scan's original start row
       // We cannot directly compare that with the region's start key, but can enforce that
       // the original start row still falls within the new region.
