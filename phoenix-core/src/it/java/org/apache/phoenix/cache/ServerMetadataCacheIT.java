@@ -101,8 +101,6 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "NEVER");
     props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
     props.put(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
-    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
     serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
