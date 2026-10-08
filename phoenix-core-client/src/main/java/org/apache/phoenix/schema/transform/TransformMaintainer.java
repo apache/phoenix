@@ -133,6 +133,11 @@ public class TransformMaintainer extends IndexMaintainer {
     return coveredColumnsMap.keySet();
   }
 
+  @Override
+  protected Map<ColumnReference, ColumnReference> getCoveredColumnsMap() {
+    return coveredColumnsMap;
+  }
+
   private TransformMaintainer(final PTable oldTable, final PTable newTable,
     PhoenixConnection connection) {
     this(oldTable.getRowKeySchema(), oldTable.getBucketNum() != null);
