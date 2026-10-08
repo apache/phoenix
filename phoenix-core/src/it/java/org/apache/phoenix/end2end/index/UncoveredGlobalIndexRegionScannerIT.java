@@ -24,21 +24,32 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -50,7 +61,9 @@ import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -67,6 +80,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
+  private static final long AGE_THRESHOLD_MS = 60_000;
+  // Keep stale entries live in HBase and in Phoenix while testing the independent repair threshold.
+  private static final int TTL_SECONDS = 3600;
+  private static final int ROW_COUNT = 20;
+  private static final long UPDATED_TIME_BASE = 1_700_000_000_000L;
   private final boolean uncovered;
   private final boolean salted;
 
@@ -896,6 +914,181 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
+    }
+  }
+
+  /** PHOENIX-8016: an old index entry must be aged independently of its recent base row. */
+  @Test
+  public void testOldStaleEntriesAreDeletedWhileDataRowsAreRecent() throws Exception {
+    assumeTrue(uncovered);
+    verifyStaleEntryRepair(true);
+  }
+
+  @Test
+  public void testYoungStaleEntriesAreNotDeleted() throws Exception {
+    assumeTrue(uncovered);
+    verifyStaleEntryRepair(false);
+  }
+
+  private void verifyStaleEntryRepair(boolean oldEntries) throws Exception {
+    Map<Configuration, String> originalThresholds = new LinkedHashMap<>();
+    Configuration clusterConfig = getUtility().getConfiguration();
+    originalThresholds.put(clusterConfig,
+      clusterConfig.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    getUtility().getHBaseCluster().getRegionServerThreads().forEach(thread -> {
+      Configuration config = thread.getRegionServer().getConfiguration();
+      originalThresholds.putIfAbsent(config,
+        config.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    });
+    EnvironmentEdge originalClock = EnvironmentEdgeManager.getDelegate();
+    ManualEnvironmentEdge clock = new ManualEnvironmentEdge();
+    try {
+      // Keep the class-wide zero threshold for existing tests; use a positive age only here.
+      for (Configuration config : originalThresholds.keySet()) {
+        config.setLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+          AGE_THRESHOLD_MS);
+        assertEquals(AGE_THRESHOLD_MS,
+          config.getLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, -1));
+      }
+      try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Fixture fixture = createFixture(conn, clock, oldEntries ? AGE_THRESHOLD_MS * 2 : 1000);
+        // No LIMIT: isolate cleanup from premature scan termination in PHOENIX-8015.
+        String query = fixture.indexQuery("");
+        assertPlan(conn, query).table(fixture.indexTable).scanType("FULL SCAN");
+        assertRows(conn, query, ROW_COUNT);
+        if (oldEntries) {
+          try (Table index =
+            getUtility().getConnection().getTable(TableName.valueOf(fixture.indexTable))) {
+            for (Result stale : fixture.staleRows) {
+              assertTrue("Old stale index entry survived read repair",
+                index.get(new Get(stale.getRow())).isEmpty());
+            }
+          }
+          assertEquals("Current index entries must survive cleanup", ROW_COUNT,
+            readPhysicalRows(fixture.indexTable).size());
+        } else {
+          assertStaleEntriesPresent(fixture);
+        }
+        assertRows(conn, "SELECT /*+ NO_INDEX */ ID, PAYLOAD, UPDATED_TIME FROM "
+          + fixture.dataTable + " ORDER BY UPDATED_TIME ASC", ROW_COUNT);
+      }
+    } finally {
+      EnvironmentEdgeManager.injectEdge(originalClock);
+      originalThresholds.forEach((config, value) -> {
+        if (value == null) {
+          config.unset(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB);
+        } else {
+          config.set(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, value);
+        }
+      });
+    }
+  }
+
+  private Fixture createFixture(Connection conn, ManualEnvironmentEdge clock, long updateDelayMs)
+    throws Exception {
+    String dataTable = generateUniqueName();
+    String indexTable = generateUniqueName();
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE TABLE " + dataTable
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, UPDATED_TIME TIMESTAMP, PAYLOAD VARCHAR)" + " TTL="
+        + TTL_SECONDS + ", IS_STRICT_TTL=true" + (salted ? ", SALT_BUCKETS=4" : ""));
+      stmt.execute("CREATE UNCOVERED INDEX " + indexTable + " ON " + dataTable + " (UPDATED_TIME)"
+        + (salted ? " SALT_BUCKETS=4" : ""));
+    }
+    clock.setValue(EnvironmentEdgeManager.currentTimeMillis() + 1);
+    EnvironmentEdgeManager.injectEdge(clock);
+    long insertTime = clock.currentTime();
+    upsertRows(conn, dataTable, false);
+    List<Result> staleRows = readPhysicalRows(indexTable);
+    assertEquals("Initial NULL-keyed index entries", ROW_COUNT, staleRows.size());
+    for (Result stale : staleRows) {
+      assertEquals(insertTime, stale.rawCells()[0].getTimestamp());
+    }
+
+    clock.incrementValue(updateDelayMs);
+    // Supply the indexed column explicitly to take the write-optimized uncovered-index path.
+    upsertRows(conn, dataTable, true);
+    Fixture fixture = new Fixture(dataTable, indexTable, staleRows);
+    assertEquals("Both stale and current index entries must physically exist", ROW_COUNT * 2,
+      readPhysicalRows(indexTable).size());
+    assertStaleEntriesPresent(fixture);
+    for (Result data : readPhysicalRows(dataTable)) {
+      assertEquals("Base rows must have the recent update timestamp", clock.currentTime(),
+        data.rawCells()[0].getTimestamp());
+    }
+    return fixture;
+  }
+
+  private void upsertRows(Connection conn, String dataTable, boolean nonNullTimestamp)
+    throws Exception {
+    try (PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + dataTable + " (ID, UPDATED_TIME, PAYLOAD) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < ROW_COUNT; i++) {
+        stmt.setString(1, "tenant-" + i);
+        if (nonNullTimestamp) {
+          stmt.setTimestamp(2, new Timestamp(UPDATED_TIME_BASE + i * 1000L));
+        } else {
+          stmt.setNull(2, Types.TIMESTAMP);
+        }
+        stmt.setString(3, "payload-" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+  }
+
+  private List<Result> readPhysicalRows(String tableName) throws Exception {
+    // No Phoenix scan attributes: inspect live HBase entries without uncovered verification.
+    List<Result> rows = new ArrayList<>();
+    try (Table table = getUtility().getConnection().getTable(TableName.valueOf(tableName));
+      ResultScanner scanner = table.getScanner(new Scan())) {
+      for (Result result : scanner) {
+        rows.add(result);
+      }
+    }
+    return rows;
+  }
+
+  private void assertStaleEntriesPresent(Fixture fixture) throws Exception {
+    try (
+      Table index = getUtility().getConnection().getTable(TableName.valueOf(fixture.indexTable))) {
+      for (Result stale : fixture.staleRows) {
+        Result current = index.get(new Get(stale.getRow()));
+        assertFalse("Fixture lost a stale index entry", current.isEmpty());
+        assertEquals("Stale entry timestamp must not advance with the data row",
+          stale.rawCells()[0].getTimestamp(), current.rawCells()[0].getTimestamp());
+      }
+    }
+  }
+
+  private void assertRows(Connection conn, String query, int expectedRows) throws Exception {
+    try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
+      int count = 0;
+      while (rs.next()) {
+        assertEquals("tenant-" + count, rs.getString(1));
+        assertEquals("payload-" + count, rs.getString(2));
+        assertEquals(new Timestamp(UPDATED_TIME_BASE + count * 1000L), rs.getTimestamp(3));
+        count++;
+      }
+      assertEquals("Valid rows returned by: " + query, expectedRows, count);
+    }
+  }
+
+  private static class Fixture {
+    final String dataTable;
+    final String indexTable;
+    final List<Result> staleRows;
+
+    Fixture(String dataTable, String indexTable, List<Result> staleRows) {
+      this.dataTable = dataTable;
+      this.indexTable = indexTable;
+      this.staleRows = staleRows;
+    }
+
+    String indexQuery(String predicate) {
+      return "SELECT /*+ INDEX(" + dataTable + " " + indexTable
+        + ") */ ID, PAYLOAD, UPDATED_TIME FROM " + dataTable + predicate
+        + " ORDER BY UPDATED_TIME ASC";
     }
   }
 
