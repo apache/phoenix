@@ -165,6 +165,7 @@ import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
@@ -1922,6 +1923,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
 
+      // PHOENIX-7788: recover an orphaned disabled physical table before modifyTable runs on it.
+      if (
+        tableExist && tableType == PTableType.TABLE
+          && admin.isTableDisabled(TableName.valueOf(physicalTableName))
+      ) {
+        byte[] viewIndexMarker = existingDesc == null ? null
+          : existingDesc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES);
+        // Classify by the descriptor marker, falling back to the _IDX_ name prefix for older
+        // view-index tables that predate the marker.
+        boolean isViewIndexTable =
+          (viewIndexMarker != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(viewIndexMarker)))
+            || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName));
+        reenableOrphanedDisabledHBaseTable(physicalTableName, isViewIndexTable, admin);
+      }
+
       TableDescriptorBuilder newDesc =
         generateTableDescriptor(physicalTableName, parentPhysicalTableName, existingDesc, tableType,
           props, families, splits, isNamespaceMapped);
@@ -2456,6 +2472,50 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       admin.disableTable(tableName);
     } catch (TableNotEnabledException e) {
       LOGGER.info("Table already disabled, continuing with next steps", e);
+    }
+  }
+
+  private void enableTable(Admin admin, TableName tableName) throws IOException {
+    try {
+      admin.enableTable(tableName);
+    } catch (TableNotDisabledException e) {
+      LOGGER.info("Table already enabled, continuing with next steps", e);
+    }
+  }
+
+  /**
+   * PHOENIX-7788: re-enable a disabled physical HBase table if SYSTEM.CATALOG has no row for it. If
+   * metadata exists, leave it disabled — an admin may have disabled the registered table. Caller
+   * must have already confirmed the physical table exists and is disabled.
+   */
+  private void reenableOrphanedDisabledHBaseTable(byte[] physicalTableNameBytes,
+    boolean isViewIndexTable, Admin admin) throws SQLException {
+    TableName physicalTableName = TableName.valueOf(physicalTableNameBytes);
+    // For a view-index physical table, resolve to the base table name; otherwise the physical
+    // name is itself the metadata key.
+    String physicalName = Bytes.toString(physicalTableNameBytes);
+    String metadataName = isViewIndexTable
+      ? MetaDataUtil.getViewIndexUserTableName(physicalName)
+      : physicalName;
+    byte[] schemaBytes = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(metadataName));
+    byte[] tableBytes = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(metadataName));
+    // No-cache read straight from the server; a stale/absent client-cache entry must not drive
+    // the orphan decision.
+    PTable existingTable = getTable(null, schemaBytes, tableBytes, HConstants.LATEST_TIMESTAMP,
+      HConstants.LATEST_TIMESTAMP).getTable();
+    if (existingTable != null) {
+      LOGGER.info(
+        "Physical HBase table {} is disabled but {} has metadata for it; "
+          + "leaving it disabled to preserve any intentional admin action.",
+        physicalTableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+      return;
+    }
+    LOGGER.info("Re-enabling orphaned disabled HBase table {} during CREATE TABLE",
+      physicalTableName);
+    try {
+      enableTable(admin, physicalTableName);
+    } catch (IOException e) {
+      throw ClientUtil.parseServerException(e);
     }
   }
 

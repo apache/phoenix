@@ -83,6 +83,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -1730,6 +1731,129 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
       value = result.getValue(familyName, emptyColumnQualifier);
       assertNull(value);
+    }
+  }
+
+  @Test
+  public void testCreateTableReenablesExistingDisabledHBaseTable() throws Exception {
+    String tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName
+      + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR) COLUMN_ENCODED_BYTES=NONE";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+    }
+
+    ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), props);
+    TableName hbaseTableName = TableName.valueOf(tableName);
+
+    // Simulate the "failed drop" state: Phoenix metadata is gone but the physical HBase
+    // table still exists and has been left disabled.
+    try (Admin admin = services.getAdmin();
+      Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      admin.disableTable(hbaseTableName);
+      assertTrue(admin.isTableDisabled(hbaseTableName));
+
+      conn.createStatement()
+        .executeUpdate("DELETE FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName + "'");
+      conn.commit();
+      conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+    }
+
+    try (Admin admin = services.getAdmin()) {
+      assertFalse("HBase table should have been re-enabled by CREATE TABLE",
+        admin.isTableDisabled(hbaseTableName));
+      assertTrue(admin.isTableEnabled(hbaseTableName));
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a', 'b')");
+      try (ResultSet rs =
+        conn.createStatement().executeQuery("SELECT V FROM " + tableName + " WHERE K = 'a'")) {
+        assertTrue(rs.next());
+        assertEquals("b", rs.getString(1));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  // Test for PHOENIX-7788: guard must be gated on metadata absence, not on physical state
+  // alone, so an intentional admin disable of a Phoenix-registered table is not silently
+  // undone by CREATE TABLE IF NOT EXISTS.
+  @Test
+  public void testCreateTableIfNotExistsDoesNotReenableDisabledTableWithMetadata()
+    throws Exception {
+    String tableName = generateUniqueName();
+    String ddl = "CREATE TABLE " + tableName
+      + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR) COLUMN_ENCODED_BYTES=NONE";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+    }
+
+    ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), props);
+    TableName hbaseTableName = TableName.valueOf(tableName);
+
+    // Simulate an admin disabling a registered Phoenix table for maintenance. Metadata
+    // rows in SYSTEM.CATALOG are left intact.
+    try (Admin admin = services.getAdmin()) {
+      admin.disableTable(hbaseTableName);
+      assertTrue(admin.isTableDisabled(hbaseTableName));
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+      conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + tableName
+        + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR) COLUMN_ENCODED_BYTES=NONE");
+    }
+
+    try (Admin admin = services.getAdmin()) {
+      assertTrue(
+        "CREATE TABLE IF NOT EXISTS must not re-enable a disabled table with existing metadata",
+        admin.isTableDisabled(hbaseTableName));
+    }
+  }
+
+  // PHOENIX-7788: when the base table still has metadata, a disabled shared view-index physical
+  // table must be left disabled -- an admin may have disabled it intentionally, and re-creating
+  // the base table must not silently undo that (same conservative rule as plain base tables).
+  @Test
+  public void testCreateTableDoesNotReenableDisabledViewIndexTableWhenBaseTableExists()
+    throws Exception {
+    String baseTable = generateUniqueName();
+    String ddl = "CREATE TABLE IF NOT EXISTS " + baseTable + " (T_ID VARCHAR NOT NULL, "
+      + "K VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY (T_ID, K)) "
+      + "MULTI_TENANT=true, COLUMN_ENCODED_BYTES=NONE";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+    }
+
+    ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), props);
+    TableName physicalIndexTable =
+      TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(baseTable));
+
+    try (Admin admin = services.getAdmin()) {
+      admin.disableTable(physicalIndexTable);
+      assertTrue(admin.isTableDisabled(physicalIndexTable));
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+      conn.createStatement().execute(ddl);
+    }
+
+    try (Admin admin = services.getAdmin()) {
+      assertTrue("Shared view-index table with a live base table must stay disabled",
+        admin.isTableDisabled(physicalIndexTable));
     }
   }
 
