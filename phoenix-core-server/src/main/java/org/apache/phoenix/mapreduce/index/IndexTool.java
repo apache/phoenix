@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -865,6 +866,14 @@ public class IndexTool extends Configured implements Tool {
       if (dataTable != null && indexTable != null) {
         setupIndexAndDataTable(conn);
         if (
+          pIndexTable.getVectorIndexType() == VectorIndexType.HNSW
+            && (indexVerifyType != IndexVerifyType.NONE
+              || sourceTable != SourceTable.DATA_TABLE_SOURCE)
+        ) {
+          throw new IllegalArgumentException(
+            "IndexTool does not verify HNSW indexes; use indexfsck.py verify");
+        }
+        if (
           pIndexTable.getVectorIndexType() == VectorIndexType.IVF
             && pIndexTable.getVectorCentroidGeneration() == null
         ) {
@@ -1082,6 +1091,19 @@ public class IndexTool extends Configured implements Tool {
   static void buildHnswIndex(PhoenixConnection conn, PTable dataTable, PTable indexTable)
     throws Exception {
     String indexName = indexTable.getName().getString();
+    buildHnswRegions(conn, dataTable, indexTable, region -> true);
+    IndexUtil.updateIndexState(conn, indexName, PIndexState.ACTIVE, null);
+    LOGGER.info("Built HNSW index {}", indexName);
+  }
+
+  /**
+   * Rebuilds HNSW index segments for all data regions satisfying {@code regions}, triggering
+   * asynchronous server side region rebuilds and waiting until fresh segments covering every
+   * matching region are published.
+   */
+  public static void buildHnswRegions(PhoenixConnection conn, PTable dataTable, PTable indexTable,
+    Predicate<RegionInfo> regions) throws Exception {
+    String indexName = indexTable.getName().getString();
     byte[] dataPhysical = dataTable.getPhysicalName().getBytes();
     byte[] family = SchemaUtil.getEmptyColumnFamily(indexTable);
     long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -1094,6 +1116,9 @@ public class IndexTool extends Configured implements Tool {
         List<HnswSegment.Descriptor> segments = HnswSegment.list(index, family);
         for (HRegionLocation location : services.getAllTableRegions(dataPhysical)) {
           RegionInfo region = location.getRegion();
+          if (!regions.test(region)) {
+            continue;
+          }
           boolean built = false;
           for (HnswSegment.Descriptor d : segments) {
             built |= d.time >= start && d.covers(region.getStartKey(), region.getEndKey());
@@ -1125,8 +1150,6 @@ public class IndexTool extends Configured implements Tool {
         Thread.sleep(1000);
       }
     }
-    IndexUtil.updateIndexState(conn, indexName, PIndexState.ACTIVE, null);
-    LOGGER.info("Built HNSW index {}", indexName);
   }
 
   public static boolean isTimeRangeSet(Long startTime, Long endTime) {

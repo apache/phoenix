@@ -257,7 +257,8 @@ public final class HnswSegment {
   }
 
   /**
-   * Scans and returns descriptors for all segments in the index table.
+   * Scans and returns descriptors for all segments in the index table. Rows that are not
+   * well-formed segment rows are skipped.
    * @param table  index table
    * @param family column family
    * @return list of segment descriptors
@@ -271,11 +272,14 @@ public final class HnswSegment {
       for (Result r : scanner) {
         byte[] end = r.getValue(family, END_KEY_QUALIFIER);
         byte[] count = r.getValue(family, COUNT_QUALIFIER);
-        if (end != null && count != null) {
-          byte[] base = r.getValue(family, BASE_TIME_QUALIFIER);
-          Long baseTime =
-            base != null && base.length == Bytes.SIZEOF_LONG ? Bytes.toLong(base) : null;
-          segments.add(new Descriptor(r.getRow(), end, Bytes.toInt(count), baseTime));
+        byte[] base = r.getValue(family, BASE_TIME_QUALIFIER);
+        if (
+          end != null && count != null && count.length == Bytes.SIZEOF_INT
+            && r.getRow().length >= Bytes.SIZEOF_LONG
+            && (base == null || base.length == Bytes.SIZEOF_LONG)
+        ) {
+          segments.add(new Descriptor(r.getRow(), end, Bytes.toInt(count),
+            base != null ? Bytes.toLong(base) : null));
         }
       }
     }
@@ -511,7 +515,11 @@ public final class HnswSegment {
     graph = null;
   }
 
-  private OnDiskGraphIndex graph() throws IOException {
+  /**
+   * Retrieves the segment graph index, reloading the payload if previously evicted, or null if the
+   * segment holds no vectors.
+   */
+  public OnDiskGraphIndex graph() throws IOException {
     if (keys.length == 0) {
       return null;
     }

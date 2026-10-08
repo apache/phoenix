@@ -306,7 +306,7 @@ public final class HnswIndexManager implements VectorIndexManager {
    * Determines the replay start timestamp across active stacks, accounting for the replay lookback
    * margin.
    */
-  static long replayStartTime(List<HnswSegment.Descriptor> current) {
+  public static long replayStartTime(List<HnswSegment.Descriptor> current) {
     Map<StackId, Long> newestPerStack = new HashMap<>();
     for (HnswSegment.Descriptor d : current) {
       StackId id = stackId(d);
@@ -323,7 +323,7 @@ public final class HnswIndexManager implements VectorIndexManager {
    * Finds active segments covering this region, retaining base segments not superseded by newer
    * bases alongside their associated deltas.
    */
-  static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
+  public static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
     byte[] startKey, byte[] endKey) {
     List<HnswSegment.Descriptor> overlappingBases = new ArrayList<>();
     List<HnswSegment.Descriptor> overlappingDeltas = new ArrayList<>();
@@ -805,7 +805,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
   }
 
-  static List<HnswSegment.Descriptor> segmentsToRetire(List<HnswSegment.Descriptor> all,
+  public static List<HnswSegment.Descriptor> segmentsToRetire(List<HnswSegment.Descriptor> all,
     byte[] startKey, byte[] endKey) {
     List<HnswSegment.Descriptor> bases = new ArrayList<>();
     List<HnswSegment.Descriptor> deltas = new ArrayList<>();
