@@ -1815,7 +1815,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   private TableDescriptor ensureTableCreated(byte[] physicalTableName,
     byte[] parentPhysicalTableName, PTableType tableType, Map<String, Object> props,
     List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-    boolean modifyExistingMetaData, boolean isNamespaceMapped, boolean isDoNotUpgradePropSet)
+    boolean modifyExistingMetaData, boolean isNamespaceMapped, boolean isDoNotUpgradePropSet,
+    boolean createIfNotExists)
     throws SQLException {
     SQLException sqlE = null;
     TableDescriptor existingDesc = null;
@@ -2000,6 +2001,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
         return null;
       } else {
+        if (createIfNotExists && doesPhoenixTableAlreadyExist(existingDesc)) {
+          // Already a Phoenix-managed table, skip remaining modifications entirely.
+          return existingDesc;
+        }
+        // We create phoenix table that maps to existing HBase table - we shall continue to add coprocessors.
         if (isMetaTable && !isUpgradeRequired()) {
           checkClientServerCompatibility(
             SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
@@ -2432,12 +2438,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   private void ensureViewIndexTableCreated(byte[] physicalTableName, byte[] parentPhysicalTableName,
     Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families,
-    byte[][] splits, long timestamp, boolean isNamespaceMapped) throws SQLException {
+    byte[][] splits, long timestamp, boolean isNamespaceMapped, boolean createIfNotExists) throws SQLException {
     byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
 
     tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
     TableDescriptor desc = ensureTableCreated(physicalIndexName, parentPhysicalTableName,
-      PTableType.TABLE, tableProps, families, splits, true, isNamespaceMapped, false);
+      PTableType.TABLE, tableProps, families, splits, true, isNamespaceMapped, false,
+      createIfNotExists);
     if (desc != null) {
       if (
         !Boolean.TRUE.equals(
@@ -2531,7 +2538,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     final byte[] physicalTableName, PTableType tableType, Map<String, Object> tableProps,
     final List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
     boolean isNamespaceMapped, final boolean allocateIndexId, final boolean isDoNotUpgradePropSet,
-    final PTable parentTable) throws SQLException {
+    final PTable parentTable, boolean createIfNotExists) throws SQLException {
     List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinkMutations(tableMetaData);
     byte[][] rowKeyMetadata = new byte[3][];
     Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetaData);
@@ -2560,7 +2567,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // For views this will ensure that metadata already exists
       // For tables and indexes, this will create the metadata if it doesn't already exist
       ensureTableCreated(physicalTableNameBytes, null, tableType, tableProps, families, splits,
-        true, isNamespaceMapped, isDoNotUpgradePropSet);
+        true, isNamespaceMapped, isDoNotUpgradePropSet, createIfNotExists && !localIndexTable);
     }
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     if (tableType == PTableType.INDEX) { // Index on view
@@ -2571,7 +2578,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           // For view index, the physical table name is _IDX_+ logical table name format
           ensureViewIndexTableCreated(
             tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes),
-            physicalTableName, MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped);
+            physicalTableName, MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped, createIfNotExists);
         }
       }
     } else if (tableType == PTableType.TABLE && MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) { // Create
@@ -2606,7 +2613,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       }
       ensureViewIndexTableCreated(physicalTableNameBytes, physicalTableNameBytes, tableProps,
         familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null,
-        MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped);
+        MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped, createIfNotExists);
     }
 
     // Avoid the client-server RPC if this is not a view creation
@@ -2891,13 +2898,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   private void ensureViewIndexTableCreated(PName tenantId, byte[] physicalIndexTableName,
-    long timestamp, boolean isNamespaceMapped) throws SQLException {
+    long timestamp, boolean isNamespaceMapped, boolean createIfNotExists) throws SQLException {
     String name = Bytes
       .toString(SchemaUtil.getParentTableNameFromIndexTable(physicalIndexTableName,
         MetaDataUtil.VIEW_INDEX_TABLE_PREFIX))
       .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
     PTable table = getTable(tenantId, name, timestamp);
-    ensureViewIndexTableCreated(table, timestamp, isNamespaceMapped);
+    ensureViewIndexTableCreated(table, timestamp, isNamespaceMapped, createIfNotExists);
   }
 
   private PTable getTable(PName tenantId, String fullTableName, long timestamp)
@@ -2926,7 +2933,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return table;
   }
 
-  private void ensureViewIndexTableCreated(PTable table, long timestamp, boolean isNamespaceMapped)
+  private void ensureViewIndexTableCreated(PTable table, long timestamp, boolean isNamespaceMapped,
+    boolean createIfNotExists)
     throws SQLException {
     byte[] physicalTableName = table.getPhysicalName().getBytes();
     TableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
@@ -2963,7 +2971,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     byte[] viewPhysicalTableName = MetaDataUtil
       .getNamespaceMappedName(table.getName(), isNamespaceMapped).getBytes(StandardCharsets.UTF_8);
     ensureViewIndexTableCreated(viewPhysicalTableName, physicalTableName, tableProps, families,
-      splits, timestamp, isNamespaceMapped);
+      splits, timestamp, isNamespaceMapped, createIfNotExists);
   }
 
   @Override
@@ -3101,7 +3109,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
               Boolean.TRUE
                 .equals(PBoolean.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))
             ) {
-              this.ensureViewIndexTableCreated(table, timestamp, table.isNamespaceMapped());
+              this.ensureViewIndexTableCreated(table, timestamp, table.isNamespaceMapped(), true);
             } else {
               this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
             }
