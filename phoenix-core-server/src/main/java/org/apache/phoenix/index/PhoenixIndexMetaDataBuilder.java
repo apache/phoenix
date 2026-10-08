@@ -58,7 +58,7 @@ public class PhoenixIndexMetaDataBuilder {
    * Lazily-computed, cached JDBC URL used to open server-side connections for index metadata
    * lookups.
    */
-  private static volatile String serverConnectionUrl;
+  private volatile String serverConnectionUrl;
 
   private final RegionCoprocessorEnvironment env;
 
@@ -69,13 +69,13 @@ public class PhoenixIndexMetaDataBuilder {
   public PhoenixIndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp)
     throws IOException {
     IndexMetaDataCache indexMetaDataCache =
-      getIndexMetaDataCache(env, miniBatchOp.getOperation(0).getAttributesMap());
+      getIndexMetaDataCache(miniBatchOp.getOperation(0).getAttributesMap());
     return new PhoenixIndexMetaData(indexMetaDataCache,
       miniBatchOp.getOperation(0).getAttributesMap());
   }
 
-  private static IndexMetaDataCache getIndexMetaDataCache(RegionCoprocessorEnvironment env,
-    Map<String, byte[]> attributes) throws IOException {
+  private IndexMetaDataCache getIndexMetaDataCache(Map<String, byte[]> attributes)
+    throws IOException {
     if (attributes == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
@@ -85,7 +85,7 @@ public class PhoenixIndexMetaDataBuilder {
     }
     boolean useServerMetadata = uuid.length == 0;
     if (useServerMetadata) {
-      IndexMetaDataCache cacheFromPTable = getIndexMetaDataCacheFromPTable(env, attributes);
+      IndexMetaDataCache cacheFromPTable = getIndexMetaDataCacheFromPTable(attributes);
       if (cacheFromPTable != null) {
         return cacheFromPTable;
       }
@@ -127,12 +127,10 @@ public class PhoenixIndexMetaDataBuilder {
   /**
    * Get IndexMetaDataCache by looking up PTable using table metadata attributes attached to the
    * mutation.
-   * @param env        RegionCoprocessorEnvironment.
    * @param attributes Mutation attributes.
    * @return IndexMetaDataCache or null if table metadata not found in attributes.
    */
-  private static IndexMetaDataCache getIndexMetaDataCacheFromPTable(
-    RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) {
+  private IndexMetaDataCache getIndexMetaDataCacheFromPTable(Map<String, byte[]> attributes) {
     try {
       byte[] schemaBytes =
         attributes.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
@@ -162,8 +160,9 @@ public class PhoenixIndexMetaDataBuilder {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
       }
       QueryUtil.setServerConnection(props);
-      try (Connection conn = DriverManager.getConnection(getServerConnectionUrl(env), props)) {
+      try (Connection conn = DriverManager.getConnection(getServerConnectionUrl(), props)) {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        pconn.getQueryServices().clearUpgradeRequired();
         PTable dataTable = pconn.getTable(tenantId, fullTableName);
         final List<IndexMaintainer> indexMaintainers =
           buildIndexMaintainersFromPTable(dataTable, pconn);
@@ -222,15 +221,14 @@ public class PhoenixIndexMetaDataBuilder {
     return indexMaintainers;
   }
 
-  private static String getServerConnectionUrl(RegionCoprocessorEnvironment env)
-    throws SQLException {
+  private String getServerConnectionUrl() throws SQLException {
     String url = serverConnectionUrl;
     if (url == null) {
-      synchronized (PhoenixIndexMetaDataBuilder.class) {
+      synchronized (this) {
         url = serverConnectionUrl;
         if (url == null) {
           url = QueryUtil.getConnectionUrl(new Properties(), env.getConfiguration());
-          LOGGER.info("Cached server-side JDBC url for index metadata lookups: {}", url);
+          LOGGER.debug("Cached server-side JDBC url for index metadata lookups: {}", url);
           serverConnectionUrl = url;
         }
       }

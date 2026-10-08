@@ -78,6 +78,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
     new ThreadLocal<BatchMutateContext>();
 
   private PhoenixIndexCodec codec;
+  private PhoenixIndexMetaDataBuilder indexMetaDataBuilder;
   private IndexWriter writer;
   private boolean stopped;
 
@@ -91,6 +92,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
     final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
     String serverName = env.getServerName().getServerName();
     codec = new PhoenixIndexCodec(env.getConfiguration(), env.getRegionInfo().getTable().getName());
+    indexMetaDataBuilder = new PhoenixIndexMetaDataBuilder(env);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     // setup the actual index writer
@@ -144,8 +146,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
       return;
     }
 
-    PhoenixIndexMetaData indexMetaData =
-      new PhoenixIndexMetaDataBuilder(c.getEnvironment()).getIndexMetaData(miniBatchOp);
+    PhoenixIndexMetaData indexMetaData = indexMetaDataBuilder.getIndexMetaData(miniBatchOp);
     if (
       indexMetaData.getClientVersion() >= MetaDataProtocol.MIN_TX_CLIENT_SIDE_MAINTENANCE
         && !indexMetaData.hasLocalIndexes()
