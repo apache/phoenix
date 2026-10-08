@@ -266,7 +266,7 @@ public final class KeySpaceList {
    * the maximum — which orders the same way under either separator. Without prefix relationships
    * the hull is exactly {@code [min(lower), max(upper)]}.
    */
-  private static org.apache.phoenix.query.KeyRange
+  static org.apache.phoenix.query.KeyRange
     boundingHull(List<org.apache.phoenix.query.KeyRange> ranges) {
     byte[] unbound = org.apache.phoenix.query.KeyRange.UNBOUND;
     byte[] lower = null;
@@ -332,7 +332,7 @@ public final class KeySpaceList {
       upperInclusive);
   }
 
-  private static boolean isStrictPrefix(byte[] prefix, byte[] key) {
+  static boolean isStrictPrefix(byte[] prefix, byte[] key) {
     return prefix.length > 0 && prefix.length < key.length
       && Bytes.compareTo(prefix, 0, prefix.length, key, 0, prefix.length) == 0;
   }

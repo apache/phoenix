@@ -182,6 +182,11 @@ public final class KeySpace {
     if (this.equals(other)) {
       return Optional.of(this);
     }
+    for (int i = 0; i < dims.length; i++) {
+      if (!this.dims[i].equals(other.dims[i]) && hasPrefixBounds(this.dims[i], other.dims[i])) {
+        return Optional.empty();
+      }
+    }
     if (contains(other)) {
       return Optional.of(this);
     }
@@ -219,6 +224,28 @@ public final class KeySpace {
     KeyRange[] newDims = dims.clone();
     newDims[diffDim] = a.union(b);
     return Optional.of(new KeySpace(newDims, false));
+  }
+
+  /**
+   * True when a bound of {@code a} is a strict byte prefix of a bound of {@code b}, or the reverse.
+   * Ranges compare as raw per-dim bytes, but a variable-length column orders in the row key as
+   * {@code value || sep}, with {@code sep} 0x00 for ASC and 0xFF for DESC: for DESC a value sorts
+   * after its own extensions ('2' after '23'), the opposite of byte order. Bounds without a prefix
+   * relationship differ at a byte before either ends and order the same both ways, so containment,
+   * overlap and union are only decided on them; otherwise the spaces stay separate, which is always
+   * sound for OR.
+   */
+  private static boolean hasPrefixBounds(KeyRange a, KeyRange b) {
+    byte[][] as = { a.getLowerRange(), a.getUpperRange() };
+    byte[][] bs = { b.getLowerRange(), b.getUpperRange() };
+    for (byte[] x : as) {
+      for (byte[] y : bs) {
+        if (KeySpaceList.isStrictPrefix(x, y) || KeySpaceList.isStrictPrefix(y, x)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**

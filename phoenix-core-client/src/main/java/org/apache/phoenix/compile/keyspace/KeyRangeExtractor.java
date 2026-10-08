@@ -358,6 +358,16 @@ public final class KeyRangeExtractor {
         }
       }
     }
+    // A multi-column slot ending on a DESC variable-length column can't order that column's values
+    // when some are byte prefixes of others: SkipScanFilter compares the slot's bytes lex, but the
+    // row key orders a DESC value after its own extensions ('2' after '23'). End the window before
+    // such a column so it gets its own slot, ordered by the column's comparator.
+    while (
+      compoundEnd - compoundStart > 1 && isDescVarLength(schema, compoundEnd - 1)
+        && hasPrefixBounds(list, compoundEnd - 1)
+    ) {
+      compoundEnd--;
+    }
     int compoundLen = compoundEnd - compoundStart;
 
     // Safety gate: compound emission is UNSAFE when any space has a non-single-key dim
@@ -458,33 +468,15 @@ public final class KeyRangeExtractor {
           compoundStart);
         byte[] hi = getKeyWithSchemaOffset(schema, perDimSlots, perDimSpan, KeyRange.Bound.UPPER,
           compoundStart);
-        // Strip the trailing separator byte for the last productive field if it's
-        // variable-length AND that field is the last field in the full PK schema.
-        // ScanUtil.getMinKey/getMaxKey append a trailing separator for variable-length
-        // fields (both ASC `\x00` and DESC `\xFF`). Downstream ScanRanges.create ->
-        // ScanUtil.setKey walks our compound bytes again and re-appends another separator
-        // when it finishes the same field, producing a double-separator bug (extra
-        // trailing `\xFF` for DESC, extra `\x00` for ASC). Stripping here lets the
-        // downstream setKey re-add it correctly.
-        //
-        // IMPORTANT: only strip when the last productive field is actually the last field
-        // in the PK. If there are unconstrained PK fields after the productive run, the
-        // trailing separator is an internal boundary marker between the last-productive
-        // dim and the (wildcard) next dim — downstream setKey needs it to know where the
-        // constrained prefix ends. Stripping in that case produces a startRow that's too
-        // short and misses the dim boundary (see QueryCompilerTest.testRVCScanBoundaries1).
+        // Strip the trailing separator ScanUtil.getMinKey/getMaxKey append after a
+        // variable-length last field (`\x00` ASC, `\xFF` DESC), for every space alike. The
+        // slot's consumers never see it: SkipScanFilter compares the slot span's field bytes,
+        // which end before the last field's separator, and ScanRanges.create -> ScanUtil.setKey
+        // re-appends it when building start/stop rows. Keeping it in some spaces but not others
+        // also leaves the slot's ranges in mixed encodings, which coalescing then compares.
         org.apache.phoenix.schema.ValueSchema.Field lastField =
           schema.getField(compoundStart + len - 1);
-        boolean lastIsVarLength = !lastField.getDataType().isFixedWidth();
-        boolean lastIsLastPkField = (compoundStart + len) == schema.getMaxFields();
-        // Strip when:
-        // (a) this field is the last PK field (no trailing unconstrained dims), OR
-        // (b) all productive dims are single-key (we'll emit as a point key, and the
-        // trailing separator is redundant — downstream SkipScanFilter works with
-        // raw point bytes).
-        // When neither condition holds (range with trailing EVERYTHING dims), keep the
-        // separator as a boundary marker for downstream setKey (see testRVCScanBoundaries1).
-        if (lastIsVarLength && (lastIsLastPkField || allSingleKey)) {
+        if (!lastField.getDataType().isFixedWidth()) {
           lo = stripTrailingSeparator(lo, lastField);
           hi = stripTrailingSeparator(hi, lastField);
         }
@@ -527,16 +519,18 @@ public final class KeyRangeExtractor {
         // Over budget — truncating the list would drop matching OR branches (false
         // negatives a residual cannot recover). Collapse to a single covering envelope
         // instead; residual filter rejects extras admitted by the wider scan.
-        compounds = java.util.Collections.singletonList(collapseToSingleBoundingRange(compounds));
+        compounds = java.util.Collections.singletonList(compoundLen == 1
+          ? KeySpaceList.boundingHull(compounds)
+          : collapseToSingleBoundingRange(compounds));
         compoundsApproximated = true;
       }
     } // end if (compoundLen > 0)
 
-    // Coalesce adjacent/overlapping compound ranges. Since the bytes are lex-ordered the
-    // standard KeyRange.coalesce is applicable. If the compound window is empty, this
-    // yields an empty list (no compound slot will be emitted).
-    List<KeyRange> coalesced = compounds.isEmpty()
-      ? java.util.Collections.<KeyRange> emptyList()
+    // Coalesce adjacent/overlapping compound ranges. A one-column slot holds the column's value
+    // bytes, coalesced as such (see coalesceColumn); wider compounds are lex-ordered row-key bytes.
+    // If the compound window is empty, this yields an empty list (no compound slot is emitted).
+    List<KeyRange> coalesced = compounds.isEmpty() ? java.util.Collections.<KeyRange> emptyList()
+      : compoundLen == 1 ? coalesceColumn(compounds)
       : KeyRange.coalesce(compounds);
     if (!coalesced.isEmpty() && coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
       return nothing();
@@ -654,7 +648,8 @@ public final class KeyRangeExtractor {
     // they still narrow the scan's skip-scan filter beyond what the compound alone does.
     boolean emittedTrailingPinned = false;
     for (int d = compoundEnd; d < maxProductiveEnd; d++) {
-      out.add(Collections.singletonList(pinnedValue[d]));
+      out.add(
+        pinnedValue[d] != null ? Collections.singletonList(pinnedValue[d]) : dimRanges(list, d));
       slotSpanList.add(0);
       emittedTrailingPinned = true;
     }
@@ -742,6 +737,76 @@ public final class KeyRangeExtractor {
       }
     }
     return cols;
+  }
+
+  private static boolean isDescVarLength(RowKeySchema schema, int field) {
+    org.apache.phoenix.schema.ValueSchema.Field f = schema.getField(field);
+    return f.getSortOrder() == org.apache.phoenix.schema.SortOrder.DESC
+      && !f.getDataType().isFixedWidth();
+  }
+
+  /** True when some bound of dim {@code d} across the list is a strict byte prefix of another. */
+  private static boolean hasPrefixBounds(KeySpaceList list, int d) {
+    List<KeyRange> ranges = new ArrayList<>(list.size());
+    for (KeySpace ks : list.spaces()) {
+      ranges.add(ks.get(d));
+    }
+    return hasPrefixBounds(ranges);
+  }
+
+  /** True when some bound in {@code ranges} is a strict byte prefix of another. */
+  private static boolean hasPrefixBounds(List<KeyRange> ranges) {
+    List<byte[]> bounds = new ArrayList<>(2 * ranges.size());
+    for (KeyRange r : ranges) {
+      if (!r.lowerUnbound()) {
+        bounds.add(r.getLowerRange());
+      }
+      if (!r.upperUnbound()) {
+        bounds.add(r.getUpperRange());
+      }
+    }
+    // Sorted, every key between a prefix and one of its extensions shares the prefix, so checking
+    // neighbors is enough.
+    bounds.sort(org.apache.hadoop.hbase.util.Bytes.BYTES_COMPARATOR);
+    for (int i = 1; i < bounds.size(); i++) {
+      if (KeySpaceList.isStrictPrefix(bounds.get(i - 1), bounds.get(i))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * {@link KeyRange#coalesce} for one column's ranges. Coalescing compares bounds as raw bytes, but
+   * a variable-length column orders in the row key as {@code value || sep}, with {@code sep} 0x00
+   * for ASC and 0xFF for DESC: for DESC a value sorts after its own extensions ('2' after '23').
+   * Bounds without prefix relationships order the same both ways; when some are prefixes of others
+   * the ranges are only deduplicated, which is always sound (ScanRanges sorts each slot by its
+   * column's order, and SkipScanFilter navigates overlapping ranges).
+   */
+  private static List<KeyRange> coalesceColumn(List<KeyRange> ranges) {
+    if (!hasPrefixBounds(ranges)) {
+      return KeyRange.coalesce(ranges);
+    }
+    java.util.LinkedHashSet<KeyRange> distinct = new java.util.LinkedHashSet<>();
+    for (KeyRange r : ranges) {
+      if (r == KeyRange.EVERYTHING_RANGE) {
+        return Collections.singletonList(KeyRange.EVERYTHING_RANGE);
+      }
+      if (r != KeyRange.EMPTY_RANGE) {
+        distinct.add(r);
+      }
+    }
+    return new ArrayList<>(distinct);
+  }
+
+  /** The coalesced ranges of dim {@code d} across the list, as a one-column slot. */
+  private static List<KeyRange> dimRanges(KeySpaceList list, int d) {
+    List<KeyRange> ranges = new ArrayList<>(list.size());
+    for (KeySpace ks : list.spaces()) {
+      ranges.add(ks.get(d));
+    }
+    return coalesceColumn(ranges);
   }
 
   /**
@@ -883,7 +948,7 @@ public final class KeyRangeExtractor {
       if (perSlot.get(d).isEmpty()) {
         break;
       }
-      List<KeyRange> coalesced = KeyRange.coalesce(new ArrayList<>(perSlot.get(d)));
+      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)));
       if (coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
         return nothing();
       }
@@ -1017,7 +1082,7 @@ public final class KeyRangeExtractor {
         out.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
         continue;
       }
-      List<KeyRange> coalesced = KeyRange.coalesce(new ArrayList<>(perSlot.get(d)));
+      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)));
       if (coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
         return nothing();
       }
