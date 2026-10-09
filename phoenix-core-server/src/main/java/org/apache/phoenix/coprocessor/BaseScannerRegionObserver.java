@@ -92,13 +92,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
       // For local indexes we have to abort any scan that was open during a split.
       // We detect that condition as follows:
       // 1. The EXPECTED_UPPER_REGION_KEY attribute has to always match the region's end key.
-      // Older clients do not set the attribute. For them, the scan's stop row is the fallback.
+      // Older clients do not set the attribute. For them, the region end key is the fallback.
+      // A reversed scan has its boundaries swapped, so the end key is in the start row.
       // 2. Phoenix sets the SCAN_ACTUAL_START_ROW attribute to the scan's original start row
       // We cannot directly compare that with the region's start key, but can enforce that
       // the original start row still falls within the new region.
       byte[] expectedUpperRegionKey =
         scan.getAttribute(BaseScannerRegionObserverConstants.EXPECTED_UPPER_REGION_KEY) == null
-          ? scan.getStopRow()
+          ? (scan.isReversed() ? scan.getStartRow() : scan.getStopRow())
           : scan.getAttribute(BaseScannerRegionObserverConstants.EXPECTED_UPPER_REGION_KEY);
 
       byte[] actualStartRow =

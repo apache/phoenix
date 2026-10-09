@@ -139,14 +139,17 @@ public class LocalIndexScanBoundaryTest {
   }
 
   @Test
-  public void testForwardScanWithoutExpectedUpperRegionKey() throws Exception {
-    // Older clients do not set the attribute. The forward scan falls back to the stop row.
-    Scan scan = clientScan(E, I, false);
-    scan.setAttribute(EXPECTED_UPPER_REGION_KEY, null);
-    BaseScannerRegionObserver.throwIfScanOutOfRegion(scan, region(E, I));
-    assertScanRows(scan, E, false);
-    scan = clientScan(E, I, false);
-    scan.setAttribute(EXPECTED_UPPER_REGION_KEY, null);
-    assertStale(scan, region(E, O));
+  public void testScanWithoutExpectedUpperRegionKey() throws Exception {
+    // Older clients do not set the attribute. The check falls back to the region end key in the
+    // scan, which is the stop row for a forward scan and the start row for a reversed scan.
+    for (boolean reversed : new boolean[] { false, true }) {
+      Scan scan = clientScan(E, I, reversed);
+      scan.setAttribute(EXPECTED_UPPER_REGION_KEY, null);
+      BaseScannerRegionObserver.throwIfScanOutOfRegion(scan, region(E, I));
+      assertScanRows(scan, E, reversed);
+      scan = clientScan(E, I, reversed);
+      scan.setAttribute(EXPECTED_UPPER_REGION_KEY, null);
+      assertStale(scan, region(E, O));
+    }
   }
 }
