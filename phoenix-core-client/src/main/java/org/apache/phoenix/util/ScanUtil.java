@@ -1605,8 +1605,13 @@ public class ScanUtil {
         byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null
           ? scan.getAttribute(SCAN_ACTUAL_START_ROW)
           : HConstants.EMPTY_BYTE_ARRAY;
+        // The region end key is not known here. Keep the one that the region scan already has.
+        byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
         ScanUtil.setLocalIndexAttributes(scan, 0, actualStartRow, HConstants.EMPTY_BYTE_ARRAY,
           scan.getStartRow(), scan.getStopRow());
+        if (expectedUpperRegionKey != null) {
+          scan.setAttribute(EXPECTED_UPPER_REGION_KEY, expectedUpperRegionKey);
+        }
       }
     }
   }
