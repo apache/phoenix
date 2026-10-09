@@ -121,6 +121,8 @@ public final class PhoenixConfigurationUtil {
 
   public static final String INDEX_TOOL_SOURCE_TABLE = "phoenix.mr.index_tool.source.table";
 
+  public static final String INDEX_TOOL_DELETE_ORPHANS = "phoenix.mr.index_tool.delete.orphans";
+
   public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
 
   public static final String SCRUTINY_BATCH_SIZE = "phoenix.mr.scrutiny.batch.size";
@@ -747,6 +749,16 @@ public final class PhoenixConfigurationUtil {
     Preconditions.checkNotNull(configuration);
     return IndexScrutinyTool.SourceTable.valueOf(configuration.get(INDEX_TOOL_SOURCE_TABLE,
       IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE.name()));
+  }
+
+  public static void setIndexToolDeleteOrphans(Configuration configuration, boolean deleteOrphans) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setBoolean(INDEX_TOOL_DELETE_ORPHANS, deleteOrphans);
+  }
+
+  public static boolean isIndexToolDeleteOrphans(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getBoolean(INDEX_TOOL_DELETE_ORPHANS, false);
   }
 
   public static void setScrutinySourceTable(Configuration configuration, SourceTable sourceTable) {

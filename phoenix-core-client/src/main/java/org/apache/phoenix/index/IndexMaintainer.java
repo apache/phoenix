@@ -27,6 +27,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +55,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
 import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -76,8 +79,11 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -87,6 +93,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
@@ -109,6 +116,7 @@ import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
@@ -167,6 +175,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
   public static boolean sendIndexMaintainer(PTable index) {
     PIndexState indexState = index.getIndexState();
+    if (index.isVectorIndex() && index.getVectorCentroidGeneration() == null) {
+      // An untrained vector index has no centroids and keeps no index rows, so send no maintainer
+      return false;
+    }
     return !(indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState);
   }
 
@@ -476,6 +488,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private boolean isCDCIndex;
   private IndexConsistency indexConsistency;
 
+  // Vector index attributes. The first indexed slot of the row key holds the vector centroid ID.
+  private String vectorAlgorithm;
+  private DistanceMetric distanceMetric;
+  // The maintainer keeps the centroid models for writes during its full lifetime. Thus a cache
+  // eviction cannot cause a reload for each row, or a failure on a client with no server connection
+  private CachedCentroids activeCentroids;
+  private CachedCentroids buildingCentroids;
+  private Long centroidGeneration;
+  private Long buildingGeneration;
+  private ColumnReference functionalVectorColumn;
+
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
     this.isDataTableSalted = isDataTableSalted;
@@ -501,6 +524,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     this.encodingScheme = index.getEncodingScheme();
     this.isCDCIndex = CDCUtil.isCDCIndex(index);
     this.indexConsistency = index.getIndexConsistency();
+    if (index.isVectorIndex()) {
+      this.vectorAlgorithm = index.getVectorIndexAlgorithm();
+      this.distanceMetric = DistanceMetric.fromString(index.getVectorDistanceMetric());
+      this.centroidGeneration = index.getVectorCentroidGeneration();
+      this.buildingGeneration =
+        index.isVectorRebuildInProgress() ? index.getVectorBuildingGeneration() : null;
+      PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
+      if (IndexUtil.getDataColumnOrNull(dataTable, vectorColumn.getName().getString()) == null) {
+        this.functionalVectorColumn = new ColumnReference(vectorColumn.getFamilyName().getBytes(),
+          vectorColumn.getColumnQualifierBytes());
+      }
+    }
 
     // null check for b/w compatibility
     this.encodingScheme = index.getEncodingScheme() == null
@@ -530,6 +565,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     int indexedExpressionCount = 0;
     for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
       PColumn indexColumn = index.getPKColumns().get(i);
+      if (isCentroidColumn(index, indexColumn)) {
+        indexedExpressionCount++;
+        continue;
+      }
       String indexColumnName = indexColumn.getName().getString();
       String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
       String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
@@ -602,7 +641,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     UDFParseNodeVisitor visitor = new UDFParseNodeVisitor();
     for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
       PColumn indexColumn = index.getPKColumns().get(i);
-      String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+      // The centroid ID comes from the indexed vector, so the slot uses the vector expression
+      String expressionStr = isCentroidColumn(index, indexColumn)
+        ? VectorIndexTrainer.getIndexedVectorColumn(index).getExpressionStr()
+        : IndexUtil.getIndexColumnExpressionStr(indexColumn);
       try {
         ParseNode parseNode = SQLParser.parseCondition(expressionStr);
         parseNode.accept(visitor);
@@ -633,7 +675,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       }
       if (expressionIndexCompiler.getColumnRef() != null) {
         // get the column of the data column that corresponds to this index column
-        PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+        PColumn column = isCentroidColumn(index, indexColumn)
+          ? expressionIndexCompiler.getColumnRef().getColumn()
+          : IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
         boolean isPKColumn = SchemaUtil.isPKColumn(column);
         if (isPKColumn) {
           int dataPkPos = dataTable.getPKColumns().indexOf(column)
@@ -641,8 +685,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
           indexedColumnsInfo.add(new Pair<>((String) null, column.getName().getString()));
         } else {
-          indexColByteSize += column.getDataType().isFixedWidth()
-            ? SchemaUtil.getFixedByteSize(column)
+          indexColByteSize += isCentroidColumn(index, indexColumn) ? Bytes.SIZEOF_INT
+            : column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column)
             : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
           try {
             // Surround constant with cast so that we can still know the original type. Otherwise,
@@ -660,8 +704,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           }
         }
       } else {
-        indexColByteSize += expression.getDataType().isFixedWidth()
-          ? SchemaUtil.getFixedByteSize(expression)
+        indexColByteSize += isCentroidColumn(index, indexColumn) ? Bytes.SIZEOF_INT
+          : expression.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(expression)
           : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
         this.indexedExpressions.add(expression);
         KeyValueExpressionVisitor kvVisitor = new KeyValueExpressionVisitor() {
@@ -763,8 +807,61 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, null);
   }
 
+  /**
+   * Builds the index row key for a data row. For a vector index, this method evaluates the vector
+   * leniently. It returns null if the vector is null or malformed, or if the index has no trained
+   * centroids.
+   */
   public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName) {
+    return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, encodedRegionName,
+      null, getWriteGeneration());
+  }
+
+  /**
+   * Builds the index row key for a data row from the indexed vector that
+   * {@link #getIndexedVector(Put, boolean)} already evaluated. Returns null for a vector index if
+   * the vector is null or if the index has no trained centroids.
+   */
+  public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, long ts,
+    byte[] encodedRegionName, ImmutableBytesWritable indexedVector) {
+    if (isVectorIndex() && indexedVector == null) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, indexedVector,
+      getWriteGeneration());
+  }
+
+  /**
+   * Builds the index row key of a data row under the outgoing generation of a migration. Returns
+   * null if no migration is in progress or the row has no vector.
+   */
+  public byte[] buildOutgoingRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts, byte[] encodedRegionName) {
+    if (!isMigrating()) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, null,
+      centroidGeneration);
+  }
+
+  /**
+   * Builds the index row key of a data row under the outgoing generation of a migration. The caller
+   * supplies the indexed vector from {@link #getIndexedVector(Put, boolean)}. Returns null if no
+   * migration is in progress or the row has no vector.
+   */
+  public byte[] buildOutgoingRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts, byte[] encodedRegionName, ImmutableBytesWritable indexedVector) {
+    if (!isMigrating() || indexedVector == null) {
+      return null;
+    }
+    return buildRowKey(valueGetter, rowKeyPtr, null, null, ts, encodedRegionName, indexedVector,
+      centroidGeneration);
+  }
+
+  private byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName,
+    ImmutableBytesWritable indexedVector, Long generation) {
     if (isCDCIndex && encodedRegionName == null) {
       throw new IllegalArgumentException("Encoded region name is required for a CDC index");
     }
@@ -845,7 +942,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           dataColumnType = expression.getDataType();
           dataSortOrder = expression.getSortOrder();
           isNullable = expression.isNullable();
-          if (expression instanceof PartitionIdFunction) {
+          if (i == 0 && isVectorIndex()) {
+            if (generation == null) {
+              // An untrained index has no centroids for assignment, so it keeps no index rows
+              return null;
+            }
+            ImmutableBytesWritable vector =
+              indexedVector != null ? indexedVector : getIndexedVector(valueGetter, ts, false);
+            if (vector == null) {
+              return null;
+            }
+            ptr.set(PInteger.INSTANCE.toBytes(getCentroids(generation).assign(vector.get(),
+              vector.getOffset(), vector.getLength(), dataColumnType)));
+            dataColumnType = PInteger.INSTANCE;
+            dataSortOrder = SortOrder.ASC;
+            isNullable = false;
+          } else if (expression instanceof PartitionIdFunction) {
             if (i != 0) {
               throw new DoNotRetryIOException(
                 "PARTITION_ID() has to be the prefix " + "of the index row key!");
@@ -1123,6 +1235,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
 
   public boolean shouldPrepareIndexMutations(Put dataRowState) {
+    return shouldPrepareIndexMutations(dataRowState, getIndexedVector(dataRowState, true));
+  }
+
+  /**
+   * Determines if the index row for a data row must be prepared. The caller gives the indexed
+   * vector that {@link #getIndexedVector(Put, boolean)} already evaluated. A vector index prepares
+   * no index row if the vector is null. Other indexes ignore the vector.
+   */
+  public boolean shouldPrepareIndexMutations(Put dataRowState,
+    ImmutableBytesWritable indexedVector) {
+    if (isVectorIndex() && indexedVector == null) {
+      // A row with a null vector has no index row and gets no index mutations
+      return false;
+    }
     if (getIndexWhere() == null) {
       // It is a full index and the index row should be prepared.
       return true;
@@ -1237,7 +1363,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       boolean isNullableToBe;
       Integer maxLengthToBe;
       Integer scaleToBe;
-      if (indexField == null) {
+      if (indexField == null && isVectorIndex() && i == 0) {
+        // The first indexed column of the index row key is the centroid ID, a non-null INTEGER
+        expressionItr.next();
+        isNullableToBe = false;
+        dataTypeToBe = PInteger.INSTANCE;
+        sortOrderToBe = SortOrder.ASC;
+        maxLengthToBe = null;
+        scaleToBe = null;
+      } else if (indexField == null) {
         Expression e = expressionItr.next();
         isNullableToBe = e.isNullable();
         dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, e.getDataType());
@@ -1322,12 +1456,34 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
     ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
     boolean verified, byte[] encodedRegionName) throws IOException {
+    // Evaluate the vector strictly, so that a malformed vector makes the row write fail
+    return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+      regionEndKey, verified, encodedRegionName,
+      isVectorIndex() ? getIndexedVector(valueGetter, ts, true) : null);
+  }
+
+  /**
+   * Builds the index row update for a data row from the indexed vector that
+   * {@link #getIndexedVector(Put, boolean)} already evaluated. Returns null for a vector index if
+   * the vector is null or if the index has no trained centroids.
+   */
+  public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+    ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
+    boolean verified, byte[] encodedRegionName, ImmutableBytesWritable indexedVector)
+    throws IOException {
+    if (isVectorIndex() && indexedVector == null) {
+      return null;
+    }
     byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey,
-      ts, encodedRegionName);
+      ts, encodedRegionName, indexedVector, getWriteGeneration());
+    if (indexRowKey == null) {
+      return null;
+    }
     return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
       regionEndKey, indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
       indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme,
-      encodingScheme, dataEncodingScheme, verified);
+      encodingScheme, dataEncodingScheme, verified, functionalVectorColumn,
+      functionalVectorColumn == null ? null : indexedVector);
   }
 
   public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
@@ -1337,6 +1493,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     boolean destWALDisabled, ImmutableStorageScheme srcImmutableStorageScheme,
     ImmutableStorageScheme destImmutableStorageScheme, QualifierEncodingScheme destEncodingScheme,
     QualifierEncodingScheme srcEncodingScheme, boolean verified) throws IOException {
+    return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+      regionEndKey, destRowKey, emptyKeyValueCFPtr, coveredColumnsMap, destEmptyKeyValueRef,
+      destWALDisabled, srcImmutableStorageScheme, destImmutableStorageScheme, destEncodingScheme,
+      srcEncodingScheme, verified, null, null);
+  }
+
+  public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+    ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
+    byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
+    Map<ColumnReference, ColumnReference> coveredColumnsMap, ColumnReference destEmptyKeyValueRef,
+    boolean destWALDisabled, ImmutableStorageScheme srcImmutableStorageScheme,
+    ImmutableStorageScheme destImmutableStorageScheme, QualifierEncodingScheme destEncodingScheme,
+    QualifierEncodingScheme srcEncodingScheme, boolean verified, ColumnReference computedColumn,
+    ImmutableBytesWritable computedValue) throws IOException {
     Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
     Put put = null;
     // New row being inserted: add the empty key value
@@ -1376,6 +1546,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         familyToColListMap.get(cf).add(Pair.newPair(indexColRef, ref));
       }
+      if (computedValue != null) {
+        // The computed vector column has no source column in the data table
+        familyToColListMap.computeIfAbsent(new ImmutableBytesPtr(computedColumn.getFamily()),
+          k -> Lists.newArrayList()).add(Pair.newPair(computedColumn, (ColumnReference) null));
+      }
       // iterate over each column family and create a byte[] containing all the columns
       for (Entry<ImmutableBytesPtr,
         List<Pair<ColumnReference, ColumnReference>>> entry : familyToColListMap.entrySet()) {
@@ -1394,7 +1569,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           ColumnReference indexColRef = colRefPair.getFirst();
           ColumnReference dataColRef = colRefPair.getSecond();
           byte[] value = null;
-          if (srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          if (dataColRef == null) {
+            value = computedValue.copyBytes();
+          } else if (
+            srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+          ) {
             Expression expression = new SingleCellColumnExpression(new PDatum() {
               @Override
               public boolean isNullable() {
@@ -1420,8 +1599,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
               public PDataType getDataType() {
                 return null;
               }
-            }, dataColRef.getFamily(), dataColRef.getQualifier(), destEncodingScheme,
-              destImmutableStorageScheme);
+            }, dataColRef.getFamily(), dataColRef.getQualifier(), srcEncodingScheme,
+              srcImmutableStorageScheme);
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
             value = ptr.copyBytesIfNecessary();
@@ -1544,6 +1723,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           }
         }
       }
+      if (computedValue != null) {
+        if (put == null) {
+          put = new Put(destRowKey);
+          put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+        }
+        put.add(kvBuilder.buildPut(rowKey, computedColumn.getFamilyWritable(),
+          computedColumn.getQualifierWritable(), ts, computedValue));
+      }
     }
     return put;
   }
@@ -1568,6 +1755,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     int colsSet =
       indexUpdate.getFamilyCellMap().values().stream().mapToInt(elem -> elem.size()).sum();
+    if (
+      functionalVectorColumn != null && indexUpdate.has(functionalVectorColumn.getFamily(),
+        functionalVectorColumn.getQualifier())
+    ) {
+      // The computed vector column is not a covered column, so do not count it
+      colsSet--;
+    }
     if (coveredColumnsMap.size() + 1 == colsSet) { // add 1 for the empty column
       // Index row update is always a full update except when some columns are explicitly
       // set to null. Do a quick size check to determine if some covered columns are being
@@ -1724,6 +1918,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     byte[] regionStartKey, byte[] regionEndKey, byte[] encodedRegionName) throws IOException {
     byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts,
       encodedRegionName);
+    if (indexRowKey == null) {
+      return null;
+    }
     // Delete the entire row if any of the indexed columns changed
     DeleteType deleteType = null;
     if (
@@ -2076,6 +2273,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     maintainer.nDataTableSaltBuckets =
       proto.hasDataTableSaltBuckets() ? proto.getDataTableSaltBuckets() : -1;
+    if (proto.hasVectorAlgorithm()) {
+      maintainer.vectorAlgorithm = proto.getVectorAlgorithm();
+      maintainer.distanceMetric = DistanceMetric.fromString(proto.getDistanceMetric());
+      maintainer.centroidGeneration =
+        proto.hasCentroidGeneration() ? proto.getCentroidGeneration() : null;
+      maintainer.buildingGeneration =
+        proto.hasBuildingGeneration() ? proto.getBuildingGeneration() : null;
+      if (proto.hasFunctionalVectorColumn()) {
+        maintainer.functionalVectorColumn =
+          new ColumnReference(proto.getFunctionalVectorColumn().getFamily().toByteArray(),
+            proto.getFunctionalVectorColumn().getQualifier().toByteArray());
+      }
+    }
     maintainer.initCachedState();
     return maintainer;
   }
@@ -2234,6 +2444,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     if (maintainer.isDataTableSalted) {
       builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
+    }
+    if (maintainer.isVectorIndex()) {
+      builder.setVectorAlgorithm(maintainer.vectorAlgorithm);
+      builder.setDistanceMetric(maintainer.distanceMetric.name());
+      if (maintainer.centroidGeneration != null) {
+        builder.setCentroidGeneration(maintainer.centroidGeneration);
+      }
+      if (maintainer.buildingGeneration != null) {
+        builder.setBuildingGeneration(maintainer.buildingGeneration);
+      }
+      if (maintainer.functionalVectorColumn != null) {
+        builder.setFunctionalVectorColumn(ServerCachingProtos.ColumnReference.newBuilder()
+          .setFamily(ByteStringer.wrap(maintainer.functionalVectorColumn.getFamily()))
+          .setQualifier(ByteStringer.wrap(maintainer.functionalVectorColumn.getQualifier())));
+      }
     }
     return builder.build();
   }
@@ -2620,6 +2845,141 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public IndexConsistency getIndexConsistency() {
     return indexConsistency;
+  }
+
+  public boolean isVectorIndex() {
+    return vectorAlgorithm != null;
+  }
+
+  public DistanceMetric getDistanceMetric() {
+    return distanceMetric;
+  }
+
+  public Long getCentroidGeneration() {
+    return centroidGeneration;
+  }
+
+  /** Returns true if a rebuild migration to a building generation is in progress. */
+  public boolean isMigrating() {
+    return buildingGeneration != null;
+  }
+
+  /**
+   * Returns the generation of new index rows: the building generation during a migration, otherwise
+   * the active generation.
+   */
+  public Long getWriteGeneration() {
+    return isMigrating() ? buildingGeneration : centroidGeneration;
+  }
+
+  /** Reads the centroid ID from an index row key. */
+  public int getCentroidId(byte[] indexRowKey) {
+    int slot =
+      (nIndexSaltBuckets > 0 ? 1 : 0) + (viewIndexId != null ? 1 : 0) + (isMultiTenant ? 1 : 0);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    getIndexRowKeySchema().iterator(indexRowKey, ptr, slot + 1);
+    return PInteger.INSTANCE.getCodec().decodeInt(ptr, SortOrder.ASC);
+  }
+
+  /**
+   * Returns the index column that holds the computed vector of a functional vector index. Returns
+   * null if the index is not a vector index or indexes a plain vector column.
+   */
+  public ColumnReference getFunctionalVectorColumn() {
+    return functionalVectorColumn;
+  }
+
+  /**
+   * Loads the centroids of the active generation and, during a migration, of the building
+   * generation. Callers use this before they take row locks, so that no load occurs under a lock.
+   * The centroids come from the cache. On a cache miss they load through {@code conn}, or through
+   * an internal server connection if {@code conn} is null. The maintainer keeps them for its
+   * lifetime. An untrained index has no centroids.
+   */
+  public void loadCentroids(Connection conn) throws SQLException {
+    if (!isVectorIndex() || centroidGeneration == null) {
+      // A non-vector index or an untrained vector index has no centroids to load
+      return;
+    }
+    if (activeCentroids == null) {
+      activeCentroids = loadCentroids(conn, centroidGeneration);
+    }
+    if (isMigrating() && buildingCentroids == null) {
+      buildingCentroids = loadCentroids(conn, buildingGeneration);
+    }
+  }
+
+  private CachedCentroids loadCentroids(Connection conn, long generation) throws SQLException {
+    // An index that a view inherits uses the centroids of the parent index
+    return VectorCentroidCache.getForWrite(conn,
+      CentroidManager.getCentroidIndexName(logicalIndexName), generation, distanceMetric);
+  }
+
+  private CachedCentroids getCentroids(long generation) {
+    try {
+      loadCentroids(null);
+    } catch (SQLException e) {
+      throw new IllegalStateException(e);
+    }
+    return generation == centroidGeneration ? activeCentroids : buildingCentroids;
+  }
+
+  /**
+   * Evaluates the indexed vector of a data row state. A row write evaluates each row state one
+   * time, and all checks of the write use the result. Returns null if the row state is null or has
+   * no vector, or if the index is not a vector index. If {@code strict} is true, a malformed vector
+   * causes an {@link IllegalDataException}. If it is false, a malformed vector gives null.
+   */
+  public ImmutableBytesWritable getIndexedVector(Put dataRowState, boolean strict) {
+    if (dataRowState == null || !isVectorIndex()) {
+      return null;
+    }
+    return getIndexedVector(new IndexUtil.SimpleValueGetter(dataRowState),
+      HConstants.LATEST_TIMESTAMP, strict);
+  }
+
+  /**
+   * Evaluates the indexed vector expression at a timestamp. Use strict evaluation for the new row
+   * state of a write, so that a malformed vector makes the write fail. Use lenient evaluation for
+   * the current row state. Then a malformed stored vector gives null and does not block a delete or
+   * a correction of the row.
+   */
+  private ImmutableBytesWritable getIndexedVector(ValueGetter valueGetter, long ts,
+    boolean strict) {
+    if (valueGetter == null) {
+      return null;
+    }
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    try {
+      if (
+        !indexedExpressions.get(0).evaluate(new ValueGetterTuple(valueGetter, ts), ptr)
+          || ptr.getLength() == 0
+      ) {
+        return null;
+      }
+    } catch (IllegalDataException e) {
+      if (strict) {
+        throw e;
+      }
+      return null;
+    }
+    return ptr;
+  }
+
+  /**
+   * Returns true if the indexed vectors of the current and next row states have identical bytes.
+   * Then the next row keeps the centroid and the index row key of the current row. Returns false if
+   * either vector is null.
+   */
+  public boolean isVectorUnchanged(ImmutableBytesWritable current, ImmutableBytesWritable next) {
+    return current != null && next != null && Bytes.equals(current.get(), current.getOffset(),
+      current.getLength(), next.get(), next.getOffset(), next.getLength());
+  }
+
+  /** Returns true if the column is the centroid ID column in the row key of a vector index. */
+  private static boolean isCentroidColumn(PTable index, PColumn column) {
+    return index.isVectorIndex()
+      && MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME.equals(column.getName().getString());
   }
 
   public static class UDFParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {

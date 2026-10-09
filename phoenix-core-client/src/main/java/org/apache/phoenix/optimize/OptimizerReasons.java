@@ -35,6 +35,8 @@ public final class OptimizerReasons {
   public static final String RULE_ORDER_PRESERVING = "order-preserving";
   public static final String RULE_NON_LOCAL_PREFERRED = "non-local preferred";
   public static final String RULE_PARTIAL_INDEX_APPLICABLE = "partial index applicable";
+  public static final String RULE_NEAREST_NEIGHBOR_INDEX = "nearest-neighbor index";
+  public static final String RULE_SELECTIVE_FILTER_FIRST = "selective filter first";
 
   // REASON_* — rejected-index reason labels.
   public static final String REASON_NO_PK_PREFIX_BOUND = "no PK prefix bound";
@@ -50,6 +52,13 @@ public final class OptimizerReasons {
   public static final String REASON_NOT_APPLICABLE_TO_JOIN = "not applicable to join";
   public static final String REASON_PATH_EXPRESSION_DOES_NOT_MATCH =
     "path expression does not match";
+  public static final String REASON_NOT_A_VECTOR_SEARCH = "not a nearest-neighbor search";
+  public static final String REASON_VECTOR_METRIC_MISMATCH = "distance metric does not match index";
+  public static final String REASON_VECTOR_NULLS_FIRST =
+    "NULLS FIRST needs rows the index does not hold";
+  public static final String REASON_VECTOR_COLUMN_MISMATCH = "indexes a different vector column";
+  public static final String REASON_VECTOR_EXPRESSION_NOT_INDEXED =
+    "does not index the query vector expression";
 
   /** Builds the functional index rule label of the form {@code "matches <expr>"}. */
   public static String matches(String expression) {

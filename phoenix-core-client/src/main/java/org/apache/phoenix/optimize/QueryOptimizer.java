@@ -40,6 +40,7 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -53,6 +54,7 @@ import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -79,10 +81,13 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryOptimizer {
+  private static final Logger LOGGER = LoggerFactory.getLogger(QueryOptimizer.class);
   private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
   private final QueryServices services;
@@ -293,7 +298,16 @@ public class QueryOptimizer {
       }
     }
 
-    List<PTable> indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
+    List<PTable> indexes = Lists.newArrayList();
+    for (PTable idx : dataPlan.getTableRef().getTable().getIndexes()) {
+      // A vector index is a candidate only for a vector search or if an INDEX hint is present
+      if (
+        !idx.isVectorIndex() || select.getHint().hasHint(Hint.INDEX)
+          || VectorSearchUtil.isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit())
+      ) {
+        indexes.add(idx);
+      }
+    }
     if (
       dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate()
         || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))
@@ -527,9 +541,10 @@ public class QueryOptimizer {
     QueryPlan dataPlan, boolean isHinted, SelectStatement indexSelect, ColumnResolver resolver)
     throws SQLException {
     int nColumns = dataPlan.getProjector().getColumnCount();
-    // We will or will not do tuple projection according to the data plan.
-    boolean isProjected =
-      dataPlan.getContext().getResolver().getTables().get(0).getTable().getType()
+    // A vector index plan does not use tuple projection, so that the ORDER BY resolves to the
+    // vector column of the index and not to the data table column.
+    boolean isProjected = !index.isVectorIndex()
+      && dataPlan.getContext().getResolver().getTables().get(0).getTable().getType()
           == PTableType.PROJECTED;
     // Check index state of now potentially updated index table to make sure it's active
     TableRef indexTableRef = resolver.getTables().get(0);
@@ -556,6 +571,12 @@ public class QueryOptimizer {
             index.getTableName() == null ? null : index.getTableName().getString();
           throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
         }
+        if (index.isVectorIndex()) {
+          String reason = getVectorIndexRejection(index, dataPlan);
+          if (reason != null) {
+            return AddPlanResult.rejected(index, reason);
+          }
+        }
         // translate nodes that match expressions that are indexed to the
         // associated column parse node
         IndexExpressionParseNodeRewriter indexExpressionRewriter =
@@ -579,7 +600,40 @@ public class QueryOptimizer {
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
           isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
 
-        QueryPlan plan = compiler.compile();
+        if (index.isVectorIndex()) {
+          String reason = getVectorOrderingRejection(index, rewrittenIndexSelect);
+          if (reason != null) {
+            return AddPlanResult.rejected(index, reason);
+          }
+        }
+        QueryPlan plan;
+        if (index.isVectorIndex()) {
+          // If the projection needs uncovered columns, try to read them from the data table
+          // only after the index ranks the candidates
+          QueryPlan covering = null;
+          try {
+            covering = compiler.compile();
+          } catch (ColumnNotFoundException e) {
+            // An uncovered column or a wildcard needs a deferred read of the data table
+          }
+          if (
+            covering == null || covering.getContext().isUncoveredIndex()
+              || covering.getProjector().getColumnCount() != nColumns
+          ) {
+            QueryPlan deferred = getVectorDeferredProjectionPlan(statement, dataPlan,
+              rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlans);
+            if (deferred != null) {
+              return AddPlanResult.success(deferred);
+            }
+          }
+          if (covering == null) {
+            throw new ColumnNotFoundException(index.getSchemaName().getString(),
+              index.getTableName().getString(), null, "*");
+          }
+          plan = covering;
+        } else {
+          plan = compiler.compile();
+        }
         if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
           // Indexed columns should also be added to the data columns to join for
           // uncovered global indexes. This is required to verify index rows against
@@ -672,51 +726,16 @@ public class QueryOptimizer {
             new WhereConditionRewriter(FromCompiler.getResolver(dataPlan.getTableRef()), context);
           where = where.accept(whereRewriter);
           if (where != null) {
-            PTable dataTable = dataPlan.getTableRef().getTable();
-            List<PColumn> pkColumns = dataTable.getPKColumns();
-            List<AliasedNode> aliasedNodes =
-              Lists.<AliasedNode> newArrayListWithExpectedSize(pkColumns.size());
-            List<ParseNode> nodes =
-              Lists.<ParseNode> newArrayListWithExpectedSize(pkColumns.size());
-            boolean isSalted = dataTable.getBucketNum() != null;
-            boolean isTenantSpecific =
-              dataTable.isMultiTenant() && statement.getConnection().getTenantId() != null;
-            int posOffset = (isSalted ? 1 : 0) + (isTenantSpecific ? 1 : 0);
-            for (int i = posOffset; i < pkColumns.size(); i++) {
-              PColumn column = pkColumns.get(i);
-              String indexColName = IndexUtil.getIndexColumnName(column);
-              ParseNode indexColNode =
-                new ColumnParseNode(null, '"' + indexColName + '"', indexColName);
-              PDataType indexColType = IndexUtil.getIndexColumnDataType(column);
-              PDataType dataColType = column.getDataType();
-              if (indexColType != dataColType) {
-                indexColNode = FACTORY.cast(indexColNode, dataColType, null, null);
-              }
-              aliasedNodes.add(FACTORY.aliasedNode(null, indexColNode));
-              nodes.add(new ColumnParseNode(null, '"' + column.getName().getString() + '"'));
-            }
+            List<ParseNode> nodes = Lists.newArrayList();
+            List<AliasedNode> aliasedNodes = getIndexPkProjection(dataPlan.getTableRef().getTable(),
+              statement.getConnection(), nodes);
             SelectStatement innerSelect = FACTORY.select(indexSelect.getFrom(),
               indexSelect.getHint(), false, aliasedNodes, where, null, null, null, null, null,
               indexSelect.getBindCount(), false, indexSelect.hasSequence(),
               Collections.<SelectStatement> emptyList(), indexSelect.getUdfParseNodes());
-            ParseNode outerWhere =
-              FACTORY.in(nodes.size() == 1 ? nodes.get(0) : FACTORY.rowValueConstructor(nodes),
-                FACTORY.subquery(innerSelect, false), false, true);
-            ParseNode extractedCondition = whereRewriter.getExtractedCondition();
-            if (extractedCondition != null) {
-              outerWhere = FACTORY.and(Lists.newArrayList(outerWhere, extractedCondition));
-            }
-            HintNode hint = HintNode.combine(
-              HintNode.subtract(indexSelect.getHint(),
-                new Hint[] { Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION }),
-              FACTORY.hint("NO_INDEX"));
-            SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
-            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, dataPlan.getContext());
-            QueryPlan plan =
-              new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
-                rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
-                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
-                  .withRewriteContext(dataPlan.getContext()).compile();
+            QueryPlan plan = compileIndexSemiJoin(statement, dataPlan, indexSelect.getHint(),
+              innerSelect, nodes, whereRewriter.getExtractedCondition(), targetColumns,
+              parallelIteratorFactory, dataPlans);
             return AddPlanResult.success(plan);
           }
         }
@@ -727,6 +746,160 @@ public class QueryOptimizer {
     }
     return AddPlanResult.rejected(index, adjustReasonForFunctionalIndex(index,
       OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION, dataPlan.getContext()));
+  }
+
+  /**
+   * Returns a projection of the data primary key columns as the index stores them, cast to the data
+   * types. Adds a parse node for each matching data primary key column to {@code dataPkNodes}. The
+   * projection does not include the salt column or the tenant column of a tenant connection.
+   */
+  private static List<AliasedNode> getIndexPkProjection(PTable dataTable,
+    PhoenixConnection connection, List<ParseNode> dataPkNodes) throws SQLException {
+    List<PColumn> pkColumns = dataTable.getPKColumns();
+    List<AliasedNode> aliasedNodes =
+      Lists.<AliasedNode> newArrayListWithExpectedSize(pkColumns.size());
+    boolean isSalted = dataTable.getBucketNum() != null;
+    boolean isTenantSpecific = dataTable.isMultiTenant() && connection.getTenantId() != null;
+    int posOffset = (isSalted ? 1 : 0) + (isTenantSpecific ? 1 : 0);
+    for (int i = posOffset; i < pkColumns.size(); i++) {
+      PColumn column = pkColumns.get(i);
+      String indexColName = IndexUtil.getIndexColumnName(column);
+      ParseNode indexColNode = new ColumnParseNode(null, '"' + indexColName + '"', indexColName);
+      PDataType indexColType = IndexUtil.getIndexColumnDataType(column);
+      PDataType dataColType = column.getDataType();
+      if (indexColType != dataColType) {
+        indexColNode = FACTORY.cast(indexColNode, dataColType, null, null);
+      }
+      aliasedNodes.add(FACTORY.aliasedNode(null, indexColNode));
+      dataPkNodes.add(new ColumnParseNode(null, '"' + column.getName().getString() + '"'));
+    }
+    return aliasedNodes;
+  }
+
+  /**
+   * Compiles a query on the data table that reads only the rows whose primary keys the index
+   * subquery returns. This query supplies the uncovered columns. It also applies the given
+   * condition, and it does not use an index.
+   */
+  private QueryPlan compileIndexSemiJoin(PhoenixStatement statement, QueryPlan dataPlan,
+    HintNode queryHint, SelectStatement innerSelect, List<ParseNode> dataPkNodes,
+    ParseNode condition, List<? extends PDatum> targetColumns,
+    ParallelIteratorFactory parallelIteratorFactory, Map<TableRef, QueryPlan> dataPlans)
+    throws SQLException {
+    ParseNode outerWhere = FACTORY.in(
+      dataPkNodes.size() == 1 ? dataPkNodes.get(0) : FACTORY.rowValueConstructor(dataPkNodes),
+      FACTORY.subquery(innerSelect, false), false, true);
+    if (condition != null) {
+      outerWhere = FACTORY.and(Lists.newArrayList(outerWhere, condition));
+    }
+    HintNode hint = HintNode.combine(
+      HintNode.subtract(queryHint,
+        new Hint[] { Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION }),
+      FACTORY.hint("NO_INDEX"));
+    SelectStatement query =
+      FACTORY.select((SelectStatement) dataPlan.getStatement(), hint, outerWhere);
+    RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, dataPlan.getContext());
+    boolean isProjected =
+      dataPlan.getContext().getResolver().getTables().get(0).getTable().getType()
+          == PTableType.PROJECTED;
+    return new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
+      rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
+      dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
+        .withRewriteContext(dataPlan.getContext()).compile();
+  }
+
+  /**
+   * Returns the reason to reject the vector index for the query, or null if the index applies. The
+   * query must be a vector search that uses the metric of the index and NULLS LAST.
+   */
+  private static String getVectorIndexRejection(PTable index, QueryPlan dataPlan) {
+    if (!VectorSearchUtil.isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit())) {
+      return OptimizerReasons.REASON_NOT_A_VECTOR_SEARCH;
+    }
+    if (
+      VectorSearchUtil.getDistanceMetric(dataPlan.getOrderBy())
+          != DistanceMetric.fromString(index.getVectorDistanceMetric())
+    ) {
+      return OptimizerReasons.REASON_VECTOR_METRIC_MISMATCH;
+    }
+    if (!dataPlan.getOrderBy().getOrderByExpressions().get(0).isNullsLast()) {
+      // A row without a vector has no index row, so the index cannot put such rows first
+      return OptimizerReasons.REASON_VECTOR_NULLS_FIRST;
+    }
+    return null;
+  }
+
+  /**
+   * Returns the reason to reject the index if the rewritten index query does not rank by the
+   * indexed vector column of the index. Returns null if it does.
+   */
+  private static String getVectorOrderingRejection(PTable index, SelectStatement indexSelect) {
+    VectorSearchDescriptor descriptor = VectorSearchUtil.getVectorSearchDescriptor(indexSelect);
+    if (descriptor == null || !descriptor.isSourceColumn()) {
+      // The rewrite did not replace the ranked vector with an index column, so the index does not
+      // store this vector
+      return OptimizerReasons.REASON_VECTOR_EXPRESSION_NOT_INDEXED;
+    }
+    PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
+    return vectorColumn.getName().getString().equals(descriptor.getSourceColumnName())
+      ? null
+      : OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH;
+  }
+
+  /**
+   * Returns a plan that ranks the primary keys on the vector index first. The plan then reads the
+   * uncovered projected columns from the data table with a semi-join on those keys. Thus the plan
+   * reads data rows only for the top K keys. Returns null if the filter or the ORDER BY needs
+   * uncovered columns, or if the plan does not compile.
+   */
+  private QueryPlan getVectorDeferredProjectionPlan(PhoenixStatement statement, QueryPlan dataPlan,
+    SelectStatement indexSelect, ColumnResolver resolver, List<? extends PDatum> targetColumns,
+    ParallelIteratorFactory parallelIteratorFactory, Map<TableRef, QueryPlan> dataPlans)
+    throws SQLException {
+    try {
+      List<ParseNode> dataPkNodes = Lists.newArrayList();
+      List<AliasedNode> pkProjection = getIndexPkProjection(dataPlan.getTableRef().getTable(),
+        statement.getConnection(), dataPkNodes);
+      int rows = dataPlan.getLimit() + (dataPlan.getOffset() == null ? 0 : dataPlan.getOffset());
+      // The key query projects only the primary key. Thus its ORDER BY must name the distance
+      // expression, not an ordinal.
+      OrderByNode rank = indexSelect.getOrderBy().get(0);
+      List<OrderByNode> keyOrderBy = Collections.singletonList(
+        FACTORY.orderBy(VectorSearchUtil.getOrderByExpression(indexSelect, rank), rank));
+      SelectStatement keySelect =
+        FACTORY.select(indexSelect.getFrom(), indexSelect.getHint(), false, pkProjection,
+          indexSelect.getWhere(), null, null, keyOrderBy, FACTORY.limit(FACTORY.literal(rows)),
+          null, indexSelect.getBindCount(), false, indexSelect.hasSequence(),
+          Collections.<SelectStatement> emptyList(), indexSelect.getUdfParseNodes());
+      QueryPlan keyPlan =
+        new QueryCompiler(statement, keySelect, resolver, Collections.<PDatum> emptyList(),
+          parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), false, true,
+          dataPlans).withRewriteContext(dataPlan.getContext()).compile();
+      if (keyPlan.getContext().isUncoveredIndex()) {
+        return null;
+      }
+      // A derived table applies the distance ORDER BY and the LIMIT to the candidate keys before
+      // the semi-join, so the semi-join reads only the top K keys
+      List<AliasedNode> keyColumns = Lists.newArrayListWithExpectedSize(pkProjection.size());
+      List<AliasedNode> rankedKeys = Lists.newArrayListWithExpectedSize(pkProjection.size());
+      for (int i = 0; i < pkProjection.size(); i++) {
+        String alias = "_VK" + i;
+        rankedKeys.add(FACTORY.aliasedNode(alias, pkProjection.get(i).getNode()));
+        keyColumns.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + alias + '"', null)));
+      }
+      SelectStatement innerSelect =
+        FACTORY.select(FACTORY.derivedTable("_VK", FACTORY.select(keySelect, false, rankedKeys)),
+          HintNode.EMPTY_HINT_NODE, false, keyColumns, null, null, null, null, null, null,
+          keySelect.getBindCount(), false, false, Collections.<SelectStatement> emptyList(),
+          keySelect.getUdfParseNodes());
+      return compileIndexSemiJoin(statement, dataPlan, keySelect.getHint(), innerSelect,
+        dataPkNodes, ((SelectStatement) dataPlan.getStatement()).getWhere(), targetColumns,
+        parallelIteratorFactory, dataPlans);
+    } catch (SQLException e) {
+      // The caller then uses a plan that reads uncovered columns for each candidate, if any
+      LOGGER.debug("Cannot defer the uncovered projection of a vector index query", e);
+      return null;
+    }
   }
 
   // returns true if we can still use the index
@@ -757,16 +930,23 @@ public class QueryOptimizer {
       return plans;
     }
 
+    final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
+    final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
+    final Set<QueryPlan> filterFirst = VectorSearchUtil.getFilterFirstPlans(plans, dataPlan);
     if (this.costBased) {
       Collections.sort(plans, new Comparator<QueryPlan>() {
         @Override
         public int compare(QueryPlan plan1, QueryPlan plan2) {
-          return plan1.getCost().compareTo(plan2.getCost());
+          int c = VectorSearchUtil.getCost(plan1).compareTo(VectorSearchUtil.getCost(plan2));
+          // If the costs are equal, the static precedence rules for vector plans set the order.
+          return c != 0
+            ? c
+            : compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable, filterFirst);
         }
       });
       // Return ordered list based on cost if stats are available; otherwise fall
       // back to static ordering.
-      if (!plans.get(0).getCost().isUnknown()) {
+      if (!VectorSearchUtil.getCost(plans.get(0)).isUnknown()) {
         QueryPlan costWinner = plans.get(0);
         for (int i = 1; i < plans.size(); i++) {
           PTable losingTable = plans.get(i).getTableRef().getTable();
@@ -827,14 +1007,14 @@ public class QueryOptimizer {
       }
     }
     final int boundRanges = nViewConstants;
-    final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
-    final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
     Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
 
       @Override
       public int compare(QueryPlan plan1, QueryPlan plan2) {
         PTable table1 = plan1.getTableRef().getTable();
         PTable table2 = plan2.getTableRef().getTable();
+        int c = compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable, filterFirst);
+        if (c != 0) return c;
         int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
         int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
         // For shared indexes (i.e. indexes on views and local indexes),
@@ -846,7 +1026,7 @@ public class QueryOptimizer {
         // (but the sum of buckets cover the entire table)
         boundCount1 -= plan1.getContext().getScanRanges().isSalted() ? 1 : 0;
         boundCount2 -= plan2.getContext().getScanRanges().isSalted() ? 1 : 0;
-        int c = boundCount2 - boundCount1;
+        c = boundCount2 - boundCount1;
         if (c != 0) return c;
         if (plan1.getGroupBy() != null && plan2.getGroupBy() != null) {
           if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
@@ -903,9 +1083,45 @@ public class QueryOptimizer {
     QueryPlan runnerUp =
       bestCandidates.size() > 1 ? bestCandidates.get(1) : firstOther(plans, winner);
     tagComparatorRejections(winner, plans, boundRanges, state);
-    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges), state);
+    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges, filterFirst), state);
 
     return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
+  }
+
+  static int compareVectorPlans(QueryPlan plan1, QueryPlan plan2,
+    int comparisonOfDataVersusIndexTable) {
+    return compareVectorPlans(plan1, plan2, comparisonOfDataVersusIndexTable,
+      Collections.emptySet());
+  }
+
+  /**
+   * Orders candidate plans for a nearest neighbor vector search by access tier and index coverage.
+   * Without a data table hint, filter first plans ({@link VectorSearchUtil#getFilterFirstPlans})
+   * rank first, because they read few rows and give exact results. Vector index plans rank next,
+   * before all other plans. A data table hint removes both precedences: filter first plans rank
+   * with the other plans, and vector index plans rank last. Among vector index plans, a plan with
+   * fewer data table lookups ranks first: a covering index, then deferred projection, then an
+   * uncovered index scan. Two plans in the same tier that do not read a vector index compare as 0.
+   * The caller then orders them by other criteria, and the comparison stays transitive.
+   */
+  static int compareVectorPlans(QueryPlan plan1, QueryPlan plan2,
+    int comparisonOfDataVersusIndexTable, Set<QueryPlan> filterFirst) {
+    int c = Integer.compare(vectorTier(plan1, comparisonOfDataVersusIndexTable, filterFirst),
+      vectorTier(plan2, comparisonOfDataVersusIndexTable, filterFirst));
+    if (c != 0 || !VectorSearchUtil.usesVectorIndex(plan1)) {
+      return c;
+    }
+    return Integer.compare(VectorSearchUtil.getLookupRank(plan1),
+      VectorSearchUtil.getLookupRank(plan2));
+  }
+
+  private static int vectorTier(QueryPlan plan, int comparisonOfDataVersusIndexTable,
+    Set<QueryPlan> filterFirst) {
+    boolean dataHinted = comparisonOfDataVersusIndexTable < 0;
+    if (VectorSearchUtil.usesVectorIndex(plan)) {
+      return dataHinted ? 3 : 1;
+    }
+    return filterFirst.contains(plan) && !dataHinted ? 0 : 2;
   }
 
   /**
@@ -1093,9 +1309,18 @@ public class QueryOptimizer {
    * Returns the {@code RULE_*} label for the chosen plan by replaying the comparator ladder in
    * {@link #orderPlansBestToWorst} against the runner up and returning the first decisive branch.
    */
-  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges) {
+  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges,
+    Set<QueryPlan> filterFirst) {
     if (runnerUp == null) {
       return OptimizerReasons.RULE_ONLY_CANDIDATE;
+    }
+    if (compareVectorPlans(winner, runnerUp, 1, filterFirst) != 0) {
+      if (VectorSearchUtil.usesVectorIndex(winner)) {
+        return OptimizerReasons.RULE_NEAREST_NEIGHBOR_INDEX;
+      }
+      if (filterFirst.contains(winner)) {
+        return OptimizerReasons.RULE_SELECTIVE_FILTER_FIRST;
+      }
     }
     PTable winnerTable = winner.getTableRef().getTable();
     PTable runnerUpTable = runnerUp.getTableRef().getTable();

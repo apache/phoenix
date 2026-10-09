@@ -33,11 +33,14 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.function.AvgAggregateFunction;
+import org.apache.phoenix.expression.function.CosineDistanceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
+import org.apache.phoenix.expression.function.L2DistanceFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -241,6 +244,18 @@ public class ParseNodeFactory {
 
   public ModulusParseNode modulus(List<ParseNode> children) {
     return new ModulusParseNode(children);
+  }
+
+  public FunctionParseNode l2Distance(List<ParseNode> children) {
+    return function(L2DistanceFunction.NAME, children);
+  }
+
+  public FunctionParseNode cosineDistance(List<ParseNode> children) {
+    return function(CosineDistanceFunction.NAME, children);
+  }
+
+  public FunctionParseNode innerProductDistance(List<ParseNode> children) {
+    return function(InnerProductDistanceFunction.NAME, children);
   }
 
   public AndParseNode and(List<ParseNode> children) {
@@ -904,6 +919,22 @@ public class ParseNodeFactory {
 
   public OrderByNode orderBy(ParseNode expression, boolean nullsLast, boolean orderAscending) {
     return new OrderByNode(expression, nullsLast, orderAscending);
+  }
+
+  /** Creates an ORDER BY item without a NULLS FIRST or NULLS LAST clause. */
+  public OrderByNode orderBy(ParseNode expression, boolean orderAscending) {
+    return new OrderByNode(expression, orderAscending);
+  }
+
+  /**
+   * Creates an ORDER BY item over a rewritten expression with the ordering of the template. If the
+   * template resolves its default to NULLS LAST, as for a vector distance, the new item keeps NULLS
+   * LAST. This is also true if the rewritten expression is not a distance, such as an index column.
+   */
+  public OrderByNode orderBy(ParseNode expression, OrderByNode template) {
+    return template.isNullsDefault() && !template.isNullsLast()
+      ? new OrderByNode(expression, template.isAscending())
+      : new OrderByNode(expression, template.isNullsLast(), template.isAscending());
   }
 
   public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct,

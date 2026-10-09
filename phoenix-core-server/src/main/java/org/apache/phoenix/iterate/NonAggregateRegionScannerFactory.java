@@ -57,6 +57,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.function.ScalarFunction;
@@ -231,6 +232,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     if (serverParsedJsonQueryFuncRefs != null) {
       Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
     }
+    deserializeAndAddComplexDataTypeFunctions(scan,
+      BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION, serverParsedKVRefs,
+      resultList);
     return resultList;
   }
 
@@ -289,9 +293,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       // context is used when we are iterating over the top n rows before the first next() call
       PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
       inner.setRegionScannerContext(sc);
-      OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions,
-        spoolingEnabled, thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
-        getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+      OrderedResultIterator iterator =
+        limit >= 0 && VectorDistanceOrderedResultIterator.appliesTo(orderByExpressions)
+          ? new VectorDistanceOrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
+            thresholdBytes, limit, estimatedRowSize, getPageSizeMsForRegionScanner(scan), scan,
+            s.getRegionInfo())
+          : new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled, thresholdBytes,
+            limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan),
+            scan, s.getRegionInfo());
       return new OrderedResultIteratorWithScannerContext(sc, iterator);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -352,7 +361,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           func = new JsonQueryFunction();
         } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION)) {
           func = new BsonValueFunction();
-        }
+        } else
+          if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION)) {
+            func = new BsonVectorValueFunction();
+          }
         if (func != null) {
           func.readFields(input);
           funcRefs[i] = func;

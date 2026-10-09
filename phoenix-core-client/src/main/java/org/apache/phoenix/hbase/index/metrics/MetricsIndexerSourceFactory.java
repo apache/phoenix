@@ -25,6 +25,7 @@ public class MetricsIndexerSourceFactory {
   private volatile MetricsIndexerSource indexerSource;
   private GlobalIndexCheckerSource globalIndexCheckerSource;
   private MetricsIndexCDCConsumerSource indexCDCConsumerSource;
+  private MetricsVectorIndexSource vectorIndexSource;
 
   private MetricsIndexerSourceFactory() {
   }
@@ -52,5 +53,12 @@ public class MetricsIndexerSourceFactory {
       INSTANCE.indexCDCConsumerSource = new MetricsIndexCDCConsumerSourceImpl();
     }
     return INSTANCE.indexCDCConsumerSource;
+  }
+
+  public synchronized MetricsVectorIndexSource getMetricsVectorIndexSource() {
+    if (INSTANCE.vectorIndexSource == null) {
+      INSTANCE.vectorIndexSource = new MetricsVectorIndexSourceImpl();
+    }
+    return INSTANCE.vectorIndexSource;
   }
 }
