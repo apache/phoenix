@@ -84,6 +84,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.ServerScanUtil;
@@ -137,6 +138,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -1125,7 +1127,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     throws Throwable {
     ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates =
       ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
-    this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData);
+    this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations,
+      getLocalIndexMetaData(indexMetaData));
     byte[] tableName = table.getName();
     HTableInterfaceReference hTableInterfaceReference =
       new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
@@ -1147,6 +1150,47 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       miniBatchOp.addOperationsFromCP(0, localUpdates.toArray(new Mutation[localUpdates.size()]));
     }
+  }
+
+  /**
+   * Returns index metadata that contains only the local index maintainers. Other code paths of this
+   * observer maintain global, uncovered, CDC and transform indexes. The index builder must not
+   * build updates for them here. A CDC index row key needs the encoded region name, which this path
+   * does not supply.
+   */
+  private static PhoenixIndexMetaData getLocalIndexMetaData(PhoenixIndexMetaData indexMetaData)
+    throws IOException {
+    List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
+    List<IndexMaintainer> localMaintainers = new ArrayList<>(maintainers.size());
+    for (IndexMaintainer maintainer : maintainers) {
+      if (maintainer.isLocalIndex() && !(maintainer instanceof TransformMaintainer)) {
+        localMaintainers.add(maintainer);
+      }
+    }
+    if (localMaintainers.size() == maintainers.size()) {
+      return indexMetaData;
+    }
+    IndexMetaDataCache localIndexMetaDataCache = new IndexMetaDataCache() {
+      @Override
+      public List<IndexMaintainer> getIndexMaintainers() {
+        return localMaintainers;
+      }
+
+      @Override
+      public PhoenixTransactionContext getTransactionContext() {
+        return indexMetaData.getTransactionContext();
+      }
+
+      @Override
+      public int getClientVersion() {
+        return indexMetaData.getClientVersion();
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+    return new PhoenixIndexMetaData(localIndexMetaDataCache, indexMetaData.getAttributes());
   }
 
   /**
