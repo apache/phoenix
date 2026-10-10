@@ -177,6 +177,9 @@ public interface QueryServices extends SQLCloseable {
   // automatic rebuild. Manual rebuilds do not use this value.
   public static final String VECTOR_REBUILD_MIN_INTERVAL_MS_ATTRIB =
     "phoenix.vector.rebuild.min.interval.ms";
+  // The maximum off-heap memory, in bytes, for the loaded HNSW graph segments of one JVM
+  public static final String HNSW_OFFHEAP_MAX_BYTES_ATTRIB =
+    "phoenix.vector.hnsw.offheap.max.bytes";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

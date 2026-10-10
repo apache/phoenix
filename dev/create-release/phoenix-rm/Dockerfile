@@ -20,7 +20,8 @@
 # Copied directly from HBase
 #
 # Includes:
-# * Java 8
+# * Java 8 (default)
+# * Java 17 (Phoenix requires Java 11 or later)
 FROM ubuntu:22.04
 
 # Install extra needed repos and refresh.
@@ -37,6 +38,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -qq -y update \
     libxml2-utils='2.9.13+dfsg-*' \
     lsof='4.93.2+dfsg-*' \
     openjdk-8-jdk='8u*' \
+    openjdk-17-jdk='17.0.*' \
     python3='3.10.6-1~22.04.1' \
     python2='2.7.18-3' \
     python3-pip='22.0.2+dfsg-*' \
