@@ -240,8 +240,8 @@ public class VectorColumnParseTest {
 
     assertEquals("COSINE", indexStmt.getVectorMetric());
     assertEquals("IVF", indexStmt.getVectorAlgorithm());
-    assertEquals(Integer.valueOf(32), indexStmt.getVectorLists());
-    assertEquals(Integer.valueOf(1000), indexStmt.getVectorSampleSize());
+    assertEquals("32", indexStmt.getVectorLists());
+    assertEquals("1000", indexStmt.getVectorSampleSize());
     // The statement must remove the vector options from the physical table properties.
     assertTrue(indexStmt.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY).isEmpty());
   }
@@ -313,8 +313,8 @@ public class VectorColumnParseTest {
     CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
     assertEquals("IVF", indexStmt.getVectorAlgorithm());
     assertEquals("COSINE", indexStmt.getVectorMetric());
-    assertEquals(Integer.valueOf(32), indexStmt.getVectorLists());
-    assertEquals(Integer.valueOf(1000), indexStmt.getVectorSampleSize());
+    assertEquals("32", indexStmt.getVectorLists());
+    assertEquals("1000", indexStmt.getVectorSampleSize());
   }
 
   @Test
@@ -357,8 +357,8 @@ public class VectorColumnParseTest {
         CreateIndexStatement stmt = (CreateIndexStatement) new SQLParser(ddl).parseStatement();
         assertEquals(ddl, PTable.IndexType.VECTOR_GLOBAL, stmt.getIndexType());
         assertEquals(ddl, async, stmt.isAsync());
-        assertEquals(ddl, hasOptions ? Integer.valueOf(8) : null, stmt.getVectorLists());
-        assertEquals(ddl, hasOptions ? Integer.valueOf(100) : null, stmt.getVectorSampleSize());
+        assertEquals(ddl, hasOptions ? "8" : null, stmt.getVectorLists());
+        assertEquals(ddl, hasOptions ? "100" : null, stmt.getVectorSampleSize());
         assertTrue(ddl, stmt.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY).isEmpty());
         List<ParseNode> splits = stmt.getSplitNodes();
         int expected = split.isEmpty() ? 0 : split.split(",").length;

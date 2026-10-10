@@ -132,6 +132,11 @@ message PTable {
   optional int32 vectorIvfSampleSize = 63;
   optional int64 vectorCentroidGeneration = 64;
   optional int64 vectorBuildingGeneration = 65;
+  optional int32 vectorHnswM = 66;
+  optional int32 vectorHnswEfConstruction = 67;
+  optional double vectorHnswAlpha = 68;
+  optional string vectorQuantizationType = 69;
+  optional int32 vectorPqSegments = 70;
 }
 
 message EncodedCQCounter {

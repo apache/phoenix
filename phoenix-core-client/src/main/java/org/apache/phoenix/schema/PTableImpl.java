@@ -231,6 +231,11 @@ public class PTableImpl implements PTable {
   private final Integer vectorIvfSampleSize;
   private final Long vectorCentroidGeneration;
   private final Long vectorBuildingGeneration;
+  private final Integer vectorHnswM;
+  private final Integer vectorHnswEfConstruction;
+  private final Double vectorHnswAlpha;
+  private final String vectorQuantizationType;
+  private final Integer vectorPqSegments;
 
   public static class Builder {
     private PTableKey key;
@@ -308,6 +313,11 @@ public class PTableImpl implements PTable {
     private Integer vectorIvfSampleSize;
     private Long vectorCentroidGeneration;
     private Long vectorBuildingGeneration;
+    private Integer vectorHnswM;
+    private Integer vectorHnswEfConstruction;
+    private Double vectorHnswAlpha;
+    private String vectorQuantizationType;
+    private Integer vectorPqSegments;
 
     // Used to denote which properties a view has explicitly modified
     private BitSet viewModifiedPropSet = new BitSet(3);
@@ -794,6 +804,31 @@ public class PTableImpl implements PTable {
       return this;
     }
 
+    public Builder setVectorHnswM(Integer vectorHnswM) {
+      this.vectorHnswM = vectorHnswM;
+      return this;
+    }
+
+    public Builder setVectorHnswEfConstruction(Integer vectorHnswEfConstruction) {
+      this.vectorHnswEfConstruction = vectorHnswEfConstruction;
+      return this;
+    }
+
+    public Builder setVectorHnswAlpha(Double vectorHnswAlpha) {
+      this.vectorHnswAlpha = vectorHnswAlpha;
+      return this;
+    }
+
+    public Builder setVectorQuantizationType(String vectorQuantizationType) {
+      this.vectorQuantizationType = vectorQuantizationType;
+      return this;
+    }
+
+    public Builder setVectorPqSegments(Integer vectorPqSegments) {
+      this.vectorPqSegments = vectorPqSegments;
+      return this;
+    }
+
     /**
      * Populate derivable attributes of the PTable
      * @return PTableImpl.Builder object
@@ -1084,6 +1119,11 @@ public class PTableImpl implements PTable {
     this.vectorIvfSampleSize = builder.vectorIvfSampleSize;
     this.vectorCentroidGeneration = builder.vectorCentroidGeneration;
     this.vectorBuildingGeneration = builder.vectorBuildingGeneration;
+    this.vectorHnswM = builder.vectorHnswM;
+    this.vectorHnswEfConstruction = builder.vectorHnswEfConstruction;
+    this.vectorHnswAlpha = builder.vectorHnswAlpha;
+    this.vectorQuantizationType = builder.vectorQuantizationType;
+    this.vectorPqSegments = builder.vectorPqSegments;
   }
 
   // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1162,7 +1202,12 @@ public class PTableImpl implements PTable {
       .setVectorDimension(table.getVectorDimension()).setVectorIvfLists(table.getVectorIvfLists())
       .setVectorIvfSampleSize(table.getVectorIvfSampleSize())
       .setVectorCentroidGeneration(table.getVectorCentroidGeneration())
-      .setVectorBuildingGeneration(table.getVectorBuildingGeneration());
+      .setVectorBuildingGeneration(table.getVectorBuildingGeneration())
+      .setVectorHnswM(table.getVectorHnswM())
+      .setVectorHnswEfConstruction(table.getVectorHnswEfConstruction())
+      .setVectorHnswAlpha(table.getVectorHnswAlpha())
+      .setVectorQuantizationType(table.getVectorQuantizationType())
+      .setVectorPqSegments(table.getVectorPqSegments());
   }
 
   @Override
@@ -2201,6 +2246,13 @@ public class PTableImpl implements PTable {
     if (table.hasVectorBuildingGeneration()) {
       vectorBuildingGeneration = table.getVectorBuildingGeneration();
     }
+    Integer vectorHnswM = table.hasVectorHnswM() ? table.getVectorHnswM() : null;
+    Integer vectorHnswEfConstruction =
+      table.hasVectorHnswEfConstruction() ? table.getVectorHnswEfConstruction() : null;
+    Double vectorHnswAlpha = table.hasVectorHnswAlpha() ? table.getVectorHnswAlpha() : null;
+    String vectorQuantizationType =
+      table.hasVectorQuantizationType() ? table.getVectorQuantizationType() : null;
+    Integer vectorPqSegments = table.hasVectorPqSegments() ? table.getVectorPqSegments() : null;
     IndexConsistency indexConsistency = null;
     if (tableType == PTableType.INDEX) {
       if (table.hasIndexConsistency()) {
@@ -2249,7 +2301,10 @@ public class PTableImpl implements PTable {
         .setVectorDimension(vectorDimension).setVectorIvfLists(vectorIvfLists)
         .setVectorIvfSampleSize(vectorIvfSampleSize)
         .setVectorCentroidGeneration(vectorCentroidGeneration)
-        .setVectorBuildingGeneration(vectorBuildingGeneration).build();
+        .setVectorBuildingGeneration(vectorBuildingGeneration).setVectorHnswM(vectorHnswM)
+        .setVectorHnswEfConstruction(vectorHnswEfConstruction).setVectorHnswAlpha(vectorHnswAlpha)
+        .setVectorQuantizationType(vectorQuantizationType).setVectorPqSegments(vectorPqSegments)
+        .build();
     } catch (SQLException e) {
       throw new RuntimeException(e); // Impossible
     }
@@ -2442,6 +2497,21 @@ public class PTableImpl implements PTable {
     }
     if (table.getVectorBuildingGeneration() != null) {
       builder.setVectorBuildingGeneration(table.getVectorBuildingGeneration());
+    }
+    if (table.getVectorHnswM() != null) {
+      builder.setVectorHnswM(table.getVectorHnswM());
+    }
+    if (table.getVectorHnswEfConstruction() != null) {
+      builder.setVectorHnswEfConstruction(table.getVectorHnswEfConstruction());
+    }
+    if (table.getVectorHnswAlpha() != null) {
+      builder.setVectorHnswAlpha(table.getVectorHnswAlpha());
+    }
+    if (table.getVectorQuantizationType() != null) {
+      builder.setVectorQuantizationType(table.getVectorQuantizationType());
+    }
+    if (table.getVectorPqSegments() != null) {
+      builder.setVectorPqSegments(table.getVectorPqSegments());
     }
     return builder.build();
   }
@@ -2719,6 +2789,31 @@ public class PTableImpl implements PTable {
   @Override
   public Long getVectorBuildingGeneration() {
     return vectorBuildingGeneration;
+  }
+
+  @Override
+  public Integer getVectorHnswM() {
+    return vectorHnswM;
+  }
+
+  @Override
+  public Integer getVectorHnswEfConstruction() {
+    return vectorHnswEfConstruction;
+  }
+
+  @Override
+  public Double getVectorHnswAlpha() {
+    return vectorHnswAlpha;
+  }
+
+  @Override
+  public String getVectorQuantizationType() {
+    return vectorQuantizationType;
+  }
+
+  @Override
+  public Integer getVectorPqSegments() {
+    return vectorPqSegments;
   }
 
   private static final class KVColumnFamilyQualifier {

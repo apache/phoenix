@@ -268,7 +268,12 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
     Scan scan = new Scan();
     scan.readVersions(store.getColumnFamilyDescriptor().getMaxVersions());
     for (Store s : env.getRegion().getStores()) {
-      if (!isLocalIndexStore(s)) {
+      // The repair reads only data families. The hidden family of VECTOR_LOCAL indexes holds no
+      // data rows, so an anchor row never becomes a local index row.
+      if (
+        !isLocalIndexStore(s) && !Bytes.equals(s.getColumnFamilyDescriptor().getName(),
+          QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+      ) {
         scan.addFamily(s.getColumnFamilyDescriptor().getName());
       }
     }
