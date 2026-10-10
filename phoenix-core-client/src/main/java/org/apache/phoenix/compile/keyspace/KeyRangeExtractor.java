@@ -176,7 +176,7 @@ public final class KeyRangeExtractor {
     // The per-slot SkipScanFilter handles narrowing past the gap and ScanRanges reports
     // boundPkColumnCount correctly for the local-index-pruning heuristic.
     if (minProductiveStart > prefixSlots || allSpacesHaveMiddleGap) {
-      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
     }
 
     // Single-space, single-productive-dim: trivial case with no compound benefit.
@@ -185,7 +185,7 @@ public final class KeyRangeExtractor {
     // producing wider-than-correct scan. Per-slot emission lets ScanRanges process the
     // range once with the real schema, matching V1's byte output exactly.
     if (list.spaces().size() == 1 && (maxProductiveEnd - prefixSlots) == 1) {
-      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
     }
 
     // If any space has IS_NULL_RANGE / IS_NOT_NULL_RANGE at ANY productive dim, route
@@ -199,7 +199,7 @@ public final class KeyRangeExtractor {
       for (int d = prefixSlots; d < ks.nDims(); d++) {
         KeyRange dim = ks.get(d);
         if (dim == KeyRange.IS_NULL_RANGE || dim == KeyRange.IS_NOT_NULL_RANGE) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
         }
       }
     }
@@ -220,7 +220,7 @@ public final class KeyRangeExtractor {
       for (int d = prefixSlots + 1; d < maxProductiveEnd; d++) {
         org.apache.phoenix.schema.ValueSchema.Field f = schema.getField(d);
         if (org.apache.phoenix.util.ScanUtil.getComparator(f) != leadingCmp) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
         }
       }
     }
@@ -274,7 +274,7 @@ public final class KeyRangeExtractor {
           }
         }
         if (laterRangeExists) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
         }
       }
     }
@@ -396,11 +396,11 @@ public final class KeyRangeExtractor {
         if (dim == KeyRange.EVERYTHING_RANGE) continue;
         if (!dim.isSingleKey()) {
           if (sawNonSingleKey) {
-            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
           }
           sawNonSingleKey = true;
         } else if (sawNonSingleKey) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
         }
       }
     }
@@ -476,6 +476,8 @@ public final class KeyRangeExtractor {
         // also leaves the slot's ranges in mixed encodings, which coalescing then compares.
         org.apache.phoenix.schema.ValueSchema.Field lastField =
           schema.getField(compoundStart + len - 1);
+        byte[] unstrippedLo = lo;
+        byte[] unstrippedHi = hi;
         if (!lastField.getDataType().isFixedWidth()) {
           lo = stripTrailingSeparator(lo, lastField);
           hi = stripTrailingSeparator(hi, lastField);
@@ -496,13 +498,22 @@ public final class KeyRangeExtractor {
         // bytes equal lo — the trailing unconstrained dims are implicitly wild.
         KeyRange compound;
         boolean shorterThanSlotSpan = end < compoundEnd;
+        boolean inverted = compoundLen == 1 && isDescVarLength(schema, compoundStart);
         if (allSingleKey && lo != null && lo.length > 0 && !shorterThanSlotSpan) {
           compound = KeyRange.getKeyRange(lo);
         } else {
+          // A one-column slot on a DESC variable-length column orders by that column's
+          // comparator. In that order a valid range can have a raw lower bound above its raw
+          // upper bound, so the code builds the range as inverted.
           compound = KeyRange.getKeyRange(lo == null ? KeyRange.UNBOUND : lo, true,
-            hi == null ? KeyRange.UNBOUND : hi, false);
+            hi == null ? KeyRange.UNBOUND : hi, false, inverted);
         }
         if (compound == KeyRange.EMPTY_RANGE) {
+          // The strip can put a DESC upper bound below the lower bound. The space then looks
+          // empty, but it has rows. Per-column slots keep the separator and these rows.
+          if (!inverted && isOrderedRange(unstrippedLo, unstrippedHi)) {
+            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+          }
           continue;
         }
         compounds.add(compound);
@@ -520,7 +531,7 @@ public final class KeyRangeExtractor {
         // negatives a residual cannot recover). Collapse to a single covering envelope
         // instead; residual filter rejects extras admitted by the wider scan.
         compounds = java.util.Collections.singletonList(compoundLen == 1
-          ? KeySpaceList.boundingHull(compounds)
+          ? KeySpaceList.boundingHull(compounds, isDescVarLength(schema, compoundStart))
           : collapseToSingleBoundingRange(compounds));
         compoundsApproximated = true;
       }
@@ -530,7 +541,7 @@ public final class KeyRangeExtractor {
     // bytes, coalesced as such (see coalesceColumn); wider compounds are lex-ordered row-key bytes.
     // If the compound window is empty, this yields an empty list (no compound slot is emitted).
     List<KeyRange> coalesced = compounds.isEmpty() ? java.util.Collections.<KeyRange> emptyList()
-      : compoundLen == 1 ? coalesceColumn(compounds)
+      : compoundLen == 1 ? coalesceColumn(compounds, schema, compoundStart)
       : KeyRange.coalesce(compounds);
     if (!coalesced.isEmpty() && coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
       return nothing();
@@ -591,7 +602,7 @@ public final class KeyRangeExtractor {
         // Safe fix: fall back to per-column projection so each PK column gets its own
         // slot in the SkipScanFilter and the downstream filter enforces the predicates
         // per-row. This matches V1's behavior for IN-list + RVC-inequality shapes.
-        return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots);
+        return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
       }
     }
 
@@ -647,11 +658,22 @@ public final class KeyRangeExtractor {
     // aren't counted by getBoundPkSpan because the compound slot has hasUnbound, but
     // they still narrow the scan's skip-scan filter beyond what the compound alone does.
     boolean emittedTrailingPinned = false;
+    boolean emittedDimRanges = false;
     for (int d = compoundEnd; d < maxProductiveEnd; d++) {
-      out.add(
-        pinnedValue[d] != null ? Collections.singletonList(pinnedValue[d]) : dimRanges(list, d));
+      if (pinnedValue[d] != null) {
+        out.add(Collections.singletonList(pinnedValue[d]));
+      } else {
+        out.add(dimRanges(list, d, schema));
+        emittedDimRanges = true;
+      }
       slotSpanList.add(0);
       emittedTrailingPinned = true;
+    }
+    // A slot that holds one column's ranges from all spaces loses their pairing with the window.
+    // The slots then admit every combination. The residual filter must stay unless the spaces
+    // are already that product.
+    if (emittedDimRanges && !isExactProduct(list, compoundEnd, maxProductiveEnd)) {
+      compoundsApproximated = true;
     }
     int[] slotSpan = new int[slotSpanList.size()];
     for (int i = 0; i < slotSpan.length; i++)
@@ -777,15 +799,43 @@ public final class KeyRangeExtractor {
   }
 
   /**
-   * {@link KeyRange#coalesce} for one column's ranges. Coalescing compares bounds as raw bytes, but
-   * a variable-length column orders in the row key as {@code value || sep}, with {@code sep} 0x00
-   * for ASC and 0xFF for DESC: for DESC a value sorts after its own extensions ('2' after '23').
-   * Bounds without prefix relationships order the same both ways; when some are prefixes of others
-   * the ranges are only deduplicated, which is always sound (ScanRanges sorts each slot by its
-   * column's order, and SkipScanFilter navigates overlapping ranges).
+   * True when the spaces are exactly the product of two sets: their windows on the dims before
+   * {@code from}, and each dim's ranges on {@code [from, to)}. Per-dim slots for {@code [from, to)}
+   * then admit no extra rows.
    */
-  private static List<KeyRange> coalesceColumn(List<KeyRange> ranges) {
-    if (!hasPrefixBounds(ranges)) {
+  private static boolean isExactProduct(KeySpaceList list, int from, int to) {
+    java.util.Set<KeySpace> spaces = new java.util.HashSet<>(list.spaces());
+    java.util.Set<List<KeyRange>> windows = new java.util.HashSet<>();
+    for (KeySpace ks : spaces) {
+      List<KeyRange> window = new ArrayList<>(from);
+      for (int d = 0; d < from; d++) {
+        window.add(ks.get(d));
+      }
+      windows.add(window);
+    }
+    BigInteger product = BigInteger.valueOf(windows.size());
+    for (int d = from; d < to; d++) {
+      java.util.Set<KeyRange> ranges = new java.util.HashSet<>();
+      for (KeySpace ks : spaces) {
+        ranges.add(ks.get(d));
+      }
+      product = product.multiply(BigInteger.valueOf(ranges.size()));
+    }
+    // Each space is one combination of the product. Thus equal counts mean equal sets.
+    return product.equals(BigInteger.valueOf(spaces.size()));
+  }
+
+  /**
+   * {@link KeyRange#coalesce} for the ranges of the column at {@code field}. Coalescing compares
+   * bounds as raw bytes. That matches the row key order for ASC and fixed-width columns. A DESC
+   * variable-length column orders as {@code value || 0xFF}, so a value sorts after its own
+   * extensions ('2' after '23'). For such a column with prefix-related bounds, the ranges merge
+   * under the column's comparator instead. Without a schema, the order is unknown, so the ranges
+   * are only deduplicated.
+   */
+  private static List<KeyRange> coalesceColumn(List<KeyRange> ranges, RowKeySchema schema,
+    int field) {
+    if ((schema != null && !isDescVarLength(schema, field)) || !hasPrefixBounds(ranges)) {
       return KeyRange.coalesce(ranges);
     }
     java.util.LinkedHashSet<KeyRange> distinct = new java.util.LinkedHashSet<>();
@@ -797,16 +847,89 @@ public final class KeyRangeExtractor {
         distinct.add(r);
       }
     }
-    return new ArrayList<>(distinct);
+    // The NULL ranges have sentinel bounds that do not compare as values. IS_NULL sorts first in
+    // the slot and holds no values, so it stays apart from the merge. The method only deduplicates
+    // a set that holds IS_NOT_NULL.
+    if (schema == null || distinct.contains(KeyRange.IS_NOT_NULL_RANGE)) {
+      return new ArrayList<>(distinct);
+    }
+    boolean isNull = distinct.remove(KeyRange.IS_NULL_RANGE);
+    List<KeyRange> merged = coalesceDescVarLength(new ArrayList<>(distinct));
+    if (!isNull) {
+      return merged;
+    }
+    List<KeyRange> out = new ArrayList<>(merged.size() + 1);
+    out.add(KeyRange.IS_NULL_RANGE);
+    if (!(merged.size() == 1 && merged.get(0) == KeyRange.EMPTY_RANGE)) {
+      out.addAll(merged);
+    }
+    return out;
+  }
+
+  /**
+   * Merges the overlapping and adjacent ranges of a DESC variable-length column. Bounds compare in
+   * the order of {@link KeyRange#DESC_COMPARATOR}, which ScanRanges and SkipScanFilter also use for
+   * the slot. The result is sorted and disjoint in that order.
+   */
+  private static List<KeyRange> coalesceDescVarLength(List<KeyRange> ranges) {
+    if (ranges.isEmpty()) {
+      return Collections.singletonList(KeyRange.EMPTY_RANGE);
+    }
+    ranges.sort(KeyRange.DESC_COMPARATOR);
+    List<KeyRange> out = new ArrayList<>(ranges.size());
+    KeyRange current = ranges.get(0);
+    for (int i = 1; i < ranges.size(); i++) {
+      KeyRange next = ranges.get(i);
+      if (!overlapsOrTouchesDesc(current, next)) {
+        out.add(current);
+        current = next;
+        continue;
+      }
+      byte[] upper;
+      boolean upperInclusive;
+      if (current.upperUnbound() || next.upperUnbound()) {
+        upper = KeyRange.UNBOUND;
+        upperInclusive = false;
+      } else {
+        int cmp = compareDesc(next.getUpperRange(), current.getUpperRange());
+        upper = cmp > 0 ? next.getUpperRange() : current.getUpperRange();
+        upperInclusive = cmp > 0 ? next.isUpperInclusive()
+          : cmp < 0 ? current.isUpperInclusive()
+          : current.isUpperInclusive() || next.isUpperInclusive();
+      }
+      // A valid range can have a raw lower bound above its raw upper bound ('23' to '2' is CDCC
+      // to CD). The merge builds the range as inverted, so the range does not read as empty.
+      current = KeyRange.getKeyRange(current.getLowerRange(), current.isLowerInclusive(), upper,
+        upperInclusive, true);
+    }
+    out.add(current);
+    return out;
+  }
+
+  /**
+   * True when {@code next} overlaps or touches {@code current} in DESC order. The caller makes sure
+   * that {@code next} does not sort before {@code current}.
+   */
+  private static boolean overlapsOrTouchesDesc(KeyRange current, KeyRange next) {
+    if (current.upperUnbound() || next.lowerUnbound()) {
+      return true;
+    }
+    int cmp = compareDesc(next.getLowerRange(), current.getUpperRange());
+    return cmp < 0 || (cmp == 0 && (current.isUpperInclusive() || next.isLowerInclusive()));
+  }
+
+  static int compareDesc(byte[] a, byte[] b) {
+    return org.apache.phoenix.execute.DescVarLengthFastByteComparisons.compareTo(a, 0, a.length, b,
+      0, b.length);
   }
 
   /** The coalesced ranges of dim {@code d} across the list, as a one-column slot. */
-  private static List<KeyRange> dimRanges(KeySpaceList list, int d) {
+  private static List<KeyRange> dimRanges(KeySpaceList list, int d, RowKeySchema schema) {
     List<KeyRange> ranges = new ArrayList<>(list.size());
     for (KeySpace ks : list.spaces()) {
       ranges.add(ks.get(d));
     }
-    return coalesceColumn(ranges);
+    return coalesceColumn(ranges, schema, d);
   }
 
   /**
@@ -888,6 +1011,14 @@ public final class KeyRangeExtractor {
   }
 
   /**
+   * True when both bounds are set and {@code lo} is below {@code hi}. The range then has rows.
+   */
+  private static boolean isOrderedRange(byte[] lo, byte[] hi) {
+    return lo != null && hi != null && lo.length > 0 && hi.length > 0
+      && org.apache.hadoop.hbase.util.Bytes.compareTo(lo, hi) < 0;
+  }
+
+  /**
    * V1-shaped per-column projection that stops at the first EVERYTHING past the prefix. Kept as the
    * legacy entry point used by tests without a schema; less general than {@link #emitV1Projection}
    * which walks past EVERYTHING gaps so trailing constraints can still narrow via
@@ -948,7 +1079,7 @@ public final class KeyRangeExtractor {
       if (perSlot.get(d).isEmpty()) {
         break;
       }
-      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)));
+      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)), null, d);
       if (coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
         return nothing();
       }
@@ -1008,6 +1139,15 @@ public final class KeyRangeExtractor {
    */
   static Result emitV1Projection(KeySpaceList list, int nPkColumns, int cartesianBound,
     int prefixSlots) {
+    return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, null);
+  }
+
+  /**
+   * {@link #emitV1Projection(KeySpaceList, int, int, int)} with the row key {@code schema}, which
+   * gives each column's sort order for coalescing. A null schema means the order is unknown.
+   */
+  static Result emitV1Projection(KeySpaceList list, int nPkColumns, int cartesianBound,
+    int prefixSlots, RowKeySchema schema) {
     if (list.isUnsatisfiable()) {
       return nothing();
     }
@@ -1071,7 +1211,9 @@ public final class KeyRangeExtractor {
         break;
       }
     }
-    boolean approximated = allowed < kept;
+    // Per-column slots admit every combination of their ranges. If the spaces are not that
+    // product, the slots lose the pairing between columns. The residual filter must then stay.
+    boolean approximated = allowed < kept || !isExactProduct(list, prefixSlots, allowed);
 
     // Emit per-slot, starting at prefixSlots. Fill EVERYTHING for any gap-slots between
     // prefixSlots and the first constrained dim.
@@ -1082,7 +1224,7 @@ public final class KeyRangeExtractor {
         out.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
         continue;
       }
-      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)));
+      List<KeyRange> coalesced = coalesceColumn(new ArrayList<>(perSlot.get(d)), schema, d);
       if (coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
         return nothing();
       }

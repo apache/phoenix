@@ -44,10 +44,20 @@ public final class KeySpace {
 
   private final KeyRange[] dims;
   private final boolean empty;
+  /**
+   * Marks the dims that hold DESC variable-length columns, or null when the sort orders are
+   * unknown. Equality and hashing ignore it.
+   */
+  private final boolean[] descVarLength;
 
   private KeySpace(KeyRange[] dims, boolean empty) {
+    this(dims, empty, null);
+  }
+
+  private KeySpace(KeyRange[] dims, boolean empty, boolean[] descVarLength) {
     this.dims = dims;
     this.empty = empty;
+    this.descVarLength = descVarLength;
   }
 
   public static KeySpace everything(int n) {
@@ -63,16 +73,32 @@ public final class KeySpace {
   }
 
   public static KeySpace single(int dim, KeyRange r, int n) {
+    return single(dim, r, n, null);
+  }
+
+  /**
+   * Like {@link #single(int, KeyRange, int)}, with {@code descVarLength} marking the dims that hold
+   * DESC variable-length columns.
+   */
+  public static KeySpace single(int dim, KeyRange r, int n, boolean[] descVarLength) {
     if (r == KeyRange.EMPTY_RANGE) {
       return empty(n);
     }
     KeyRange[] dims = new KeyRange[n];
     Arrays.fill(dims, KeyRange.EVERYTHING_RANGE);
     dims[dim] = r;
-    return new KeySpace(dims, false);
+    return new KeySpace(dims, false, descVarLength);
   }
 
   public static KeySpace of(KeyRange[] dims) {
+    return of(dims, null);
+  }
+
+  /**
+   * Like {@link #of(KeyRange[])}, with {@code descVarLength} marking the dims that hold DESC
+   * variable-length columns.
+   */
+  public static KeySpace of(KeyRange[] dims, boolean[] descVarLength) {
     boolean empty = false;
     for (KeyRange r : dims) {
       if (r == KeyRange.EMPTY_RANGE) {
@@ -80,7 +106,7 @@ public final class KeySpace {
         break;
       }
     }
-    return new KeySpace(dims.clone(), empty);
+    return new KeySpace(dims.clone(), empty, descVarLength);
   }
 
   public int nDims() {
@@ -105,7 +131,12 @@ public final class KeySpace {
     if (r == KeyRange.EMPTY_RANGE) {
       return empty(dims.length);
     }
-    return new KeySpace(newDims, false);
+    return new KeySpace(newDims, false, descVarLength);
+  }
+
+  /** The DESC variable-length mask of this space, or null when the sort orders are unknown. */
+  boolean[] descVarLength() {
+    return descVarLength;
   }
 
   public boolean isEmpty() {
@@ -133,17 +164,51 @@ public final class KeySpace {
     if (this.empty || other.empty) {
       return empty(dims.length);
     }
+    boolean[] mask = descVarLengthWith(other);
     KeyRange[] newDims = new KeyRange[dims.length];
     for (int i = 0; i < dims.length; i++) {
       KeyRange a = this.dims[i];
       KeyRange b = other.dims[i];
-      KeyRange inter = intersectRange(a, b);
+      KeyRange inter = mask != null && mask[i] && hasPrefixBounds(a, b)
+        ? intersectDesc(a, b)
+        : intersectRange(a, b);
       if (inter == KeyRange.EMPTY_RANGE) {
         return empty(dims.length);
       }
       newDims[i] = inter;
     }
-    return new KeySpace(newDims, false);
+    return new KeySpace(newDims, false, mask);
+  }
+
+  /**
+   * Intersects two ranges on a DESC variable-length dim that have prefix-related bounds. Raw byte
+   * order is not the row key order for such bounds, so the bounds compare in DESC order. The result
+   * is inverted, because its raw lower bound can be above its raw upper bound. An inverted range is
+   * empty when its bounds cross in row key order. The NULL ranges have sentinel bounds, so they use
+   * the plain intersection.
+   */
+  private static KeyRange intersectDesc(KeyRange a, KeyRange b) {
+    if (
+      a == KeyRange.IS_NULL_RANGE || b == KeyRange.IS_NULL_RANGE || a == KeyRange.IS_NOT_NULL_RANGE
+        || b == KeyRange.IS_NOT_NULL_RANGE
+    ) {
+      return intersectRange(a, b);
+    }
+    int lowerCmp = a.lowerUnbound() ? -1
+      : b.lowerUnbound() ? 1
+      : KeyRangeExtractor.compareDesc(a.getLowerRange(), b.getLowerRange());
+    int upperCmp = a.upperUnbound() ? 1
+      : b.upperUnbound() ? -1
+      : KeyRangeExtractor.compareDesc(a.getUpperRange(), b.getUpperRange());
+    return KeyRange.getKeyRange(lowerCmp >= 0 ? a.getLowerRange() : b.getLowerRange(),
+      lowerCmp > 0 ? a.isLowerInclusive()
+        : lowerCmp < 0 ? b.isLowerInclusive()
+        : a.isLowerInclusive() && b.isLowerInclusive(),
+      upperCmp <= 0 ? a.getUpperRange() : b.getUpperRange(),
+      upperCmp < 0 ? a.isUpperInclusive()
+        : upperCmp > 0 ? b.isUpperInclusive()
+        : a.isUpperInclusive() && b.isUpperInclusive(),
+      true);
   }
 
   /**
@@ -183,7 +248,10 @@ public final class KeySpace {
       return Optional.of(this);
     }
     for (int i = 0; i < dims.length; i++) {
-      if (!this.dims[i].equals(other.dims[i]) && hasPrefixBounds(this.dims[i], other.dims[i])) {
+      if (
+        !this.dims[i].equals(other.dims[i]) && isDescVarLength(descVarLengthWith(other), i)
+          && hasPrefixBounds(this.dims[i], other.dims[i])
+      ) {
         return Optional.empty();
       }
     }
@@ -223,17 +291,28 @@ public final class KeySpace {
     }
     KeyRange[] newDims = dims.clone();
     newDims[diffDim] = a.union(b);
-    return Optional.of(new KeySpace(newDims, false));
+    return Optional.of(new KeySpace(newDims, false, descVarLengthWith(other)));
+  }
+
+  /**
+   * The DESC mask of this space or of {@code other}. Both are for one table, so either is correct.
+   */
+  private boolean[] descVarLengthWith(KeySpace other) {
+    return descVarLength != null ? descVarLength : other.descVarLength;
+  }
+
+  /** True when dim {@code i} holds a DESC variable-length column, or its sort order is unknown. */
+  private static boolean isDescVarLength(boolean[] descVarLength, int i) {
+    return descVarLength == null || descVarLength[i];
   }
 
   /**
    * True when a bound of {@code a} is a strict byte prefix of a bound of {@code b}, or the reverse.
-   * Ranges compare as raw per-dim bytes, but a variable-length column orders in the row key as
-   * {@code value || sep}, with {@code sep} 0x00 for ASC and 0xFF for DESC: for DESC a value sorts
-   * after its own extensions ('2' after '23'), the opposite of byte order. Bounds without a prefix
-   * relationship differ at a byte before either ends and order the same both ways, so containment,
-   * overlap and union are only decided on them; otherwise the spaces stay separate, which is always
-   * sound for OR.
+   * Ranges compare as raw bytes. A DESC variable-length column orders in the row key as
+   * {@code value || 0xFF}, so a value sorts after its own extensions ('2' after '23'). That is the
+   * opposite of byte order. Bounds without a prefix relation order the same both ways. On a DESC
+   * variable-length dim, only such bounds decide containment, overlap and union. Otherwise the
+   * spaces stay separate, which is always sound for OR.
    */
   private static boolean hasPrefixBounds(KeyRange a, KeyRange b) {
     byte[][] as = { a.getLowerRange(), a.getUpperRange() };

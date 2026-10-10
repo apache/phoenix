@@ -383,13 +383,17 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       // `(org > 003, entity in (002,008))`. V2's two slots together cover the same
       // rows V1's single range does after the server filter applies — V2 reads the
       // same or fewer rows. Different explain shape, equivalent runtime work.
+      // The per-column slots do not keep the pairing of org and entity, so V2 marks the scan
+      // approximated. The server filter then keeps the whole WHERE clause.
       isV2Optimizer()
         ? text(
           "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 2 RANGES OVER ATABLE ['000000000000003'] - [*]",
           "    INDEX ATABLE", "    REGIONS PLANNED <N>",
-          "    SERVER FILTER BY (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
+          "    SERVER FILTER BY (ORGANIZATION_ID > '000000000000001' AND"
+            + " ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008' AND"
+            + " (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
             + " (ORGANIZATION_ID = TO_CHAR('000000000000003') AND"
-            + " ENTITY_ID >= TO_CHAR('000000000000005')))")
+            + " ENTITY_ID >= TO_CHAR('000000000000005'))))")
         : text(
           "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
             + " ['000000000000003000000000000005'] - [*]",
@@ -398,9 +402,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       isV2Optimizer()
         ? scanAttrs("SKIP SCAN ON 2 RANGES ", "ATABLE", " ['000000000000003'] - [*]").put(
           "serverWhereFilter",
-          "SERVER FILTER BY (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
+          "SERVER FILTER BY (ORGANIZATION_ID > '000000000000001' AND"
+            + " ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008' AND"
+            + " (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
             + " (ORGANIZATION_ID = TO_CHAR('000000000000003') AND"
-            + " ENTITY_ID >= TO_CHAR('000000000000005')))")
+            + " ENTITY_ID >= TO_CHAR('000000000000005'))))")
         : scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000003000000000000005'] - [*]").put(
           "serverWhereFilter",
           "SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"));

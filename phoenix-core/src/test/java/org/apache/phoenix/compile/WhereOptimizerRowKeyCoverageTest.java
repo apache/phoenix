@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -26,8 +27,11 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -41,7 +45,9 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
@@ -171,6 +177,258 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
     assertScansCoverMatchingRows(SortOrder.ASC, SortOrder.DESC, AB, PREFIX_VALUES, TRAILING_CASES);
   }
 
+  /**
+   * The RVC IN list ends on a DESC column with prefix-related values. The scan can put that column
+   * in its own slot, which loses the pairing between k1 and k2. The residual filter must then stay
+   * and remove the unpaired rows.
+   */
+  @Test
+  public void testDescTrailingRvcInReturnsOnlyPairedRows() throws Exception {
+    for (String pk : new String[] { "k1, k2 DESC, k3", "k1 DESC, k2 DESC, k3" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        assertScanReturnsExactly(pk, options, "(k1, k2) IN (('a', '1'), ('b', '10'))", false,
+          (a, b, c) -> (a.equals("a") && b.equals("1")) || (a.equals("b") && b.equals("10")));
+      }
+    }
+  }
+
+  /**
+   * Prefix-related ranges on a DESC column must form one sorted, disjoint slot. Region pruning and
+   * the salted stop row read the slot in that order, so overlapping ranges drop rows.
+   */
+  @Test
+  public void testDescPrefixRangesFormDisjointSlot() throws Exception {
+    for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+      StatementContext context = assertScanReturnsExactly("k1 DESC, k2, k3", options,
+        "k1 = '10' OR k1 BETWEEN '1' AND '100'", true,
+        (a, b, c) -> in("1", "10", "100").test(a, b));
+      List<List<KeyRange>> slots = context.getScanRanges().getRanges();
+      assertEquals("k1 slot " + slots, 1, slots.get(slots.size() - 1).size());
+    }
+  }
+
+  /**
+   * Each OR branch is a DESC range whose lower value is a prefix of its upper value, so its raw
+   * lower bound is above its raw upper bound. When there are too many branches, they collapse to
+   * one bounding range. That range must keep the rows of every branch. The first query exceeds the
+   * cartesian bound of the key space list. The second query exceeds the bound of the scan slot. An
+   * IS NULL branch gives the bounding range a null lower bound, and the range must then keep the
+   * null rows too. V1 loses rows of crossed DESC ranges in salted scans, so only V2 runs those
+   * salted cases.
+   */
+  @Test
+  public void testDescPrefixRangesBoundingHullKeepsRows() throws Exception {
+    List<String> k1Values = new ArrayList<>(AB);
+    List<String> branches = new ArrayList<>();
+    List<String> fValues = new ArrayList<>();
+    for (int i = 0; i < 260; i++) {
+      k1Values.add(String.format("c%03d", i));
+      branches.add(String.format("k2 BETWEEN '2' AND '2%03d'", i));
+    }
+    for (int i = 0; i < 300; i++) {
+      fValues.add(String.format("'f%03d'", i));
+    }
+    // The k2 list is the larger side of the AND, so it is the side that collapses.
+    branches.add("k2 BETWEEN '2' AND '2260'");
+    branches.add("k2 BETWEEN '2' AND '2261'");
+    branches.add("k2 BETWEEN '2' AND '2262'");
+    String k1In = "k1 IN ('" + String.join("', '", k1Values) + "')";
+    String crossed = String.join(" OR ", branches);
+    String[] crossedOptions = new String[] { "" };
+    StringBuilder or = new StringBuilder();
+    for (int i = 0; i <= 50000; i++) {
+      or.append(i == 0 ? "" : " OR ").append(String.format("(k1 > '2' AND k1 <= '2%05d')", i));
+    }
+    for (String options : crossedOptions) {
+      for (String pk : new String[] { "k1, k2 DESC, k3", "k1 DESC, k2 DESC, k3" }) {
+        assertScanReturnsExactly(pk, options, k1In + " AND (" + crossed + ")", false,
+          (a, b, c) -> AB.contains(a) && b.compareTo("2") >= 0 && b.compareTo("2262") <= 0);
+      }
+      assertScanReturnsExactly("k1 DESC, k2, k3", options, or.toString(), false,
+        (a, b, c) -> a.compareTo("2") > 0 && a.compareTo("250000") <= 0);
+    }
+    String fIn = String.join(", ", fValues);
+    // The flag of each case is true when V1 also returns the right rows in a salted scan.
+    Object[][] cases = {
+      { k1In + " AND (k2 IS NULL OR k2 IN (" + fIn + "))", true,
+        (RowPredicate) (a, b, c) -> b == null },
+      { k1In + " AND (k2 IS NULL OR k2 IN (" + fIn + ") OR k2 = '2')", true,
+        (RowPredicate) (a, b, c) -> b == null || b.equals("2") },
+      { k1In + " AND (k2 IS NULL OR k2 IN ('1', '10', '100', '2', '23', '230', " + fIn + "))", true,
+        (RowPredicate) (a, b, c) -> b == null
+          || in("1", "10", "100", "2", "23", "230").test(b, c) },
+      { k1In + " AND (k2 IS NULL OR k2 <= '2' OR k2 IN (" + fIn + "))", true,
+        (RowPredicate) (a, b, c) -> b == null || b.compareTo("2") <= 0 },
+      { k1In + " AND (k2 IS NULL OR " + crossed + ")", false, (RowPredicate) (a, b, c) -> b == null
+        || (b.compareTo("2") >= 0 && b.compareTo("2262") <= 0) }, };
+    List<String> grid = new ArrayList<>(PREFIX_VALUES);
+    grid.addAll(AB);
+    List<String> k2Values = new ArrayList<>(grid);
+    k2Values.add(null);
+    for (String pk : new String[] { "k1, k2 DESC, k3", "k1 DESC, k2 DESC, k3" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+          String tableName = generateUniqueName();
+          conn.createStatement()
+            .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR,"
+              + " k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))"
+              + options);
+          List<Row> rows = new ArrayList<>();
+          PreparedStatement upsert = conn.prepareStatement(
+            "UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+          for (String k1 : grid) {
+            for (String k2 : k2Values) {
+              for (String k3 : Arrays.asList("y", "z")) {
+                upsert.setString(1, k1);
+                upsert.setString(2, k2);
+                upsert.setString(3, k3);
+                upsert.execute();
+                Iterator<Pair<byte[], List<Cell>>> it =
+                  PhoenixRuntime.getUncommittedDataIterator(conn);
+                rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+                conn.rollback();
+              }
+            }
+          }
+          rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+          for (int i = 0; i < cases.length; i++) {
+            if (!(Boolean) cases[i][1] && !options.isEmpty() && !isV2Optimizer()) {
+              continue;
+            }
+            RowPredicate matches = (RowPredicate) cases[i][2];
+            Set<String> expected = new TreeSet<>();
+            Set<String> returned = new TreeSet<>();
+            for (Row row : rows) {
+              if (AB.contains(row.k1) && matches.test(row.k1, row.k2, row.k3)) {
+                expected.add(row.toString());
+              }
+            }
+            for (Row row : returnedRows(compile(conn, tableName, (String) cases[i][0]), rows)) {
+              returned.add(row.toString());
+            }
+            assertEquals("[" + pk + options + "] IS NULL case " + i, expected, returned);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * A DESC range whose lower value is a prefix of its upper value has a raw lower bound above its
+   * raw upper bound ('23' to '2' is CDCC to CD). The range must stay a valid branch of the OR.
+   * These tests use unsalted tables only. The salted check serializes the skip-scan filter, and
+   * KeyRange serialization loses the inverted flag of such ranges. V1 has the same issue.
+   */
+  @Test
+  public void testDescPrefixRangeInOrKeepsRows() throws Exception {
+    assertScanReturnsExactly("k1 DESC, k2, k3", "", "(k1 > '2' AND k1 <= '23') OR k1 = '3'", false,
+      (a, b, c) -> between(a, "2", "23") || a.equals("3"));
+    assertScanReturnsExactly("k1 DESC, k2, k3", "",
+      "(k1 > '2' AND k1 <= '23') OR (k1 > '1' AND k1 <= '100')", false,
+      (a, b, c) -> between(a, "2", "23") || between(a, "1", "100"));
+  }
+
+  /**
+   * An IS NULL branch on a DESC column must not stop the merge of the other ranges in its slot.
+   * Overlapping ranges in the slot give a stop row that excludes the row (a, '1').
+   */
+  @Test
+  public void testDescPrefixRangesMergeWithIsNull() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR,"
+          + " k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2 DESC, k3))");
+      StatementContext context = compile(conn, tableName,
+        "k1 = 'a' AND (k2 IS NULL OR k2 = '10' OR k2 BETWEEN '1' AND '100')");
+      List<List<KeyRange>> slots = context.getScanRanges().getRanges();
+      assertEquals("k2 slot " + slots, 2, slots.get(1).size());
+      byte[] key = ByteUtil.concat(Bytes.toBytes("a"), new byte[] { 0, (byte) 0xCE, (byte) 0xFF },
+        Bytes.toBytes("y"));
+      assertTrue("stop row excludes (a, 1, y)",
+        Bytes.compareTo(context.getScan().getStopRow(), key) > 0);
+    }
+  }
+
+  /**
+   * An AND of prefix-related bounds on a DESC column must intersect in row key order. In raw bytes
+   * '2' (CD) is inside k1 > '23' (below CDCC), but in the row key '2' sorts after '23'. The cases
+   * run on a leading DESC key and on a trailing DESC key.
+   */
+  @Test
+  public void testDescPrefixRangesIntersect() throws Exception {
+    Object[][] cases = { { "k1 > '23' AND k1 = '2'", in() }, { "k1 = '2' AND k1 < '23'", in("2") },
+      { "k1 >= '230' AND k1 = '23'", in() }, { "k1 = '23' AND k1 < '230'", in("23") },
+      { "k1 > '1' AND k1 = '100'", in("100") }, { "k1 < '10' AND k1 = '100'", in() },
+      { "k1 > '2' AND k1 < '230'", in("20", "23") }, { "k1 >= '2' AND k1 < '23'", in("2", "20") },
+      { "k1 > '23' AND k1 <= '3'", in("230", "3") },
+      { "k1 < '23' AND k1 > '1'", in("10", "100", "11", "2", "20") },
+      { "k1 IN ('2', '23', '230') AND k1 > '23'", in("230") }, };
+    List<String> failures = new ArrayList<>();
+    for (Object[] c : cases) {
+      @SuppressWarnings("unchecked")
+      BiPredicate<String, String> matches = (BiPredicate<String, String>) c[1];
+      String where = (String) c[0];
+      try {
+        assertScanReturnsExactly("k1 DESC, k2, k3", "", where, false,
+          (a, b, k3) -> matches.test(a, b));
+      } catch (AssertionError e) {
+        failures.add(e.getMessage());
+      }
+      try {
+        assertScanReturnsExactly("k1, k2 DESC, k3", "", "k1 = 'a' AND " + where.replace("k1", "k2"),
+          false, (a, b, k3) -> a.equals("a") && matches.test(b, a));
+      } catch (AssertionError e) {
+        failures.add(e.getMessage());
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * An exclusive range on a DESC k2 after a point on a DESC k1 must keep its rows. The compound
+   * bound of k1 and k2 must not lose the k2 values that start with the lower value, such as '10'.
+   */
+  @Test
+  public void testDescExclusiveRangeAfterDescPointKeepsRows() throws Exception {
+    Object[][] cases = {
+      { "k1 = '1' AND k2 > '1' AND k2 < '2'",
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("1") > 0 && b.compareTo("2") < 0 },
+      { "k1 = '1' AND k2 > '10' AND k2 < '11'",
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("10") > 0
+          && b.compareTo("11") < 0 },
+      { "k1 = '1' AND k2 > '2' AND k2 < '3'",
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("2") > 0 && b.compareTo("3") < 0 },
+      { "k1 = '10' AND k2 > '1' AND k2 < '2' AND k3 = 'y'", (RowPredicate) (a, b,
+        c) -> a.equals("10") && b.compareTo("1") > 0 && b.compareTo("2") < 0 && c.equals("y") }, };
+    for (String pk : new String[] { "k1 DESC, k2 DESC, k3", "k1 DESC, k2 DESC, k3 DESC",
+      "k1, k2 DESC, k3" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        for (Object[] c : cases) {
+          assertScanReturnsExactly(pk, options, (String) c[0], false, (RowPredicate) c[1]);
+        }
+      }
+    }
+  }
+
+  /** True when {@code lower < value <= upper}. */
+  private static boolean between(String value, String lower, String upper) {
+    return value.compareTo(lower) > 0 && value.compareTo(upper) <= 0;
+  }
+
+  /** The prefix guard applies only to DESC variable-length columns, so ASC ranges still merge. */
+  @Test
+  public void testAscPrefixRangesMerge() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))");
+      ScanRanges scanRanges = compile(conn, tableName, "k1 LIKE '1%' OR k1 = '10'").getScanRanges();
+      assertEquals(1, scanRanges.getRanges().size());
+      assertEquals(1, scanRanges.getRanges().get(0).size());
+    }
+  }
+
   private static BiPredicate<String, String> in(String... values) {
     List<String> list = Arrays.asList(values);
     return (a, b) -> list.contains(a);
@@ -179,11 +437,17 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
   private static final class Row {
     final String k1;
     final String k2;
+    final String k3;
     final Cell cell;
 
     Row(String k1, String k2, Cell cell) {
+      this(k1, k2, null, cell);
+    }
+
+    Row(String k1, String k2, String k3, Cell cell) {
       this.k1 = k1;
       this.k2 = k2;
+      this.k3 = k3;
       this.cell = cell;
     }
 
@@ -193,7 +457,7 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
 
     @Override
     public String toString() {
-      return "(" + k1 + ", " + k2 + ")";
+      return "(" + k1 + ", " + k2 + (k3 == null ? "" : ", " + k3) + ")";
     }
   }
 
@@ -254,9 +518,17 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       return admitted;
     }
     Scan scan = context.getScan();
-    byte[] start = scan.getStartRow();
-    byte[] stop = scan.getStopRow();
-    SkipScanFilter skipScan = findSkipScanFilter(scan.getFilter());
+    admitted =
+      scanRows(scan.getStartRow(), scan.getStopRow(), findSkipScanFilter(scan.getFilter()), rows);
+    assertTrue("scan for '" + where + "' admits no rows; grid or predicate is wrong",
+      !admitted.isEmpty());
+    return admitted;
+  }
+
+  /** The rows between {@code start} and {@code stop} that the skip-scan filter includes. */
+  private static List<Row> scanRows(byte[] start, byte[] stop, SkipScanFilter skipScan,
+    List<Row> rows) {
+    List<Row> admitted = new ArrayList<>();
     // Rows below the last seek hint are never shown to the filter, as in a real scan.
     byte[] seekTo = null;
     for (Row row : rows) {
@@ -280,9 +552,169 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       }
       admitted.add(row);
     }
-    assertTrue("scan for '" + where + "' admits no rows; grid or predicate is wrong",
-      !admitted.isEmpty());
     return admitted;
+  }
+
+  /** A predicate over a row of a table with the key columns k1, k2 and k3. */
+  @FunctionalInterface
+  private interface RowPredicate {
+    boolean test(String k1, String k2, String k3);
+  }
+
+  /**
+   * Asserts that the scan for {@code where} returns exactly the rows that {@code matches} accepts.
+   * The grid has k1 and k2 in {@link #PREFIX_VALUES} or {'a', 'b'}, and k3 in {'y', 'z'}. When
+   * {@code checkRegions} is true, the scan must also keep the region of each matching row.
+   */
+  private static StatementContext assertScanReturnsExactly(String pk, String options, String where,
+    boolean checkRegions, RowPredicate matches) throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL,"
+          + " k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))" + options);
+      List<String> grid = new ArrayList<>(PREFIX_VALUES);
+      grid.addAll(AB);
+      List<Row> rows = new ArrayList<>();
+      PreparedStatement upsert = conn
+        .prepareStatement("UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+      for (String k1 : grid) {
+        for (String k2 : grid) {
+          for (String k3 : Arrays.asList("y", "z")) {
+            upsert.setString(1, k1);
+            upsert.setString(2, k2);
+            upsert.setString(3, k3);
+            upsert.execute();
+            Iterator<Pair<byte[], List<Cell>>> it = PhoenixRuntime.getUncommittedDataIterator(conn);
+            rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+            conn.rollback();
+          }
+        }
+      }
+      rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+      StatementContext context = compile(conn, tableName, where);
+      Set<String> expected = new TreeSet<>();
+      Set<String> returned = new TreeSet<>();
+      for (Row row : rows) {
+        if (matches.test(row.k1, row.k2, row.k3)) {
+          expected.add(row.toString());
+        }
+      }
+      for (Row row : returnedRows(context, rows)) {
+        returned.add(row.toString());
+      }
+      assertEquals("[" + pk + options + "] " + where, expected, returned);
+      for (Row row : rows) {
+        if (checkRegions && expected.contains(row.toString())) {
+          byte[] key = row.key();
+          assertTrue("[" + pk + options + "] " + where + " prunes the region of " + row, context
+            .getScanRanges().intersectRegion(key, ByteUtil.concat(key, new byte[] { 0 }), false));
+        }
+      }
+      return context;
+    }
+  }
+
+  private static StatementContext compile(Connection conn, String tableName, String where)
+    throws SQLException {
+    PhoenixPreparedStatement stmt = new PhoenixPreparedStatement(
+      conn.unwrap(PhoenixConnection.class), "SELECT * FROM " + tableName + " WHERE " + where);
+    return stmt.compileQuery().getContext();
+  }
+
+  /**
+   * The rows the compiled scan returns after the residual filters. A salted scan runs once per
+   * bucket, as the parallel scans do, each with its own copy of the skip-scan filter.
+   */
+  private static List<Row> returnedRows(StatementContext context, List<Row> rows) throws Exception {
+    ScanRanges scanRanges = context.getScanRanges();
+    List<Row> admitted = new ArrayList<>();
+    if (scanRanges.isDegenerate()) {
+      return admitted;
+    }
+    Scan scan = context.getScan();
+    List<Filter> residual = new ArrayList<>();
+    SkipScanFilter skipScan = splitFilters(scan.getFilter(), residual);
+    if (scanRanges.isPointLookup()) {
+      Set<String> keys = new HashSet<>();
+      scanRanges.getPointLookupKeyIterator()
+        .forEachRemaining(k -> keys.add(Bytes.toStringBinary(k.getLowerRange())));
+      for (Row row : rows) {
+        if (keys.contains(Bytes.toStringBinary(row.key()))) {
+          admitted.add(row);
+        }
+      }
+    } else if (scanRanges.isSalted()) {
+      for (int bucket = 0; bucket < 256; bucket++) {
+        byte b = (byte) bucket;
+        List<Row> bucketRows = new ArrayList<>();
+        for (Row row : rows) {
+          if (row.key()[0] == b) {
+            bucketRows.add(row);
+          }
+        }
+        if (!bucketRows.isEmpty()) {
+          admitted.addAll(scanRows(withBucket(scan.getStartRow(), b, b),
+            withBucket(scan.getStopRow(), b, (byte) (bucket + 1)),
+            skipScan == null ? null : SkipScanFilter.parseFrom(skipScan.toByteArray()),
+            bucketRows));
+        }
+      }
+    } else {
+      admitted = scanRows(scan.getStartRow(), scan.getStopRow(), skipScan, rows);
+    }
+    List<Row> returned = new ArrayList<>();
+    for (Row row : admitted) {
+      if (passes(residual, row.cell)) {
+        returned.add(row);
+      }
+    }
+    return returned;
+  }
+
+  /** The scan boundary moved into {@code bucket}, or the bucket edge when it is unbound. */
+  private static byte[] withBucket(byte[] key, byte bucket, byte edge) {
+    if (key.length == 0) {
+      return new byte[] { edge };
+    }
+    byte[] copy = key.clone();
+    copy[0] = bucket;
+    return copy;
+  }
+
+  private static boolean passes(List<Filter> filters, Cell cell) throws Exception {
+    for (Filter f : filters) {
+      f.reset();
+      ReturnCode code = f.filterCell(cell);
+      if (
+        (code != ReturnCode.INCLUDE && code != ReturnCode.INCLUDE_AND_NEXT_COL) || f.filterRow()
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Returns the {@link SkipScanFilter} and adds every other filter to {@code residual}. */
+  private static SkipScanFilter splitFilters(Filter filter, List<Filter> residual) {
+    if (filter == null) {
+      return null;
+    }
+    if (filter instanceof SkipScanFilter) {
+      return (SkipScanFilter) filter;
+    }
+    if (filter instanceof FilterList) {
+      SkipScanFilter found = null;
+      for (Filter f : ((FilterList) filter).getFilters()) {
+        SkipScanFilter s = splitFilters(f, residual);
+        if (s != null) {
+          found = s;
+        }
+      }
+      return found;
+    }
+    residual.add(filter);
+    return null;
   }
 
   private static SkipScanFilter findSkipScanFilter(Filter filter) {

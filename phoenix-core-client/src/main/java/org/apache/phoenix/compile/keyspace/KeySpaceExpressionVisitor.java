@@ -102,10 +102,18 @@ public class KeySpaceExpressionVisitor
 
   private final PTable table;
   private final int nPkColumns;
+  /** Marks the PK columns that are DESC and variable-length; see {@link KeySpace}. */
+  private final boolean[] descVarLength;
 
   public KeySpaceExpressionVisitor(PTable table) {
     this.table = table;
     this.nPkColumns = table.getPKColumns().size();
+    this.descVarLength = new boolean[nPkColumns];
+    for (int i = 0; i < nPkColumns; i++) {
+      PColumn column = table.getPKColumns().get(i);
+      descVarLength[i] =
+        column.getSortOrder() == SortOrder.DESC && !column.getDataType().isFixedWidth();
+    }
   }
 
   public int nPkColumns() {
@@ -392,7 +400,7 @@ public class KeySpaceExpressionVisitor
       if (range == null) {
         return Result.everything(nPkColumns);
       }
-      KeySpace ks = KeySpace.single(pkPos, range, nPkColumns);
+      KeySpace ks = KeySpace.single(pkPos, range, nPkColumns, descVarLength);
       KeySpaceList list =
         ks.isEmpty() ? KeySpaceList.unsatisfiable(nPkColumns) : KeySpaceList.of(ks);
       Set<Expression> consumed = new HashSet<>();
@@ -422,7 +430,7 @@ public class KeySpaceExpressionVisitor
     if (descColumn.getSortOrder() == org.apache.phoenix.schema.SortOrder.DESC) {
       range = range.invert();
     }
-    KeySpace ks = KeySpace.single(chain.pkPos, range, nPkColumns);
+    KeySpace ks = KeySpace.single(chain.pkPos, range, nPkColumns, descVarLength);
     KeySpaceList list = ks.isEmpty() ? KeySpaceList.unsatisfiable(nPkColumns) : KeySpaceList.of(ks);
     Set<Expression> consumed = new HashSet<>();
     Set<Expression> partExtracts = chain.keyPart.getExtractNodes();
@@ -458,7 +466,7 @@ public class KeySpaceExpressionVisitor
       return Result.everything(nPkColumns);
     }
     KeyRange range = node.isNegate() ? KeyRange.IS_NOT_NULL_RANGE : KeyRange.IS_NULL_RANGE;
-    KeySpace ks = KeySpace.single(pkPos, range, nPkColumns);
+    KeySpace ks = KeySpace.single(pkPos, range, nPkColumns, descVarLength);
     Set<Expression> consumed = new HashSet<>();
     consumed.add(node);
     return new Result(KeySpaceList.of(ks), consumed);
@@ -499,7 +507,7 @@ public class KeySpaceExpressionVisitor
     if (range == KeyRange.EMPTY_RANGE) {
       return Result.unsatisfiable(nPkColumns);
     }
-    KeySpace ks = KeySpace.single(pkPos, range, nPkColumns);
+    KeySpace ks = KeySpace.single(pkPos, range, nPkColumns, descVarLength);
     Set<Expression> consumed = new HashSet<>();
     if (node.endsWithOnlyWildcard()) {
       consumed.add(node);
@@ -542,7 +550,8 @@ public class KeySpaceExpressionVisitor
         if (range == KeyRange.EMPTY_RANGE) {
           continue;
         }
-        perValueLists.add(KeySpaceList.of(KeySpace.single(pkPos, range, nPkColumns)));
+        perValueLists
+          .add(KeySpaceList.of(KeySpace.single(pkPos, range, nPkColumns, descVarLength)));
       }
       KeySpaceList acc = KeySpaceList.orAll(nPkColumns, perValueLists);
       if (acc.isUnsatisfiable()) {
@@ -732,7 +741,7 @@ public class KeySpaceExpressionVisitor
       if (range == null || range == KeyRange.EMPTY_RANGE || range == KeyRange.IS_NULL_RANGE) {
         continue;
       }
-      perValueLists.add(KeySpaceList.of(KeySpace.single(pkPos, range, nPkColumns)));
+      perValueLists.add(KeySpaceList.of(KeySpace.single(pkPos, range, nPkColumns, descVarLength)));
     }
     if (perValueLists.isEmpty()) {
       return Result.everything(nPkColumns);
@@ -785,7 +794,7 @@ public class KeySpaceExpressionVisitor
         }
         dims[pkPositions[i]] = range;
       }
-      return KeySpace.of(dims);
+      return KeySpace.of(dims, descVarLength);
     }
 
     // LiteralExpression packed compound bytes (InListExpression.create's sort path).
@@ -853,7 +862,7 @@ public class KeySpaceExpressionVisitor
         offset++;
       }
     }
-    return KeySpace.of(dims);
+    return KeySpace.of(dims, descVarLength);
   }
 
   @Override
@@ -935,7 +944,8 @@ public class KeySpaceExpressionVisitor
       if (isDesc) {
         range = range.invert();
       }
-      perValueLists.add(KeySpaceList.of(KeySpace.single(chain.pkPos, range, nPkColumns)));
+      perValueLists
+        .add(KeySpaceList.of(KeySpace.single(chain.pkPos, range, nPkColumns, descVarLength)));
     }
     KeySpaceList acc = KeySpaceList.orAll(nPkColumns, perValueLists);
     if (acc.isUnsatisfiable()) {

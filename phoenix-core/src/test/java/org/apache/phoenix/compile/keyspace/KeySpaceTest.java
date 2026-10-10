@@ -211,4 +211,41 @@ public class KeySpaceTest {
     KeySpace ksB = KeySpace.of(new KeyRange[] { pt("b"), KeyRange.EVERYTHING_RANGE });
     assertFalse("Distinct ASC singletons must not merge", ksA.unionIfMergeable(ksB).isPresent());
   }
+
+  /**
+   * The prefix guard applies only to DESC variable-length dims. An ASC dim merges a range with a
+   * point that extends its lower bound. A DESC dim, or a dim of unknown order, does not.
+   */
+  @Test
+  public void prefixGuardAppliesOnlyToDescVarLengthDims() {
+    KeyRange[] x = { pt("k"), range("1", true, "2", false) };
+    KeyRange[] y = { pt("k"), pt("10") };
+    Optional<KeySpace> asc = KeySpace.of(x, new boolean[] { false, false })
+      .unionIfMergeable(KeySpace.of(y, new boolean[] { false, false }));
+    assertTrue(asc.isPresent());
+    assertEquals(range("1", true, "2", false), asc.get().get(1));
+    assertFalse(KeySpace.of(x, new boolean[] { false, true })
+      .unionIfMergeable(KeySpace.of(y, new boolean[] { false, true })).isPresent());
+    assertFalse(KeySpace.of(x).unionIfMergeable(KeySpace.of(y)).isPresent());
+  }
+
+  /**
+   * On a DESC variable-length dim, AND compares prefix-related bounds in row key order. In the row
+   * key, '2' (CD) sorts after '23' (CDCC). Thus k1 > '23' AND k1 = '2' is empty, and k1 < '23' AND
+   * k1 = '2' is the point. An ASC dim compares the same bounds in byte order.
+   */
+  @Test
+  public void andComparesDescVarLengthPrefixBoundsInRowKeyOrder() {
+    byte[] two = { (byte) 0xCD };
+    byte[] twentyThree = { (byte) 0xCD, (byte) 0xCC };
+    KeyRange[] eq = { KeyRange.getKeyRange(two) };
+    KeyRange[] gt = { KeyRange.getKeyRange(KeyRange.UNBOUND, false, twentyThree, false, true) };
+    KeyRange[] lt = { KeyRange.getKeyRange(twentyThree, false, KeyRange.UNBOUND, false, true) };
+    boolean[] desc = { true };
+    boolean[] asc = { false };
+    assertTrue(KeySpace.of(gt, desc).and(KeySpace.of(eq, desc)).isEmpty());
+    assertEquals(eq[0], KeySpace.of(eq, desc).and(KeySpace.of(lt, desc)).get(0));
+    assertEquals(eq[0], KeySpace.of(gt, asc).and(KeySpace.of(eq, asc)).get(0));
+    assertTrue(KeySpace.of(eq, asc).and(KeySpace.of(lt, asc)).isEmpty());
+  }
 }

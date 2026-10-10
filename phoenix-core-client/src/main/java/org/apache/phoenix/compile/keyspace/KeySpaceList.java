@@ -232,12 +232,17 @@ public final class KeySpaceList {
       }
       if (onlyConstrainedDim(current) == trailing) {
         List<org.apache.phoenix.query.KeyRange> ranges = new ArrayList<>(current.size());
+        boolean[] mask = null;
         for (KeySpace ks : current) {
           ranges.add(ks.get(trailing));
+          if (mask == null) {
+            mask = ks.descVarLength();
+          }
         }
-        org.apache.phoenix.query.KeyRange hull = boundingHull(ranges);
-        return new KeySpaceList(n, Collections.singletonList(KeySpace.single(trailing, hull, n)),
-          true);
+        org.apache.phoenix.query.KeyRange hull =
+          boundingHull(ranges, mask != null && mask[trailing]);
+        return new KeySpaceList(n,
+          Collections.singletonList(KeySpace.single(trailing, hull, n, mask)), true);
       }
       // Drop dim `trailing` from every space, then merge duplicates. We call
       // mergeToFixpoint directly (not fromNormalized) to avoid re-triggering the
@@ -257,17 +262,32 @@ public final class KeySpaceList {
   }
 
   /**
-   * Single range covering every range in {@code ranges}, all on one dim. Bounds are compared as raw
-   * per-dim bytes, but a variable-length column orders in the row key as {@code value || sep}, with
-   * {@code sep} 0x00 for ASC and 0xFF for DESC, so when one bound is a strict byte prefix of
-   * another their row-key order depends on the sort order, which isn't known here. In that case the
-   * bound is moved to a key that differs from every input bound at a byte before either ends — the
-   * previous key of the minimum lower bound, the next key of the shortest upper bound that prefixes
-   * the maximum — which orders the same way under either separator. Without prefix relationships
-   * the hull is exactly {@code [min(lower), max(upper)]}.
+   * Bounding hull for ranges on a column that is not a DESC variable-length column. See
+   * {@link #boundingHull(List, boolean)}.
    */
   static org.apache.phoenix.query.KeyRange
     boundingHull(List<org.apache.phoenix.query.KeyRange> ranges) {
+    return boundingHull(ranges, false);
+  }
+
+  /**
+   * Single range covering every range in {@code ranges}, all on one dim. Bounds are compared as raw
+   * per-dim bytes. A variable-length column orders in the row key as {@code value || sep}, with
+   * {@code sep} 0x00 for ASC and 0xFF for DESC. When one bound is a strict byte prefix of another,
+   * their row-key order thus depends on the separator. In that case the bound moves to a key that
+   * orders the same way under either separator: the previous key of the minimum lower bound, or the
+   * next key of the shortest upper bound that prefixes the maximum. Without prefix relationships
+   * the hull is exactly {@code [min(lower), max(upper)]}.
+   * <p>
+   * Set {@code inverted} when the ranges are on a DESC variable-length column. On that column a
+   * valid range can have a raw lower bound above its raw upper bound. The hull is built as inverted
+   * only when both of its bounds are values and they cross in this way. The non-inverted check then
+   * returns an empty range, and the inverted check keeps it. In all other cases the non-inverted
+   * check does not lose rows. The inverted check also reads a null lower bound as out of order and
+   * returns an empty range, so a hull with a null bound must not be inverted.
+   */
+  static org.apache.phoenix.query.KeyRange
+    boundingHull(List<org.apache.phoenix.query.KeyRange> ranges, boolean inverted) {
     byte[] unbound = org.apache.phoenix.query.KeyRange.UNBOUND;
     byte[] lower = null;
     boolean lowerInclusive = false;
@@ -276,7 +296,10 @@ public final class KeySpaceList {
     for (org.apache.phoenix.query.KeyRange r : ranges) {
       if (lower != unbound) {
         if (r.lowerUnbound()) {
+          // An unbound side is not inclusive. A stale flag can turn the hull of a null bound and an
+          // unbound side into IS_NULL_RANGE.
           lower = unbound;
+          lowerInclusive = false;
         } else {
           int cmp = lower == null ? -1 : Bytes.compareTo(r.getLowerRange(), lower);
           if (cmp < 0) {
@@ -290,6 +313,7 @@ public final class KeySpaceList {
       if (upper != unbound) {
         if (r.upperUnbound()) {
           upper = unbound;
+          upperInclusive = false;
         } else {
           int cmp = upper == null ? 1 : Bytes.compareTo(r.getUpperRange(), upper);
           if (cmp > 0) {
@@ -328,8 +352,10 @@ public final class KeySpaceList {
         upper = unbound;
       }
     }
+    boolean crossed = inverted && lower != null && upper != null && lower.length > 0
+      && upper.length > 0 && Bytes.compareTo(lower, upper) > 0;
     return org.apache.phoenix.query.KeyRange.getKeyRange(lower, lowerInclusive, upper,
-      upperInclusive);
+      upperInclusive, crossed);
   }
 
   static boolean isStrictPrefix(byte[] prefix, byte[] key) {
