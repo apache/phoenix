@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
@@ -119,6 +120,8 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
@@ -131,6 +134,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
@@ -148,6 +153,14 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
  * @since 2.1.0
  */
 public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(IndexMaintainer.class);
+  // A rebuild of a region evaluates the vector of each row. Thus at most one WARN in this interval
+  // reports the rows that HNSW indexes cannot index. The other rows log at DEBUG
+  private static final long UNINDEXABLE_WARN_INTERVAL_MS = 60_000;
+  // The number of rows that HNSW indexes could not index since the last WARN, and the time of
+  // that WARN
+  private static final AtomicLong UNINDEXABLE_ROWS = new AtomicLong();
+  private static final AtomicLong UNINDEXABLE_WARN_TIME = new AtomicLong(Long.MIN_VALUE);
 
   private static final int EXPRESSION_NOT_PRESENT = -1;
   private static final int ESTIMATED_EXPRESSION_SIZE = 8;
@@ -176,7 +189,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
   public static boolean sendIndexMaintainer(PTable index) {
     PIndexState indexState = index.getIndexState();
-    if (index.isVectorIndex() && index.getVectorCentroidGeneration() == null) {
+    if (
+      index.getVectorIndexType() == VectorIndexType.IVF
+        && index.getVectorCentroidGeneration() == null
+    ) {
       // An untrained vector index has no centroids and keeps no index rows, so send no maintainer
       return false;
     }
@@ -197,9 +213,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return Iterators.filter(indexes, new Predicate<PTable>() {
       @Override
       public boolean apply(PTable index) {
+        // An HNSW graph is region state. Thus the server maintains it, as for a CDC index
         return sendIndexMaintainer(index) && IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() == index.getImmutableStorageScheme()
-            && !CDCUtil.isCDCIndex(index));
+            && !CDCUtil.isCDCIndex(index) && index.getVectorIndexType() != VectorIndexType.HNSW);
       }
     });
   }
@@ -212,7 +229,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return sendIndexMaintainer(index) && ((IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme()
             || IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection)))
-          || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
+          || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index)
+          || index.getVectorIndexType() == VectorIndexType.HNSW);
       }
     });
   }
@@ -499,8 +517,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private Long centroidGeneration;
   private Long buildingGeneration;
   private ColumnReference functionalVectorColumn;
-  // The vector expression of an HNSW index, compiled against the data table
+  // The vector expression of an HNSW index, compiled for the data table, and the data cells that
+  // the expression reads
   private Expression vectorExpression;
+  private Set<ColumnReference> vectorExpressionColumns;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
@@ -2031,6 +2051,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     if (indexWhereColumns != null) {
       addColumnRefForScan(indexWhereColumns, result);
     }
+    if (vectorExpressionColumns != null) {
+      addColumnRefForScan(vectorExpressionColumns, result);
+    }
     return result;
   }
 
@@ -2330,6 +2353,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           new ColumnReference(proto.getFunctionalVectorColumn().getFamily().toByteArray(),
             proto.getFunctionalVectorColumn().getQualifier().toByteArray());
       }
+      if (proto.hasVectorExpression()) {
+        try (ByteArrayInputStream stream =
+          new ByteArrayInputStream(proto.getVectorExpression().toByteArray())) {
+          DataInput input = new DataInputStream(stream);
+          maintainer.vectorExpression =
+            ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+          maintainer.vectorExpression.readFields(input);
+        }
+      }
     }
     maintainer.initCachedState();
     return maintainer;
@@ -2504,6 +2536,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           .setFamily(ByteStringer.wrap(maintainer.functionalVectorColumn.getFamily()))
           .setQualifier(ByteStringer.wrap(maintainer.functionalVectorColumn.getQualifier())));
       }
+      if (maintainer.vectorExpression != null) {
+        try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+          DataOutput output = new DataOutputStream(stream);
+          WritableUtils.writeVInt(output,
+            ExpressionType.valueOf(maintainer.vectorExpression).ordinal());
+          maintainer.vectorExpression.write(output);
+          builder.setVectorExpression(ByteStringer.wrap(stream.toByteArray()));
+        }
+      }
     }
     return builder.build();
   }
@@ -2592,6 +2633,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       expression.accept(visitor);
     }
     allColumns.addAll(indexedColumns);
+    if (vectorExpression != null) {
+      // Find the cells that the vector expression reads. With SINGLE_CELL_ARRAY_WITH_OFFSETS, this
+      // is the single cell that holds all the columns of the family
+      vectorExpressionColumns = new HashSet<>();
+      vectorExpression.accept(new KeyValueExpressionVisitor() {
+        @Override
+        public Void visit(KeyValueColumnExpression expression) {
+          vectorExpressionColumns.add(
+            new ColumnReference(expression.getColumnFamily(), expression.getColumnQualifier()));
+          return null;
+        }
+      });
+    }
     for (ColumnReference colRef : coveredColumnsMap.keySet()) {
       if (immutableStorageScheme == ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
         allColumns.add(colRef);
@@ -2896,6 +2950,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return vectorAlgorithm != null;
   }
 
+  /** Returns the vector index type, or null if the index is not a vector index. */
+  public VectorIndexType getVectorIndexType() {
+    return VectorIndexType.fromAlgorithm(vectorAlgorithm);
+  }
+
   public DistanceMetric getDistanceMetric() {
     return distanceMetric;
   }
@@ -2997,8 +3056,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     try {
       if (
-        !indexedExpressions.get(0).evaluate(new ValueGetterTuple(valueGetter, ts), ptr)
-          || ptr.getLength() == 0
+        !(vectorExpression != null ? vectorExpression : indexedExpressions.get(0))
+          .evaluate(new ValueGetterTuple(valueGetter, ts), ptr) || ptr.getLength() == 0
       ) {
         return null;
       }
@@ -3009,6 +3068,79 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       return null;
     }
     return ptr;
+  }
+
+  /**
+   * Evaluates the indexed vector of a row for an HNSW index, and returns it as a float array.
+   * Returns null if the row has no vector, or if the index cannot index the vector. The index
+   * cannot index a vector of another dimension, which only a writer that bypasses the client can
+   * store. The index also cannot index a vector with an element that is not a finite float, for
+   * example a DOUBLE element that is too large for a float. The method logs each vector that the
+   * index cannot index. If the evaluation fails, for example on a malformed vector, a strict
+   * evaluation throws the exception, as for {@link #getIndexedVector(Put, boolean)}. A lenient
+   * evaluation logs the failure and returns null.
+   */
+  public float[] getVectorAsFloats(ValueGetter valueGetter, long ts, boolean strict) {
+    ImmutableBytesWritable ptr;
+    try {
+      ptr = getIndexedVector(valueGetter, ts, true);
+    } catch (RuntimeException e) {
+      if (strict) {
+        throw e;
+      }
+      unindexable(valueGetter, "the vector cannot be evaluated", e);
+      return null;
+    }
+    if (ptr == null) {
+      return null;
+    }
+    Expression expression = vectorExpression != null ? vectorExpression : indexedExpressions.get(0);
+    boolean isDouble = expression.getDataType() instanceof PVectorDouble;
+    Integer dimension = expression.getMaxLength();
+    if (
+      dimension != null
+        && ptr.getLength() != dimension * (isDouble ? Bytes.SIZEOF_DOUBLE : Bytes.SIZEOF_FLOAT)
+    ) {
+      unindexable(valueGetter,
+        "the vector has " + ptr.getLength() + " bytes, not dimension " + dimension, null);
+      return null;
+    }
+    float[] f;
+    if (isDouble) {
+      double[] d = PVectorDouble.readElements(ptr.get(), ptr.getOffset(), ptr.getLength());
+      f = new float[d.length];
+      for (int i = 0; i < d.length; i++) {
+        f[i] = (float) d[i];
+      }
+    } else {
+      f = PVectorFloat.readElements(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+    for (int i = 0; i < f.length; i++) {
+      if (!Float.isFinite(f[i])) {
+        // The graph cannot place such a vector. Also, PQ training over it fails for the segment
+        unindexable(valueGetter, "vector element " + i + " is not a finite float", null);
+        return null;
+      }
+    }
+    return f;
+  }
+
+  // Logs a row that this HNSW index cannot index. The first such row in each interval logs a WARN
+  // with the number of such rows since the last WARN. The other rows log at DEBUG
+  private void unindexable(ValueGetter valueGetter, String reason, Throwable cause) {
+    UNINDEXABLE_ROWS.incrementAndGet();
+    long now = EnvironmentEdgeManager.currentTimeMillis();
+    long last = UNINDEXABLE_WARN_TIME.get();
+    String row = Bytes.toStringBinary(valueGetter.getRowKey());
+    if (
+      now >= last + UNINDEXABLE_WARN_INTERVAL_MS && UNINDEXABLE_WARN_TIME.compareAndSet(last, now)
+    ) {
+      LOGGER.warn(
+        "HNSW indexes did not index {} rows since the last report, such as row {} of index {}: {}",
+        UNINDEXABLE_ROWS.getAndSet(0), row, logicalIndexName, reason, cause);
+    } else {
+      LOGGER.debug("HNSW index {} does not index row {}: {}", logicalIndexName, row, reason, cause);
+    }
   }
 
   /**

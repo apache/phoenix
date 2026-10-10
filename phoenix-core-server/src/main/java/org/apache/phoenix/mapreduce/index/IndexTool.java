@@ -36,16 +36,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.ToLongFunction;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -69,9 +74,13 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
+import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.HnswRegionRequests;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -93,6 +102,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ColumnInfo;
@@ -859,7 +869,10 @@ public class IndexTool extends Configured implements Tool {
       createIndexToolTables(conn);
       if (dataTable != null && indexTable != null) {
         setupIndexAndDataTable(conn);
-        if (pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null) {
+        if (
+          pIndexTable.getVectorIndexType() == VectorIndexType.IVF
+            && pIndexTable.getVectorCentroidGeneration() == null
+        ) {
           LOGGER.info("Vector index {} has no trained centroids, leaving it unbuilt", qIndexTable);
           return 0;
         }
@@ -870,6 +883,10 @@ public class IndexTool extends Configured implements Tool {
         preSplitIndexTable(cmdLine, conn);
       }
 
+      if (pIndexTable != null && pIndexTable.getVectorIndexType() == VectorIndexType.HNSW) {
+        buildHnswIndex(conn.unwrap(PhoenixConnection.class), pDataTable, pIndexTable);
+        return 0;
+      }
       boolean result = submitIndexToolJob(conn, configuration);
 
       if (result) {
@@ -1039,8 +1056,21 @@ public class IndexTool extends Configured implements Tool {
           .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
     indexType = pIndexTable.getIndexType();
+    // Reject the options that an HNSW build does not support. Do this before a disabled index
+    // moves to BUILDING
     if (
-      pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null
+      pIndexTable.getVectorIndexType() == VectorIndexType.HNSW
+        && (indexVerifyType != IndexVerifyType.NONE || sourceTable != SourceTable.DATA_TABLE_SOURCE)
+    ) {
+      throw new IllegalArgumentException("IndexTool does not verify HNSW indexes");
+    }
+    // An HNSW index has no index rows to delete. A build replaces the segments of each region
+    if (pIndexTable.getVectorIndexType() == VectorIndexType.HNSW && shouldDeleteBeforeRebuild) {
+      throw new IllegalArgumentException("IndexTool does not support -deleteall for HNSW indexes");
+    }
+    if (
+      pIndexTable.getVectorIndexType() == VectorIndexType.IVF
+        && pIndexTable.getVectorCentroidGeneration() == null
         && sourceTable == SourceTable.DATA_TABLE_SOURCE && indexVerifyType != IndexVerifyType.ONLY
     ) {
       // Train the first centroid generation of an ASYNC vector index before the build. The run
@@ -1080,6 +1110,104 @@ public class IndexTool extends Configured implements Tool {
     // index state transition error
     changeDisabledIndexStateToBuiding(connection);
   }
+
+  /**
+   * Builds an HNSW index. Each data region builds a base segment on its server. The index becomes
+   * ACTIVE when each region has a fresh base segment.
+   */
+  static void buildHnswIndex(PhoenixConnection conn, PTable dataTable, PTable indexTable)
+    throws Exception {
+    String indexName = indexTable.getName().getString();
+    // The server sets the last DDL time when the index enters its current state. A base segment
+    // with a later time is fresh. Thus a rerun keeps the regions that an earlier run built
+    long since = conn.getTableNoCache(indexName).getLastDDLTimestamp();
+    buildHnswRegions(conn, dataTable, indexTable, region -> since);
+    IndexUtil.updateIndexState(conn, indexName, PIndexState.ACTIVE, null);
+    // A split after the last listing makes daughters without a base. A daughter that opened while
+    // the index was BUILDING does not rebuild on its own. Thus the build lists the regions again
+    // after the index is ACTIVE
+    buildHnswRegions(conn, dataTable, indexTable, region -> since);
+    LOGGER.info("Built HNSW index {}", indexName);
+  }
+
+  /**
+   * Builds the HNSW segments of all the regions of the data table. Each region gets a request for
+   * an asynchronous full rebuild on its server. The method then waits until each region is built.
+   * It lists the segments from the hidden family V# of the data table. A region is built when a
+   * base segment of the index definition covers it exactly and has a time of at least {@code since}
+   * for the region, or when a request of this call built it. A region without an anchor row holds
+   * no rows, so it is built. The build scan of a region returns the server time at which the region
+   * accepted the request. Only a base whose build started later counts, because a rebuild that
+   * already runs at the request can miss rows. A region that is not built gets its request again
+   * every 30 polls, with the time of its last accepted request. Thus a rebuild that serves that
+   * request is not followed by another. The method fails only when no region becomes built for
+   * {@link #HNSW_BUILD_STALL_MS}.
+   */
+  public static void buildHnswRegions(PhoenixConnection conn, PTable dataTable, PTable indexTable,
+    ToLongFunction<RegionInfo> since) throws Exception {
+    String indexName = indexTable.getName().getString();
+    byte[] indexKey = Bytes.toBytes(CentroidManager.getCentroidIndexName(indexName));
+    byte[] definition = HnswSegment.definitionDigest(HnswIndexManager.definition(indexTable));
+    byte[] dataPhysical = dataTable.getPhysicalName().getBytes();
+    long progress = EnvironmentEdgeManager.currentTimeMillis();
+    int remaining = Integer.MAX_VALUE;
+    ConnectionQueryServices services = conn.getQueryServices();
+    // The server time at which each region accepted its last request, by encoded region name
+    Map<String, Long> accepted = new HashMap<>();
+    try (Table data = services.getTable(dataPhysical)) {
+      HnswSegmentStore segmentStore = new HnswSegmentStore.TableStore(data);
+      for (int round = 0;; round++) {
+        List<RegionInfo> missing = new ArrayList<>();
+        List<HnswSegment.Descriptor> segments = segmentStore.list(indexKey);
+        for (HRegionLocation location : services.getAllTableRegions(dataPhysical)) {
+          RegionInfo region = location.getRegion();
+          Long requested = accepted.get(region.getEncodedName());
+          long bar = requested != null ? requested + 1 : since.applyAsLong(region);
+          boolean built = HnswSegment.anchor(region.getStartKey(), region.getEndKey()) == null;
+          for (HnswSegment.Descriptor d : segments) {
+            built |= d.time >= bar && d.covers(region.getStartKey(), region.getEndKey())
+              && Bytes.equals(d.definition, definition);
+          }
+          if (!built) {
+            missing.add(region);
+          }
+        }
+        if (missing.isEmpty()) {
+          break;
+        }
+        long now = EnvironmentEdgeManager.currentTimeMillis();
+        if (missing.size() < remaining) {
+          progress = now;
+        } else if (now - progress > HNSW_BUILD_STALL_MS) {
+          // A retry of the build does not help. The servers already rebuild the regions and retry
+          // the failed rebuilds
+          throw new DoNotRetryIOException(
+            "HNSW index " + indexName + " build stalled with " + missing.size()
+              + " regions unbuilt and none built for " + HNSW_BUILD_STALL_MS + " ms");
+        }
+        remaining = missing.size();
+        if (round % 30 == 0) {
+          HnswRegionRequests.send(data, missing, BaseScannerRegionObserverConstants.HNSW_BUILD,
+            region -> Bytes.add(
+              Bytes.toBytes(accepted.getOrDefault(region.getEncodedName(), Long.MAX_VALUE)),
+              Bytes.toBytes(indexName)),
+            (region, value, failure) -> {
+              if (failure != null) {
+                throw failure;
+              }
+              if (value != null) {
+                accepted.put(region.getEncodedName(), Bytes.toLong(value));
+              }
+            });
+          LOGGER.info("Building HNSW index {}: {} regions remaining", indexName, missing.size());
+        }
+        Thread.sleep(1000);
+      }
+    }
+  }
+
+  /** An HNSW build fails when no region becomes built for this time. */
+  static final long HNSW_BUILD_STALL_MS = TimeUnit.HOURS.toMillis(1);
 
   public static boolean isTimeRangeSet(Long startTime, Long endTime) {
     return startTime != null || endTime != null;

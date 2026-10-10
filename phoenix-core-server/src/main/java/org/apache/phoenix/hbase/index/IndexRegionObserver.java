@@ -44,8 +44,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
@@ -57,12 +59,14 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionReplicaUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -70,12 +74,18 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
@@ -100,6 +110,7 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
 import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
@@ -112,11 +123,15 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.vector.HnswCandidateProbe;
+import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
+import org.apache.phoenix.hbase.index.vector.VectorIndexManager;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.ScorecardAccumulator;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
@@ -132,6 +147,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpressionFactory;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -359,6 +375,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
     // Vector index scorecard deltas of this batch. They go to the accumulator after a success.
     private Map<ScorecardAccumulator.Key, long[]> scorecardDeltas;
+    // The graph changes of this batch. The batch applies them only after a successful commit
+    private final List<Runnable> vectorIndexUpdates = new ArrayList<>();
+    // The HNSW index managers of this batch, by logical index name. The batch gets them before
+    // Phoenix takes its row locks
+    private final Map<String, VectorIndexManager> hnswManagers = new HashMap<>();
+    // A time before the timestamp of this batch, if the batch changes an HNSW graph
+    private Long hnswBatchStart;
     // The previous concurrent batch contexts
     private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
     // The latches of the threads waiting for this batch to complete
@@ -532,6 +555,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
+  private RegionCoprocessorEnvironment env;
+  // The vector index managers of this region, by index name. A name has no view prefix. An open
+  // holds the lock of this map, so that each index has one manager
+  private final ConcurrentMap<String, VectorIndexManager> vectorIndexManagers =
+    new ConcurrentHashMap<>();
+  // The time and the cause of the last failed open of a vector index manager, by index name. The
+  // lock of vectorIndexManagers guards this map
+  private final Map<String, Pair<Long, IOException>> vectorIndexOpenFailures = new HashMap<>();
+  // After a failed open, the region does not try to open the manager again for this time. Writes
+  // and scans of the index fail during this time
+  private static final long VECTOR_INDEX_OPEN_RETRY_MS = 10_000;
+  // The start times of the batches that change HNSW graphs and did not apply the changes yet. The
+  // value is the number of batches with that start time. The oldest start time limits the replay
+  // start of a new segment. Each access holds the lock of this map
+  private final TreeMap<Long, Integer> hnswBatches = new TreeMap<>();
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -542,6 +580,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void start(CoprocessorEnvironment e) throws IOException {
     try {
       final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
+      this.env = env;
       encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
       String serverName = env.getServerName().getServerName();
       if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
@@ -642,6 +681,201 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (this.indexCDCConsumer != null) {
       this.indexCDCConsumer.stop();
     }
+    // A scan can try to open a manager after the region closes. The lock makes sure that
+    // getVectorIndexManager sees the stop and refuses the open
+    synchronized (vectorIndexManagers) {
+      for (VectorIndexManager manager : vectorIndexManagers.values()) {
+        try {
+          manager.close();
+        } catch (IOException ex) {
+          LOG.warn("Failed to close vector index manager on stop", ex);
+        }
+      }
+    }
+  }
+
+  /**
+   * Returns the vector index manager of the given index on this region. The first access opens the
+   * manager. If the manager closes because the index was dropped or created again, the next access
+   * opens a new manager. After a failed open, an access fails without a new open until
+   * {@code VECTOR_INDEX_OPEN_RETRY_MS} has passed. After the region stops, an access fails.
+   */
+  public VectorIndexManager getVectorIndexManager(String indexName) throws IOException {
+    // A view inherits each index of its parent with the name <view>#<index>. The view uses the
+    // graph of the parent index
+    String name = CentroidManager.getCentroidIndexName(indexName);
+    VectorIndexManager manager = vectorIndexManagers.get(name);
+    if (manager != null && !manager.isClosed()) {
+      return manager;
+    }
+    synchronized (vectorIndexManagers) {
+      manager = vectorIndexManagers.get(name);
+      if (manager != null && !manager.isClosed()) {
+        return manager;
+      }
+      if (stopped) {
+        throw new NotServingRegionException(env.getRegionInfo().getRegionNameAsString());
+      }
+      Pair<Long, IOException> failure = vectorIndexOpenFailures.get(name);
+      if (
+        failure != null && EnvironmentEdgeManager.currentTimeMillis()
+            < failure.getFirst() + VECTOR_INDEX_OPEN_RETRY_MS
+      ) {
+        String message = "The vector index manager of " + name + " failed to open";
+        throw failure.getSecond() instanceof DoNotRetryIOException
+          ? new DoNotRetryIOException(message, failure.getSecond())
+          : new IOException(message, failure.getSecond());
+      }
+      try {
+        manager = VectorIndexManager.create(env, name, this::oldestHnswBatch);
+      } catch (IOException | RuntimeException e) {
+        long now = EnvironmentEdgeManager.currentTimeMillis();
+        // A client scan can name any index. Remove the old failures, so that the map holds only
+        // the failures that can still refuse an open
+        vectorIndexOpenFailures.values()
+          .removeIf(f -> now >= f.getFirst() + VECTOR_INDEX_OPEN_RETRY_MS);
+        // HBase aborts the server on an unchecked exception from a coprocessor hook, so convert it
+        IOException openFailure = e instanceof IOException
+          ? (IOException) e
+          : new DoNotRetryIOException("Cannot open HNSW index " + name, e);
+        vectorIndexOpenFailures.put(name, new Pair<>(now, openFailure));
+        throw openFailure;
+      }
+      vectorIndexOpenFailures.remove(name);
+      vectorIndexManagers.put(name, manager);
+      return manager;
+    }
+  }
+
+  // Returns the oldest start time of a batch that changes HNSW graphs and did not apply the changes
+  // yet, or Long.MAX_VALUE. A flush sets the replay start of its segment to this time or earlier,
+  // so that a manager that opens later replays the changes of these batches
+  private long oldestHnswBatch() {
+    synchronized (hnswBatches) {
+      return hnswBatches.isEmpty() ? Long.MAX_VALUE : hnswBatches.firstKey();
+    }
+  }
+
+  /**
+   * After a major compaction of a column family, flushes each vector index manager that indexes the
+   * family. The compaction purges delete markers and expired rows, so a replay cannot find these
+   * changes. The flush writes a segment that holds these changes, and moves the replay start past
+   * the compaction. A manager that opens later rebuilds if a major compaction ended after the
+   * replay start of its segments.
+   */
+  @Override
+  public void postCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+    StoreFile resultFile, CompactionLifeCycleTracker tracker, CompactionRequest request) {
+    byte[] family = store.getColumnFamilyDescriptor().getName();
+    // A compaction of the hidden family V# changes no data row, so it needs no flush
+    if (
+      (request.isMajor() || request.isAllFiles())
+        && !Bytes.equals(family, QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+    ) {
+      for (VectorIndexManager manager : vectorIndexManagers.values()) {
+        HnswIndexManager hnsw = (HnswIndexManager) manager;
+        if (hnsw.indexes(family)) {
+          hnsw.flush();
+        }
+      }
+    }
+  }
+
+  /**
+   * Restricts an HNSW search scan to the candidate rows that the HNSW index manager of the region
+   * finds. If the scan has a {@link PagingFilter}, the candidate filter goes inside it, so that the
+   * paging filter stays the outermost filter of the scan.
+   */
+  @Override
+  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+    throws IOException {
+    if (!RegionReplicaUtil.isDefaultReplica(c.getEnvironment().getRegionInfo())) {
+      // A secondary replica does not get the writes of the primary, so it keeps no graph. Its scan
+      // has no candidate restriction, and ranks every row in its range
+      return;
+    }
+    try {
+      byte[] index = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX);
+      if (index != null) {
+        Filter candidateFilter = HnswCandidateProbe.candidateFilter(c.getEnvironment(),
+          (HnswIndexManager) getVectorIndexManager(Bytes.toString(index)), scan);
+        if (candidateFilter == null) {
+          return;
+        }
+        Filter filter = scan.getFilter();
+        if (filter instanceof PagingFilter) {
+          PagingFilter paging = (PagingFilter) filter;
+          paging.setDelegateFilter(and(paging.getDelegateFilter(), candidateFilter));
+        } else {
+          scan.setFilter(and(filter, candidateFilter));
+        }
+      }
+    } catch (IOException e) {
+      throw e;
+    } catch (Throwable t) {
+      // HBase aborts the server on an unchecked exception from a coprocessor hook, so the scan
+      // fails instead
+      throw ClientUtil.createIOException(
+        "HNSW scan of region " + c.getEnvironment().getRegionInfo().getRegionNameAsString(), t);
+    }
+  }
+
+  /**
+   * For an HNSW build scan, requests an asynchronous full rebuild of the segments of the region.
+   * The scan returns one cell that holds the server time at which the region accepted the request.
+   * A repeated request of the same build starts no rebuild if a full rebuild that swapped after the
+   * earlier request runs or is complete. For an HNSW purge scan, deletes the segment cells of a
+   * dropped HNSW index from the region. The scan returns one cell that holds the number of deleted
+   * cells.
+   */
+  @Override
+  public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
+    RegionScanner s) throws IOException {
+    byte[] request = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD);
+    byte[] purge = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_PURGE);
+    if (
+      (request == null && purge == null)
+        || !RegionReplicaUtil.isDefaultReplica(c.getEnvironment().getRegionInfo())
+    ) {
+      return s;
+    }
+    try {
+      if (purge != null) {
+        return HnswIndexManager.acceptedScanner(s, purgeVectorIndex(Bytes.toString(purge)));
+      }
+      String index = Bytes.toString(request, Bytes.SIZEOF_LONG, request.length - Bytes.SIZEOF_LONG);
+      long accepted =
+        ((HnswIndexManager) getVectorIndexManager(index)).rebuild(Bytes.toLong(request));
+      return HnswIndexManager.acceptedScanner(s, accepted);
+    } catch (IOException e) {
+      throw e;
+    } catch (Throwable t) {
+      // HBase aborts the server on an unchecked exception from a coprocessor hook, so the scan
+      // fails instead
+      throw ClientUtil.createIOException(
+        "HNSW build of region " + c.getEnvironment().getRegionInfo().getRegionNameAsString(), t);
+    }
+  }
+
+  // Deletes the segment cells of a dropped HNSW index from the region. The region refuses the purge
+  // of a live index. Otherwise it first closes the manager of the index, so that the manager writes
+  // no more cells
+  private long purgeVectorIndex(String indexName) throws IOException {
+    String name = CentroidManager.getCentroidIndexName(indexName);
+    HnswIndexManager.checkPurge(env, name);
+    synchronized (vectorIndexManagers) {
+      VectorIndexManager manager = vectorIndexManagers.remove(name);
+      if (manager != null) {
+        manager.close();
+      }
+    }
+    return HnswIndexManager.purge(env, name);
+  }
+
+  private static Filter and(Filter filter, Filter other) {
+    return filter == null
+      ? other
+      : new FilterList(FilterList.Operator.MUST_PASS_ALL, filter, other);
   }
 
   /**
@@ -1530,8 +1764,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     long ts) throws IOException {
     List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
       new ArrayList<>(maintainers.size());
+    List<Pair<IndexMaintainer, VectorIndexManager>> graphIndexes = new ArrayList<>();
     for (IndexMaintainer indexMaintainer : maintainers) {
       if (indexMaintainer.isLocalIndex()) {
+        continue;
+      }
+      if (indexMaintainer.getVectorIndexType() == VectorIndexType.HNSW) {
+        // An HNSW index has no index table. The batch changes its graph after the commit
+        graphIndexes.add(new Pair<>(indexMaintainer,
+          context.hnswManagers.get(indexMaintainer.getLogicalIndexName())));
         continue;
       }
       if (
@@ -1558,6 +1799,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Put nextDataRowState = dataRowState.getSecond();
       if (currentDataRowState == null && nextDataRowState == null) {
         continue;
+      }
+      for (Pair<IndexMaintainer, VectorIndexManager> graphIndex : graphIndexes) {
+        // Evaluate the new vector before the commit. As for an IVF index, a malformed vector makes
+        // the write fail. The graph change uses this result, so that a BSON document decodes once
+        float[] next = nextDataRowState == null
+          ? null
+          : graphIndex.getFirst().getVectorAsFloats(
+            new IndexUtil.SimpleValueGetter(nextDataRowState), HConstants.LATEST_TIMESTAMP, true);
+        VectorIndexManager manager = graphIndex.getSecond();
+        context.vectorIndexUpdates
+          .add(() -> manager.onMutation(currentDataRowState, nextDataRowState, next));
       }
       ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
       generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
@@ -2065,13 +2317,34 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       ServerIndexUtil.setDeleteAttributes(miniBatchOp);
     }
 
-    // Load the centroids of each vector index before the row locks. A cache miss reads
-    // SYSTEM.VECTOR_CENTROID, and the batch must not hold row locks during that read.
+    // Load the centroids of each IVF index and open the manager of each HNSW index before Phoenix
+    // takes its row locks. A centroid cache miss reads SYSTEM.VECTOR_CENTROID. The batch must not
+    // hold Phoenix row locks during that read. preBatchMutate runs while HBase holds the row locks
+    // of the batch and the read lock of the region updates lock. Thus a slow first open of a
+    // manager delays a memstore flush of the region, and the writes that wait for the flush. This
+    // occurs one time for each region and index.
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
       try {
         indexMaintainer.loadCentroids(null);
       } catch (SQLException e) {
         throw ClientUtil.createIOException("Unable to load vector index centroids", e);
+      }
+      if (indexMaintainer.getVectorIndexType() == VectorIndexType.HNSW) {
+        if (context.hnswBatchStart == null) {
+          // Record a time before the batch takes its timestamp. The batch changes the graphs only
+          // after its commit. A flush that swaps before then gives its segment a replay start no
+          // later than this time
+          context.hnswBatchStart = EnvironmentEdgeManager.currentTimeMillis();
+          synchronized (hnswBatches) {
+            hnswBatches.merge(context.hnswBatchStart, 1, Integer::sum);
+          }
+        }
+        // Keep the manager for the batch. The batch then changes the graph of the manager whose
+        // resources it checked. If the manager closes, the batch does not open a new manager while
+        // it holds its row locks
+        VectorIndexManager manager = getVectorIndexManager(indexMaintainer.getLogicalIndexName());
+        manager.checkResources();
+        context.hnswManagers.put(indexMaintainer.getLogicalIndexName(), manager);
       }
     }
 
@@ -2275,6 +2548,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         removePendingRows(context);
       }
       if (success) {
+        // Apply the graph changes before the batch releases its row locks. Thus the changes to one
+        // row apply in the order of their commits
+        for (Runnable update : context.vectorIndexUpdates) {
+          update.run();
+        }
         context.currentPhase = BatchMutatePhase.POST;
         if ((context.hasAtomic || context.returnResult) && miniBatchOp.size() == 1) {
           if (!isAtomicOperationComplete(miniBatchOp.getOperationStatus(0))) {
@@ -2316,6 +2594,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         doPost(c, context);
       }
     } finally {
+      if (context.hnswBatchStart != null) {
+        synchronized (hnswBatches) {
+          hnswBatches.computeIfPresent(context.hnswBatchStart, (t, n) -> n == 1 ? null : n - 1);
+        }
+      }
       removeBatchMutateContext(c);
     }
   }

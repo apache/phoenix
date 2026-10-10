@@ -37,8 +37,10 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.SQLParser;
@@ -590,6 +592,34 @@ public class VectorIndexCompilerTest extends BaseConnectionlessQueryTest {
     return new PTable.VectorIndex.Builder().setAlgorithm("HNSW").setDistanceMetric("COSINE")
       .setDimension(16).setHnswM(16).setHnswEfConstruction(100).setHnswAlpha(1.2)
       .setQuantizationType("NONE");
+  }
+
+  /**
+   * Tests the cost of an HNSW plan. Each region scan of the plan reads its own candidates. Thus the
+   * cost counts the candidates of each scan, but not more than the rows of the scanned range.
+   * Without statistics, the cost is unknown. Thus the cost-based optimizer does not prefer the plan
+   * over a plan with a known cost.
+   */
+  @Test
+  public void testHnswPlanCost() throws Exception {
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class)) {
+      conn.createStatement()
+        .execute("CREATE TABLE T_VEC_COST (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 2))");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_VEC_COST ON T_VEC_COST (V) "
+        + "WITH (algorithm='HNSW', metric='COSINE')");
+      // A new HNSW index stays in BUILDING state until IndexTool builds its segments
+      conn.createStatement().execute("ALTER INDEX I_VEC_COST ON T_VEC_COST ACTIVE");
+      String query = "SELECT /*+ INDEX(T_VEC_COST I_VEC_COST) */ ID FROM T_VEC_COST "
+        + "ORDER BY COSINE_DISTANCE(V, ?) LIMIT 10";
+      PhoenixPreparedStatement ps =
+        conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+      ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1f, 0f }));
+      QueryPlan plan = ps.optimizeQuery();
+      assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
+      assertTrue(plan.getCost().isUnknown());
+    }
   }
 
   /**

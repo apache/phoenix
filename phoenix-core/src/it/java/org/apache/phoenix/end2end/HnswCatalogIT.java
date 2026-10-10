@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -62,6 +63,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationRes
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -306,8 +308,9 @@ public class HnswCatalogIT extends ParallelStatsDisabledIT {
    * second HNSW index leaves the descriptor unchanged. V# keeps its fixed TTL, KEEP_DELETED_CELLS
    * and REPLICATION_SCOPE when CREATE TABLE and ALTER TABLE set other values. The index does not
    * inherit the Phoenix TTL of the data table. An IVF index on the same table has its own index
-   * table, which follows the data table. REBUILD ALL ASYNC enqueues no rebuild task. DROP COLUMN of
-   * the vector column drops the index, and V# stays. The family name V# is reserved.
+   * table, which follows the data table. REBUILD ALL ASYNC enqueues no rebuild task, and IndexTool
+   * refuses -deleteall. DROP COLUMN of the vector column drops the index, and V# stays. The family
+   * name V# is reserved.
    */
   @Test
   public void testHiddenFamily() throws Exception {
@@ -392,6 +395,8 @@ public class HnswCatalogIT extends ParallelStatsDisabledIT {
       assertTrue(
         Task.queryTaskTable(conn, null, null, table, PTable.TaskType.INDEX_REBUILD, null, hnsw)
           .isEmpty());
+      assertEquals(-1, (int) IndexTool.run(new Configuration(getUtility().getConfiguration()), null,
+        table, hnsw, false, null, false, true, true).getKey());
 
       stmt.execute("ALTER TABLE " + table + " DROP COLUMN V");
       assertTrue(PhoenixRuntime.getTableNoCache(conn, table).getIndexes().isEmpty());
@@ -819,12 +824,13 @@ public class HnswCatalogIT extends ParallelStatsDisabledIT {
 
   private static void assertHiddenFamilyCompaction(String ttl) throws Exception {
     String table = generateUniqueName();
+    String index = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl());
       Statement stmt = conn.createStatement()) {
       stmt.execute("CREATE TABLE " + table
         + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), C VARCHAR) GUIDE_POSTS_WIDTH=20, "
         + ttl);
-      stmt.execute("CREATE VECTOR INDEX " + generateUniqueName() + " ON " + table
+      stmt.execute("CREATE VECTOR INDEX " + index + " ON " + table
         + " (V) WITH (algorithm='HNSW', metric='COSINE')");
       stmt.execute("UPSERT INTO " + table + " VALUES ('a', ARRAY[1.0, 0.0, 0.0, 0.0], 'c')");
       conn.commit();
@@ -841,8 +847,15 @@ public class HnswCatalogIT extends ParallelStatsDisabledIT {
         TestUtil.flush(getUtility(), TableName.valueOf(table));
         stmt.execute("UPDATE STATISTICS " + table);
         TestUtil.majorCompact(getUtility(), TableName.valueOf(table));
-        assertEquals(ttl, Arrays.asList("\\x00/current/Put", "\\x00/live/Put"),
-          hiddenCells(htable));
+        // The major compaction of the data family also makes the region write a segment of the
+        // index. The assertion ignores the cells of that segment
+        List<String> cells = new ArrayList<>();
+        for (String cell : hiddenCells(htable)) {
+          if (!cell.startsWith("\\x00/" + index + "\\x00")) {
+            cells.add(cell);
+          }
+        }
+        assertEquals(ttl, Arrays.asList("\\x00/current/Put", "\\x00/live/Put"), cells);
       }
       List<String> families = statsFamilies(conn, table);
       assertTrue(ttl + " " + families, families.contains(QueryConstants.DEFAULT_COLUMN_FAMILY));

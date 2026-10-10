@@ -40,15 +40,18 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -313,7 +316,32 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
       }
     }
 
-    return submitJob(conf, tableName, inputPaths, outputPath, tablesToBeLoaded, hasLocalIndexes);
+    int status =
+      submitJob(conf, tableName, inputPaths, outputPath, tablesToBeLoaded, hasLocalIndexes);
+    if (status == 0 && qualifiedIndexTableName == null) {
+      buildHnswIndexes(conf, qualifiedTableName);
+    }
+    return status;
+  }
+
+  // The loaded HFiles bypass the region observers. Thus after the load, each region of the table
+  // rebuilds the graph of each HNSW index from its rows
+  private static void buildHnswIndexes(Configuration conf, String qualifiedTableName)
+    throws Exception {
+    try (PhoenixConnection conn = QueryUtil.getConnection(conf).unwrap(PhoenixConnection.class)) {
+      PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+      for (PTable index : table.getIndexes()) {
+        if (
+          index.getVectorIndexType() == VectorIndexType.HNSW
+            && IndexMaintainer.sendIndexMaintainer(index)
+        ) {
+          LOGGER.info("Rebuilding HNSW index {} of {}", index.getName(), qualifiedTableName);
+          // Each region gets a request. Only a base segment that swaps after the request counts,
+          // because an older base segment can lack the loaded rows
+          IndexTool.buildHnswRegions(conn, table, index, region -> Long.MAX_VALUE);
+        }
+      }
+    }
   }
 
   /**
@@ -460,6 +488,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
     List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
     for (PTable indexTable : table.getIndexes()) {
+      if (indexTable.getVectorIndexType() == VectorIndexType.HNSW) {
+        // An HNSW index has no index rows. Its regions rebuild their graphs after the load
+        continue;
+      }
       indexTables.add(new TargetTableRef(indexTable.getName().getString(),
         indexTable.getPhysicalName().getString()));
     }
