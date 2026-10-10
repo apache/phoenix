@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.optimize;
 
+import java.util.Locale;
 import org.apache.phoenix.expression.function.CosineDistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceFunction;
@@ -37,7 +38,7 @@ public enum DistanceMetric {
       return null;
     }
     try {
-      return valueOf(name.trim().toUpperCase());
+      return valueOf(name.trim().toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException e) {
       return null;
     }

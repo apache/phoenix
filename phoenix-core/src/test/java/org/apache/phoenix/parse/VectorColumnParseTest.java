@@ -240,8 +240,8 @@ public class VectorColumnParseTest {
 
     assertEquals("COSINE", indexStmt.getVectorMetric());
     assertEquals("IVF", indexStmt.getVectorAlgorithm());
-    assertEquals(Integer.valueOf(32), indexStmt.getVectorLists());
-    assertEquals(Integer.valueOf(1000), indexStmt.getVectorSampleSize());
+    assertEquals("32", indexStmt.getVectorLists());
+    assertEquals("1000", indexStmt.getVectorSampleSize());
     // The statement must remove the vector options from the physical table properties.
     assertTrue(indexStmt.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY).isEmpty());
   }
@@ -313,8 +313,8 @@ public class VectorColumnParseTest {
     CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
     assertEquals("IVF", indexStmt.getVectorAlgorithm());
     assertEquals("COSINE", indexStmt.getVectorMetric());
-    assertEquals(Integer.valueOf(32), indexStmt.getVectorLists());
-    assertEquals(Integer.valueOf(1000), indexStmt.getVectorSampleSize());
+    assertEquals("32", indexStmt.getVectorLists());
+    assertEquals("1000", indexStmt.getVectorSampleSize());
   }
 
   @Test

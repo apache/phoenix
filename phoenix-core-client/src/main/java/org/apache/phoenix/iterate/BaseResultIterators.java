@@ -367,6 +367,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
       }
       if (context.hasRowSizeFunction() || context.hasRawRowSizeFunction()) {
         scan.getFamilyMap().clear();
+        // Project only the families of the table. Then an anchor row in the hidden family of
+        // VECTOR_LOCAL indexes never becomes a result row. A table with only primary key columns
+        // projects its empty column family, but a mapped view of that shape scans all families.
+        for (PColumnFamily family : table.getColumnFamilies()) {
+          scan.addFamily(family.getName().getBytes());
+        }
+        if (table.getColumnFamilies().isEmpty() && table.getViewType() != ViewType.MAPPED) {
+          scan.addFamily(SchemaUtil.getEmptyColumnFamily(table));
+        }
         if (context.hasRawRowSizeFunction()) {
           scan.setRaw(true);
           scan.readAllVersions();

@@ -287,4 +287,78 @@ public class VectorIndexTypeTest {
     } catch (SQLFeatureNotSupportedException expected) {
     }
   }
+
+  /** Tests that VECTOR_LOCAL, the index type of HNSW indexes, has the serialized value 5. */
+  @Test
+  public void testVectorLocalRoundTrip() {
+    assertEquals((byte) 5, IndexType.VECTOR_LOCAL.getSerializedValue());
+    assertEquals(IndexType.VECTOR_LOCAL, IndexType.fromSerializedValue((byte) 5));
+    assertEquals(IndexType.VECTOR_LOCAL, IndexType.fromToken(" vector_local "));
+    assertArrayEquals(Bytes.toBytes("VECTOR_LOCAL"), IndexType.VECTOR_LOCAL.getBytes());
+  }
+
+  /** Tests that the HNSW index metadata keeps its values through a protobuf round trip. */
+  @Test
+  public void testHnswVectorIndexProtoRoundTrip() throws Exception {
+    PTable table =
+      new PTableImpl.Builder().setType(PTableType.INDEX).setIndexType(IndexType.VECTOR_LOCAL)
+        .setName(PNameFactory.newName("IDX_HNSW")).setTableName(PNameFactory.newName("IDX_HNSW"))
+        .setParentTableName(PNameFactory.newName("DATA_TBL")).setAllColumns(Collections.emptyList())
+        .setPkColumns(Collections.emptyList()).setIndexes(Collections.emptyList())
+        .setPhysicalNames(Collections.emptyList()).setVectorIndexAlgorithm("HNSW")
+        .setVectorDistanceMetric("COSINE").setVectorDimension(96).setVectorHnswM(24)
+        .setVectorHnswEfConstruction(150).setVectorHnswAlpha(1.4).setVectorQuantizationType("PQ")
+        .setVectorPqSegments(12).build();
+
+    PTableProtos.PTable proto = PTableImpl.toProto(table);
+    assertEquals((byte) 5, proto.getIndexType().toByteArray()[0]);
+    PTable rt = PTableImpl.createFromProto(proto);
+    assertEquals(IndexType.VECTOR_LOCAL, rt.getIndexType());
+    assertTrue(rt.isVectorIndex());
+    assertEquals(VectorIndexType.HNSW, rt.getVectorIndexType());
+    PTable.VectorIndex vi = rt.getVectorIndex();
+    assertEquals("HNSW", vi.getAlgorithm());
+    assertEquals("COSINE", vi.getDistanceMetric());
+    assertEquals(Integer.valueOf(96), vi.getDimension());
+    assertEquals(Integer.valueOf(24), vi.getHnswM());
+    assertEquals(Integer.valueOf(150), vi.getHnswEfConstruction());
+    assertEquals(Double.valueOf(1.4), vi.getHnswAlpha());
+    assertEquals("PQ", vi.getQuantizationType());
+    assertEquals(Integer.valueOf(12), vi.getPqSegments());
+    assertNull(vi.getIvfLists());
+    assertNull(vi.getIvfSampleSize());
+    assertNull(rt.getVectorCentroidGeneration());
+  }
+
+  /** Tests that only a vector index returns vector index parameters. */
+  @Test
+  public void testVectorIndexViewRequiresVectorIndexType() throws Exception {
+    PTable notVector = new PTableImpl.Builder().setIndexType(IndexType.GLOBAL)
+      .setVectorIndexAlgorithm("HNSW").setVectorHnswM(16).build();
+    assertNull(notVector.getVectorIndex());
+    assertNull(notVector.getVectorIndexType());
+    // A VECTOR_LOCAL index is never a LOCAL index, and a LOCAL index is never a vector index
+    PTable local = new PTableImpl.Builder().setIndexType(IndexType.LOCAL)
+      .setVectorIndexAlgorithm("HNSW").setVectorHnswM(16).build();
+    assertFalse(local.isVectorIndex());
+    assertNull(local.getVectorIndex());
+    PTable hnsw = new PTableImpl.Builder().setIndexType(IndexType.VECTOR_LOCAL)
+      .setVectorIndexAlgorithm("HNSW").setVectorHnswM(16).build();
+    assertEquals(VectorIndexType.HNSW, hnsw.getVectorIndexType());
+    assertEquals(Integer.valueOf(16), hnsw.getVectorIndex().getHnswM());
+    PTable ivf = new PTableImpl.Builder().setIndexType(IndexType.VECTOR_GLOBAL)
+      .setVectorIndexAlgorithm("IVF").setVectorIvfLists(8).build();
+    assertEquals(VectorIndexType.IVF, ivf.getVectorIndexType());
+    assertEquals(Integer.valueOf(8), ivf.getVectorIndex().getIvfLists());
+    assertNull(ivf.getVectorIndex().getHnswM());
+  }
+
+  @Test
+  public void testFromAlgorithm() {
+    assertEquals(VectorIndexType.IVF, VectorIndexType.fromAlgorithm("ivf"));
+    assertEquals(VectorIndexType.HNSW, VectorIndexType.fromAlgorithm("  Hnsw \t"));
+    assertNull(VectorIndexType.fromAlgorithm(null));
+    assertNull(VectorIndexType.fromAlgorithm(""));
+    assertNull(VectorIndexType.fromAlgorithm("DISKANN"));
+  }
 }

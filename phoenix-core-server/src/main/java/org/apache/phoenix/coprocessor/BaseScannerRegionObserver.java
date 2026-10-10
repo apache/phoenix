@@ -57,6 +57,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
@@ -397,6 +398,15 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
   public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
     ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
     CompactionRequest request) throws IOException {
+    // Compactions of the hidden family of VECTOR_LOCAL indexes keep the scan options of the family.
+    // The Phoenix options keep all versions and delete markers for CompactionScanner, which this
+    // family does not use. Thus a major compaction removes deleted and replaced segment cells.
+    if (
+      Bytes.equals(store.getColumnFamilyDescriptor().getName(),
+        QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+    ) {
+      return;
+    }
     Configuration conf = c.getEnvironment().getConfiguration();
     if (isPhoenixCompactionEnabled(conf)) {
       setScanOptionsForFlushesAndCompactions(options);

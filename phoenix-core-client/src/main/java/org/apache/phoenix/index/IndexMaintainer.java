@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -498,6 +499,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private Long centroidGeneration;
   private Long buildingGeneration;
   private ColumnReference functionalVectorColumn;
+  // The vector expression of an HNSW index, compiled against the data table
+  private Expression vectorExpression;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
@@ -784,6 +787,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
       }
     }
+    if (index.getVectorIndexType() == VectorIndexType.HNSW) {
+      compileVectorExpression(VectorIndexTrainer.getIndexedVectorColumn(index).getExpressionStr(),
+        expressionIndexCompiler, dataTable);
+    }
     this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
     this.logicalIndexName = index.getName().getString();
     if (index.getIndexWhere() != null) {
@@ -792,6 +799,44 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     initCachedState();
+  }
+
+  // Compiles the vector expression and adds its data columns to the indexed columns. Thus a DROP
+  // COLUMN of one of these columns drops the index. A view that does not have one of these columns
+  // does not inherit the index.
+  private void compileVectorExpression(String expressionStr, IndexExpressionCompiler compiler,
+    PTable dataTable) {
+    try {
+      compiler.reset();
+      vectorExpression = SQLParser.parseCondition(expressionStr).accept(compiler);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+    vectorExpression.accept(new KeyValueExpressionVisitor() {
+      @Override
+      public Void visit(KeyValueColumnExpression expression) {
+        // Find the data column by its family and qualifier. With SINGLE_CELL_ARRAY_WITH_OFFSETS,
+        // use the inner expression. Its encoded qualifier is the position of the column in the
+        // single cell.
+        KeyValueColumnExpression kv = expression instanceof SingleCellColumnExpression
+          ? ((SingleCellColumnExpression) expression).getKeyValueExpression()
+          : expression;
+        try {
+          PColumn column = dataTable.getColumnFamily(kv.getColumnFamily())
+            .getPColumnForColumnQualifier(kv.getColumnQualifier());
+          indexedColumnsInfo
+            .add(new Pair<>(column.getFamilyName().getString(), column.getName().getString()));
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+        return null;
+      }
+
+      @Override
+      public Void visit(SingleCellColumnExpression expression) {
+        return visit((KeyValueColumnExpression) expression);
+      }
+    });
   }
 
   public void setDataImmutableStorageScheme(ImmutableStorageScheme sc) {

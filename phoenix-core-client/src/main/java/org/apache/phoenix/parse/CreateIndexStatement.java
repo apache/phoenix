@@ -25,6 +25,7 @@ import java.util.Objects;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.types.IndexConsistency;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -44,14 +45,24 @@ public class CreateIndexStatement extends SingleTableStatement {
   private final IndexConsistency indexConsistency;
   private final String vectorAlgorithm;
   private final String vectorMetric;
-  private final Integer vectorLists;
-  private final Integer vectorSampleSize;
+  private final String vectorLists;
+  private final String vectorSampleSize;
+  private final String vectorM;
+  private final String vectorEfConstruction;
+  private final String vectorAlpha;
+  private final String vectorQuantization;
+  private final String vectorPqSegments;
 
   /** Option names for the WITH clause of CREATE VECTOR INDEX. The name match ignores case. */
   public static final String VECTOR_ALGORITHM_OPTION = "ALGORITHM";
   public static final String VECTOR_METRIC_OPTION = "METRIC";
   public static final String VECTOR_LISTS_OPTION = "LISTS";
   public static final String VECTOR_SAMPLE_SIZE_OPTION = "SAMPLE_SIZE";
+  public static final String VECTOR_M_OPTION = "M";
+  public static final String VECTOR_EF_CONSTRUCTION_OPTION = "EF_CONSTRUCTION";
+  public static final String VECTOR_ALPHA_OPTION = "ALPHA";
+  public static final String VECTOR_QUANTIZATION_OPTION = "QUANTIZATION";
+  public static final String VECTOR_PQ_SEGMENTS_OPTION = "PQ_SEGMENTS";
 
   public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
     IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -76,7 +87,6 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.splitNodes = splits == null ? Collections.<ParseNode> emptyList() : splits;
     this.props = props == null ? ArrayListMultimap.<String, Pair<String, Object>> create() : props;
     this.ifNotExists = ifNotExists;
-    this.indexType = indexType;
     this.async = async;
     this.udfParseNodes = udfParseNodes;
     this.where = where;
@@ -88,14 +98,36 @@ public class CreateIndexStatement extends SingleTableStatement {
         Objects.toString(removeVectorOption(this.props, VECTOR_ALGORITHM_OPTION), null);
       this.vectorMetric =
         Objects.toString(removeVectorOption(this.props, VECTOR_METRIC_OPTION), null);
-      this.vectorLists = toInteger(removeVectorOption(this.props, VECTOR_LISTS_OPTION));
-      this.vectorSampleSize = toInteger(removeVectorOption(this.props, VECTOR_SAMPLE_SIZE_OPTION));
+      this.vectorLists =
+        Objects.toString(removeVectorOption(this.props, VECTOR_LISTS_OPTION), null);
+      this.vectorSampleSize =
+        Objects.toString(removeVectorOption(this.props, VECTOR_SAMPLE_SIZE_OPTION), null);
+      this.vectorM = Objects.toString(removeVectorOption(this.props, VECTOR_M_OPTION), null);
+      this.vectorEfConstruction =
+        Objects.toString(removeVectorOption(this.props, VECTOR_EF_CONSTRUCTION_OPTION), null);
+      this.vectorAlpha =
+        Objects.toString(removeVectorOption(this.props, VECTOR_ALPHA_OPTION), null);
+      this.vectorQuantization =
+        Objects.toString(removeVectorOption(this.props, VECTOR_QUANTIZATION_OPTION), null);
+      this.vectorPqSegments =
+        Objects.toString(removeVectorOption(this.props, VECTOR_PQ_SEGMENTS_OPTION), null);
     } else {
       this.vectorAlgorithm = null;
       this.vectorMetric = null;
       this.vectorLists = null;
       this.vectorSampleSize = null;
+      this.vectorM = null;
+      this.vectorEfConstruction = null;
+      this.vectorAlpha = null;
+      this.vectorQuantization = null;
+      this.vectorPqSegments = null;
     }
+    // The algorithm selects the vector index type. An HNSW index keeps its segments in the data
+    // table, so it is a VECTOR_LOCAL index. IVF and an unknown algorithm stay VECTOR_GLOBAL.
+    this.indexType = indexType == IndexType.VECTOR_GLOBAL
+      && VectorIndexType.fromAlgorithm(this.vectorAlgorithm) == VectorIndexType.HNSW
+        ? IndexType.VECTOR_LOCAL
+        : indexType;
   }
 
   public CreateIndexStatement(CreateIndexStatement createStmt,
@@ -116,6 +148,11 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.vectorMetric = createStmt.getVectorMetric();
     this.vectorLists = createStmt.getVectorLists();
     this.vectorSampleSize = createStmt.getVectorSampleSize();
+    this.vectorM = createStmt.getVectorM();
+    this.vectorEfConstruction = createStmt.getVectorEfConstruction();
+    this.vectorAlpha = createStmt.getVectorAlpha();
+    this.vectorQuantization = createStmt.getVectorQuantization();
+    this.vectorPqSegments = createStmt.getVectorPqSegments();
   }
 
   public static IndexConsistency
@@ -147,17 +184,6 @@ public class CreateIndexStatement extends SingleTableStatement {
       }
     }
     return value;
-  }
-
-  private static Integer toInteger(Object value) {
-    if (value instanceof Number) {
-      return ((Number) value).intValue();
-    }
-    try {
-      return value == null ? null : Integer.valueOf(value.toString().trim());
-    } catch (NumberFormatException e) {
-      return null;
-    }
   }
 
   public IndexKeyConstraint getIndexConstraint() {
@@ -212,11 +238,31 @@ public class CreateIndexStatement extends SingleTableStatement {
     return vectorMetric;
   }
 
-  public Integer getVectorLists() {
+  public String getVectorLists() {
     return vectorLists;
   }
 
-  public Integer getVectorSampleSize() {
+  public String getVectorSampleSize() {
     return vectorSampleSize;
+  }
+
+  public String getVectorM() {
+    return vectorM;
+  }
+
+  public String getVectorEfConstruction() {
+    return vectorEfConstruction;
+  }
+
+  public String getVectorAlpha() {
+    return vectorAlpha;
+  }
+
+  public String getVectorQuantization() {
+    return vectorQuantization;
+  }
+
+  public String getVectorPqSegments() {
+    return vectorPqSegments;
   }
 }

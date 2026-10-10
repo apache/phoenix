@@ -43,6 +43,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -267,7 +268,10 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         ImmutableBytesPtr cfKey =
           new ImmutableBytesPtr(store.getColumnFamilyDescriptor().getName());
         boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
-        if (isLocalIndexStore != collectingForLocalIndex) {
+        if (
+          isLocalIndexStore != collectingForLocalIndex
+            || cfKey.equals(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR)
+        ) {
           continue;
         }
         if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
