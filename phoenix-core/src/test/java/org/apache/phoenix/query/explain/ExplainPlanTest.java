@@ -445,25 +445,29 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("rangeScanNotNull",
       "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL"
         + " AND \"DATE\" >= to_date('2013-01-01')",
-      // V2 strictly better: V1 stops compound emission at the IS NOT NULL
-      // on `inst` and leaves both `HOST IS NULL` AND `DATE >=` as server filters that
-      // run against every row in the [not null] range. V2 continues compound emission
-      // into a 3-dim SKIP SCAN [not null, null, '2013-01-01'] - [not null, null, *],
-      // letting HBase reject all rows that don't satisfy the trailing dims pre-filter.
+      // V1 stops at the IS NOT NULL on `inst` and filters the [not null] range on the
+      // server. V2 uses a 3-dim SKIP SCAN [not null, null, '2013-01-01'] - [not null, null,
+      // *], so HBase skips most rows that fail the trailing dims. The `host` IS NULL slot
+      // comes after a range slot, and the skip-scan filter does not keep null apart there.
+      // Thus V2 also keeps the full WHERE clause as a server filter.
       isV2Optimizer()
         ? text(
           "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 1 RANGE OVER PTSDB"
             + " [not null,null,'2013-01-01'] - [not null,null,*]",
           "    INDEX PTSDB", "    REGIONS PLANNED <N>",
-          "    SERVER PROJECTION FILTER BY FIRST KEY ONLY")
+          "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+          "    SERVER FILTER BY (INST IS NOT NULL AND HOST IS NULL"
+            + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')")
         : text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [not null]", "    INDEX PTSDB",
           "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
           "    SERVER FILTER BY (HOST IS NULL"
             + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
       isV2Optimizer()
         ? scanAttrs("SKIP SCAN ON 1 RANGE ", "PTSDB",
-          " [not null,null,'2013-01-01'] - [not null,null,*]").put("serverFirstKeyOnlyProjection",
-            true)
+          " [not null,null,'2013-01-01'] - [not null,null,*]")
+            .put("serverFirstKeyOnlyProjection", true).put("serverWhereFilter",
+              "SERVER FILTER BY (INST IS NOT NULL AND HOST IS NULL"
+                + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')")
         : scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverFirstKeyOnlyProjection", true)
           .put("serverWhereFilter",
             "SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));

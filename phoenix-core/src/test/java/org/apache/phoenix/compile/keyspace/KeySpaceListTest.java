@@ -21,6 +21,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
 import org.junit.Test;
@@ -213,6 +216,44 @@ public class KeySpaceListTest {
     assertEquals(KeyRange.getKeyRange(Bytes.toBytes("100000"), true, Bytes.toBytes("169999"), true),
       full.spaces().get(0).get(0));
     assertEquals(KeyRange.EVERYTHING_RANGE, full.spaces().get(0).get(1));
+  }
+
+  /** The union of an approximated branch with an exact branch stays approximated. */
+  @Test
+  public void orAllKeepsApproximatedBranch() {
+    java.util.List<KeySpaceList> points = new java.util.ArrayList<>();
+    for (int i = 0; i < 70_000; i++) {
+      points.add(KeySpaceList.of(KeySpace.single(0, pt(String.format("%06d", 100_000 + i)), 2)));
+    }
+    KeySpaceList widened = KeySpaceList.orAll(2, points);
+    assertTrue(widened.isApproximated());
+    KeySpaceList exact = KeySpaceList.of(KeySpace.single(0, pt("200000"), 2));
+    KeySpaceList full = KeySpaceList.orAll(2, java.util.Arrays.asList(widened, exact));
+    assertEquals(2, full.size());
+    assertTrue(full.isApproximated());
+  }
+
+  /** An approximated branch that merges into EVERYTHING keeps its flag through OR and AND. */
+  @Test
+  public void approximatedEverythingKeepsFlag() {
+    List<KeySpaceList> points = new ArrayList<>();
+    for (int i = 0; i < 70_000; i++) {
+      points.add(KeySpaceList.of(KeySpace.single(0, pt(String.format("%06d", 100_000 + i)), 2)));
+    }
+    KeySpaceList widened = KeySpaceList.orAll(2, points);
+    assertTrue(widened.isApproximated());
+    byte[] mid = Bytes.toBytes("150000");
+    KeySpaceList below = KeySpaceList
+      .of(KeySpace.single(0, KeyRange.getKeyRange(KeyRange.UNBOUND, false, mid, false), 2));
+    KeySpaceList above = KeySpaceList
+      .of(KeySpace.single(0, KeyRange.getKeyRange(mid, true, KeyRange.UNBOUND, false), 2));
+    KeySpaceList all = KeySpaceList.orAll(2, Arrays.asList(widened, below, above));
+    assertTrue(all.isEverything());
+    assertTrue(all.isApproximated());
+    KeySpaceList exact = KeySpaceList.of(KeySpace.single(0, pt("150000"), 2));
+    assertTrue(exact.and(all).isApproximated());
+    assertTrue(all.and(exact).isApproximated());
+    assertTrue(KeySpaceList.orAll(2, Arrays.asList(exact, all)).isApproximated());
   }
 
   /**

@@ -445,6 +445,13 @@ public final class KeyRangeExtractor {
         int end = firstProductiveStop(ks, prefixSlots);
         // Clamp end to the compound window: trailing pinned dims are emitted separately.
         if (end > compoundEnd) end = compoundEnd;
+        // A compound bound does not enforce a column that follows an unconstrained column of the
+        // space. When the window holds such a column, the residual filter must stay.
+        int gap = firstProductiveStopStrict(ks, compoundStart);
+        int afterGap = gap < compoundEnd ? firstConstrainedDim(ks, gap) : -1;
+        if (afterGap >= 0 && afterGap < compoundEnd) {
+          compoundsApproximated = true;
+        }
         // Per-dim view: dims [compoundStart, end) as individual slots with slotSpan 0.
         int len = end - compoundStart;
         if (len <= 0) {
@@ -701,7 +708,9 @@ public final class KeyRangeExtractor {
       if (pinnedValue[d] != null) {
         out.add(Collections.singletonList(pinnedValue[d]));
       } else {
-        out.add(dimRanges(list, d, schema));
+        List<KeyRange> ranges = dimRanges(list, d, schema);
+        compoundsApproximated |= joinsToAllButNull(list, d, ranges, schema, pkNullable);
+        out.add(ranges);
         emittedDimRanges = true;
       }
       slotSpanList.add(0);
@@ -1236,6 +1245,40 @@ public final class KeyRangeExtractor {
     return -1;
   }
 
+  /** True when some space of the list has a range other than EVERYTHING on {@code d}. */
+  private static boolean constrainsDim(KeySpaceList list, int d) {
+    for (KeySpace ks : list.spaces()) {
+      if (d < ks.nDims() && ks.get(d) != KeyRange.EVERYTHING_RANGE) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when each space rejects a null key on {@code d}, but the ranges of the spaces join to all
+   * values in {@code slot}. The slot then admits a null key of a nullable column. The residual
+   * filter must keep the predicates for such a slot.
+   */
+  private static boolean joinsToAllButNull(KeySpaceList list, int d, List<KeyRange> slot,
+    RowKeySchema schema, boolean[] pkNullable) {
+    if (
+      schema == null || slot.size() != 1 || slot.get(0) != KeyRange.EVERYTHING_RANGE
+        || !isNullable(schema, pkNullable, d)
+    ) {
+      return false;
+    }
+    for (KeySpace ks : list.spaces()) {
+      if (
+        d >= ks.nDims() || ks.get(d) == KeyRange.EVERYTHING_RANGE
+          || ks.get(d) == KeyRange.IS_NULL_RANGE
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Productive-run end for {@code ks}: one past the highest constrained dim at or after
    * {@code prefixSlots}. Unlike {@link #firstProductiveStop} this version walks through middle
@@ -1362,6 +1405,7 @@ public final class KeyRangeExtractor {
       if (coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
         return nothing();
       }
+      approximated |= joinsToAllButNull(list, d, coalesced, schema, pkNullable);
       out.add(coalesced);
       if (coalesced.size() > 1) {
         useSkipScan = true;
@@ -1454,6 +1498,10 @@ public final class KeyRangeExtractor {
         leading.size() == 1 && leading.get(0) == KeyRange.EVERYTHING_RANGE;
       if (leadingIsEverything) {
         useSkipScan = false;
+        // The ranges of the spaces can join to EVERYTHING on the leading slot. The caller does
+        // not see a leading EVERYTHING in such a list, so the flag keeps the later slots in the
+        // residual filter.
+        approximated |= out.size() > 1 && constrainsDim(list, prefixSlots);
       }
     }
     int[] slotSpan = new int[out.size()];

@@ -44,9 +44,10 @@ public final class KeySpaceList {
   private final List<KeySpace> spaces;
   private final int nDims;
   /**
-   * True when this list was produced by {@link #widenToBudget} (trailing dims replaced with
-   * EVERYTHING to stay under the cartesian bound). Residual filter must retain predicates for
-   * dropped dimensions.
+   * True when this list admits more rows than the predicate it represents. {@link #widenToBudget}
+   * sets the flag when it replaces trailing dims with EVERYTHING to stay under the cartesian bound.
+   * {@link #and} and {@link #orAll} keep the flag from an approximated input. The residual filter
+   * must retain the predicates for the dropped dimensions.
    */
   private final boolean approximated;
 
@@ -169,11 +170,12 @@ public final class KeySpaceList {
     if (this.isUnsatisfiable() || other.isUnsatisfiable()) {
       return unsatisfiable(nDims);
     }
+    // An approximated EVERYTHING side admits extra rows, so the result keeps its flag.
     if (this.isEverything()) {
-      return other;
+      return this.approximated ? other.markApproximated() : other;
     }
     if (other.isEverything()) {
-      return this;
+      return other.approximated ? this.markApproximated() : this;
     }
     KeySpaceList left = this;
     KeySpaceList right = other;
@@ -325,6 +327,12 @@ public final class KeySpaceList {
         }
       }
     }
+    if (lower == unbound && ranges.contains(org.apache.phoenix.query.KeyRange.IS_NULL_RANGE)) {
+      // The null bound records that the hull contains NULL. An unbound lower side excludes null
+      // rows in a middle PK slot.
+      lower = org.apache.phoenix.query.KeyRange.NULL_BOUND;
+      lowerInclusive = true;
+    }
     boolean lowerAmbiguous = false;
     byte[] upperPrefix = null;
     for (org.apache.phoenix.query.KeyRange r : ranges) {
@@ -419,9 +427,10 @@ public final class KeySpaceList {
       return unsatisfiable(nDims);
     }
     List<KeySpace> combined = new ArrayList<>();
+    boolean approx = false;
     for (KeySpaceList b : branches) {
       if (b.isEverything()) {
-        return everything(nDims);
+        return b.approximated ? b : everything(nDims);
       }
       if (b.isUnsatisfiable()) {
         continue;
@@ -431,8 +440,16 @@ public final class KeySpaceList {
           "KeySpaceList arity mismatch: " + nDims + " vs " + b.nDims);
       }
       combined.addAll(b.spaces);
+      approx |= b.approximated;
     }
-    return fromNormalized(nDims, combined);
+    KeySpaceList out = fromNormalized(nDims, combined);
+    // An approximated branch admits extra rows. The union also admits them, so it is approximated.
+    return approx ? out.markApproximated() : out;
+  }
+
+  /** Returns this list with the approximated flag set. */
+  private KeySpaceList markApproximated() {
+    return approximated ? this : new KeySpaceList(nDims, new ArrayList<>(spaces), true);
   }
 
   /**

@@ -29,10 +29,9 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 
 /**
- * V2 variant of {@link org.apache.phoenix.compile.WhereOptimizer.RemoveExtractedNodesVisitor} that
- * also collapses {@link OrExpression} nodes when every branch was extracted. The v1 visitor only
- * collapses {@link AndExpression}; this version closes the gap so normalized RVC-inequality trees
- * (which expand to OR-of-AND) collapse fully when every scalar comparison is consumed.
+ * V2 variant of {@link org.apache.phoenix.compile.WhereOptimizer.RemoveExtractedNodesVisitor}. It
+ * removes AND conjuncts that the scan applies, and it drops TRUE literals from the AND that it
+ * rebuilds. An {@link OrExpression} stays whole or goes away as a unit, as in the v1 visitor.
  */
 final class RemoveExtractedNodesVisitorV2 extends StatelessTraverseNoExpressionVisitor<Expression> {
   private final Set<Expression> nodesToRemove;
@@ -44,11 +43,6 @@ final class RemoveExtractedNodesVisitorV2 extends StatelessTraverseNoExpressionV
   @Override
   public Expression defaultReturn(Expression node, List<Expression> e) {
     return nodesToRemove.contains(node) ? null : node;
-  }
-
-  @Override
-  public Iterator<Expression> visitEnter(OrExpression node) {
-    return node.getChildren().iterator();
   }
 
   @Override
@@ -83,21 +77,17 @@ final class RemoveExtractedNodesVisitorV2 extends StatelessTraverseNoExpressionV
     return node;
   }
 
+  /**
+   * The consumed set matches nodes by equals(). Thus it can hold a leaf that is equal to a branch
+   * of this OR. For example, the leaf can come from a tautology OR or from an AND conjunct. Removal
+   * of that branch makes the OR stricter and drops rows. Thus the OR goes away only when the OR
+   * node itself is consumed.
+   */
   @Override
   public Expression visitLeave(OrExpression node, List<Expression> l) {
-    if (!l.equals(node.getChildren())) {
-      List<Expression> filtered = removeTrue(l);
-      if (filtered.isEmpty()) {
-        // Same logic as AND: empty branch list means the OR evaluated to TRUE once every
-        // contribution was absorbed by key ranges.
-        return LiteralExpression.newConstant(true, Determinism.ALWAYS);
-      }
-      if (filtered.size() == 1) {
-        return filtered.get(0);
-      }
-      return new OrExpression(filtered);
-    }
-    return node;
+    return nodesToRemove.contains(node)
+      ? LiteralExpression.newConstant(true, Determinism.ALWAYS)
+      : node;
   }
 
   private static List<Expression> removeTrue(List<Expression> l) {

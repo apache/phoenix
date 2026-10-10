@@ -280,8 +280,9 @@ public class KeySpaceExpressionVisitor
       if (r.list.isEverything()) {
         // Distinguish (a) genuine tautology (fully analyzed branch that happens to cover
         // all rows, e.g. `pk >= 7 OR pk < 9`) from (b) unanalyzable branch (e.g. non-PK
-        // predicate). (a) has non-empty consumed, (b) has empty consumed.
-        if (r.consumed != null && !r.consumed.isEmpty()) {
+        // predicate). (a) has non-empty consumed, (b) has empty consumed. An approximated
+        // EVERYTHING admits extra rows, so it is not a tautology.
+        if (r.consumed != null && !r.consumed.isEmpty() && !r.list.isApproximated()) {
           sawGenuineTautology = true;
           branchConsumedUnion.addAll(r.consumed);
         } else {
@@ -326,7 +327,7 @@ public class KeySpaceExpressionVisitor
 
     KeySpaceList acc = KeySpaceList.orAll(nPkColumns, branchLists);
 
-    if (!allBranchesFullyExtracted) {
+    if (!allBranchesFullyExtracted || coversNullableDim(acc, branchLists)) {
       // Can't consume the OR; emit the narrowed scan range but leave OR in residual.
       return new Result(acc, java.util.Collections.<Expression> emptySet());
     }
@@ -356,6 +357,52 @@ public class KeySpaceExpressionVisitor
     // Emit narrowing, but the residual must re-evaluate the OR. This is the provably
     // correct handling of RVC lex-cascades and similar shapes.
     return new Result(acc, java.util.Collections.<Expression> emptySet());
+  }
+
+  /**
+   * True when the merged list has EVERYTHING on a dim that a branch constrains, and the PK column
+   * of that dim can be null. For example, {@code k > '1' OR k < 'a'} merges to EVERYTHING on k. The
+   * OR is not true for a null k, so the scan does not enforce it. The PK columns give the nullable
+   * flag, because the row key schema can lose it.
+   */
+  private boolean coversNullableDim(KeySpaceList acc, List<KeySpaceList> branchLists) {
+    for (int d = 0; d < nPkColumns; d++) {
+      if (!table.getPKColumns().get(d).isNullable() || !hasEverythingAt(acc, d, branchLists)) {
+        continue;
+      }
+      for (KeySpaceList branch : branchLists) {
+        for (KeySpace ks : branch.spaces()) {
+          if (ks.get(d) != KeyRange.EVERYTHING_RANGE) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when a space of the merged list has EVERYTHING on {@code dim}, and no branch has that same
+   * space. A branch space with EVERYTHING on the dim accepts a null key, as in the absorption
+   * {@code (k1 = 'a' AND k2 > '1') OR k1 = 'a'}. Such a space is not a join of ranges.
+   */
+  private static boolean hasEverythingAt(KeySpaceList list, int dim,
+    List<KeySpaceList> branchLists) {
+    for (KeySpace ks : list.spaces()) {
+      if (ks.get(dim) == KeyRange.EVERYTHING_RANGE && !isBranchSpace(ks, branchLists)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isBranchSpace(KeySpace ks, List<KeySpaceList> branchLists) {
+    for (KeySpaceList branch : branchLists) {
+      if (branch.spaces().contains(ks)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -908,6 +955,9 @@ public class KeySpaceExpressionVisitor
         type.pad(ptr, length, SortOrder.ASC);
       }
     }
+    if (isPastFixedWidthLimit(op, rhs, column)) {
+      return KeyRange.EMPTY_RANGE;
+    }
     byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
     KeyRange range = ByteUtil.getKeyRange(key, rhs.getSortOrder(), op, type);
     if (rhs.getSortOrder() == SortOrder.DESC) {
@@ -917,6 +967,42 @@ public class KeySpaceExpressionVisitor
       range = range.invert();
     }
     return range;
+  }
+
+  /**
+   * True when a strict bound on a fixed-width column has no value past it. Examples are
+   * {@code k > 2147483647} and {@code k < -2147483648} on an INTEGER key. No row matches such a
+   * comparison. The shared key range code makes an unbound side for the first case, and this side
+   * admits all rows. The check uses the operator in row key order, because a DESC literal has
+   * inverted bytes.
+   */
+  private static boolean isPastFixedWidthLimit(CompareOperator op, Expression rhs, PColumn column) {
+    PDataType type = column.getDataType();
+    Integer width = type.getByteSize() != null ? type.getByteSize() : column.getMaxLength();
+    CompareOperator rowKeyOp = rhs.getSortOrder().transform(op);
+    if (
+      !type.isFixedWidth() || width == null || rhs.getDataType() != type
+        || (rowKeyOp != CompareOperator.GREATER && rowKeyOp != CompareOperator.LESS)
+    ) {
+      return false;
+    }
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    if (!rhs.evaluate(null, ptr) || ptr.getLength() == 0) {
+      return false;
+    }
+    if (column.getMaxLength() != null) {
+      type.pad(ptr, column.getMaxLength(), SortOrder.ASC);
+    }
+    if (ptr.getLength() != width) {
+      return false;
+    }
+    byte limit = rowKeyOp == CompareOperator.GREATER ? (byte) 0xFF : 0;
+    for (int i = 0; i < ptr.getLength(); i++) {
+      if (ptr.get()[ptr.getOffset() + i] != limit) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1079,6 +1165,9 @@ public class KeySpaceExpressionVisitor
 
     @Override
     public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
+      if (isPastFixedWidthLimit(op, rhs, childPart.getColumn())) {
+        return KeyRange.EMPTY_RANGE;
+      }
       KeyRange range = childPart.getKeyRange(op, rhs);
       if (range == null) {
         return null;

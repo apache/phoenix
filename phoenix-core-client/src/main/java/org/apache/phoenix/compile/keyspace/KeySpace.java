@@ -216,15 +216,24 @@ public final class KeySpace {
    * {@link KeyRange#IS_NULL_RANGE} / {@link KeyRange#IS_NOT_NULL_RANGE}. Plain
    * {@link KeyRange#intersect} treats EVERYTHING ∩ IS_NULL as EMPTY because IS_NULL uses an
    * empty-byte-array sentinel that coincides with the EVERYTHING representation.
+   * <p>
+   * A range with an inclusive null lower bound also contains NULL. A bounding range of an OR with
+   * an IS NULL branch has this form. Plain {@link KeyRange#intersect} returns EMPTY for IS_NULL
+   * against such a range, so this method returns IS_NULL instead.
    */
   private static KeyRange intersectRange(KeyRange a, KeyRange b) {
-    if (a == KeyRange.EVERYTHING_RANGE) {
+    if (a == KeyRange.EVERYTHING_RANGE || (b == KeyRange.IS_NULL_RANGE && hasNullLower(a))) {
       return b;
     }
-    if (b == KeyRange.EVERYTHING_RANGE) {
+    if (b == KeyRange.EVERYTHING_RANGE || (a == KeyRange.IS_NULL_RANGE && hasNullLower(b))) {
       return a;
     }
     return a.intersect(b);
+  }
+
+  /** True when the range starts at an inclusive null bound, so that it contains NULL. */
+  private static boolean hasNullLower(KeyRange r) {
+    return r.getLowerRange() == KeyRange.NULL_BOUND && r.isLowerInclusive();
   }
 
   /**

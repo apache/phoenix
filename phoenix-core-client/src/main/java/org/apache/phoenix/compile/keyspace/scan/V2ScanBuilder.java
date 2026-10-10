@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile.keyspace.scan;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -259,10 +260,73 @@ public final class V2ScanBuilder {
       }
     }
 
+    boolean approximated = extract.approximated || in.list.isApproximated();
+    // A slot that loses its null rows ends the key slots. The residual filter then applies the
+    // full predicate.
+    int nullSlot = firstSlotThatSkipsNull(cnf, in.prefixSlots);
+    if (nullSlot >= 0) {
+      cnf = new ArrayList<>(cnf.subList(0, nullSlot));
+      slotSpan = Arrays.copyOf(slotSpan, nullSlot);
+      useSkipScan &= nullSlot > in.prefixSlots;
+      approximated = true;
+    }
+    // An empty bound after a range slot does not separate null rows in the filter.
+    if (useSkipScan && hasNullableEmptyLowerAfterRange(in.table, cnf, slotSpan)) {
+      approximated = true;
+    }
     ScanRanges scanRanges = ScanRanges.create(in.schema, cnf, slotSpan, in.nBuckets, useSkipScan,
       in.table.getRowTimestampColPos(), in.minOffset);
-    boolean approximated = extract.approximated || in.list.isApproximated();
     return new Result(scanRanges, false, approximated);
+  }
+
+  /**
+   * Returns the first user slot that holds IS_NULL and a range with no lower bound, or -1. A null
+   * key value sorts first in the row key, for ASC and DESC columns. ScanRanges sorts the range with
+   * no lower bound before IS_NULL. That range then gives the start key and the seek hints, and it
+   * starts after null. Thus the scan skips the null rows of IS_NULL.
+   */
+  private static int firstSlotThatSkipsNull(List<List<KeyRange>> cnf, int prefixSlots) {
+    for (int i = prefixSlots; i < cnf.size(); i++) {
+      List<KeyRange> slot = cnf.get(i);
+      if (!slot.contains(KeyRange.IS_NULL_RANGE)) {
+        continue;
+      }
+      for (KeyRange r : slot) {
+        if (r.lowerUnbound() && !KeyRange.IS_NULL_RANGE.equals(r)) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * True when a slot after a slot that is not a point has a range with an empty raw lower bound,
+   * and the slot starts on a key column that can be null. A null value has empty bytes, and these
+   * bytes sort first for both sort orders. Such a range thus admits null, or it is IS NULL. The
+   * skip-scan filter compares these rows in place, without a seek to the bound. It does not keep
+   * null apart from the other values, so the residual filter must keep the predicate. The PK
+   * columns give the nullable flag, because the condensed row key schema can lose it.
+   */
+  private static boolean hasNullableEmptyLowerAfterRange(PTable table, List<List<KeyRange>> cnf,
+    int[] slotSpan) {
+    boolean afterRange = false;
+    int field = 0;
+    for (int i = 0; i < cnf.size(); field += slotSpan[i] + 1, i++) {
+      for (KeyRange r : cnf.get(i)) {
+        if (
+          afterRange && r.getLowerRange().length == 0
+            && (r.getUpperRange().length > 0 || r.isSingleKey())
+            && table.getPKColumns().get(field).isNullable()
+        ) {
+          return true;
+        }
+      }
+      for (KeyRange r : cnf.get(i)) {
+        afterRange |= !r.isSingleKey();
+      }
+    }
+    return false;
   }
 
   /**
