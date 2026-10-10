@@ -192,12 +192,14 @@ import java.util.UUID;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -219,6 +221,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ServerBuildIndexCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
@@ -235,6 +238,7 @@ import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.HnswRegionRequests;
 import org.apache.phoenix.index.vector.VectorIndexRebuilder;
 import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
@@ -4689,6 +4693,7 @@ public class MetaDataClient {
           if (table != null) {
             if (tableType == PTableType.INDEX) {
               deleteVectorCentroids(table);
+              purgeHnswSegments(table);
             } else if (tableType == PTableType.TABLE) {
               for (PTable index : table.getIndexes()) {
                 deleteVectorCentroids(index);
@@ -4825,6 +4830,34 @@ public class MetaDataClient {
     } catch (SQLException e) {
       LOGGER.warn("Could not delete the centroids and tasks of dropped vector index {}; its "
         + "reconciliation task removes what remains.", indexName, e);
+    }
+  }
+
+  /**
+   * Asks each region of the data table to delete the segment cells of a dropped VECTOR_LOCAL index.
+   * The purge is best effort: a failure logs a warning, and the drop does not fail. A region that
+   * misses the purge keeps orphan cells. Queries ignore these cells, and repair removes them.
+   */
+  private void purgeHnswSegments(PTable index) {
+    if (index.getIndexType() != IndexType.VECTOR_LOCAL) {
+      return;
+    }
+    String indexKey = CentroidManager.getCentroidIndexName(index.getName().getString());
+    byte[] physical = index.getPhysicalName().getBytes();
+    try (Table data = connection.getQueryServices().getTable(physical)) {
+      List<RegionInfo> regions = new ArrayList<>();
+      for (HRegionLocation location : connection.getQueryServices().getAllTableRegions(physical)) {
+        regions.add(location.getRegion());
+      }
+      HnswRegionRequests.send(data, regions, BaseScannerRegionObserverConstants.HNSW_PURGE,
+        region -> Bytes.toBytes(indexKey), (region, value, failure) -> {
+          if (failure != null) {
+            LOGGER.warn("Could not purge the segments of dropped HNSW index {} from region {}",
+              indexKey, region.getEncodedName(), failure);
+          }
+        });
+    } catch (SQLException | IOException e) {
+      LOGGER.warn("Could not purge the segments of dropped HNSW index {}", indexKey, e);
     }
   }
 
@@ -6151,6 +6184,11 @@ public class MetaDataClient {
                 Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
             }
             return new MutationState(0, 0, connection);
+          }
+          // A DROP COLUMN of an indexed column drops the index. Then the regions purge the
+          // segments of each dropped VECTOR_LOCAL index
+          for (TableRef index : indexesToDrop) {
+            purgeHnswSegments(index.getTable());
           }
           // If we've done any index metadata updates, don't bother trying to update
           // client-side cache as it would be too painful. Just let it pull it over from

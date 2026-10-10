@@ -56,6 +56,8 @@ public final class OptimizerReasons {
   public static final String REASON_VECTOR_METRIC_MISMATCH = "distance metric does not match index";
   public static final String REASON_VECTOR_NULLS_FIRST =
     "NULLS FIRST needs rows the index does not hold";
+  public static final String REASON_HNSW_FILTERED_SEARCH =
+    "filtered search not supported for HNSW index";
   public static final String REASON_VECTOR_COLUMN_MISMATCH = "indexes a different vector column";
   public static final String REASON_VECTOR_EXPRESSION_NOT_INDEXED =
     "does not index the query vector expression";
