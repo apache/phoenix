@@ -24,6 +24,7 @@ import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENAN
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
+import static org.apache.phoenix.query.QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_DEFINED_IN_TABLE_DESCRIPTOR;
@@ -61,6 +62,7 @@ import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
@@ -204,7 +206,7 @@ public class CompactionScanner implements InternalScanner {
     this.minVersion = cfd.getMinVersions();
     this.maxVersion = cfd.getMaxVersions();
     this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
-    familyCount = region.getTableDescriptor().getColumnFamilies().length;
+    familyCount = getDataFamilyCount(region.getTableDescriptor());
     localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     emptyCFStore =
       familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF)) || localIndex;
@@ -253,6 +255,44 @@ public class CompactionScanner implements InternalScanner {
       Bytes.toString(emptyCQ), this.minVersion, this.maxVersion, this.keepDeletedCells.name(),
       this.familyCount, this.localIndex, this.emptyCFStore, compactionTime, maxLookbackWindowStart,
       maxLookbackInMillis, this.major));
+  }
+
+  /**
+   * Returns the number of column families that take part in the row decisions of a compaction. The
+   * hidden family of VECTOR_LOCAL indexes does not count. This family holds HNSW segment cells, not
+   * columns of data rows. It compacts as a store of its own with the HBase scanner. Thus a table
+   * with one data family keeps the store-level compaction of a single-family table.
+   */
+  @VisibleForTesting
+  static int getDataFamilyCount(TableDescriptor tableDescriptor) {
+    int count = 0;
+    for (ColumnFamilyDescriptor family : tableDescriptor.getColumnFamilies()) {
+      if (!Bytes.equals(family.getName(), VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Returns true if a major compaction of this store must compact each row at the region level.
+   * This applies to the store of the empty column family when the table has more than one data
+   * family. That store needs the cells of the other families. These cells tell which empty cells to
+   * keep, so that a row does not expire partially.
+   */
+  @VisibleForTesting
+  static boolean isRegionLevelCompaction(boolean major, int familyCount, boolean localIndex,
+    boolean emptyCFStore) {
+    return major && familyCount > 1 && !localIndex && emptyCFStore;
+  }
+
+  /**
+   * Returns true if a major compaction of this store compacts each row at the region level. The
+   * result does not depend on the compaction type of this scanner.
+   */
+  @VisibleForTesting
+  boolean isRegionLevelStore() {
+    return isRegionLevelCompaction(true, familyCount, localIndex, emptyCFStore);
   }
 
   @VisibleForTesting
@@ -2655,7 +2695,7 @@ public class CompactionScanner implements InternalScanner {
       // non-empty CF cell to prevent partial row expiry. This can happen when last row version of
       // non-empty
       // CF cell outside max lookback window is older than last row version of empty CF cell.
-      if (major && familyCount > 1 && !localIndex && emptyCFStore && !regionLevel) {
+      if (!regionLevel && isRegionLevelCompaction(major, familyCount, localIndex, emptyCFStore)) {
         compactRegionLevel(result, phoenixResult);
       } else if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
         if (familyCount == 1 || regionLevel) {

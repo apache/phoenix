@@ -38,6 +38,8 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -93,7 +95,11 @@ public class TTLRegionScanner extends BaseRegionScanner {
     ) {
       ttlExpression = scanTTLExpression;
     } else {
-      ColumnFamilyDescriptor cfd = env.getRegion().getTableDescriptor().getColumnFamilies()[0];
+      // The hidden family V# of VECTOR_LOCAL indexes has no TTL. When all data families sort after
+      // V#, V# is the first family. Then the TTL comes from the second family.
+      ColumnFamilyDescriptor[] families = env.getRegion().getTableDescriptor().getColumnFamilies();
+      ColumnFamilyDescriptor cfd = families.length > 1 && Bytes.equals(families[0].getName(),
+        QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES) ? families[1] : families[0];
       ttlExpression = TTLExpressionFactory.create(cfd.getTimeToLive());
     }
     // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
