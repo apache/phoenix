@@ -743,6 +743,49 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
+   * The data columns of an HNSW vector expression are indexed columns. HNSW has no key column for
+   * the vector. Without these indexed columns, DROP COLUMN keeps the index, and every later write
+   * fails. With SINGLE_CELL_ARRAY_WITH_OFFSETS, the expression reads the single cell of the family.
+   * The maintainer then finds the data column by its position in that cell.
+   */
+  @Test
+  public void testHnswVectorColumnsAreIndexedColumns() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      for (String create : new String[] { "CREATE TABLE ", "CREATE IMMUTABLE TABLE " }) {
+        String tableName = "T_" + generateUniqueName();
+        String plain = "I_" + generateUniqueName();
+        String functional = "I_" + generateUniqueName();
+        boolean singleCell = create.contains("IMMUTABLE");
+        pconn.createStatement()
+          .execute(create + tableName
+            + " (ID VARCHAR PRIMARY KEY, K VARCHAR, V VECTOR(FLOAT, 2), DOC BSON)"
+            + (singleCell
+              ? " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2"
+              : ""));
+        pconn.createStatement().execute("CREATE VECTOR INDEX " + plain + " ON " + tableName
+          + " (V) WITH (algorithm = 'HNSW', metric = 'L2')");
+        pconn.createStatement().execute("CREATE VECTOR INDEX " + functional + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(DOC, 'v', 2)) WITH (algorithm = 'HNSW', metric = 'L2')");
+        PTable dataTable = pconn.getTable(tableName);
+        assertEquals(create,
+          singleCell
+            ? PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+            : PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+          dataTable.getImmutableStorageScheme());
+        Set<Pair<String, String>> indexed =
+          IndexMaintainer.create(dataTable, pconn.getTable(plain), pconn).getIndexedColumnInfo();
+        assertTrue(create + indexed, indexed.contains(new Pair<>("0", "V")));
+        assertFalse(create + indexed, indexed.contains(new Pair<>("0", "K")));
+        indexed = IndexMaintainer.create(dataTable, pconn.getTable(functional), pconn)
+          .getIndexedColumnInfo();
+        assertTrue(create + indexed, indexed.contains(new Pair<>("0", "DOC")));
+        assertFalse(create + indexed, indexed.contains(new Pair<>("0", "V")));
+      }
+    }
+  }
+
+  /**
    * Verifies that a client keeps the centroids that it loaded before a write. The client has no
    * server connection, so it cannot reload centroids that the cache evicts.
    */

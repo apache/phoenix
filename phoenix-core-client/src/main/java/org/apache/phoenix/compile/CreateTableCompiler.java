@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -52,6 +53,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
@@ -127,8 +129,10 @@ public class CreateTableCompiler {
     for (int i = 0; i < columnDefs.size(); i++) {
       ColumnDef columnDef = columnDefs.get(i);
       if (
-        columnDef.getColumnDefName().getFamilyName() != null && columnDef.getColumnDefName()
+        columnDef.getColumnDefName().getFamilyName() != null && (columnDef.getColumnDefName()
           .getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+          || columnDef.getColumnDefName().getFamilyName()
+            .contains(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY))
       ) {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY).build()
           .buildException();
@@ -139,6 +143,17 @@ public class CreateTableCompiler {
           overideColumnDefs = new ArrayList<>(columnDefs);
         }
         overideColumnDefs.set(i, new ColumnDef(columnDef, null));
+      }
+    }
+    // DEFAULT_COLUMN_FAMILY must not contain V#, the hidden family of VECTOR_LOCAL indexes
+    for (Pair<String, Object> prop : create.getProps()
+      .get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+      if (
+        PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME.equals(prop.getFirst()) && String
+          .valueOf(prop.getSecond()).contains(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY)
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY).build()
+          .buildException();
       }
     }
     if (overideColumnDefs != null) {

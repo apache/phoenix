@@ -193,6 +193,7 @@ import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
@@ -302,6 +303,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -354,6 +356,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
   private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
   private static final String ALTER_TABLE_SET_PROPS = "ALTER TABLE %s SET %s=%s";
+  private static final long HNSW_MOB_THRESHOLD_BYTES = 1024;
   private final GuidePostsCacheProvider GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
   protected final Configuration config;
 
@@ -1267,6 +1270,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return columnDescBuilder.build();
   }
 
+  // The hidden family of VECTOR_LOCAL indexes contains the HNSW segments. MOB keeps the large
+  // segment payloads out of store file rewrites. Segments are region-local derived state, so the
+  // family never follows the TTL, KEEP_DELETED_CELLS or REPLICATION_SCOPE of the data table.
+  private static ColumnFamilyDescriptor generateVectorLocalIndexColumnFamilyDescriptor() {
+    return ColumnFamilyDescriptorBuilder
+      .newBuilder(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES).setMobEnabled(true)
+      .setMobThreshold(HNSW_MOB_THRESHOLD_BYTES).setMaxVersions(1).setTimeToLive(HConstants.FOREVER)
+      .setKeepDeletedCells(KeepDeletedCells.FALSE).setScope(HConstants.REPLICATION_SCOPE_LOCAL)
+      .setBloomFilterType(BloomType.ROW).build();
+  }
+
   // Workaround HBASE-14737
   private static void setHColumnDescriptorValue(ColumnFamilyDescriptorBuilder columnDescBuilder,
     String key, Object value) {
@@ -1354,7 +1368,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // to be the DEFAULT_COLUMN_FAMILY, so we choose the first column family for syncing
       // properties
       if (dataTableColDescForIndexTablePropSyncing == null) {
-        dataTableColDescForIndexTablePropSyncing = baseTableDesc.getColumnFamilies()[0];
+        // The hidden family of VECTOR_LOCAL indexes has fixed settings, so it is never the source
+        // of the synced properties of a new index family
+        for (ColumnFamilyDescriptor family : baseTableDesc.getColumnFamilies()) {
+          if (
+            !Bytes.equals(family.getName(), QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+          ) {
+            dataTableColDescForIndexTablePropSyncing = family;
+            break;
+          }
+        }
       }
       if (baseTableDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)) {
         // The base table still uses the old indexing
@@ -1387,12 +1410,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             SchemaUtil.getTableNameFromFullName(fullTableName), Bytes.toString(familyByte));
         }
 
-        ColumnFamilyDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
+        // The hidden family of VECTOR_LOCAL indexes gets fixed settings and no synced properties
+        boolean isVectorLocalIndexFamily =
+          Bytes.equals(familyByte, QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
+        ColumnFamilyDescriptor columnDescriptor = isVectorLocalIndexFamily
+          ? generateVectorLocalIndexColumnFamilyDescriptor()
+          : generateColumnFamilyDescriptor(family, tableType);
         // Keep certain index column family properties in sync with the base table
         if (
           (tableType == PTableType.INDEX
             || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName)))
-            && (syncedProps != null && !syncedProps.isEmpty())
+            && (syncedProps != null && !syncedProps.isEmpty()) && !isVectorLocalIndexFamily
         ) {
           ColumnFamilyDescriptorBuilder colFamDescBuilder =
             ColumnFamilyDescriptorBuilder.newBuilder(columnDescriptor);
@@ -1401,7 +1429,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
         tableDescriptorBuilder.setColumnFamily(columnDescriptor);
       } else {
-        if (tableType != PTableType.VIEW) {
+        if (
+          tableType != PTableType.VIEW
+            && !Bytes.equals(familyByte, QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+        ) {
           ColumnFamilyDescriptor columnDescriptor =
             tableDescriptorBuilder.build().getColumnFamily(familyByte);
           if (columnDescriptor == null) {
@@ -1436,7 +1467,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   private boolean isLocalIndexTable(Collection<byte[]> families) {
     // no easier way to know local index table?
     for (byte[] family : families) {
-      if (Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+      // The hidden family of VECTOR_LOCAL indexes is in the data table, as the L# families are.
+      // Thus the data table does not get GlobalIndexChecker or the index priority.
+      if (
+        Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+          || Bytes.equals(family, QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+      ) {
         return true;
       }
     }
@@ -2548,6 +2584,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       if (
         Bytes.toString(family.getFirst())
           .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+          || Bytes.equals(family.getFirst(), QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
       ) {
         localIndexTable = true;
         break;
@@ -3821,7 +3858,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     Map<String, Map<String, Object>> allFamiliesProps, Integer newTTL,
     KeepDeletedCells newKeepDeletedCells, Integer newReplicationScope) {
     for (ColumnFamilyDescriptor family : tableDesc.getColumnFamilies()) {
-      if (!allFamiliesProps.containsKey(family.getNameAsString())) {
+      if (
+        !allFamiliesProps.containsKey(family.getNameAsString())
+          && !Bytes.equals(family.getName(), QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+      ) {
         allFamiliesProps.put(family.getNameAsString(),
           getNewSyncedPropsMap(newTTL, newKeepDeletedCells, newReplicationScope));
       }
@@ -3849,7 +3889,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
 
     for (PTable indexTable : table.getIndexes()) {
-      if (indexTable.getIndexType() == PTable.IndexType.LOCAL) {
+      if (
+        indexTable.getIndexType() == PTable.IndexType.LOCAL
+          || indexTable.getIndexType() == PTable.IndexType.VECTOR_LOCAL
+      ) {
         // local index tables are already handled when we sync all column families of a base table
         continue;
       }
@@ -4811,22 +4854,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 16,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 21,
         PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 15,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 20,
         PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 14,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 19,
         PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 13,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 18,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 12,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 17,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 11,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 16,
         PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " " + PVarchar.INSTANCE.getSqlTypeName());
 
       /**
@@ -4834,38 +4877,53 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
        * PHOENIX_TTL Column. See PHOENIX-7023
        */
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 10,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 15,
         PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 14,
         PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 13,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 12,
         PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 11,
         PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 10,
         PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
         PhoenixDatabaseMetaData.VECTOR_DIMENSION + " " + PInteger.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
         PhoenixDatabaseMetaData.VECTOR_IVF_LISTS + " " + PInteger.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
         PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE + " " + PInteger.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
         PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION + " " + PLong.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
         PhoenixDatabaseMetaData.VECTOR_BUILDING_GENERATION + " " + PLong.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        PhoenixDatabaseMetaData.VECTOR_HNSW_M + " " + PInteger.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3, PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION
+          + " " + PInteger.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA + " " + PDouble.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1, PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE + " "
+          + PVarchar.INSTANCE.getSqlTypeName());
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+        PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS + " " + PInteger.INSTANCE.getSqlTypeName());
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
