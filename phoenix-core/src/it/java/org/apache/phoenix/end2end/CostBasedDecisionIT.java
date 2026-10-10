@@ -34,6 +34,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -79,10 +80,24 @@ public class CostBasedDecisionIT extends BaseTest {
 
       String query =
         "SELECT rowkey, c1, c2 FROM " + tableName + " where c1 LIKE 'X0%' ORDER BY rowkey";
-      // Use the data table plan that opts out order-by when stats are not available.
-      assertPlan(conn, query).scanType("FULL SCAN")
-        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1).indexRejected(
-          0, tableName + "_IDX", OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
+      if (isV2Optimizer()) {
+        // V2 (no stats): compound emission produces a tight scan range estimate
+        // [1,'X0'] - [1,'X1'] for the local index — `LIKE 'X0%'` is recognized as a
+        // range predicate at compile time, not just at stats time — so the index binds
+        // more PK columns than the data table and is picked even pre-stats. V2 is
+        // strictly better here: the index scan reads ~1/16th of the rows plus a cheap
+        // client merge sort, vs V1 reading all 10000 data rows and rejecting ~9375 via
+        // the server filter.
+        assertPlan(conn, query).scanType("RANGE SCAN").table(tableName + "_IDX(" + tableName + ")")
+          .keyRanges("[1,'X0'] - [1,'X1']").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+          .indexRejectedNone();
+      } else {
+        // Use the data table plan that opts out order-by when stats are not available.
+        assertPlan(conn, query).scanType("FULL SCAN")
+          .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
+          .indexRejected(0, tableName + "_IDX",
+            OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
+      }
 
       PreparedStatement stmt =
         conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
@@ -152,7 +167,10 @@ public class CostBasedDecisionIT extends BaseTest {
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
       assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
       assertEquals(indexName + "(" + tableName + ")", explainPlanAttributes.getTableName());
-      assertEquals("[1]", explainPlanAttributes.getKeyRanges());
+      // V2 extracts `rowkey <= 'z'` into the trailing scan bound past the unconstrained
+      // c1 dim; the residual filter still appears but HBase rejects out-of-range rows first.
+      assertEquals(isV2Optimizer() ? "[1,*,*] - [1,*,'z']" : "[1]",
+        explainPlanAttributes.getKeyRanges());
       assertTrue(explainPlanAttributes.isServerFirstKeyOnlyProjection());
       assertEquals("SERVER FILTER BY \"ROWKEY\" <= 'z'",
         explainPlanAttributes.getServerWhereFilter());
@@ -183,15 +201,26 @@ public class CostBasedDecisionIT extends BaseTest {
       String query =
         "SELECT * FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
       // Use the idx2 plan with a wider PK slot span when stats are not available.
+      // V1 narrows the scan to (region, c2 < 9000) and leaves both `C1 BETWEEN 10
+      // AND 20` and `C3 < 5000` as a server filter. V2 additionally extracts
+      // `C3 < 5000` into the trailing scan bound (idx2 PK is [region, c2, c3,
+      // rowkey]) — the scan becomes SKIP SCAN ON 1 RANGE [2,*,*] - [2,9000,5000].
+      // V2 is strictly better: rows with c3 ≥ 5000 are rejected by HBase before
+      // reaching the server filter, the residual filter shrinks accordingly, and
+      // network egress is reduced. Same admitted rows.
       ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
         .optimizeQuery().getExplainPlan();
       ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
+      assertEquals(isV2Optimizer() ? "SKIP SCAN ON 1 RANGE" : "RANGE SCAN",
+        explainPlanAttributes.getExplainScanType());
       assertEquals(indexName2 + "(" + tableName + ")", explainPlanAttributes.getTableName());
-      assertEquals("[2,*] - [2,9,000]", explainPlanAttributes.getKeyRanges());
+      assertEquals(isV2Optimizer() ? "[2,*,*] - [2,9,000,5,000]" : "[2,*] - [2,9,000]",
+        explainPlanAttributes.getKeyRanges());
       assertEquals(
-        "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
+        isV2Optimizer()
+          ? "SERVER FILTER BY (\"C1\" >= 10 AND \"C1\" <= 20)"
+          : "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
         explainPlanAttributes.getServerWhereFilter());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
 
@@ -242,12 +271,22 @@ public class CostBasedDecisionIT extends BaseTest {
       String query = "UPSERT INTO " + tableName + " SELECT * FROM " + tableName
         + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
       // Use the idx2 plan with a wider PK slot span when stats are not available.
+      // V2 additionally extracts `C3 < 5000` into the trailing scan bound → SKIP SCAN ON
+      // 1 RANGE [2,*,*] - [2,9000,5000]; rows with c3 ≥ 5000 are rejected by HBase
+      // pre-filter and the upstream UPSERT does less work. Same admitted rows.
       assertMutationPlan(conn, query).abstractExplainPlan("UPSERT SELECT").iteratorType("PARALLEL")
-        .scanType("RANGE SCAN").table(indexName2 + "(" + tableName + ")")
-        .keyRanges("[2,*] - [2,9,000]")
-        .serverWhereFilter(
-          "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+        .scanType(isV2Optimizer() ? "SKIP SCAN ON 1 RANGE" : "RANGE SCAN")
+        .table(indexName2 + "(" + tableName + ")")
+        .keyRanges(isV2Optimizer() ? "[2,*,*] - [2,9,000,5,000]" : "[2,*] - [2,9,000]")
+        .serverWhereFilter(isV2Optimizer()
+          ? "SERVER FILTER BY (\"C1\" >= 10 AND \"C1\" <= 20)"
+          : "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
+        .clientSortAlgo("CLIENT MERGE SORT")
+        // With C3 extracted into the scan bound, idx2 binds more PK columns than idx1 under
+        // V2, so that rule decides before the local/non-local tie-break.
+        .indexRule(isV2Optimizer()
+          ? OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS
+          : OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
         .indexRejectedNone();
 
       PreparedStatement stmt = conn
@@ -294,12 +333,22 @@ public class CostBasedDecisionIT extends BaseTest {
       String query =
         "DELETE FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
       // Use the idx2 plan with a wider PK slot span when stats are not available.
+      // V2 additionally extracts `C3 < 5000` into the trailing scan bound → SKIP SCAN ON
+      // 1 RANGE [2,*,*] - [2,9000,5000]; fewer rows fetched from HBase → fewer rows
+      // considered for delete. Same admitted rows.
       assertMutationPlan(conn, query).abstractExplainPlan("DELETE ROWS CLIENT SELECT")
-        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName2 + "(" + tableName + ")")
-        .keyRanges("[2,*] - [2,9,000]")
-        .serverWhereFilter(
-          "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+        .iteratorType("PARALLEL").scanType(isV2Optimizer() ? "SKIP SCAN ON 1 RANGE" : "RANGE SCAN")
+        .table(indexName2 + "(" + tableName + ")")
+        .keyRanges(isV2Optimizer() ? "[2,*,*] - [2,9,000,5,000]" : "[2,*] - [2,9,000]")
+        .serverWhereFilter(isV2Optimizer()
+          ? "SERVER FILTER BY (\"C1\" >= 10 AND \"C1\" <= 20)"
+          : "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
+        .clientSortAlgo("CLIENT MERGE SORT")
+        // With C3 extracted into the scan bound, idx2 binds more PK columns than idx1 under
+        // V2, so that rule decides before the local/non-local tie-break.
+        .indexRule(isV2Optimizer()
+          ? OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS
+          : OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
         .indexRejectedNone();
 
       PreparedStatement stmt = conn
@@ -371,12 +420,14 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the optimal plan based on cost when stats become available.
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
         .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")")
+        .keyRanges(isV2Optimizer() ? "[1,*,*] - [1,*,'z']" : "[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
         .indexRejectedNone().end().subPlan(1).iteratorType("PARALLEL").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")")
+        .keyRanges(isV2Optimizer() ? "[1,*,'a'] - [1,*,*]" : "[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
@@ -403,11 +454,22 @@ public class CostBasedDecisionIT extends BaseTest {
         + "JOIN (SELECT c1, max(rowkey) mrk, max(c2) mc2 FROM " + tableName
         + " where rowkey <= 'z' GROUP BY c1) t2 "
         + "ON t1.rowkey = t2.mrk WHERE t1.c1 LIKE 'X0%' ORDER BY t1.rowkey";
-      // Use the default plan when stats are not available.
-      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
-        .serverWhereFilter("SERVER FILTER BY C1 LIKE 'X0%'")
-        .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ROWKEY IN (T2.MRK)").indexRule(null)
-        .indexRejectedNone().subPlanCount(1).subPlan(0)
+      // Use the default plan when stats are not available. V2 picks the local index for
+      // the probe side even pre-stats (see testCostOverridesStaticPlanOrdering1): its
+      // compound emission gives `t1.c1 LIKE 'X0%'` the tight range [1,'X0'] - [1,'X1'],
+      // so the probe reads ~625 index rows instead of all 10000 data rows. The build
+      // side keeps the data-table RANGE SCAN [*] - ['z'].
+      ExplainPlanTestUtil.ExplainPlanAssert probe = isV2Optimizer()
+        ? assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+          .table(indexName + "(" + tableName + ")").keyRanges("[1,'X0'] - [1,'X1']")
+          .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true).serverWhereFilter(null)
+          .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)")
+          .indexRule(null).indexRejectedNone()
+        : assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+          .table(tableName).serverWhereFilter("SERVER FILTER BY C1 LIKE 'X0%'")
+          .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ROWKEY IN (T2.MRK)").indexRule(null)
+          .indexRejectedNone();
+      probe.subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(tableName)
         .keyRanges("[*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
@@ -428,15 +490,26 @@ public class CostBasedDecisionIT extends BaseTest {
       conn.createStatement().execute("UPDATE STATISTICS " + tableName);
 
       // Use the optimal plan based on cost when stats become available.
-      assertPlan(conn, query).iteratorType("PARALLEL 626-WAY").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges("[1,'X0'] - [1,'X1']")
-        .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
-        .serverSortedBy("[\"T1.:ROWKEY\"]").clientSortAlgo("CLIENT MERGE SORT")
+      // V1 picks the index plan here AND uses stats-based 626-WAY parallel execution with an
+      // explicit SERVER SORTED BY step. V2 reaches the same logical index plan pre-stats
+      // already and doesn't restructure the plan when stats arrive — it stays at 1-WAY
+      // parallelism without the stats-driven SERVER SORTED BY: tighter scan ranges from the
+      // start and no plan churn, at the cost of less stats-driven parallelism. The same row
+      // set is returned via the same scan ranges. The inner side also differs: V1 emits [1]
+      // plus a server filter; V2 extracts `rowkey <= 'z'` into [1,*,*] - [1,*,'z'] (fewer
+      // rows shipped to the join hash table).
+      assertPlan(conn, query).iteratorType(isV2Optimizer() ? "PARALLEL 1-WAY" : "PARALLEL 626-WAY")
+        .scanType("RANGE SCAN").table(indexName + "(" + tableName + ")")
+        .keyRanges("[1,'X0'] - [1,'X1']").serverMergeColumns("[0.C2]")
+        .serverFirstKeyOnlyProjection(true)
+        .serverSortedBy(isV2Optimizer() ? null : "[\"T1.:ROWKEY\"]")
+        .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").indexRule(null)
         .indexRejectedNone().subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")")
+        .keyRanges(isV2Optimizer() ? "[1,*,*] - [1,*,'z']" : "[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
