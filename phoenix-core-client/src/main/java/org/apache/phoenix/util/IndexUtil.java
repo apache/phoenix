@@ -867,7 +867,8 @@ public class IndexUtil {
     PTable table = tableRef.getTable();
     return table.getType() == PTableType.INDEX && (table.getIndexType() == PTable.IndexType.LOCAL
       || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
-      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL || tableRef.isHinted());
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_LOCAL || tableRef.isHinted());
   }
 
   public static long getMaxTimestamp(Mutation m) {

@@ -92,6 +92,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -625,7 +626,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
   public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
     InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
     CompactionRequest request) throws IOException {
-
+    // The hidden family of VECTOR_LOCAL indexes keeps the HBase compaction scanner.
+    // CompactionScanner would apply the TTL of the data table to the anchor rows and purge the
+    // segments. The family also gets no statistics.
+    if (
+      Bytes.equals(store.getColumnFamilyDescriptor().getName(),
+        QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+    ) {
+      return scanner;
+    }
     final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
     // Compaction and split upcalls run with the effective user context of the requesting user.
     // This will lead to failure of cross cluster RPC if the effective user is not

@@ -44,6 +44,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -172,6 +173,11 @@ public class PostDDLCompiler {
          */
         long totalMutationCount = 0;
         for (final TableRef tableRef : tableRefs) {
+          // The physical table of a VECTOR_LOCAL index is the data table. Skip the index, so that
+          // no DDL deletes or scans data rows as index rows.
+          if (tableRef.getTable().getIndexType() == IndexType.VECTOR_LOCAL) {
+            continue;
+          }
           Scan scan = ScanUtil.newScan(context.getScan());
           SelectStatement select = SelectStatement.COUNT_ONE;
           // We need to use this tableRef
