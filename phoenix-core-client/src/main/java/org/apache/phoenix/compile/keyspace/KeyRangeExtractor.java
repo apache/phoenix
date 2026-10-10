@@ -76,6 +76,11 @@ public final class KeyRangeExtractor {
      * visitor-consumed predicates in the residual filter when this is set.
      */
     public final boolean approximated;
+    /**
+     * True when the slots end before a trailing run of nullable key columns. The last slot then had
+     * later slots before the drop.
+     */
+    public final boolean droppedTrailingNullSlots;
 
     public Result(List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan) {
       this(ranges, slotSpan, useSkipScan, false);
@@ -83,10 +88,16 @@ public final class KeyRangeExtractor {
 
     public Result(List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan,
       boolean approximated) {
+      this(ranges, slotSpan, useSkipScan, approximated, false);
+    }
+
+    public Result(List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan,
+      boolean approximated, boolean droppedTrailingNullSlots) {
       this.ranges = ranges;
       this.slotSpan = slotSpan;
       this.useSkipScan = useSkipScan;
       this.approximated = approximated;
+      this.droppedTrailingNullSlots = droppedTrailingNullSlots;
     }
 
     public boolean isNothing() {
@@ -1386,8 +1397,9 @@ public final class KeyRangeExtractor {
       }
     }
     // A row key with trailing null columns is short. Drop the slots that such a row cannot match.
-    allowed = Math.min(allowed,
-      trailingNullStop(perSlot, nPkColumns, prefixSlots, allowed, schema, pkNullable));
+    int nullStop = trailingNullStop(perSlot, nPkColumns, prefixSlots, allowed, schema, pkNullable);
+    boolean droppedTrailingNullSlots = nullStop < allowed;
+    allowed = Math.min(allowed, nullStop);
     // Per-column slots admit every combination of their ranges. If the spaces are not that
     // product, the slots lose the pairing between columns. The residual filter must then stay.
     boolean approximated = allowed < kept || !isExactProduct(list, prefixSlots, allowed);
@@ -1560,7 +1572,7 @@ public final class KeyRangeExtractor {
         }
       }
     }
-    return new Result(out, slotSpan, useSkipScan, approximated);
+    return new Result(out, slotSpan, useSkipScan, approximated, droppedTrailingNullSlots);
   }
 
   /**

@@ -235,7 +235,8 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
     branches.add("k2 BETWEEN '2' AND '2262'");
     String k1In = "k1 IN ('" + String.join("', '", k1Values) + "')";
     String crossed = String.join(" OR ", branches);
-    String[] crossedOptions = new String[] { "" };
+    String[] crossedOptions =
+      isV2Optimizer() ? new String[] { "", " SALT_BUCKETS=4" } : new String[] { "" };
     StringBuilder or = new StringBuilder();
     for (int i = 0; i <= 50000; i++) {
       or.append(i == 0 ? "" : " OR ").append(String.format("(k1 > '2' AND k1 <= '2%05d')", i));
@@ -327,6 +328,32 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
     assertScanReturnsExactly("k1 DESC, k2, k3", "",
       "(k1 > '2' AND k1 <= '23') OR (k1 > '1' AND k1 <= '100')", false,
       (a, b, c) -> between(a, "2", "23") || between(a, "1", "100"));
+  }
+
+  /**
+   * The region server gets the skip-scan filter in serialized form. A DESC range whose raw lower
+   * bound is above its raw upper bound reads back as empty there, so it must not go into the
+   * filter. The filter must be the same after it is written and read back. V1 uses a full scan or a
+   * range scan for these cases.
+   */
+  @Test
+  public void testDescCrossedRangeNotInSkipScanFilter() throws Exception {
+    Object[][] cases = {
+      { "k1 DESC, k2, k3", "(k1 > '1' AND k1 <= '10') OR (k1 = '100' AND k2 = 'a')",
+        (RowPredicate) (a, b, c) -> a.equals("10") || (a.equals("100") && b.equals("a")) },
+      { "k1 DESC, k2 DESC, k3", "k1 = 'a' AND k2 >= '1' AND k2 < '10'",
+        (RowPredicate) (a, b, c) -> a.equals("a") && b.equals("1") }, };
+    for (Object[] c : cases) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        StatementContext context = assertScanReturnsExactly((String) c[0], options, (String) c[1],
+          false, (RowPredicate) c[2]);
+        SkipScanFilter f = findSkipScanFilter(context.getScan().getFilter());
+        if (f != null) {
+          assertEquals("[" + c[0] + options + "] " + c[1], f.toString(),
+            SkipScanFilter.parseFrom(f.toByteArray()).toString());
+        }
+      }
+    }
   }
 
   /**
@@ -493,6 +520,47 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
   }
 
   /**
+   * A null check on a nullable key can follow a key with an unbound range. The scan must keep the
+   * null rows, and it must not admit a null value into a range on that key. The cases use a range
+   * on k1, or IS NOT NULL on a nullable k1. V1 loses rows in the first case when k2 is DESC, so
+   * only V2 runs that case.
+   */
+  @Test
+  public void testNullCheckAfterUnboundRangeKeepsRows() throws Exception {
+    Object[][] cases = {
+      { "k1 <= '1' AND (k2 IS NULL OR k2 > '1') AND k3 = 'y'", false,
+        (RowPredicate) (a, b, c) -> a.compareTo("1") <= 0 && (b == null || b.compareTo("1") > 0)
+          && "y".equals(c) },
+      { "k1 < '2' AND (k2 IS NULL OR k2 < '2') AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.compareTo("2") < 0 && (b == null || b.compareTo("2") < 0)
+          && "y".equals(c) },
+      { "k1 < '2' AND (k2 IS NULL OR k2 = '1') AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.compareTo("2") < 0 && (b == null || "1".equals(b))
+          && "y".equals(c) },
+      { "k1 < '2' AND k2 < '2' AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.compareTo("2") < 0 && b != null && b.compareTo("2") < 0
+          && "y".equals(c) },
+      { "k1 > '1' AND k2 < '2' AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.compareTo("1") > 0 && b != null && b.compareTo("2") < 0
+          && "y".equals(c) },
+      { "k1 < '2' AND k2 IS NULL AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.compareTo("2") < 0 && b == null && "y".equals(c) }, };
+    assertNullableKeyScansReturnRows("VARCHAR NOT NULL", cases);
+    Object[][] nullableLeadCases = {
+      { "k1 IS NOT NULL AND k2 IS NULL AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a != null && b == null && "y".equals(c) },
+      { "k1 IS NOT NULL AND k2 < '2' AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a != null && b != null && b.compareTo("2") < 0
+          && "y".equals(c) },
+      { "k1 IS NOT NULL AND (k2 IS NULL OR k2 > '1') AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a != null && (b == null || b.compareTo("1") > 0)
+          && "y".equals(c) },
+      { "k1 < '2' AND k2 IS NULL AND k3 = 'y'", true, (RowPredicate) (a, b, c) -> a != null
+        && a.compareTo("2") < 0 && b == null && "y".equals(c) }, };
+    assertNullableKeyScansReturnRows("VARCHAR", nullableLeadCases);
+  }
+
+  /**
    * Asserts that each scan returns exactly the rows that its predicate accepts. The table has a
    * nullable k2, and k1 has the type {@code k1Type}. The grid has k1 and k2 in
    * {@link #PREFIX_VALUES}, {'0'} or {'a', 'b'}, and k3 in {'y', 'z', '1'}. The value '0' sorts
@@ -553,8 +621,15 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
               }
             }
             StatementContext context = compile(conn, tableName, (String) c[0]);
-            for (Row row : returnedRows(context, rows)) {
-              returned.add(row.toString());
+            try {
+              for (Row row : returnedRows(context, rows)) {
+                returned.add(row.toString());
+              }
+            } catch (IllegalStateException e) {
+              // The skip-scan filter rejects a seek hint that goes back.
+              failures.add("[" + pk + options + "] " + c[0] + " throws " + e.getMessage()
+                + " ranges " + context.getScanRanges());
+              continue;
             }
             if (!expected.equals(returned)) {
               failures.add("[" + pk + options + "] " + c[0] + " expected " + expected + " returned "
@@ -644,6 +719,50 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       }
     }
     assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * IS NULL can follow a key with an unbound range, and points can follow a gap on a nullable key.
+   * The scan must keep the null rows, and it must not fail. A gap after an IN list keeps the skip
+   * scan, because V1 also uses a skip scan there.
+   */
+  @Test
+  public void testNullAfterUnboundRangeOrNullableGapKeepsRows() throws Exception {
+    // V1 admits null into k3 >= '1' on a DESC k3 after the gap, so only V2 runs that case.
+    String[] threeKeyCases = isV2Optimizer()
+      ? new String[] { "k1 > '0' AND k2 >= '1' AND k3 IS NULL", "k1 IN ('0', '1') AND k3 IS NULL",
+        "k1 IN ('0', '1') AND k3 >= '1'" }
+      : new String[] { "k1 > '0' AND k2 >= '1' AND k3 IS NULL", "k1 IN ('0', '1') AND k3 IS NULL" };
+    Object[][] shapes = { { "k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, k3 VARCHAR", threeKeyCases },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR NOT NULL",
+        new String[] { "k1 > '0' AND k2 = '1' AND (k3 IS NULL OR k3 > '1') AND k4 = '1'",
+          "k1 > '0' AND k2 = '1' AND k3 IS NULL AND k4 = '1'",
+          "k1 > '0' AND k2 IS NULL AND (k3 = '0' OR k3 > '1') AND k4 = '1'",
+          "k1 = '1' AND k3 = '1' AND k4 IN ('1', '10')",
+          "k1 = '1' AND (k3 = '0' OR k3 > '1') AND k4 = '1'" } },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR",
+        new String[] { "k1 > '0' AND k3 >= '1' AND k4 IS NULL",
+          "k1 = '1' AND k3 = '1' AND k4 IN ('1', '10')" } }, };
+    List<String> failures = new ArrayList<>();
+    for (Object[] shape : shapes) {
+      failures.addAll(scansThatMissOracle((String) shape[0], Arrays.asList(null, "0", "1", "10"),
+        (String[]) shape[1]));
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+    if (isV2Optimizer()) {
+      try (Connection conn = DriverManager.getConnection(getUrl())) {
+        String tableName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL,"
+            + " k3 VARCHAR, v VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2 DESC, k3 DESC))");
+        for (String where : new String[] { "k1 IN ('0', '1') AND k3 IS NULL",
+          "k1 IN ('0', '1') AND k3 >= '1'" }) {
+          StatementContext context = compile(conn, tableName, where);
+          assertTrue(where + " " + context.getScanRanges(),
+            context.getScanRanges().useSkipScanFilter());
+        }
+      }
+    }
   }
 
   /**
@@ -976,6 +1095,43 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
   }
 
   /**
+   * All key columns are NOT NULL, so the row key schema merges them into one field. The merged
+   * field does not keep the nullability, but the PK columns keep it. The DESC range before the last
+   * slot must then give a range scan that keeps the rows of each region.
+   */
+  @Test
+  public void testDescRangeOnMergedNotNullKeysKeepsRows() throws Exception {
+    for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+      assertScanReturnsExactly("k1 DESC, k2 DESC, k3 DESC", options,
+        "k1 = '10' OR (k1 > '11' AND k3 = 'y' AND k2 <= '11')", true, (a, b, c) -> a.equals("10")
+          || (a.compareTo("11") > 0 && c.equals("y") && b.compareTo("11") <= 0));
+    }
+  }
+
+  /**
+   * The later key columns are nullable, so V2 drops their slots before a trailing null run. The
+   * DESC range on k1 is then in the last slot. The skip-scan filter can still lose rows for this
+   * range, so the scan must keep the rows of each region.
+   */
+  @Test
+  public void testDescRangeBeforeTrailingNullKeysKeepsRows() throws Exception {
+    String three = "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR";
+    String four = three + ", k4 VARCHAR";
+    String[][] tables = { { three, "k1 DESC, k2 DESC, k3 DESC" }, { three, "k1 DESC, k2, k3" },
+      { four, "k1 DESC, k2 DESC, k3 DESC, k4 DESC" }, { four, "k1 DESC, k2, k3, k4" } };
+    for (String[] table : tables) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        assertScanReturnsExactly(table[0], table[1], options,
+          "k1 = '10' OR (k1 > '11' AND k3 = 'y' AND k2 <= '11')", true, (a, b, c) -> a.equals("10")
+            || (a.compareTo("11") > 0 && c.equals("y") && b.compareTo("11") <= 0));
+        assertScanReturnsExactly(table[0], table[1], options,
+          "k1 = '10' OR (k1 > '11' AND k2 <= '11')", true,
+          (a, b, c) -> a.equals("10") || (a.compareTo("11") > 0 && b.compareTo("11") <= 0));
+      }
+    }
+  }
+
+  /**
    * A leading OR of points is ANDed with an OR on later key columns. The scan must keep only the
    * rows of the points. On a DESC key, a range over the points also holds rows of longer values. An
    * OR of a point branch and a range branch on k1 must also keep the rows of both branches.
@@ -1047,8 +1203,7 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
           && c.compareTo("b") > 0,
         all },
       { "k1 > '1' AND k2 IS NULL",
-        (RowPredicate) (a, b, c) -> a != null && a.compareTo("1") > 0 && b == null,
-        (BiPredicate<String, String>) (nullable, pk) -> !pk.startsWith("k1 DESC") },
+        (RowPredicate) (a, b, c) -> a != null && a.compareTo("1") > 0 && b == null, all },
       { "((k1 > '0' AND k2 IS NULL) OR (k1 IS NULL AND k2 = 'b'))",
         (RowPredicate) (a, b, c) -> (a != null && a.compareTo("0") > 0 && b == null)
           || (a == null && "b".equals(b)),
@@ -1182,8 +1337,10 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
           "(k1 > '1' OR k1 < '10') AND (k2 > '1' OR k2 < '10')",
           "(k1 = 'a' AND k2 > '1') OR k1 = 'a'", "k1 = 'a' OR (k1 = 'a' AND k2 = '1')" } },
       { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR",
-        Arrays.asList(null, "1", "10", "a"), new String[] { "k1 = 'a' AND (k4 > '1' OR k4 < '10')",
-          "k1 = 'a' AND k2 > '1' AND (k3 > '1' OR k3 < '10')" } }, };
+        Arrays.asList(null, "1", "10", "a"),
+        new String[] { "k1 = 'a' AND (k4 > '1' OR k4 < '10')",
+          "k1 = 'a' AND k2 > '1' AND (k3 > '1' OR k3 < '10')",
+          "k1 > '1' AND (k2 > '1' OR k2 < 'a') AND k3 = 'a' AND k4 = '1'" } }, };
     List<String> failures = new ArrayList<>();
     for (Object[] shape : shapes) {
       @SuppressWarnings("unchecked")
@@ -1326,6 +1483,41 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
   }
 
   /**
+   * A range with an upper raw bound on a DESC VARCHAR key is followed by a constrained key. On a
+   * DESC key, '10' (\xCE\xCF) sorts before '1' (\xCE). The scan must keep the rows of the longer
+   * values. A case with the flag true is also wrong in V1. Such a case runs only under V2.
+   */
+  @Test
+  public void testDescRangeBeforeConstrainedKeyKeepsRows() throws Exception {
+    Object[][] cases = {
+      { "k1 = '1' AND k2 > '1' AND k3 = 'y'", false,
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("1") > 0 && c.equals("y") },
+      { "k1 = '1' AND k2 > '1' AND k3 = 'z'", false,
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("1") > 0 && c.equals("z") },
+      { "k1 = '1' AND k2 >= '23' AND k3 = 'y'", false,
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("23") >= 0 && c.equals("y") },
+      { "k1 > '1' AND k2 = 'a'", false,
+        (RowPredicate) (a, b, c) -> a.compareTo("1") > 0 && b.equals("a") },
+      { "(k1 = '1' OR k1 = '2') AND k2 > '1' AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> (a.equals("1") || a.equals("2")) && b.compareTo("1") > 0
+          && c.equals("y") },
+      { "k1 = '1' AND k2 BETWEEN '10' AND '2' AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.equals("1") && b.compareTo("10") >= 0 && b.compareTo("2") <= 0
+          && c.equals("y") }, };
+    for (String pk : new String[] { "k1, k2 DESC, k3", "k1 DESC, k2 DESC, k3",
+      "k1, k2 DESC, k3 DESC", "k1 DESC, k2 DESC, k3 DESC" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        for (Object[] c : cases) {
+          if ((Boolean) c[1] && !isV2Optimizer()) {
+            continue;
+          }
+          assertScanReturnsExactly(pk, options, (String) c[0], false, (RowPredicate) c[2]);
+        }
+      }
+    }
+  }
+
+  /**
    * An exclusive range on a DESC k2 after a point on a DESC k1 must keep its rows. The compound
    * bound of k1 and k2 must not lose the k2 values that start with the lower value, such as '10'.
    */
@@ -1440,6 +1632,221 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
               }
             }
           }
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * A range on a fixed-width slot before the last slot must keep its rows when it reaches the key
+   * value with all bytes 0xFF. The skip-scan filter cannot step past that value. The filter must
+   * also not skip the lower ranges of a later slot. Some shapes cannot have this problem, and V2
+   * keeps a skip scan for them.
+   */
+  @Test
+  public void testAllOnesKeyBeforeKeyKeepsRows() throws Exception {
+    String max = String.valueOf(Integer.MAX_VALUE);
+    Object[][] cases = {
+      { "INTEGER", "k1, k2, k3", "k1 >= 0 AND k2 = 2", false,
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) >= 0 && b.equals("2") },
+      { "INTEGER", "k1 DESC, k2, k3", "k1 <= 0 AND k2 = 2", false,
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) <= 0 && b.equals("2") },
+      { "UNSIGNED_INT", "k1 DESC, k2, k3", "k1 <= 10 AND k2 = 2", false,
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) <= 10 && b.equals("2") },
+      { "INTEGER", "k1, k2, k3",
+        "((k1 = 2 AND k2 = 1) OR (k1 = " + max + " AND k2 > 5)) AND k3 BETWEEN 'w' AND 'x'", false,
+        (RowPredicate) (a, b,
+          c) -> ((a.equals("2") && b.equals("1")) || (a.equals(max) && Long.parseLong(b) > 5))
+            && c.equals("w") },
+      { "BIGINT", "k1, k2, k3 DESC", "k1 < 3 AND (k2 = 2 OR k2 > 2) AND k3 = 'y'", false,
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) < 3 && Long.parseLong(b) >= 2
+          && c.equals("y") },
+      { "INTEGER", "k1, k2, k3", "k1 = 1 AND (k2 = 1 OR k2 > 2) AND k3 = 'y'", true,
+        (RowPredicate) (a, b, c) -> a.equals("1") && (b.equals("1") || Long.parseLong(b) > 2)
+          && c.equals("y") },
+      { "INTEGER", "k1, k2, k3", "k1 BETWEEN 0 AND " + max + " AND k2 = 2", false,
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) >= 0 && b.equals("2") },
+      { "UNSIGNED_INT", "k1 DESC, k2, k3", "k1 >= 0 AND k2 = 2", false,
+        (RowPredicate) (a, b, c) -> b.equals("2") }, };
+    List<String> failures = new ArrayList<>();
+    for (Object[] c : cases) {
+      String type = (String) c[0];
+      String pk = (String) c[1];
+      String where = (String) c[2];
+      RowPredicate matches = (RowPredicate) c[4];
+      // The extreme values have key bytes that are all 0x00 or all 0xFF.
+      String min = type.equals("BIGINT") ? String.valueOf(Long.MIN_VALUE)
+        : type.equals("INTEGER") ? String.valueOf(Integer.MIN_VALUE)
+        : "0";
+      String top = type.equals("BIGINT") ? String.valueOf(Long.MAX_VALUE) : max;
+      List<String> values = new ArrayList<>(Arrays.asList(min, "1", "2", "3", "6", top));
+      if (!type.equals("UNSIGNED_INT")) {
+        values.add("-1");
+        values.add("0");
+      }
+      try (Connection conn = DriverManager.getConnection(getUrl())) {
+        String tableName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE TABLE " + tableName + " (k1 " + type + " NOT NULL, k2 " + type
+            + " NOT NULL, k3 VARCHAR, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))");
+        List<Row> rows = new ArrayList<>();
+        PreparedStatement upsert = conn
+          .prepareStatement("UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+        for (String k1 : values) {
+          for (String k2 : values) {
+            for (String k3 : Arrays.asList("w", "y", "z")) {
+              upsert.setLong(1, Long.parseLong(k1));
+              upsert.setLong(2, Long.parseLong(k2));
+              upsert.setString(3, k3);
+              upsert.execute();
+              Iterator<Pair<byte[], List<Cell>>> it =
+                PhoenixRuntime.getUncommittedDataIterator(conn);
+              rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+              conn.rollback();
+            }
+          }
+        }
+        rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+        Set<String> expected = new TreeSet<>();
+        Set<String> returned = new TreeSet<>();
+        for (Row row : rows) {
+          if (matches.test(row.k1, row.k2, row.k3)) {
+            expected.add(row.toString());
+          }
+        }
+        StatementContext context = compile(conn, tableName, where);
+        try {
+          for (Row row : returnedRows(context, rows)) {
+            returned.add(row.toString());
+          }
+        } catch (Exception e) {
+          returned.add(e.toString());
+        }
+        if (!expected.equals(returned)) {
+          failures.add("[" + type + " " + pk + "] " + where + " expected " + expected + " returned "
+            + returned);
+        }
+        if (
+          (Boolean) c[3] && isV2Optimizer()
+            && findSkipScanFilter(context.getScan().getFilter()) == null
+        ) {
+          failures.add("[" + type + " " + pk + "] " + where + " lost its skip scan");
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * An inclusive bound at the all-0xFF key value must keep its rows, as an unbound range does. The
+   * scan stop row does not stop the skip-scan filter before it fails at that value. The stop row
+   * can be past the first rejected key, or it can be empty.
+   */
+  @Test
+  public void testAllOnesInclusiveBoundBeforeKeyKeepsRows() throws Exception {
+    String intMin = String.valueOf(Integer.MIN_VALUE);
+    String longMin = String.valueOf(Long.MIN_VALUE);
+    Object[][] cases = {
+      { "INTEGER, INTEGER, VARCHAR", "k1, k2, k3", "k1 <= " + Integer.MAX_VALUE + " AND k2 < 6",
+        (RowPredicate) (a, b, c) -> Long.parseLong(b) < 6 },
+      { "INTEGER, INTEGER, VARCHAR", "k1 DESC, k2, k3", "k1 >= " + intMin + " AND k2 < 6",
+        (RowPredicate) (a, b, c) -> Long.parseLong(b) < 6 },
+      { "INTEGER, INTEGER, VARCHAR", "k1 DESC, k2, k3",
+        "(k1 = 2 OR k1 >= " + intMin + ") AND k2 < 6",
+        (RowPredicate) (a, b, c) -> Long.parseLong(b) < 6 },
+      { "BIGINT, BIGINT, VARCHAR", "k1 DESC, k2 DESC, k3 DESC",
+        "k1 >= " + longMin + " AND k2 > " + longMin,
+        (RowPredicate) (a, b, c) -> !b.equals(longMin) },
+      { "UNSIGNED_LONG, UNSIGNED_LONG, UNSIGNED_LONG", "k1 DESC, k2 DESC, k3 DESC",
+        "(k1 BETWEEN 0 AND 2 OR k1 >= 0) AND k2 = 0 AND k3 > 6",
+        (RowPredicate) (a, b, c) -> b.equals("0") && Long.parseLong(c) > 6 },
+      { "UNSIGNED_LONG, UNSIGNED_LONG, VARCHAR", "k1 DESC, k2, k3", "k1 < 11 AND k2 = 1",
+        (RowPredicate) (a, b, c) -> Long.parseLong(a) < 11 && b.equals("1") },
+      { "TINYINT, TINYINT, VARCHAR", "k1, k2 DESC, k3", "k1 <= 127 AND k2 > 2 AND k3 < 'y'",
+        (RowPredicate) (a, b, c) -> Long.parseLong(b) > 2 && c.compareTo("y") < 0 },
+      { "SMALLINT, SMALLINT, INTEGER", "k1, k2, k3 DESC",
+        "(k1 BETWEEN -32768 AND 32767 OR k1 <= 4) AND k2 = 2 AND k3 > " + intMin,
+        (RowPredicate) (a, b, c) -> b.equals("2") && !c.equals(intMin) },
+      { "INTEGER, INTEGER, INTEGER", "k1 DESC, k2 DESC, k3",
+        "((k1 IN (0, 6, 2) AND k2 > 0) OR (k1 BETWEEN " + intMin + " AND 1 AND k2 > -1)) AND k3 >= "
+          + intMin,
+        (RowPredicate) (a, b, c) -> {
+          long k1 = Long.parseLong(a);
+          long k2 = Long.parseLong(b);
+          return ((k1 == 0 || k1 == 6 || k1 == 2) && k2 > 0) || (k1 <= 1 && k2 > -1);
+        } },
+      // With 256 buckets, the salt byte can also be 0xFF.
+      { "UNSIGNED_INT, UNSIGNED_INT, UNSIGNED_INT", "k1 DESC, k2 DESC, k3", "k1 >= 0 AND k2 > 2",
+        (RowPredicate) (a, b, c) -> Long.parseLong(b) > 2, " SALT_BUCKETS=256" }, };
+    List<String> failures = new ArrayList<>();
+    for (Object[] c : cases) {
+      String[] types = ((String) c[0]).split(", ");
+      String pk = (String) c[1];
+      String where = (String) c[2];
+      RowPredicate matches = (RowPredicate) c[3];
+      // The extreme values have key bytes that are all 0x00 or all 0xFF.
+      List<List<String>> values = new ArrayList<>();
+      for (String type : types) {
+        values.add(type.equals("VARCHAR") ? Arrays.asList("w", "y", "z")
+          : type.equals("UNSIGNED_LONG")
+            ? Arrays.asList("0", "1", "2", "6", "7", "10", "11", String.valueOf(Long.MAX_VALUE))
+          : type.equals("TINYINT") ? Arrays.asList("-128", "-1", "0", "2", "3", "6", "127")
+          : type.equals("SMALLINT") ? Arrays.asList("-32768", "-1", "0", "2", "3", "6", "32767")
+          : type.equals("BIGINT")
+            ? Arrays.asList(longMin, "-1", "0", "2", "6", String.valueOf(Long.MAX_VALUE))
+          : type.equals("UNSIGNED_INT")
+            ? Arrays.asList("0", "1", "2", "3", "6", String.valueOf(Integer.MAX_VALUE))
+          : Arrays.asList(intMin, "-1", "0", "1", "2", "3", "6",
+            String.valueOf(Integer.MAX_VALUE)));
+      }
+      try (Connection conn = DriverManager.getConnection(getUrl())) {
+        String tableName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE TABLE " + tableName + " (k1 " + types[0] + " NOT NULL, k2 " + types[1]
+            + " NOT NULL, k3 " + types[2] + " NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk
+            + "))" + (c.length > 4 ? c[4] : ""));
+        List<Row> rows = new ArrayList<>();
+        PreparedStatement upsert = conn
+          .prepareStatement("UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+        for (String k1 : values.get(0)) {
+          for (String k2 : values.get(1)) {
+            for (String k3 : values.get(2)) {
+              String[] row = { k1, k2, k3 };
+              for (int i = 0; i < 3; i++) {
+                if (types[i].equals("VARCHAR")) {
+                  upsert.setString(i + 1, row[i]);
+                } else {
+                  upsert.setLong(i + 1, Long.parseLong(row[i]));
+                }
+              }
+              upsert.execute();
+              Iterator<Pair<byte[], List<Cell>>> it =
+                PhoenixRuntime.getUncommittedDataIterator(conn);
+              rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+              conn.rollback();
+            }
+          }
+        }
+        rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+        Set<String> expected = new TreeSet<>();
+        Set<String> returned = new TreeSet<>();
+        for (Row row : rows) {
+          if (matches.test(row.k1, row.k2, row.k3)) {
+            expected.add(row.toString());
+          }
+        }
+        StatementContext context = compile(conn, tableName, where);
+        try {
+          for (Row row : returnedRows(context, rows)) {
+            returned.add(row.toString());
+          }
+        } catch (Exception e) {
+          returned.add(e.toString());
+        }
+        if (!expected.equals(returned)) {
+          failures.add("[" + c[0] + " | " + pk + "] " + where + " expected " + expected
+            + " returned " + returned + " ranges " + context.getScanRanges());
         }
       }
     }
@@ -1980,7 +2387,7 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
 
   /** The rows HBase would return for the compiled scan, before any residual filter. */
   private static List<Row> admittedRows(Connection conn, String tableName, String where,
-    List<Row> rows) throws SQLException {
+    List<Row> rows) throws Exception {
     PhoenixPreparedStatement stmt = new PhoenixPreparedStatement(
       conn.unwrap(PhoenixConnection.class), "SELECT * FROM " + tableName + " WHERE " + where);
     StatementContext context = stmt.compileQuery().getContext();
@@ -1989,8 +2396,8 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       return admitted;
     }
     Scan scan = context.getScan();
-    admitted =
-      scanRows(scan.getStartRow(), scan.getStopRow(), findSkipScanFilter(scan.getFilter()), rows);
+    admitted = scanRows(scan.getStartRow(), scan.getStopRow(),
+      serverCopy(findSkipScanFilter(scan.getFilter())), rows);
     assertTrue("scan for '" + where + "' admits no rows; grid or predicate is wrong",
       !admitted.isEmpty());
     return admitted;
@@ -2039,11 +2446,20 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
    */
   private static StatementContext assertScanReturnsExactly(String pk, String options, String where,
     boolean checkRegions, RowPredicate matches) throws Exception {
+    return assertScanReturnsExactly("k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, k3 VARCHAR NOT NULL",
+      pk, options, where, checkRegions, matches);
+  }
+
+  /**
+   * As {@link #assertScanReturnsExactly(String, String, String, boolean, RowPredicate)}, with the
+   * key columns in {@code columns}. A key column after k3 stays null in each row.
+   */
+  private static StatementContext assertScanReturnsExactly(String columns, String pk,
+    String options, String where, boolean checkRegions, RowPredicate matches) throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String tableName = generateUniqueName();
-      conn.createStatement()
-        .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL,"
-          + " k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))" + options);
+      conn.createStatement().execute("CREATE TABLE " + tableName + " (" + columns
+        + ", v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))" + options);
       List<String> grid = new ArrayList<>(PREFIX_VALUES);
       grid.addAll(AB);
       List<Row> rows = new ArrayList<>();
@@ -2132,7 +2548,7 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
         }
       }
     } else {
-      admitted = scanRows(scan.getStartRow(), scan.getStopRow(), skipScan, rows);
+      admitted = scanRows(scan.getStartRow(), scan.getStopRow(), serverCopy(skipScan), rows);
     }
     List<Row> returned = new ArrayList<>();
     for (Row row : admitted) {
@@ -2141,6 +2557,16 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       }
     }
     return returned;
+  }
+
+  /**
+   * The filter that an unsalted scan uses. The region server gets the filter in serialized form. V1
+   * loses rows on that path for some DESC ranges, so only V2 gets the serialized copy here.
+   */
+  private static SkipScanFilter serverCopy(SkipScanFilter skipScan) throws Exception {
+    return skipScan == null || !isV2Optimizer()
+      ? skipScan
+      : SkipScanFilter.parseFrom(skipScan.toByteArray());
   }
 
   /** The scan boundary moved into {@code bucket}, or the bucket edge when it is unbound. */

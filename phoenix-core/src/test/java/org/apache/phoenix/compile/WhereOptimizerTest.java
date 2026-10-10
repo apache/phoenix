@@ -3702,10 +3702,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         + " t where ((t.pk1 >=2 and t.pk1<5) or (t.pk1 >=7 or t.pk1 <9)) and ((t.pk2 >= 4 and t.pk2 <6) or (t.pk2 >= 8 and t.pk2 <9))";
       queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
       scan = queryPlan.getContext().getScan();
-      // V2 recognizes the outer pk1 OR as a tautology and emits a 2-slot SkipScanFilter
-      // with EVERYTHING on pk1 and the pk2 ranges on slot 1. Scan width: full table, with
-      // the skip-scan filter evaluated per row.
-      assertTrue(scan.getFilter() instanceof SkipScanFilter);
+      // V1 emits a 2-slot SkipScanFilter with EVERYTHING on pk1 and the pk2 ranges on slot 1.
+      // Scan width: full table, with the skip-scan filter evaluated per row. V2 uses a range
+      // scan with a RowKeyComparisonFilter instead. The open pk1 range reaches pk1 = 2147483647,
+      // which has the key bytes \xFF\xFF\xFF\xFF. The skip-scan filter cannot step past that
+      // value, so it fails on a row with pk1 = 2147483647 and pk2 = 10.
+      assertTrue(isV2Optimizer()
+        ? scan.getFilter() instanceof RowKeyComparisonFilter
+        : scan.getFilter() instanceof SkipScanFilter);
       assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
       assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);
     } finally {

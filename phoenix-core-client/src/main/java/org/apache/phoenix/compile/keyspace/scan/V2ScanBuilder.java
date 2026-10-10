@@ -22,6 +22,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.keyspace.KeyRangeExtractor;
 import org.apache.phoenix.compile.keyspace.KeySpace;
@@ -32,8 +34,12 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 
@@ -264,10 +270,28 @@ public final class V2ScanBuilder {
     // A slot that loses its null rows ends the key slots. The residual filter then applies the
     // full predicate.
     int nullSlot = firstSlotThatSkipsNull(cnf, in.prefixSlots);
+    nullSlot = earlierSlot(nullSlot, firstSlotAfterNullableDescGap(in, cnf, slotSpan));
     if (nullSlot >= 0) {
       cnf = new ArrayList<>(cnf.subList(0, nullSlot));
       slotSpan = Arrays.copyOf(slotSpan, nullSlot);
       useSkipScan &= nullSlot > in.prefixSlots;
+      approximated = true;
+    }
+    // The region server gets the skip-scan filter in serialized form. KeyRange serialization
+    // drops the inverted flag. A DESC range whose raw bounds cross then reads as empty there, and
+    // the scan loses its rows. For such a slot, use a range scan and keep the residual filter.
+    // A DESC range before the last slot also loses rows in the filter, so it gets the same scan.
+    // A range that reaches the all-0xFF key before the last slot also loses rows in the filter.
+    // A null check after an unbound range also loses rows in the filter.
+    if (
+      useSkipScan && (hasCrossedRawBounds(extract.ranges)
+        || hasDescUpperBoundBeforeLastSlot(in.schema, cnf, slotSpan)
+        || (extract.droppedTrailingNullSlots
+          && hasDescUpperBound(in.schema, cnf, slotSpan, cnf.size()))
+        || hasAllOnesRangeBeforeLastSlot(in, cnf, slotSpan)
+        || hasNullCheckAfterUnboundRange(in, cnf, slotSpan))
+    ) {
+      useSkipScan = false;
       approximated = true;
     }
     // An empty bound after a range slot does not separate null rows in the filter.
@@ -298,6 +322,336 @@ public final class V2ScanBuilder {
       }
     }
     return -1;
+  }
+
+  /** Returns the lower of two slot indexes, where -1 means no slot. */
+  private static int earlierSlot(int a, int b) {
+    return a < 0 || (b >= 0 && b < a) ? b : a;
+  }
+
+  /**
+   * True when the skip-scan filter can lose rows of a null check or a nullable range. After a slot
+   * with an unbound range or a gap, the filter can step back over the key fields. It finds the end
+   * of a field by its separator byte. A null DESC field and a DESC field next to a null field break
+   * this search, so the filter can seek back, fail, or skip rows. A trailing IS_NULL on a DESC
+   * column keeps its separator bytes in a seek hint after an inclusive lower bound. The hint then
+   * sorts after the row at that bound. After an unbound DESC fixed-width column, a null check can
+   * cause a seek back. A range with no lower bound on a nullable column admits null rows. The
+   * filter can step back over these null fields after an unbound range that is not a gap. This step
+   * fails when an earlier slot has a null check or an unbound DESC fixed-width column.
+   */
+  private static boolean hasNullCheckAfterUnboundRange(Inputs in, List<List<KeyRange>> cnf,
+    int[] slotSpan) {
+    // The row key schema merges equal adjacent fields and can lose their nullability. The PK
+    // columns of the table keep it.
+    List<PColumn> pkColumns = in.table.getPKColumns();
+    boolean afterUnbound = false;
+    boolean afterOpenRange = false;
+    boolean afterNullCheck = false;
+    boolean afterDescFixedUnbound = false;
+    int field = -1;
+    for (int i = 0; i < cnf.size(); i++) {
+      field += slotSpan[i] + 1;
+      if (i < in.prefixSlots) {
+        continue;
+      }
+      List<KeyRange> slot = cnf.get(i);
+      int first = field - slotSpan[i];
+      boolean nullable = first >= pkColumns.size() || pkColumns.get(first).isNullable();
+      if (
+        slot.contains(KeyRange.IS_NULL_RANGE) && (afterDescFixedUnbound
+          || (afterUnbound && isNullSeparatorHazard(in.schema, cnf, i, first)))
+      ) {
+        return true;
+      }
+      boolean unbound = false;
+      boolean openRange = false;
+      for (KeyRange r : slot) {
+        if (
+          afterOpenRange && (afterNullCheck || afterDescFixedUnbound) && nullable
+            && r.lowerUnbound() && r != KeyRange.EVERYTHING_RANGE
+        ) {
+          return true;
+        }
+        unbound |= r.isUnbound();
+        openRange |= r.isUnbound() && r != KeyRange.EVERYTHING_RANGE;
+      }
+      afterUnbound |= unbound;
+      afterOpenRange |= openRange;
+      afterNullCheck |= slot.contains(KeyRange.IS_NULL_RANGE);
+      afterDescFixedUnbound |= unbound && in.schema.getField(field).getSortOrder() == SortOrder.DESC
+        && in.schema.getField(field).getDataType().isFixedWidth();
+    }
+    return false;
+  }
+
+  /**
+   * True when the IS_NULL in slot {@code i} breaks the separator search of the skip-scan filter.
+   * The search fails on the DESC variable-length field before the null field when a later slot
+   * restricts the key. It also fails on a null DESC variable-length field when the filter steps
+   * back over it. This occurs when the next slot holds a single key and a later slot restricts the
+   * key. As the last slot, a null DESC variable-length field breaks the seek hint after an
+   * inclusive lower bound in the slot before it.
+   */
+  private static boolean isNullSeparatorHazard(RowKeySchema schema, List<List<KeyRange>> cnf, int i,
+    int field) {
+    boolean descVarLength = isDescVarLength(schema, field);
+    if (i == cnf.size() - 1) {
+      if (!descVarLength) {
+        return false;
+      }
+      for (KeyRange r : cnf.get(i - 1)) {
+        if (!r.lowerUnbound() && r.isLowerInclusive()) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (isDescVarLength(schema, field - 1) && !isGap(cnf.get(i + 1))) {
+      return true;
+    }
+    if (!descVarLength || !hasSingleKey(cnf.get(i + 1))) {
+      return false;
+    }
+    for (int j = i + 2; j < cnf.size(); j++) {
+      if (!isGap(cnf.get(j))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** True when the row key field is DESC and has a variable length. */
+  private static boolean isDescVarLength(RowKeySchema schema, int field) {
+    return schema.getField(field).getSortOrder() == SortOrder.DESC
+      && !schema.getField(field).getDataType().isFixedWidth();
+  }
+
+  /** True when the slot does not restrict its key column. */
+  private static boolean isGap(List<KeyRange> slot) {
+    return slot.size() == 1 && slot.get(0) == KeyRange.EVERYTHING_RANGE;
+  }
+
+  /** True when the slot holds a single key, which includes IS_NULL. */
+  private static boolean hasSingleKey(List<KeyRange> slot) {
+    for (KeyRange r : slot) {
+      if (r.isSingleKey()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns the slot count to keep after a gap on a nullable DESC variable-length column, or -1.
+   * The rule applies when a slot with a single key follows the gap and another slot follows it.
+   * When the last of these slots rejects a row, the skip-scan filter steps back over the gap value.
+   * It finds the end of a field by its separator byte. A null DESC value has a different separator
+   * byte, so the filter can seek back or skip rows. The filter keeps the gap and the next slot,
+   * because it then does not step back over the gap value.
+   */
+  private static int firstSlotAfterNullableDescGap(Inputs in, List<List<KeyRange>> cnf,
+    int[] slotSpan) {
+    // The row key schema merges equal adjacent fields and can lose their nullability. The PK
+    // columns of the table keep it.
+    List<PColumn> pkColumns = in.table.getPKColumns();
+    int field = -1;
+    for (int i = 0; i < cnf.size() - 2; i++) {
+      field += slotSpan[i] + 1;
+      int first = field - slotSpan[i];
+      if (
+        i >= in.prefixSlots && isGap(cnf.get(i)) && isDescVarLength(in.schema, field)
+          && (first >= pkColumns.size() || pkColumns.get(first).isNullable())
+          && hasSingleKey(cnf.get(i + 1))
+      ) {
+        return i + 2;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * True when a range in {@code slots} has raw bounds that read as empty without the inverted flag.
+   * The raw lower bound is above the raw upper bound, or they are equal with an exclusive end. Only
+   * an inverted range on a DESC variable-length column is valid in that form.
+   */
+  private static boolean hasCrossedRawBounds(List<List<KeyRange>> slots) {
+    for (List<KeyRange> slot : slots) {
+      for (KeyRange r : slot) {
+        byte[] lower = r.getLowerRange();
+        byte[] upper = r.getUpperRange();
+        if (lower.length == 0 || upper.length == 0) {
+          continue;
+        }
+        int cmp = Bytes.compareTo(lower, upper);
+        if (cmp > 0 || (cmp == 0 && !(r.isLowerInclusive() && r.isUpperInclusive()))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when a slot before the last slot ends on a DESC variable-length column and has a range
+   * with a raw upper bound. When a later slot rejects a row, the skip-scan filter increments the
+   * bytes of this column. On a DESC column, the incremented value can be above the upper bound. The
+   * longer values that start with it can still be in the range. The filter then skips their rows.
+   * For example, k2 > '1' has the raw upper bound \xCE. After '2' (\xCD), the filter tries \xCE and
+   * stops, so it skips '10' (\xCE\xCF). A range scan with the residual filter keeps these rows.
+   */
+  private static boolean hasDescUpperBoundBeforeLastSlot(RowKeySchema schema,
+    List<List<KeyRange>> cnf, int[] slotSpan) {
+    return hasDescUpperBound(schema, cnf, slotSpan, cnf.size() - 1);
+  }
+
+  /**
+   * True when one of the first {@code end} slots has the DESC upper bound that
+   * {@link #hasDescUpperBoundBeforeLastSlot} describes. The extractor can drop the slots of a
+   * trailing null run. The last slot then had later slots, so the check also applies to it.
+   */
+  private static boolean hasDescUpperBound(RowKeySchema schema, List<List<KeyRange>> cnf,
+    int[] slotSpan, int end) {
+    int field = -1;
+    for (int i = 0; i < end; i++) {
+      field += slotSpan[i] + 1;
+      if (
+        schema.getField(field).getSortOrder() != SortOrder.DESC
+          || schema.getField(field).getDataType().isFixedWidth()
+      ) {
+        continue;
+      }
+      for (KeyRange r : cnf.get(i)) {
+        if (!r.isSingleKey() && !r.upperUnbound()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when a range before the last slot can reach the key value with all bytes 0xFF, and the
+   * skip-scan filter can then lose rows. When the next slot rejects a row, the filter increments
+   * the key bytes up to the end of the range slot. For the all-0xFF value, this carries into an
+   * earlier slot, but the filter keeps its position in the range slot. If that position is not the
+   * first range, the seek hint skips the lower ranges for the new key prefix. A carry into a point
+   * that is not next to another point is safe, because no row with the new prefix matches. A carry
+   * into the salt byte is also safe, because each bucket has its own scan. If all the earlier key
+   * bytes can also be 0xFF, the increment fails and the seek hint does not move forward. An
+   * inclusive bound at the all-0xFF value has the same problem as an unbound range. The scan stop
+   * row does not prevent it. That row can be past the first rejected key, or it can be empty. On
+   * INTEGER keys, the skip scan fails at k1 = 2147483647 (\xFF\xFF\xFF\xFF) for
+   * {@code k1 >= 0 AND k2 = 2} and for {@code k1 <= 2147483647 AND k2 < 6}. V1 uses a range scan
+   * after an unbound range, so it does not have this problem there.
+   */
+  private static boolean hasAllOnesRangeBeforeLastSlot(Inputs in, List<List<KeyRange>> cnf,
+    int[] slotSpan) {
+    boolean[] canBeAllOnes = new boolean[cnf.size()];
+    boolean[] safeCarry = new boolean[cnf.size()];
+    int field = -1;
+    for (int j = 0; j < cnf.size() - 1; j++) {
+      field += slotSpan[j] + 1;
+      List<KeyRange> slot = cnf.get(j);
+      if (in.isSalted && j == 0) {
+        // Only the last of 256 buckets has the salt byte 0xFF.
+        canBeAllOnes[j] = SaltingUtil.MAX_BUCKET_NUM.equals(in.nBuckets);
+        safeCarry[j] = true;
+        continue;
+      }
+      boolean allOnesType = true;
+      boolean fixedWidth = true;
+      for (int f = field - slotSpan[j]; f <= field; f++) {
+        allOnesType &= hasAllOnesValue(in.schema.getField(f));
+        fixedWidth &= in.schema.getField(f).getDataType().isFixedWidth();
+      }
+      boolean allOnesRange = false;
+      for (KeyRange r : slot) {
+        boolean reaches = allOnesType
+          && (r.upperUnbound() || (r.isUpperInclusive() && isAllOnes(r.getUpperRange())));
+        canBeAllOnes[j] |= reaches;
+        allOnesRange |= reaches && !r.isSingleKey();
+      }
+      safeCarry[j] = hasNoAdjacentPoints(slot, fixedWidth);
+      // The filter increments the key at this slot only when the next slot can reject a row
+      // above its last range.
+      boolean nextCanOverflow = true;
+      for (KeyRange r : cnf.get(j + 1)) {
+        nextCanOverflow &= !r.upperUnbound();
+      }
+      if (!allOnesRange || !nextCanOverflow) {
+        continue;
+      }
+      // Find the slot that takes the carry. Stop at a slot that cannot be all 0xFF.
+      int m = j - 1;
+      for (; m >= 0; m--) {
+        if (slot.size() > 1 && !safeCarry[m]) {
+          return true;
+        }
+        if (!canBeAllOnes[m]) {
+          break;
+        }
+      }
+      if (m < 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when the slot holds only points and no point is the next key value of another point. A
+   * fixed-width type is necessary for more than one point, because the increment of a
+   * variable-width key goes into its separator byte.
+   */
+  private static boolean hasNoAdjacentPoints(List<KeyRange> slot, boolean fixedWidth) {
+    if (slot.size() == 1) {
+      return slot.get(0).isSingleKey();
+    }
+    if (!fixedWidth) {
+      return false;
+    }
+    TreeSet<byte[]> points = new TreeSet<>(Bytes.BYTES_COMPARATOR);
+    for (KeyRange r : slot) {
+      if (!r.isSingleKey()) {
+        return false;
+      }
+      points.add(r.getLowerRange());
+    }
+    for (byte[] point : points) {
+      byte[] next = point.clone();
+      if (ByteUtil.nextKey(next, next.length) && points.contains(next)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** True when a value of the fixed-width field has key bytes that are all 0xFF. */
+  private static boolean hasAllOnesValue(Field field) {
+    PDataType type = field.getDataType();
+    if (!type.isFixedWidth()) {
+      return false;
+    }
+    byte[] ones = new byte[field.getByteSize()];
+    Arrays.fill(ones, (byte) -1);
+    try {
+      Object value = type.toObject(ones, 0, ones.length, type, field.getSortOrder(),
+        field.getMaxLength(), field.getScale());
+      return Arrays.equals(ones, type.toBytes(value, field.getSortOrder()));
+    } catch (RuntimeException e) {
+      // The bytes are not a valid value of the type.
+      return false;
+    }
+  }
+
+  private static boolean isAllOnes(byte[] bytes) {
+    for (byte b : bytes) {
+      if (b != -1) {
+        return false;
+      }
+    }
+    return bytes.length > 0;
   }
 
   /**
