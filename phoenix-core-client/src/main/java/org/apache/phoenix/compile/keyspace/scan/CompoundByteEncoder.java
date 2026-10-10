@@ -84,7 +84,17 @@ public final class CompoundByteEncoder {
    * @return lower-row bytes suitable for {@code scan.withStartRow(...)}
    */
   public static byte[] encodeLower(RowKeySchema schema, KeySpace space, int startField) {
-    return encode(schema, space, startField, KeyRange.Bound.LOWER);
+    return encodeLower(schema, null, space, startField);
+  }
+
+  /**
+   * {@link #encodeLower(RowKeySchema, KeySpace, int)} with the nullability of each key column by
+   * row key position. The schema merges equal adjacent fields and loses their nullability. The
+   * {@code pkNullable} array keeps it. A null array means that a merged column can be null.
+   */
+  public static byte[] encodeLower(RowKeySchema schema, boolean[] pkNullable, KeySpace space,
+    int startField) {
+    return encode(schema, pkNullable, space, startField, KeyRange.Bound.LOWER);
   }
 
   /**
@@ -92,7 +102,7 @@ public final class CompoundByteEncoder {
    * {@link KeyRange#UNBOUND} (empty byte array) when the result is unbounded.
    */
   public static byte[] encodeUpper(RowKeySchema schema, KeySpace space, int startField) {
-    return encode(schema, space, startField, KeyRange.Bound.UPPER);
+    return encode(schema, null, space, startField, KeyRange.Bound.UPPER);
   }
 
   /**
@@ -101,12 +111,21 @@ public final class CompoundByteEncoder {
    * list's lower to UNBOUND.
    */
   public static byte[] encodeListLower(RowKeySchema schema, KeySpaceList list, int startField) {
+    return encodeListLower(schema, null, list, startField);
+  }
+
+  /**
+   * {@link #encodeListLower(RowKeySchema, KeySpaceList, int)} with the nullability of each key
+   * column, as in {@link #encodeLower(RowKeySchema, boolean[], KeySpace, int)}.
+   */
+  public static byte[] encodeListLower(RowKeySchema schema, boolean[] pkNullable, KeySpaceList list,
+    int startField) {
     if (list.isUnsatisfiable() || list.isEverything()) {
       return KeyRange.UNBOUND;
     }
     byte[] min = null;
     for (KeySpace s : list.spaces()) {
-      byte[] b = encodeLower(schema, s, startField);
+      byte[] b = encodeLower(schema, pkNullable, s, startField);
       if (b == KeyRange.UNBOUND || b.length == 0) {
         return KeyRange.UNBOUND;
       }
@@ -139,8 +158,31 @@ public final class CompoundByteEncoder {
     return max == null ? KeyRange.UNBOUND : max;
   }
 
-  private static byte[] encode(RowKeySchema schema, KeySpace space, int startField,
-    KeyRange.Bound bound) {
+  /**
+   * True when a row key can end after the column at {@code field}. The row key does not keep
+   * trailing null columns. Thus a row key ends early when all later columns are null. A schema
+   * field for more than one column does not keep the nullability. For such a field,
+   * {@code pkNullable} gives the nullability. Without it, the column can be null.
+   */
+  private static boolean canEndAfter(RowKeySchema schema, boolean[] pkNullable, int field,
+    int nFields) {
+    if (field + 1 >= nFields) {
+      return false;
+    }
+    for (int d = field + 1; d < nFields; d++) {
+      Field f = schema.getField(d);
+      boolean nullable = f.getCount() == 1
+        ? f.isNullable()
+        : pkNullable == null || d >= pkNullable.length || pkNullable[d];
+      if (!nullable) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static byte[] encode(RowKeySchema schema, boolean[] pkNullable, KeySpace space,
+    int startField, KeyRange.Bound bound) {
     final int nFields = schema.getMaxFields();
     if (space.nDims() != nFields) {
       throw new IllegalArgumentException(
@@ -199,7 +241,7 @@ public final class CompoundByteEncoder {
       // - not exclusive upper AND (there are trailing fields to separate OR the bound
       // needs the SEP to be bumped correctly for inclusive/exclusive semantics).
       //
-      // LOWER-bound + inclusive-lower-single-key special case: suppress the SEP. For a
+      // LOWER-bound + inclusive-lower special case: suppress the SEP. For a
       // row with the constrained value and trailing-null PK columns (stored with no
       // trailing bytes), the row-key is just the value bytes — shorter than "value·SEP".
       // Appending SEP would make startRow > such rows and exclude them. A simple value
@@ -207,13 +249,14 @@ public final class CompoundByteEncoder {
       // trailing bytes; a scan startRow of `N000001·\x00` skips it. Leaving the raw
       // value bytes as startRow correctly includes it. V1's setKey appends SEP then
       // tail-strips on LOWER; the encoder achieves the same by not appending in the
-      // first place.
+      // first place. The same applies to the inclusive lower bound of a range, such as
+      // `k2 >= '1'`, when the row key can end after this column.
       // Only suppress on the LAST processed dim. Mid-compound dims still need the SEP
       // as a structural boundary between dim N's bytes and dim N+1's bytes — without it,
       // the scan startRow would confuse multi-dim prefix matching.
       boolean isLastProcessedDim = (d == lastConstrained);
-      boolean lowerSingleKeyInclusive = bound == KeyRange.Bound.LOWER && kr.isSingleKey()
-        && kr.isLowerInclusive() && isLastProcessedDim;
+      boolean lastInclusiveLower = bound == KeyRange.Bound.LOWER && kr.isLowerInclusive()
+        && isLastProcessedDim && (kr.isSingleKey() || canEndAfter(schema, pkNullable, d, nFields));
       if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
         byte sepByte =
           SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
@@ -222,8 +265,8 @@ public final class CompoundByteEncoder {
           !exclusiveUpper && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
         // DESC separators must always be appended — DESC-var-width terminator is load-
         // bearing at scan time. Suppress only ASC SEPs on the last-processed-dim when
-        // the bound is inclusive-lower + single-key.
-        boolean suppress = !forceDesc && lowerSingleKeyInclusive;
+        // the bound is inclusive-lower.
+        boolean suppress = !forceDesc && lastInclusiveLower;
         boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics) && !suppress;
         if (shouldAppend) {
           buf[offset++] = sepByte;
@@ -237,7 +280,7 @@ public final class CompoundByteEncoder {
         boolean forceDesc = sepBytes == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES;
         boolean appendForBoundSemantics =
           !exclusiveUpper && ((d + 1) < nFields || inclusiveUpper || exclusiveLower);
-        boolean suppress = !forceDesc && lowerSingleKeyInclusive;
+        boolean suppress = !forceDesc && lastInclusiveLower;
         boolean shouldAppend = !isFixedWidth && (forceDesc || appendForBoundSemantics) && !suppress;
         if (shouldAppend) {
           buf[offset++] = sepBytes[0];

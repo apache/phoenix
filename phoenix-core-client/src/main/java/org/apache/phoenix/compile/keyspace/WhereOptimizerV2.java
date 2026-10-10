@@ -153,7 +153,7 @@ public final class WhereOptimizerV2 {
           .isInScope(keySpaceList, schema, prefixSlots, isSalted)
     ) {
       org.apache.phoenix.compile.keyspace.scan.CompoundByteEncoderEmitter.overrideScanRows(
-        context.getScan(), keySpaceList, schema, prefixSlots,
+        context.getScan(), keySpaceList, schema, inputs.pkNullable, prefixSlots,
         buildPrefixBytes(isSalted, isSharedIndex, isMultiTenant, table, tenantIdBytes));
     }
 

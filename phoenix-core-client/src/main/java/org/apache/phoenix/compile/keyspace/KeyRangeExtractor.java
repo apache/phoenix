@@ -135,6 +135,17 @@ public final class KeyRangeExtractor {
    */
   public static Result extract(KeySpaceList list, int nPkColumns, int cartesianBound,
     int prefixSlots, RowKeySchema schema) {
+    return extract(list, nPkColumns, cartesianBound, prefixSlots, schema, null);
+  }
+
+  /**
+   * {@link #extract(KeySpaceList, int, int, int, RowKeySchema)} with the nullability of each key
+   * column by row key position. The schema merges equal adjacent fields and loses their
+   * nullability. The {@code pkNullable} array keeps it. A null array means that a merged column can
+   * be null.
+   */
+  public static Result extract(KeySpaceList list, int nPkColumns, int cartesianBound,
+    int prefixSlots, RowKeySchema schema, boolean[] pkNullable) {
     if (schema == null) {
       return emitV1ProjectionStopAtGap(list, nPkColumns, cartesianBound, prefixSlots);
     }
@@ -176,7 +187,7 @@ public final class KeyRangeExtractor {
     // The per-slot SkipScanFilter handles narrowing past the gap and ScanRanges reports
     // boundPkColumnCount correctly for the local-index-pruning heuristic.
     if (minProductiveStart > prefixSlots || allSpacesHaveMiddleGap) {
-      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema, pkNullable);
     }
 
     // Single-space, single-productive-dim: trivial case with no compound benefit.
@@ -185,7 +196,7 @@ public final class KeyRangeExtractor {
     // producing wider-than-correct scan. Per-slot emission lets ScanRanges process the
     // range once with the real schema, matching V1's byte output exactly.
     if (list.spaces().size() == 1 && (maxProductiveEnd - prefixSlots) == 1) {
-      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema, pkNullable);
     }
 
     // If any space has IS_NULL_RANGE / IS_NOT_NULL_RANGE at ANY productive dim, route
@@ -199,7 +210,8 @@ public final class KeyRangeExtractor {
       for (int d = prefixSlots; d < ks.nDims(); d++) {
         KeyRange dim = ks.get(d);
         if (dim == KeyRange.IS_NULL_RANGE || dim == KeyRange.IS_NOT_NULL_RANGE) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+            pkNullable);
         }
       }
     }
@@ -220,7 +232,8 @@ public final class KeyRangeExtractor {
       for (int d = prefixSlots + 1; d < maxProductiveEnd; d++) {
         org.apache.phoenix.schema.ValueSchema.Field f = schema.getField(d);
         if (org.apache.phoenix.util.ScanUtil.getComparator(f) != leadingCmp) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+            pkNullable);
         }
       }
     }
@@ -274,7 +287,8 @@ public final class KeyRangeExtractor {
           }
         }
         if (laterRangeExists) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+            pkNullable);
         }
       }
     }
@@ -368,6 +382,17 @@ public final class KeyRangeExtractor {
     ) {
       compoundEnd--;
     }
+    // A space can also end inside the window on a DESC variable-length column. Its bound has no
+    // separator for that column, so the compound slot does not order it against the longer values
+    // ('1' and '10'). A salted scan start then skips rows, and an unsalted skip scan emits hints
+    // out of order. The bound also holds rows of longer values that the list does not contain:
+    // the bound of '1' includes '10'. Per-column slots order and match that column correctly.
+    for (KeySpace ks : list.spaces()) {
+      int end = firstProductiveStop(ks, prefixSlots);
+      if (end > compoundStart && end < compoundEnd && isDescVarLength(schema, end - 1)) {
+        return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema, pkNullable);
+      }
+    }
     int compoundLen = compoundEnd - compoundStart;
 
     // Safety gate: compound emission is UNSAFE when any space has a non-single-key dim
@@ -396,11 +421,13 @@ public final class KeyRangeExtractor {
         if (dim == KeyRange.EVERYTHING_RANGE) continue;
         if (!dim.isSingleKey()) {
           if (sawNonSingleKey) {
-            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+              pkNullable);
           }
           sawNonSingleKey = true;
         } else if (sawNonSingleKey) {
-          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+          return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+            pkNullable);
         }
       }
     }
@@ -408,6 +435,8 @@ public final class KeyRangeExtractor {
     // Build one compound KeyRange per space, only over the [compoundStart, compoundEnd)
     // window. Pinned prefix/suffix dims are emitted as individual slots outside the loop.
     List<KeyRange> compounds = new ArrayList<>(list.size());
+    // Lower bounds that stop before a fixed-width column of the window. See startsAtShortLower.
+    List<byte[]> shortLowers = new ArrayList<>();
     boolean compoundsApproximated = false;
     // Skip the compound build entirely when every productive dim is pinned: no range
     // part to compound. The pinned slots below carry all the narrowing.
@@ -459,6 +488,8 @@ public final class KeyRangeExtractor {
             allSingleKey = false;
           }
         }
+        boolean shortLower = compoundEnd < maxProductiveEnd
+          && hasFixedWidthOpenLower(ks, schema, compoundStart + 1, end);
         // Use setKey variant with schemaStartIndex so the schema is walked starting from
         // the user-tail fields (after prefix columns like salt, viewIndexId, tenantId).
         // Without this, the first user-tail slot's bytes get decoded against the schema's
@@ -512,9 +543,13 @@ public final class KeyRangeExtractor {
           // The strip can put a DESC upper bound below the lower bound. The space then looks
           // empty, but it has rows. Per-column slots keep the separator and these rows.
           if (!inverted && isOrderedRange(unstrippedLo, unstrippedHi)) {
-            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+            return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema,
+              pkNullable);
           }
           continue;
+        }
+        if (shortLower) {
+          shortLowers.add(compound.getLowerRange());
         }
         compounds.add(compound);
       }
@@ -545,6 +580,9 @@ public final class KeyRangeExtractor {
       : KeyRange.coalesce(compounds);
     if (!coalesced.isEmpty() && coalesced.size() == 1 && coalesced.get(0) == KeyRange.EMPTY_RANGE) {
       return nothing();
+    }
+    if (startsAtShortLower(coalesced, shortLowers)) {
+      return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema, pkNullable);
     }
 
     // Mixed-width ranges within a single compound slot: if the coalesced ranges have
@@ -602,7 +640,7 @@ public final class KeyRangeExtractor {
         // Safe fix: fall back to per-column projection so each PK column gets its own
         // slot in the SkipScanFilter and the downstream filter enforces the predicates
         // per-row. This matches V1's behavior for IN-list + RVC-inequality shapes.
-        return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema);
+        return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, schema, pkNullable);
       }
     }
 
@@ -826,6 +864,64 @@ public final class KeyRangeExtractor {
   }
 
   /**
+   * Returns the number of per-column slots that keep the rows with trailing null key columns. The
+   * row key does not keep trailing null columns. Thus the key of such a row ends before the slot of
+   * its first null column. SkipScanFilter keeps a row with a short key only when each later slot
+   * holds only IS NULL. The slots must end before a trailing run of nullable columns whose slots
+   * admit NULL and are not all IS NULL. The residual filter applies the dropped slots. When all
+   * slots hold only single keys for the full key, the scan is a point lookup. A point lookup
+   * matches the short row key exactly, so all slots stay.
+   */
+  private static int trailingNullStop(List<java.util.Set<KeyRange>> perSlot, int nPkColumns,
+    int prefixSlots, int allowed, RowKeySchema schema, boolean[] pkNullable) {
+    if (schema == null) {
+      return allowed;
+    }
+    if (allowed == nPkColumns && schema.rowKeyOrderOptimizable()) {
+      boolean allSingleKeys = true;
+      for (int d = prefixSlots; d < nPkColumns && allSingleKeys; d++) {
+        for (KeyRange r : perSlot.get(d)) {
+          if (!r.isSingleKey()) {
+            allSingleKeys = false;
+            break;
+          }
+        }
+      }
+      if (allSingleKeys) {
+        return allowed;
+      }
+    }
+    int stop = allowed;
+    boolean onlyIsNull = true;
+    // The first user slot stays, because the scan needs a leading bound.
+    for (int d = nPkColumns - 1; d > prefixSlots; d--) {
+      if (!isNullable(schema, pkNullable, d)) {
+        break;
+      }
+      if (d >= allowed) {
+        continue;
+      }
+      boolean admitsNull = perSlot.get(d).isEmpty();
+      for (KeyRange r : perSlot.get(d)) {
+        if (
+          r == KeyRange.EVERYTHING_RANGE
+            || (r.getLowerRange() == KeyRange.NULL_BOUND && r.isLowerInclusive())
+        ) {
+          admitsNull = true;
+        }
+      }
+      if (!admitsNull) {
+        break;
+      }
+      onlyIsNull &= perSlot.get(d).size() == 1 && perSlot.get(d).contains(KeyRange.IS_NULL_RANGE);
+      if (!onlyIsNull) {
+        stop = d;
+      }
+    }
+    return stop;
+  }
+
+  /**
    * {@link KeyRange#coalesce} for the ranges of the column at {@code field}. Coalescing compares
    * bounds as raw bytes. That matches the row key order for ASC and fixed-width columns. A DESC
    * variable-length column orders as {@code value || 0xFF}, so a value sorts after its own
@@ -1019,6 +1115,41 @@ public final class KeyRangeExtractor {
   }
 
   /**
+   * True when a fixed-width column in dims [from, to) of {@code ks} has no lower bound. The lower
+   * bound of the compound then stops before that column.
+   */
+  private static boolean hasFixedWidthOpenLower(KeySpace ks, RowKeySchema schema, int from,
+    int to) {
+    for (int d = from; d < to; d++) {
+      if (ks.get(d).lowerUnbound() && schema.getField(d).getDataType().isFixedWidth()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when a range in {@code coalesced} starts at a lower bound in {@code shortLowers}. Such a
+   * bound stops before a fixed-width column of the compound. The scan puts the bytes of the next
+   * slot after the bound, at the position of that column. The scan then skips rows that are in the
+   * range. A range that starts at a longer bound of a different space has no such problem.
+   */
+  private static boolean startsAtShortLower(List<KeyRange> coalesced, List<byte[]> shortLowers) {
+    for (KeyRange r : coalesced) {
+      byte[] lower = r.getLowerRange();
+      if (lower.length == 0) {
+        continue;
+      }
+      for (byte[] shortLower : shortLowers) {
+        if (org.apache.hadoop.hbase.util.Bytes.equals(lower, shortLower)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * V1-shaped per-column projection that stops at the first EVERYTHING past the prefix. Kept as the
    * legacy entry point used by tests without a schema; less general than {@link #emitV1Projection}
    * which walks past EVERYTHING gaps so trailing constraints can still narrow via
@@ -1139,7 +1270,7 @@ public final class KeyRangeExtractor {
    */
   static Result emitV1Projection(KeySpaceList list, int nPkColumns, int cartesianBound,
     int prefixSlots) {
-    return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, null);
+    return emitV1Projection(list, nPkColumns, cartesianBound, prefixSlots, null, null);
   }
 
   /**
@@ -1147,7 +1278,7 @@ public final class KeyRangeExtractor {
    * gives each column's sort order for coalescing. A null schema means the order is unknown.
    */
   static Result emitV1Projection(KeySpaceList list, int nPkColumns, int cartesianBound,
-    int prefixSlots, RowKeySchema schema) {
+    int prefixSlots, RowKeySchema schema, boolean[] pkNullable) {
     if (list.isUnsatisfiable()) {
       return nothing();
     }
@@ -1211,6 +1342,9 @@ public final class KeyRangeExtractor {
         break;
       }
     }
+    // A row key with trailing null columns is short. Drop the slots that such a row cannot match.
+    allowed = Math.min(allowed,
+      trailingNullStop(perSlot, nPkColumns, prefixSlots, allowed, schema, pkNullable));
     // Per-column slots admit every combination of their ranges. If the spaces are not that
     // product, the slots lose the pairing between columns. The residual filter must then stay.
     boolean approximated = allowed < kept || !isExactProduct(list, prefixSlots, allowed);
@@ -1324,11 +1458,8 @@ public final class KeyRangeExtractor {
     }
     int[] slotSpan = new int[out.size()];
     // Extend slotSpan on the last emitted slot when it is a range (non-point) and the
-    // productive window stops before the last PK column. V1's {@code WhereOptimizer}
-    // treats a trailing scalar range on col i as spanning through the final PK col —
-    // the range bytes encode column-min/max via {@code ScanUtil.getMinKey/getMaxKey},
-    // effectively covering trailing cols — and sets {@code slotSpan[last] = nPkColumns
-    // - i - 1}. V2's per-slot emission must match this convention so that
+    // productive window stops before the last PK column. V1 sets a wider span only for
+    // a key part over several columns, such as an RVC. V2 extends the span so that
     // {@link org.apache.phoenix.compile.ScanRanges#getBoundPkColumnCount} and
     // {@link org.apache.phoenix.filter.SkipScanFilter#intersect} (which reads
     // {@code slotSpan[0]} to step the schema cursor per region) see a PK-terminating
@@ -1348,6 +1479,10 @@ public final class KeyRangeExtractor {
     // cover fewer cols than slotSpan claims, and the filter would wrongly reject
     // rows whose trailing-col bytes exceed the range upper bound. See
     // ProductMetricsIT.testFeatureLTEAggregation.
+    // 3. Every range in the last slot keeps its meaning as a compound range over the
+    // trailing columns. Otherwise the filter rejects matching rows, for example a point.
+    // 4. No row key ends inside the span. A row key ends early when its last columns are
+    // null, and the filter then rejects the row.
     if (out.size() > 0) {
       int lastSlotIdx = out.size() - 1;
       List<KeyRange> lastSlot = out.get(lastSlotIdx);
@@ -1366,14 +1501,74 @@ public final class KeyRangeExtractor {
           break;
         }
       }
-      if (lastSlotHasRange && !hasInteriorEverythingGap) {
-        int lastSlotPkIdx = prefixSlots + lastSlotIdx;
+      int lastSlotPkIdx = prefixSlots + lastSlotIdx;
+      if (
+        lastSlotHasRange && !hasInteriorEverythingGap
+          && coversTrailingColumns(lastSlot, schema, lastSlotPkIdx)
+          && !canEndAfter(schema, pkNullable, nPkColumns - 2, nPkColumns)
+      ) {
         if (lastSlotPkIdx < nPkColumns - 1) {
           slotSpan[lastSlotIdx] = (nPkColumns - 1) - lastSlotPkIdx;
         }
       }
     }
     return new Result(out, slotSpan, useSkipScan, approximated);
+  }
+
+  /**
+   * True when the per-column {@code ranges} keep their meaning as compound ranges over this column
+   * and all the columns after it. A wider slot span is then safe. The filter compares the bytes of
+   * all spanned columns with the range bounds. A row whose column equals a bound has more bytes
+   * after the bound. Thus only an inclusive lower bound and an exclusive upper bound keep their
+   * meaning. A point does not. DESC variable-length columns use a different comparator and do not
+   * keep their meaning. A fixed-width column with no lower bound also does not. The start row then
+   * gets a byte for a later column at the position of this column, and that byte skips rows.
+   */
+  private static boolean coversTrailingColumns(List<KeyRange> ranges, RowKeySchema schema,
+    int field) {
+    if (schema != null && isDescVarLength(schema, field)) {
+      return false;
+    }
+    boolean fixedWidth = schema != null && schema.getField(field).getDataType().isFixedWidth();
+    for (KeyRange r : ranges) {
+      if (
+        (!r.lowerUnbound() && !r.isLowerInclusive()) || (!r.upperUnbound() && r.isUpperInclusive())
+          || (fixedWidth && r.lowerUnbound())
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * True when a row key can end after the column at {@code field}. The row key does not keep
+   * trailing null columns. Thus a row key ends early when all later columns are null.
+   */
+  private static boolean canEndAfter(RowKeySchema schema, boolean[] pkNullable, int field,
+    int nPkColumns) {
+    if (schema == null || field + 1 >= nPkColumns) {
+      return false;
+    }
+    for (int d = field + 1; d < nPkColumns; d++) {
+      if (!isNullable(schema, pkNullable, d)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * True when the key column at row key position {@code pos} can be null. A schema field for more
+   * than one column does not keep the nullability. For such a field, {@code pkNullable} gives the
+   * nullability. Without it, the column can be null.
+   */
+  private static boolean isNullable(RowKeySchema schema, boolean[] pkNullable, int pos) {
+    org.apache.phoenix.schema.ValueSchema.Field field = schema.getField(pos);
+    if (field.getCount() == 1) {
+      return field.isNullable();
+    }
+    return pkNullable == null || pos >= pkNullable.length || pkNullable[pos];
   }
 
   /**

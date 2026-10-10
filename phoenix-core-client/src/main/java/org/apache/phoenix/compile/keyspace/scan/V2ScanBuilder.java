@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.keyspace.KeySpaceList;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
@@ -77,6 +78,11 @@ public final class V2ScanBuilder {
     public final KeySpaceList list;
     public final PTable table;
     public final RowKeySchema schema;
+    /**
+     * The nullability of each key column by row key position. The row key schema merges equal
+     * adjacent fields and loses their nullability. The PK columns of the table keep it.
+     */
+    public final boolean[] pkNullable;
     public final int nPkColumns;
     public final int prefixSlots;
     public final Integer nBuckets;
@@ -95,6 +101,7 @@ public final class V2ScanBuilder {
       this.list = list;
       this.table = table;
       this.schema = schema;
+      this.pkNullable = pkNullable(table);
       this.nPkColumns = nPkColumns;
       this.prefixSlots = prefixSlots;
       this.nBuckets = nBuckets;
@@ -105,6 +112,18 @@ public final class V2ScanBuilder {
       this.hints = hints;
       this.cartesianBound = cartesianBound;
       this.minOffset = minOffset;
+    }
+
+    private static boolean[] pkNullable(PTable table) {
+      if (table == null) {
+        return null;
+      }
+      List<PColumn> pkColumns = table.getPKColumns();
+      boolean[] nullable = new boolean[pkColumns.size()];
+      for (int i = 0; i < nullable.length; i++) {
+        nullable[i] = pkColumns.get(i).isNullable();
+      }
+      return nullable;
     }
   }
 
@@ -199,7 +218,7 @@ public final class V2ScanBuilder {
     // Classes 4 (RANGE_SCAN subcases) and 5 (SKIP_SCAN_LIST): adapter.
 
     KeyRangeExtractor.Result extract = KeyRangeExtractor.extract(in.list, in.nPkColumns,
-      in.cartesianBound, in.prefixSlots, in.schema);
+      in.cartesianBound, in.prefixSlots, in.schema, in.pkNullable);
     if (extract.isNothing()) {
       return Result.nothing();
     }
@@ -321,7 +340,7 @@ public final class V2ScanBuilder {
     byte[] prefixBytes = buildPrefixBytes(in);
     java.util.List<KeyRange> pointKeys = new java.util.ArrayList<>(in.list.spaces().size());
     for (KeySpace s : in.list.spaces()) {
-      byte[] tail = CompoundByteEncoder.encodeLower(in.schema, s, in.prefixSlots);
+      byte[] tail = CompoundByteEncoder.encodeLower(in.schema, in.pkNullable, s, in.prefixSlots);
       if (tail == null || tail.length == 0) {
         // Encoder refused this space (e.g. all-EVERYTHING past prefix). Fall back.
         return null;

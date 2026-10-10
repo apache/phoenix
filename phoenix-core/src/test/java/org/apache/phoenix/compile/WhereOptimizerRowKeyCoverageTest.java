@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -386,6 +387,150 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
   }
 
   /**
+   * One OR branch ends on a DESC column with a value that is a byte prefix of the other branch's
+   * value ('1' and '10'). The salted scan must still start at the rows of the longer value.
+   */
+  @Test
+  public void testDescShorterBranchInCompoundKeepsRows() throws Exception {
+    for (String pk : new String[] { "k1 DESC, k2 DESC, k3", "k1 DESC, k2 DESC, k3 DESC" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        assertScanReturnsExactly(pk, options, "k1 = '1' OR (k1 = '10' AND k2 = 'a')", false,
+          (a, b, c) -> a.equals("1") || (a.equals("10") && b.equals("a")));
+        assertScanReturnsExactly(pk, options, "k1 = '1' OR (k1 = '100' AND k2 IN ('a', 'b'))",
+          false, (a, b, c) -> a.equals("1") || (a.equals("100") && AB.contains(b)));
+        assertScanReturnsExactly(pk, options, "k1 = '10' OR (k1 = '1' AND k2 = 'a')", false,
+          (a, b, c) -> a.equals("10") || (a.equals("1") && b.equals("a")));
+        assertScanReturnsExactly(pk, options,
+          "(k1 = '1' AND k2 = '2') OR (k1 = '1' AND k2 = '23' AND k3 = 'y')", false,
+          (a, b, c) -> a.equals("1") && (b.equals("2") || (b.equals("23") && c.equals("y"))));
+      }
+    }
+  }
+
+  /**
+   * The shorter OR branch ends on a DESC column after a leading IN list. The unsalted scan must
+   * also keep the rows of the longer value, and its skip-scan hints must stay in key order.
+   */
+  @Test
+  public void testDescShorterBranchAfterInListKeepsRows() throws Exception {
+    for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+      assertScanReturnsExactly("k1 DESC, k2 DESC, k3 DESC", options,
+        "k1 IN ('a', 'b') AND (k2 = '1' OR (k2 = '10' AND k3 = 'y'))", false,
+        (a, b, c) -> AB.contains(a) && (b.equals("1") || (b.equals("10") && c.equals("y"))));
+    }
+  }
+
+  /**
+   * A leading OR of points is ANDed with an OR on later key columns. The scan must keep only the
+   * rows of the points. On a DESC key, a range over the points also holds rows of longer values. An
+   * OR of a point branch and a range branch on k1 must also keep the rows of both branches.
+   */
+  @Test
+  public void testLeadingPointsWithTrailingOrKeepRows() throws Exception {
+    for (String pk : new String[] { "k1, k2, k3", "k1 DESC, k2, k3", "k1 DESC, k2 DESC, k3",
+      "k1 DESC, k2 DESC, k3 DESC", "k1, k2 DESC, k3 DESC" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        assertScanReturnsExactly(pk, options, "(k1 = '1' OR k1 = '2') AND (k2 = '10' OR k3 = 'y')",
+          false, (a, b, c) -> in("1", "2").test(a, b) && (b.equals("10") || c.equals("y")));
+        assertScanReturnsExactly(pk, options, "k1 IN ('1', '2') AND (k2 = 'a' OR k3 = 'y')", false,
+          (a, b, c) -> in("1", "2").test(a, b) && (b.equals("a") || c.equals("y")));
+        assertScanReturnsExactly(pk, options, "(k1 = '1' AND k2 = '10') OR (k1 > '2' AND k1 < '3')",
+          false, (a, b, c) -> (a.equals("1") && b.equals("10"))
+            || (a.compareTo("2") > 0 && a.compareTo("3") < 0));
+        assertScanReturnsExactly(pk, options, "(k1 = '1' AND k3 = 'y') OR (k1 > '2' AND k1 < '3')",
+          false, (a, b, c) -> (a.equals("1") && c.equals("y"))
+            || (a.compareTo("2") > 0 && a.compareTo("3") < 0));
+        assertScanReturnsExactly(pk, options,
+          "(k1 = '1' AND k3 = 'y') OR (k1 > '20' AND k1 <= '3')", false,
+          (a, b, c) -> (a.equals("1") && c.equals("y"))
+            || (a.compareTo("20") > 0 && a.compareTo("3") <= 0));
+        assertScanReturnsExactly(pk, options, "(k1 > '1' AND k1 < '2') OR (k1 = '3' AND k2 = '1')",
+          false, (a, b, c) -> (a.compareTo("1") > 0 && a.compareTo("2") < 0)
+            || (a.equals("3") && b.equals("1")));
+      }
+    }
+  }
+
+  /**
+   * A point and a range on k2 share the last slot. The slot must cover only k2. A wider slot
+   * compares the trailing key columns too, so the point drops its rows.
+   */
+  @Test
+  public void testTrailingPointAndRangeKeepRows() throws Exception {
+    for (String pk : new String[] { "k1, k2, k3", "k1 DESC, k2, k3", "k1, k2 DESC, k3",
+      "k1, k2, k3 DESC" }) {
+      for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+        assertScanReturnsExactly(pk, options, "k1 = 'a' AND (k2 = '2' OR k2 > '23')", false,
+          (a, b, c) -> a.equals("a") && (b.equals("2") || b.compareTo("23") > 0));
+        assertScanReturnsExactly(pk, options, "k1 IN ('a', 'b') AND (k2 = '2' OR k2 > '23')", false,
+          (a, b, c) -> in("a", "b").test(a, b) && (b.equals("2") || b.compareTo("23") > 0));
+      }
+    }
+  }
+
+  /**
+   * The IS NULL branch is a point in a slot that also has a range, and k3 follows k2. The scan must
+   * return the k2 IS NULL rows and the range rows, and the skip-scan filter must not seek backward.
+   */
+  @Test
+  public void testDescPrefixRangesWithIsNullReturnRows() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR,"
+          + " k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2 DESC, k3))");
+      List<String> k2Values = new ArrayList<>(PREFIX_VALUES);
+      k2Values.addAll(AB);
+      k2Values.add(null);
+      List<Row> rows = new ArrayList<>();
+      PreparedStatement upsert = conn
+        .prepareStatement("UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+      for (String k1 : AB) {
+        for (String k2 : k2Values) {
+          for (String k3 : Arrays.asList("y", "z")) {
+            upsert.setString(1, k1);
+            upsert.setString(2, k2);
+            upsert.setString(3, k3);
+            upsert.execute();
+            Iterator<Pair<byte[], List<Cell>>> it = PhoenixRuntime.getUncommittedDataIterator(conn);
+            rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+            conn.rollback();
+          }
+        }
+      }
+      rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+      String where = "k1 = 'a' AND (k2 IS NULL OR k2 = '10' OR k2 BETWEEN '1' AND '100')";
+      StatementContext context = compile(conn, tableName, where);
+      Set<String> expected = new TreeSet<>();
+      Set<String> returned = new TreeSet<>();
+      for (Row row : rows) {
+        if (row.k1.equals("a") && (row.k2 == null || in("1", "10", "100").test(row.k2, null))) {
+          expected.add(row.toString());
+        }
+      }
+      for (Row row : returnedRows(context, rows)) {
+        returned.add(row.toString());
+      }
+      assertEquals(where, expected, returned);
+    }
+  }
+
+  /**
+   * A point and a range share the slot of a key column that is not the last. The slot must not span
+   * the later key columns, because the point then matches no row.
+   */
+  @Test
+  public void testPointAndRangeInMiddleSlotReturnRows() throws Exception {
+    for (String pk : new String[] { "k1, k2, k3", "k1, k2 DESC, k3" }) {
+      assertScanReturnsExactly(pk, "", "k1 = 'a' AND (k2 = '2' OR k2 BETWEEN '1' AND '100')", false,
+        (a, b, c) -> a.equals("a") && in("1", "10", "100", "2").test(b, c));
+      assertScanReturnsExactly(pk, "", "k1 IN ('a', 'b') AND (k2 = '3' OR k2 BETWEEN '1' AND '2')",
+        false, (a, b, c) -> in("a", "b").test(a, c)
+          && (b.equals("3") || (b.compareTo("1") >= 0 && b.compareTo("2") <= 0)));
+    }
+  }
+
+  /**
    * An exclusive range on a DESC k2 after a point on a DESC k1 must keep its rows. The compound
    * bound of k1 and k2 must not lose the k2 values that start with the lower value, such as '10'.
    */
@@ -411,6 +556,180 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
     }
   }
 
+  /**
+   * A range on a fixed-width k2 with no lower bound in row key order must keep its rows. A DESC k2
+   * with k2 > x and an ASC k2 with k2 < x have no such bound. The start row must not put the bytes
+   * of k3 at the position of k2.
+   */
+  @Test
+  public void testFixedWidthOpenLowerBeforeKeyKeepsRows() throws Exception {
+    Object[][] cases = {
+      { "k1 = '1' AND k2 > 1 AND k3 = 'y'",
+        (BiPredicate<BigDecimal,
+          String>) (b, c) -> b.compareTo(BigDecimal.ONE) > 0 && c.equals("y") },
+      { "k1 = '1' AND k2 >= 2 AND k3 = 'y'",
+        (BiPredicate<BigDecimal,
+          String>) (b, c) -> b.compareTo(BigDecimal.valueOf(2)) >= 0 && c.equals("y") },
+      { "k1 = '1' AND k2 > 0 AND k3 = 'y'",
+        (BiPredicate<BigDecimal, String>) (b, c) -> b.signum() > 0 && c.equals("y") },
+      { "k1 = '1' AND k2 < 2 AND k3 = 'y'",
+        (BiPredicate<BigDecimal,
+          String>) (b, c) -> b.compareTo(BigDecimal.valueOf(2)) < 0 && c.equals("y") },
+      { "k1 = '1' AND k2 <= 2 AND k3 = 'y'",
+        (BiPredicate<BigDecimal,
+          String>) (b, c) -> b.compareTo(BigDecimal.valueOf(2)) <= 0 && c.equals("y") },
+      { "k1 = '1' AND k2 < 2",
+        (BiPredicate<BigDecimal, String>) (b, c) -> b.compareTo(BigDecimal.valueOf(2)) < 0 }, };
+    List<String> failures = new ArrayList<>();
+    for (String type : new String[] { "DOUBLE", "INTEGER", "BIGINT", "UNSIGNED_INT" }) {
+      // The extreme values have key bytes that start with 0x00 or are above 'y' (0x79).
+      List<BigDecimal> k2Values = new ArrayList<>();
+      for (String v : type.equals("DOUBLE")
+        ? new String[] { "-1E308", "-1.5", "0", "1", "1.5", "2", "10", "2000000000" }
+        : type.equals("INTEGER")
+          ? new String[] { "-2147483648", "-1", "0", "1", "2", "10", "2000000000" }
+        : type.equals("BIGINT")
+          ? new String[] { "-9223372036854775808", "-1", "0", "1", "2", "10",
+            "9000000000000000000" }
+        : new String[] { "0", "1", "2", "3", "10", "2000000000" }) {
+        k2Values.add(new BigDecimal(v));
+      }
+      for (String pk : new String[] { "k1, k2, k3", "k1, k2 DESC, k3", "k1 DESC, k2, k3",
+        "k1 DESC, k2 DESC, k3" }) {
+        for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+          try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            conn.createStatement()
+              .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 " + type
+                + " NOT NULL, k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk
+                + "))" + options);
+            List<Row> rows = new ArrayList<>();
+            PreparedStatement upsert = conn.prepareStatement(
+              "UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+            for (String k1 : Arrays.asList("1", "10", "2")) {
+              for (BigDecimal k2 : k2Values) {
+                for (String k3 : Arrays.asList("y", "z")) {
+                  upsert.setString(1, k1);
+                  upsert.setBigDecimal(2, k2);
+                  upsert.setString(3, k3);
+                  upsert.execute();
+                  Iterator<Pair<byte[], List<Cell>>> it =
+                    PhoenixRuntime.getUncommittedDataIterator(conn);
+                  rows.add(new Row(k1, k2.toString(), k3, it.next().getSecond().get(0)));
+                  conn.rollback();
+                }
+              }
+            }
+            rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+            for (Object[] c : cases) {
+              String where = (String) c[0];
+              @SuppressWarnings("unchecked")
+              BiPredicate<BigDecimal, String> matches = (BiPredicate<BigDecimal, String>) c[1];
+              Set<String> expected = new TreeSet<>();
+              Set<String> returned = new TreeSet<>();
+              for (Row row : rows) {
+                if (row.k1.equals("1") && matches.test(new BigDecimal(row.k2), row.k3)) {
+                  expected.add(row.toString());
+                }
+              }
+              try {
+                for (Row row : returnedRows(compile(conn, tableName, where), rows)) {
+                  returned.add(row.toString());
+                }
+              } catch (Exception e) {
+                returned.add(e.toString());
+              }
+              if (!expected.equals(returned)) {
+                failures.add("[" + type + " " + pk + options + "] " + where + " expected "
+                  + expected + " returned " + returned);
+              }
+            }
+          }
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * A point or an inclusive upper bound on a fixed-width or DECIMAL k2 must keep its rows when k3
+   * follows k2. The slot of k2 must cover only k2.
+   */
+  @Test
+  public void testFixedWidthTrailingPointAndRangeKeepRows() throws Exception {
+    Object[][] cases = {
+      { "k1 = 'a' AND (k2 = 2 OR k2 > 5)",
+        (BiPredicate<String, BigDecimal>) (a, b) -> a.equals("a")
+          && (b.compareTo(BigDecimal.valueOf(2)) == 0 || b.compareTo(BigDecimal.valueOf(5)) > 0) },
+      { "k1 IN ('a', 'b') AND k2 <= 5",
+        (BiPredicate<String, BigDecimal>) (a, b) -> b.compareTo(BigDecimal.valueOf(5)) <= 0 },
+      { "k1 IN ('a', 'b') AND (k2 < 2 OR k2 = 5)",
+        (BiPredicate<String, BigDecimal>) (a, b) -> b.compareTo(BigDecimal.valueOf(2)) < 0
+          || b.compareTo(BigDecimal.valueOf(5)) == 0 }, };
+    List<String> failures = new ArrayList<>();
+    for (String type : new String[] { "INTEGER", "DECIMAL" }) {
+      List<BigDecimal> k2Values = new ArrayList<>();
+      for (String v : type.equals("INTEGER")
+        ? new String[] { "-1", "0", "2", "3", "5", "6", "10" }
+        : new String[] { "-1.5", "0", "2", "2.5", "5", "5.01", "10" }) {
+        k2Values.add(new BigDecimal(v));
+      }
+      for (String pk : new String[] { "k1, k2, k3", "k1, k2 DESC, k3" }) {
+        for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+          try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            conn.createStatement()
+              .execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 " + type
+                + " NOT NULL, k3 VARCHAR NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk
+                + "))" + options);
+            List<Row> rows = new ArrayList<>();
+            PreparedStatement upsert = conn.prepareStatement(
+              "UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+            for (String k1 : AB) {
+              for (BigDecimal k2 : k2Values) {
+                for (String k3 : Arrays.asList("y", "z")) {
+                  upsert.setString(1, k1);
+                  upsert.setBigDecimal(2, k2);
+                  upsert.setString(3, k3);
+                  upsert.execute();
+                  Iterator<Pair<byte[], List<Cell>>> it =
+                    PhoenixRuntime.getUncommittedDataIterator(conn);
+                  rows.add(new Row(k1, k2.toPlainString(), k3, it.next().getSecond().get(0)));
+                  conn.rollback();
+                }
+              }
+            }
+            rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+            for (Object[] c : cases) {
+              String where = (String) c[0];
+              @SuppressWarnings("unchecked")
+              BiPredicate<String, BigDecimal> matches = (BiPredicate<String, BigDecimal>) c[1];
+              Set<String> expected = new TreeSet<>();
+              Set<String> returned = new TreeSet<>();
+              for (Row row : rows) {
+                if (matches.test(row.k1, new BigDecimal(row.k2))) {
+                  expected.add(row.toString());
+                }
+              }
+              try {
+                for (Row row : returnedRows(compile(conn, tableName, where), rows)) {
+                  returned.add(row.toString());
+                }
+              } catch (Exception e) {
+                returned.add(e.toString());
+              }
+              if (!expected.equals(returned)) {
+                failures.add("[" + type + " " + pk + options + "] " + where + " expected "
+                  + expected + " returned " + returned);
+              }
+            }
+          }
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
   /** True when {@code lower < value <= upper}. */
   private static boolean between(String value, String lower, String upper) {
     return value.compareTo(lower) > 0 && value.compareTo(upper) <= 0;
@@ -427,6 +746,277 @@ public class WhereOptimizerRowKeyCoverageTest extends BaseConnectionlessQueryTes
       assertEquals(1, scanRanges.getRanges().size());
       assertEquals(1, scanRanges.getRanges().get(0).size());
     }
+  }
+
+  /**
+   * The row key does not keep trailing null key columns. A skip scan does not match such a short
+   * row key unless each later slot holds only IS NULL. An OR can give a slot IS NULL together with
+   * other ranges, or no condition. The scan must keep the rows with trailing nulls. The cases run
+   * on a nullable last key column, on a four-column key, and on a nullable middle key column. V1
+   * loses rows in some cases, so only V2 runs those cases.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testTrailingNullInOrAfterOpenMiddleKeepsRows() throws Exception {
+    RowPredicate bNull = (a, b, c) -> a.equals("b") && c == null;
+    RowPredicate aOne = (a, b, c) -> a.equals("a") && "1".equals(c);
+    // The flag of each case is true when V1 also returns the right rows.
+    Object[][] trailing = {
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c) || aOne.test(a, b, c) },
+      { "(k1 IN ('a', 'b') AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (!a.equals("c") && c == null) || aOne.test(a, b, c) },
+      { "(k1 = 'a' AND k3 = '1') OR (k1 = 'b' AND k3 IS NULL)", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'b' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> a.equals("b") && (c == null || c.equals("1")) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 IS NULL)", true,
+        (RowPredicate) (a, b, c) -> !a.equals("c") && c == null },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 IS NOT NULL)", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c) || (a.equals("a") && c != null) },
+      { "(k1 = 'b' AND k3 IS NOT NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && c != null) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 > '1')", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c)
+          || (a.equals("a") && c != null && c.compareTo("1") > 0) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 < '10')", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c)
+          || (a.equals("a") && c != null && c.compareTo("10") < 0) },
+      { "(k1 = 'b' AND (k3 IS NULL OR k3 >= '10')) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && (c == null || c.compareTo("10") >= 0))
+          || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 IN ('1', 'y'))", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c)
+          || (a.equals("a") && ("1".equals(c) || "y".equals(c))) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k2 = '1' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c) || (aOne.test(a, b, c) && "1".equals(b)) },
+      { "(k1 = 'b' AND k2 = '2' AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (bNull.test(a, b, c) && "2".equals(b)) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k2 > '1' AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (bNull.test(a, b, c) && b != null && b.compareTo("1") > 0)
+          || aOne.test(a, b, c) },
+      { "(k1 >= 'b' AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (!a.equals("a") && c == null) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k3 IS NULL) OR (k1 = 'a' AND k2 = '1')", true,
+        (RowPredicate) (a, b, c) -> bNull.test(a, b, c) || (a.equals("a") && "1".equals(b)) },
+      { "(k1 = 'b' AND k3 = '1') OR (k1 = 'a' AND k2 = '1')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && "1".equals(c))
+          || (a.equals("a") && "1".equals(b)) },
+      { "(k1 = 'b' AND k3 = '1') OR k1 = 'a'", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && "1".equals(c)) || a.equals("a") },
+      { "(k1 = 'b' AND k2 = '1' AND k3 IS NULL) OR (k1 = 'a' AND k2 = '1' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> "1".equals(b) && (bNull.test(a, b, c) || aOne.test(a, b, c)) },
+      { "k3 IS NULL OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> c == null || aOne.test(a, b, c) },
+      { "k1 IN ('a', 'b') AND (k3 IS NULL OR k3 = '1')", false,
+        (RowPredicate) (a, b, c) -> !a.equals("c") && (c == null || c.equals("1")) },
+      { "k1 = 'a' AND k2 IN ('1', '2') AND (k3 IS NULL OR k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> a.equals("a") && b != null && (c == null || c.equals("1")) }, };
+    Object[][] middle = {
+      { "(k1 = 'b' AND k2 IS NULL) OR (k1 = 'a' AND k2 = '1')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && b == null)
+          || (a.equals("a") && "1".equals(b)) },
+      { "(k1 = 'b' AND k2 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && b == null) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k2 IS NULL AND k3 IS NULL) OR (k1 = 'a' AND k3 = '1')", true,
+        (RowPredicate) (a, b, c) -> (bNull.test(a, b, c) && b == null) || aOne.test(a, b, c) },
+      { "(k1 = 'b' AND k2 IS NULL AND k3 = '1') OR (k1 = 'a' AND k2 = '2')", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && b == null && "1".equals(c))
+          || (a.equals("a") && "2".equals(b)) },
+      { "(k1 = 'b' AND k2 IS NOT NULL) OR (k1 = 'a' AND k2 IS NULL)", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && b != null) || (a.equals("a") && b == null) },
+      { "(k1 = 'b' AND k2 IS NULL) OR k1 = 'a'", true,
+        (RowPredicate) (a, b, c) -> (a.equals("b") && b == null) || a.equals("a") },
+      { "k1 IN ('a', 'b') AND (k2 IS NULL OR k2 = '1')", false,
+        (RowPredicate) (a, b, c) -> !a.equals("c") && (b == null || b.equals("1")) }, };
+    List<String> lastValues = Arrays.asList(null, "1", "10", "y");
+    List<String> failures = new ArrayList<>();
+    // Each shape gives the key columns, the middle and last values, and the cases. In the
+    // four-column key, the cases name k3 as k2 and k4 as k3, and k2 is 'x' in each row.
+    Object[][] shapes = {
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, k3 VARCHAR", Arrays.asList("1", "2"), lastValues,
+        trailing },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, k3 VARCHAR NOT NULL, k4 VARCHAR",
+        Arrays.asList("1", "2"), lastValues, trailing },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR", Arrays.asList(null, "1", "2"), lastValues,
+        trailing },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR", Arrays.asList(null, "1", "2"), lastValues,
+        middle },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR NOT NULL", Arrays.asList(null, "1", "2"),
+        Arrays.asList("1", "10", "y"), middle }, };
+    for (Object[] shape : shapes) {
+      String columns = (String) shape[0];
+      boolean fourKeys = columns.contains("k4");
+      for (int orders = 0; orders < 8; orders++) {
+        String o1 = (orders & 4) != 0 ? " DESC" : "";
+        String o2 = (orders & 2) != 0 ? " DESC" : "";
+        String o3 = (orders & 1) != 0 ? " DESC" : "";
+        String pk = fourKeys
+          ? "k1" + o1 + ", k2, k3" + o2 + ", k4" + o3
+          : "k1" + o1 + ", k2" + o2 + ", k3" + o3;
+        for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+          try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (" + columns
+              + ", v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))" + options);
+            List<Row> rows = new ArrayList<>();
+            PreparedStatement upsert = conn.prepareStatement(fourKeys
+              ? "UPSERT INTO " + tableName + " (k1, k2, k3, k4, v) VALUES (?, 'x', ?, ?, 'x')"
+              : "UPSERT INTO " + tableName + " (k1, k2, k3, v) VALUES (?, ?, ?, 'x')");
+            for (String k1 : Arrays.asList("a", "b", "c")) {
+              for (String k2 : (List<String>) shape[1]) {
+                for (String k3 : (List<String>) shape[2]) {
+                  upsert.setString(1, k1);
+                  upsert.setString(2, k2);
+                  upsert.setString(3, k3);
+                  upsert.execute();
+                  Iterator<Pair<byte[], List<Cell>>> it =
+                    PhoenixRuntime.getUncommittedDataIterator(conn);
+                  rows.add(new Row(k1, k2, k3, it.next().getSecond().get(0)));
+                  conn.rollback();
+                }
+              }
+            }
+            rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+            for (Object[] c : (Object[][]) shape[3]) {
+              if (!(Boolean) c[1] && !isV2Optimizer()) {
+                continue;
+              }
+              String where = (String) c[0];
+              if (fourKeys) {
+                where = where.replace("k3", "k4").replace("k2", "k3");
+              }
+              RowPredicate matches = (RowPredicate) c[2];
+              Set<String> expected = new TreeSet<>();
+              Set<String> returned = new TreeSet<>();
+              for (Row row : rows) {
+                if (matches.test(row.k1, row.k2, row.k3)) {
+                  expected.add(row.toString());
+                }
+              }
+              StatementContext context = compile(conn, tableName, where);
+              for (Row row : returnedRows(context, rows)) {
+                returned.add(row.toString());
+              }
+              if (!expected.equals(returned)) {
+                failures.add("[" + columns + "; " + pk + options + "] " + where + " expected "
+                  + expected + " returned " + returned);
+              }
+            }
+          }
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
+  }
+
+  /**
+   * A row with trailing null key columns has a short row key. A range on a key column must keep
+   * such rows when the row key can end after that column. The scan start row must not add a
+   * separator after the last bound column. A skip-scan slot must not span the later nullable
+   * columns. The expected rows come from the same query with each key column in an expression. The
+   * expression stops key extraction, so the residual filter checks the full predicate. V1 and V2
+   * both lose rows in some IN cases on a DESC k2 key, so those cases skip that key order.
+   */
+  @Test
+  public void testTrailingNullAfterRangeKeepsRows() throws Exception {
+    // The flag of each case is true when the case also runs on a DESC k2 key.
+    Object[][] fourKeys = {
+      { "(k1 = 'b' AND k2 >= '1' AND k3 IS NOT NULL) OR (k1 = 'a' AND k2 = '1' AND k4 = '1')",
+        true },
+      { "k1 IN ('a', 'b') AND k2 >= '1'", false }, { "k1 = 'b' AND k2 >= '1'", true },
+      { "k1 >= 'b'", true }, { "k1 = 'b' AND k2 = '1' AND k3 >= '1'", true },
+      { "k1 IN ('a', 'b') AND k2 = '1' AND k3 >= '1'", false },
+      { "k1 = 'b' AND k2 = '1' AND k3 = '1' AND k4 >= '1'", true }, };
+    Object[][] threeKeys =
+      { { "k1 >= 'c'", true }, { "k1 > 'b'", true }, { "k1 BETWEEN 'b' AND 'c'", true },
+        { "k1 = 'b' AND k2 >= '1'", true }, { "k1 IN ('a', 'c') AND k2 >= '1'", false },
+        { "(k1 = 'b' AND k2 >= '1' AND k3 IS NULL) OR (k1 = 'a' AND k2 >= '1' AND k3 = '1')",
+          true }, };
+    List<String> nullable = Arrays.asList(null, "1", "y");
+    List<String> failures = new ArrayList<>();
+    // Each shape gives the key columns, the values of each key column, and the cases.
+    Object[][] shapes = {
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR",
+        Arrays.asList(Arrays.asList("a", "b"), Arrays.asList(null, "1", "2"), nullable, nullable),
+        fourKeys },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR NOT NULL, k3 VARCHAR, k4 VARCHAR",
+        Arrays.asList(Arrays.asList("a", "b"), Arrays.asList("1", "2"), nullable, nullable),
+        fourKeys },
+      { "k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR",
+        Arrays.asList(Arrays.asList("a", "b", "c", "d"), Arrays.asList(null, "1", "2"), nullable),
+        threeKeys }, };
+    for (Object[] shape : shapes) {
+      String columns = (String) shape[0];
+      @SuppressWarnings("unchecked")
+      List<List<String>> values = (List<List<String>>) shape[1];
+      int n = values.size();
+      for (int orders = 0; orders < (1 << n); orders++) {
+        StringBuilder pk = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        StringBuilder binds = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+          boolean desc = (orders & (1 << (n - 1 - i))) != 0;
+          pk.append(i > 0 ? ", " : "").append("k").append(i + 1).append(desc ? " DESC" : "");
+          names.append("k").append(i + 1).append(", ");
+          binds.append("?, ");
+        }
+        for (String options : new String[] { "", " SALT_BUCKETS=4" }) {
+          try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (" + columns
+              + ", v VARCHAR CONSTRAINT pk PRIMARY KEY (" + pk + "))" + options);
+            PreparedStatement upsert = conn.prepareStatement(
+              "UPSERT INTO " + tableName + " (" + names + "v) VALUES (" + binds + "'x')");
+            List<Row> rows = new ArrayList<>();
+            int[] index = new int[n];
+            int i;
+            do {
+              String[] row = new String[n];
+              for (int d = 0; d < n; d++) {
+                row[d] = values.get(d).get(index[d]);
+                upsert.setString(d + 1, row[d]);
+              }
+              upsert.execute();
+              Iterator<Pair<byte[], List<Cell>>> it =
+                PhoenixRuntime.getUncommittedDataIterator(conn);
+              // Row keeps three key values. The third value holds the later key columns.
+              String rest = Arrays.toString(Arrays.copyOfRange(row, 2, n));
+              rows.add(new Row(row[0], row[1], rest, it.next().getSecond().get(0)));
+              conn.rollback();
+              for (i = n - 1; i >= 0 && ++index[i] == values.get(i).size(); i--) {
+                index[i] = 0;
+              }
+            } while (i >= 0);
+            rows.sort((x, y) -> Bytes.compareTo(x.key(), y.key()));
+            for (Object[] c : (Object[][]) shape[2]) {
+              if (!(Boolean) c[1] && pk.indexOf("k2 DESC") >= 0) {
+                continue;
+              }
+              String where = (String) c[0];
+              Set<String> expected = new TreeSet<>();
+              Set<String> returned = new TreeSet<>();
+              String oracle = where.replaceAll("\\bk(\\d)\\b", "(k$1 || '')");
+              for (Row row : returnedRows(compile(conn, tableName, oracle), rows)) {
+                expected.add(row.toString());
+              }
+              try {
+                for (Row row : returnedRows(compile(conn, tableName, where), rows)) {
+                  returned.add(row.toString());
+                }
+              } catch (RuntimeException e) {
+                returned.add(e.toString());
+              }
+              if (expected.isEmpty() || !expected.equals(returned)) {
+                failures.add("[" + columns + "; " + pk + options + "] " + where + " expected "
+                  + expected + " returned " + returned);
+              }
+            }
+          }
+        }
+      }
+    }
+    assertTrue(String.join("\n", failures), failures.isEmpty());
   }
 
   private static BiPredicate<String, String> in(String... values) {

@@ -117,11 +117,12 @@ public final class CompoundByteEncoderEmitter {
    * Override {@code scan.startRow} / {@code scan.stopRow} with the encoder's bytes prepended by
    * {@code prefixBytes}. When the encoder returns {@link KeyRange#UNBOUND} for a bound, the scan's
    * existing row for that bound is kept — it already reflects whatever the classical path computed
-   * (typically {@code UNBOUND} itself for that side).
+   * (typically {@code UNBOUND} itself for that side). The {@code pkNullable} array gives the
+   * nullability of each key column by row key position.
    */
   public static void overrideScanRows(Scan scan, KeySpaceList list, RowKeySchema schema,
-    int prefixSlots, byte[] prefixBytes) {
-    byte[] lower = CompoundByteEncoder.encodeListLower(schema, list, prefixSlots);
+    boolean[] pkNullable, int prefixSlots, byte[] prefixBytes) {
+    byte[] lower = CompoundByteEncoder.encodeListLower(schema, pkNullable, list, prefixSlots);
     byte[] upper = CompoundByteEncoder.encodeListUpper(schema, list, prefixSlots);
     if (lower != KeyRange.UNBOUND && lower.length > 0) {
       scan.withStartRow(concat(prefixBytes, lower));
