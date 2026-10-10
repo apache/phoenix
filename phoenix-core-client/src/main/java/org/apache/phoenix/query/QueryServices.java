@@ -196,6 +196,23 @@ public interface QueryServices extends SQLCloseable {
   // The maximum off-heap memory, in bytes, for the loaded HNSW graph segments of one JVM
   public static final String HNSW_OFFHEAP_MAX_BYTES_ATTRIB =
     "phoenix.vector.hnsw.offheap.max.bytes";
+  // The default search width (ef_search) of an HNSW query. The HNSW_EF_SEARCH hint overrides it
+  public static final String HNSW_EF_SEARCH_ATTRIB = "phoenix.vector.hnsw.ef_search.default";
+  // A RegionServer setting, an integer. A region asks the master to split it when the mutable
+  // HNSW graph of one of its indexes holds this many times the flush threshold of entries. The
+  // region refuses writes at four times the flush threshold. Thus a value of 4 or more gives almost
+  // no split requests, and a value of 0 or less turns them off. A value of 2 or less asks for
+  // splits at usual flush levels
+  public static final String HNSW_SPLIT_MULTIPLIER_ATTRIB = "phoenix.vector.hnsw.split.multiplier";
+  // A RegionServer setting, an integer. An HNSW search of a region scores each buffered row of the
+  // in-memory graph exactly when the graph holds at most this many live rows. Above this size, the
+  // search uses the graph links. A search that uses the links can miss a new or changed row, for
+  // example a row that repeats the vector of a deleted row. The exact search always finds such a
+  // row. Its cost grows with the number of live rows. At the default size and 768 dimensions, the
+  // exact search costs about the same as a search that uses the links. Below that size, it costs
+  // less. A value of 0 or less turns the exact search off
+  public static final String HNSW_MUTABLE_EXACT_MAX_ROWS_ATTRIB =
+    "phoenix.vector.hnsw.mutable.exact.max.rows";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling
