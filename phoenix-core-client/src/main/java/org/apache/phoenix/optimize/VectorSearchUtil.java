@@ -31,6 +31,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.DelegateQueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
+import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -380,9 +381,12 @@ public final class VectorSearchUtil {
     return false;
   }
 
-  /** Returns true if the plan reads a vector index; see {@link #getVectorIndexScan}. */
+  /**
+   * Returns true if the plan reads a vector index. Either the plan tree holds an IVF index scan
+   * (see {@link #getVectorIndexScan}), or the plan is an HNSW graph search plan.
+   */
   public static boolean usesVectorIndex(QueryPlan plan) {
-    return getVectorIndexScan(plan) != null;
+    return getVectorIndexScan(plan) != null || plan instanceof HnswScanPlan;
   }
 
   /**

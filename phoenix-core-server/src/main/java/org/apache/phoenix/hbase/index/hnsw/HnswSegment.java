@@ -349,10 +349,7 @@ public final class HnswSegment {
    */
   public static Qualifier parseQualifier(byte[] bytes, int offset, int length) {
     int end = offset + length;
-    int zero = offset;
-    while (zero < end && bytes[zero] != 0) {
-      zero++;
-    }
+    int zero = offset + indexKeyLength(bytes, offset, length);
     int start = zero + 1 + Bytes.SIZEOF_INT;
     if (zero == offset || start > end) {
       return null;
@@ -368,6 +365,18 @@ public final class HnswSegment {
     return new Qualifier(Arrays.copyOfRange(bytes, offset, zero),
       Arrays.copyOfRange(bytes, start, start + startLength),
       Bytes.toLong(bytes, start + startLength), tag);
+  }
+
+  /**
+   * Returns the length of the index key in a segment cell qualifier. The index key is the bytes
+   * before the first 0x00. If the qualifier has no 0x00, the index key is the full qualifier.
+   */
+  public static int indexKeyLength(byte[] bytes, int offset, int length) {
+    int key = 0;
+    while (key < length && bytes[offset + key] != 0) {
+      key++;
+    }
+    return key;
   }
 
   private static boolean isTag(byte tag) {

@@ -22,8 +22,10 @@ import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -48,6 +50,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.ColumnPrefixFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.hadoop.hbase.mob.MobConstants;
@@ -85,6 +88,34 @@ public abstract class HnswSegmentStore {
     HnswSegment.Listing listing = new HnswSegment.Listing();
     scan(listScan(indexKey), listing::add);
     return listing.descriptors();
+  }
+
+  /**
+   * Gives each cell of {@code V#}, for all indexes, to the consumer. Each cell has the length of
+   * its value in place of the value. The scan never reads a MOB file. It never transfers a payload,
+   * also when the payload is in the memstore. The method keeps no cell, so its memory use does not
+   * increase with the number of cells.
+   */
+  public void listCells(Consumer<Cell> consumer) throws IOException {
+    Scan scan = new Scan().addFamily(FAMILY).setFilter(new KeyOnlyFilter(true));
+    scan.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
+    scan(scan, consumer);
+  }
+
+  /**
+   * Returns the keys of the indexes that have cells in {@code V#}. A key is an index name without
+   * view prefixes. The listing does not read payloads, and it ignores cells without a key.
+   */
+  public Set<String> indexKeys() throws IOException {
+    Set<String> keys = new HashSet<>();
+    listCells(cell -> {
+      int key = HnswSegment.indexKeyLength(cell.getQualifierArray(), cell.getQualifierOffset(),
+        cell.getQualifierLength());
+      if (key > 0 && key < cell.getQualifierLength()) {
+        keys.add(Bytes.toString(cell.getQualifierArray(), cell.getQualifierOffset(), key));
+      }
+    });
+    return keys;
   }
 
   /**
