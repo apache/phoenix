@@ -40,13 +40,6 @@ public interface VectorIndexManager extends Closeable {
   void onMutation(Put currentDataRowState, Put nextDataRowState, float[] nextVector);
 
   /**
-   * Refuses a write batch with a retryable exception while the buffered graph entries are over
-   * their limit. The batch calls this method before it takes its row locks.
-   * @throws IOException if the batch must wait for a flush
-   */
-  void checkResources() throws IOException;
-
-  /**
    * Returns true after the manager closes. A manager closes when its region closes, or when its
    * index is dropped or created again. A write or a scan that names the index then opens a new
    * manager.

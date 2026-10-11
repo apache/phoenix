@@ -206,6 +206,13 @@ public class BaseScannerRegionObserverConstants {
    * the 8-byte number of cells that the region deleted.
    */
   public static final String HNSW_PURGE = "_HnswPurge";
+  /**
+   * Scan attribute that asks if the scanned region is in overflow for an HNSW index. The value is
+   * the index name without view prefixes. The request opens no index manager in the region. The
+   * scan returns one cell whose value is the 8-byte number 1 if the region is in overflow, and 0
+   * otherwise.
+   */
+  public static final String HNSW_OVERFLOW = "_HnswOverflow";
   /** Scan attribute that names the HNSW index of a nearest neighbor search. */
   public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
   /** Scan attribute that holds the candidate count, the target row count and the query vector. */

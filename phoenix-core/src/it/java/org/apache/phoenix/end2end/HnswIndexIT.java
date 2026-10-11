@@ -99,6 +99,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.fsck.Report;
+import org.apache.phoenix.mapreduce.index.fsck.hnsw.HnswIndexFsckProvider;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
@@ -1514,9 +1516,10 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * A region whose writes are faster than the flushes of its graph asks the master to split it. A
-   * split multiplier of 1 makes the region ask when its mutable graph is full. The daughters write
-   * their own segments.
+   * A region whose writes are faster than the flushes of its graph asks the master to split it. The
+   * split limits the rebuild time of each region, and thus the time that a region can stay in
+   * overflow. A split multiplier of 1 makes the region ask when its mutable graph reaches the flush
+   * threshold, far below the overflow limit. The daughters write their own segments.
    */
   @Test
   public void testWriteBacklogSplitsRegion() throws Exception {
@@ -1556,6 +1559,130 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
         manager(region, index);
       }
       awaitRebuilt(conn, table, index, since);
+    }
+  }
+
+  /**
+   * A region whose mutable graph overflows keeps its writes available. The test holds the segment
+   * writes of the table, so no flush empties the graph. It then writes past the overflow limit, and
+   * no write fails. The region enters overflow and drops its mutable graph. Its scans read the
+   * range without candidate restriction, so the results are exact. A query also finds a copy of a
+   * row that no graph holds. Verification counts the rows that changed after the segments as
+   * backlog. Inspect delta reports the overflow. After the test releases the segment writes, the
+   * repair rebuild cuts over. The region leaves overflow, and its scans are restricted again. Its
+   * base holds every row, also the rows that the region dropped from its graph.
+   */
+  @Test
+  public void testOverflowKeepsWritesAvailable() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 10, "");
+      TableName data = TableName.valueOf(table);
+      // A held segment write blocks the close of the region, so the region must not split
+      try (Admin admin = getUtility().getAdmin()) {
+        admin.modifyTable(TableDescriptorBuilder.newBuilder(admin.getDescriptor(data))
+          .setValue(QueryServices.HNSW_SPLIT_MULTIPLIER_ATTRIB, "0")
+          .setCoprocessor(SegmentFaults.class.getName()).build());
+      }
+      getUtility().waitTableAvailable(data);
+      HnswIndexManager manager = manager(regions(table).get(0), index);
+      int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
+      Random random = new Random(37);
+      int written = 0;
+      SegmentFaults.hold = new CountDownLatch(1);
+      try {
+        conn.setAutoCommit(false);
+        // The held flush holds the first entries of the graph, and the mutable graph then fills to
+        // the limit. The test writes until the region overflows. It then writes 1000 rows more,
+        // which the region drops
+        int overflowedAt = -1;
+        try (
+          PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + table + " VALUES (?, ?)")) {
+          while (overflowedAt < 0 || written < overflowedAt + 1000) {
+            assertTrue("no overflow after " + written + " rows", written < 2 * limit);
+            for (int i = 0; i < 1000; i++) {
+              String id = String.format("b%06d", written++);
+              float[] v = vector(random);
+              ps.setString(1, id);
+              ps.setArray(2, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+              ps.executeUpdate();
+              rows.put(id, v);
+            }
+            conn.commit();
+            if (overflowedAt < 0 && manager.overflowed()) {
+              overflowedAt = written;
+            }
+          }
+        }
+        conn.setAutoCommit(true);
+        assertTrue(manager.overflowed());
+        assertTrue(manager.covered());
+        assertEquals(1, value(HnswMetric.OVERFLOW_ENTRIES, index));
+        assertEquals(1, value(HnswMetric.REGIONS_OVERFLOWED, index));
+        assertEquals(1, value(HnswMetric.REGIONS_UNRESTRICTED, index));
+        assertTrue(value(HnswMetric.CHANGES_DROPPED, index) >= 1000);
+        long overflowScans = value(HnswMetric.UNRESTRICTED_OVERFLOW, index);
+        Random queries = new Random(38);
+        for (int q = 0; q < 5; q++) {
+          float[] query = vector(queries);
+          Set<String> expected = rows.entrySet().stream()
+            .sorted(Comparator.comparingDouble(e -> -cosine(query, e.getValue()))).limit(2)
+            .map(Map.Entry::getKey).collect(Collectors.toSet());
+          assertEquals(expected, new HashSet<>(query2(conn, table, query)));
+        }
+        assertEquals(overflowScans + 5, value(HnswMetric.UNRESTRICTED_OVERFLOW, index));
+        // No graph holds the copy of the row. The query reads the range of the region, so it finds
+        // the copy
+        copyRow(table, "b000005", "b000005-copy");
+        assertEquals(new HashSet<>(Arrays.asList("b000005", "b000005-copy")),
+          new HashSet<>(query2(conn, table, rows.get("b000005"))));
+        rows.put("b000005-copy", rows.get("b000005"));
+
+        // The base holds the 10 rows of the build. All other rows changed after the replay start of
+        // the base, so they are backlog
+        Report verify = IndexFsckToolIT.run(0, "verify", "-dt", table, "-it", index);
+        assertEquals(10L, HnswIndexFsckIT.verified(verify).get("valid"));
+        assertEquals(written + 1,
+          IndexFsckToolIT.count(verify, HnswIndexFsckProvider.ROWS_BACKLOG, null));
+        List<Map<String, Object>> delta =
+          HnswIndexInspectIT.list(HnswIndexInspectIT.inspect(table, index, "delta"), "regions");
+        assertEquals(true, delta.get(0).get("overflowed"));
+      } finally {
+        conn.setAutoCommit(true);
+        SegmentFaults.hold.countDown();
+        SegmentFaults.hold = null;
+      }
+
+      for (int i = 0; i < 1800 && manager.overflowed(); i++) {
+        Thread.sleep(100);
+      }
+      assertFalse(manager.overflowed());
+      assertTrue(manager.covered());
+      assertEquals(0, value(HnswMetric.REGIONS_OVERFLOWED, index));
+      for (int i = 0; i < 100 && value(HnswMetric.OVERFLOW_TIME, index) == 0; i++) {
+        Thread.sleep(100);
+      }
+      assertEquals(1, value(HnswMetric.OVERFLOW_TIME, index));
+      List<HnswSegment.Descriptor> segments = awaitSegments(conn, index, 1);
+      assertEquals(rows.size(), segments.get(0).count);
+      try (ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + table)) {
+        assertTrue(rs.next());
+        assertEquals(rows.size(), rs.getLong(1));
+      }
+      // The rows that the region dropped from its graph are in the base of the repair
+      for (int i = written - 3; i < written; i++) {
+        String id = String.format("b%06d", i);
+        assertTrue(id, search(table, index, id, rows.get(id), 10).contains(id));
+      }
+      // A copy written after the cutover is in no graph, so the restricted scan does not find it
+      copyRow(table, "b000007", "b000007-copy");
+      List<String> found = query2(conn, table, rows.get("b000007"));
+      assertEquals(2, found.size());
+      assertFalse(found.toString(), found.contains("b000007-copy"));
+      List<Map<String, Object>> delta =
+        HnswIndexInspectIT.list(HnswIndexInspectIT.inspect(table, index, "delta"), "regions");
+      assertEquals(false, delta.get(0).get("overflowed"));
     }
   }
 
