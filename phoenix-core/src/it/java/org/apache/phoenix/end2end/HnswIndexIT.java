@@ -295,11 +295,16 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
 
   /**
    * Returns the keys of the k rows of the region of the manager that are nearest to the query. A
-   * search uses its candidate count as its beam width, so this asks for at least 64 candidates.
+   * search uses its candidate count as its beam width, so this method asks for up to 64 candidates.
+   * It asks for fewer candidates than the region holds, because a search for all rows returns them
+   * without rank order.
    */
   static List<byte[]> nearestKeys(HnswIndexManager manager, float[] query, int k)
     throws IOException {
-    List<byte[]> keys = manager.search(query, Math.max(k, 64));
+    int candidates = Math.max(k,
+      Math.min(64, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW) - 1));
+    List<byte[]> keys =
+      manager.search(query, candidates, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
     return keys.subList(0, Math.min(k, keys.size()));
   }
 
@@ -609,7 +614,8 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       Map<String, float[]> rows = createAndBuild(conn, table, index, 400);
       assertEquals(PIndexState.ACTIVE, PhoenixRuntime.getTableNoCache(conn, index).getIndexState());
       for (HRegion region : regions(table)) {
-        for (byte[] key : manager(region, index).search(rows.get("a0"), 50)) {
+        for (byte[] key : manager(region, index).search(rows.get("a0"), 50,
+          HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null)) {
           assertTrue("search returned a row outside the region",
             region.getRegionInfo().containsRow(key));
         }
@@ -659,10 +665,11 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
         HnswIndexManager manager = manager(region, index);
         long expected = rows.keySet().stream()
           .filter(id -> region.getRegionInfo().containsRow(Bytes.toBytes(id))).count();
-        for (int i = 0; i < 300 && manager.count() != expected; i++) {
+        for (int i = 0; i < 300
+          && manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW) != expected; i++) {
           Thread.sleep(100);
         }
-        assertEquals(expected, manager.count());
+        assertEquals(expected, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
       }
       double recall = recall(table, index, rows);
       assertTrue("recall " + recall, recall >= 0.9);
@@ -1337,14 +1344,17 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
         assertTrue(lower.covered());
         assertFalse(upper.covered());
         for (String id : new String[] { "a0", "m", "z1" }) {
-          List<byte[]> found = lower.search(rows.get(id), 50);
+          List<byte[]> found = lower.search(rows.get(id), 50, HConstants.EMPTY_START_ROW,
+            HConstants.EMPTY_END_ROW, null);
           assertFalse(found.isEmpty());
           for (byte[] key : found) {
             assertTrue(Bytes.toString(key) + " is outside the lower daughter",
               daughters.get(0).getRegionInfo().containsRow(key));
           }
         }
-        assertTrue(upper.search(rows.get("z1"), 50).isEmpty());
+        assertTrue(upper
+          .search(rows.get("z1"), 50, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null)
+          .isEmpty());
         // The query reads the range of the upper daughter, and finds the copy with the row at the
         // split key. The lower daughter searches its graph, which does not hold the copy
         assertEquals(new HashSet<>(Arrays.asList("m", "m-copy")),
@@ -1454,7 +1464,8 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
           }
         }
         for (String id : new String[] { "a0", "m", "z1" }) {
-          List<byte[]> found = lower.search(rows.get(id), 50);
+          List<byte[]> found = lower.search(rows.get(id), 50, HConstants.EMPTY_START_ROW,
+            HConstants.EMPTY_END_ROW, null);
           assertFalse(found.isEmpty());
           for (byte[] key : found) {
             assertTrue(Bytes.toString(key) + " is outside the lower daughter",
@@ -1464,7 +1475,9 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
         // The upper daughter has no graph, so its scans read its range without candidate
         // restriction. Thus the query finds the row at the split key, which only the parent delta
         // holds
-        assertTrue(upper.search(atSplit, 50).isEmpty());
+        assertTrue(
+          upper.search(atSplit, 50, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null)
+            .isEmpty());
         assertEquals("m", query2(conn, table, atSplit).get(0));
         assertEquals("a0", query2(conn, table, newA0).get(0));
         // The daughters cannot write segments yet
@@ -1879,7 +1892,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
 
         HnswIndexManager lower = manager(regions(table).get(0), index);
         assertFalse(lower.covered());
-        assertEquals(0, lower.count());
+        assertEquals(0, lower.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
         assertEquals(new HashSet<>(Arrays.asList("a0", "a0-copy")),
           new HashSet<>(query2(conn, table, rows.get("a0"))));
         assertEquals("z1", query2(conn, table, rows.get("z1")).get(0));
