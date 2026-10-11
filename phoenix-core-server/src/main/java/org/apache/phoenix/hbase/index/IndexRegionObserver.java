@@ -813,7 +813,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     } catch (IOException e) {
       throw e;
     } catch (Throwable t) {
-      // HBase aborts the server on an unchecked exception from a coprocessor hook, so the scan
+      // The search applies the client filter, which can throw an unchecked exception.
+      // HBase aborts the server on an unchecked exception from a coprocessor hook. Thus the scan
       // fails instead
       throw ClientUtil.createIOException(
         "HNSW scan of region " + c.getEnvironment().getRegionInfo().getRegionNameAsString(), t);

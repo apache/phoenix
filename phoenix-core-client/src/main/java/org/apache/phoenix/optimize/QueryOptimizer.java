@@ -816,12 +816,10 @@ public class QueryOptimizer {
 
   /**
    * Plans a nearest neighbor query with an HNSW index. The plan scans the data table, and each
-   * region limits its scan to the candidate rows of a search of its own graph. A graph search
-   * returns the nearest rows of the full region at the current time. A filter or a partial key
-   * range can drop candidates and return too few rows. Thus the method rejects a query with a WHERE
-   * clause or a partial key range. It also rejects a point-in-time read (SCN), because a graph
-   * holds only the current data. It also rejects a query whose ORDER BY has no constant query
-   * vector.
+   * region limits its scan to the candidate rows of a search of its own graph. The region search
+   * applies the key range and the filter of the query. It asks for more candidates until enough
+   * rows pass. The method rejects a point-in-time read (SCN), because a graph holds only the
+   * current committed data. It also rejects a query whose ORDER BY has no constant query vector.
    */
   private AddPlanResult addHnswPlan(PhoenixStatement statement, PTable index, QueryPlan dataPlan,
     SelectStatement indexSelect, List<? extends PDatum> targetColumns,
@@ -835,14 +833,13 @@ public class QueryOptimizer {
     if (reason != null) {
       return AddPlanResult.rejected(index, reason);
     }
-    SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
-    if (
-      dataSelect.getWhere() != null || !dataPlan.getContext().getScanRanges().isEverything()
-        || statement.getConnection().getSCN() != null
-        || HnswScanPlan.queryVector(dataPlan.getOrderBy()) == null
-    ) {
-      return AddPlanResult.rejected(index, OptimizerReasons.REASON_HNSW_FILTERED_SEARCH);
+    if (statement.getConnection().getSCN() != null) {
+      return AddPlanResult.rejected(index, OptimizerReasons.REASON_HNSW_POINT_IN_TIME);
     }
+    if (HnswScanPlan.queryVector(dataPlan.getOrderBy()) == null) {
+      return AddPlanResult.rejected(index, OptimizerReasons.REASON_NOT_A_VECTOR_SEARCH);
+    }
+    SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
     // Compile the statement of the data plan again with a new resolver of the data table. The HNSW
     // index makes the compiler return an HnswScanPlan
     return AddPlanResult.success(new QueryCompiler(statement, dataSelect,

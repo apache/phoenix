@@ -36,10 +36,13 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -53,6 +56,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -187,20 +191,201 @@ public class HnswQueryIT extends ParallelStatsDisabledIT {
     }
   }
 
-  /** A query with a WHERE clause does not use the HNSW index, and returns the exact top-k rows. */
+  /** Asserts that the rows are in order of decreasing similarity to the query vector. */
+  private static void assertOrdered(Map<String, HnswFilteredSearchIT.Row> rows, float[] q,
+    List<String> found) {
+    for (int j = 1; j < found.size(); j++) {
+      assertTrue("Results must be ordered by distance", cosine(q, rows.get(found.get(j - 1)).vector)
+          >= cosine(q, rows.get(found.get(j)).vector) - 1e-6);
+    }
+  }
+
+  /**
+   * Tests queries with a filter on a column that the index does not hold. The filters pass 1000,
+   * 100 and 2 of the 2000 rows. Each region probes its candidates with the filter. While too few
+   * rows pass, it asks the graph for more candidates. The results are in distance order, with a
+   * recall of at least 0.9. If fewer rows than LIMIT pass, the query returns all of them.
+   */
   @Test
-  public void testFilteredQueryDoesNotUseIndex() throws Exception {
+  public void testFilteredQuery() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, HnswFilteredSearchIT.Row> rows =
+        HnswFilteredSearchIT.createAndBuild(conn, table, index, 2000);
+      for (int bound : new int[] { 500, 50, 1 }) {
+        String sql = sql(table, "", " WHERE C < " + bound, 10);
+        Set<String> passing =
+          HnswFilteredSearchIT.select(rows, id -> rows.get(id).category < bound);
+        Random random = new Random(bound);
+        assertTrue(explain(conn, sql, vector(random)).contains("SERVER HNSW SEARCH " + index));
+        int hits = 0;
+        int queries = 10;
+        for (int i = 0; i < queries; i++) {
+          float[] q = vector(random);
+          List<String> found = query(conn, sql, q);
+          List<String> expected = HnswFilteredSearchIT.topK(rows, passing, q, 10);
+          assertEquals(expected.size(), found.size());
+          assertTrue("rows outside the filter: " + found, passing.containsAll(found));
+          assertOrdered(rows, q, found);
+          if (passing.size() < 10) {
+            assertEquals(expected, found);
+          }
+          hits += expected.stream().filter(found::contains).count();
+        }
+        double recall = hits / (double) (queries * Math.min(10, passing.size()));
+        assertTrue("C < " + bound + " recall " + recall, recall >= 0.9);
+      }
+    }
+  }
+
+  /**
+   * Tests vector queries with primary key predicates: a key range, a point lookup, and a skip scan
+   * over two key ranges. The HNSW search applies the key range and the skip scan keys to each node
+   * of the graph search.
+   */
+  @Test
+  public void testKeyRangeQuery() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, HnswFilteredSearchIT.Row> rows =
+        HnswFilteredSearchIT.createAndBuild(conn, table, index, 2000);
+      Random random = new Random(3);
+      String wideSql = sql(table, "", " WHERE ID >= 'a2' AND ID < 'a5'", 10);
+      assertTrue(explain(conn, wideSql, vector(random)).contains("SERVER HNSW SEARCH " + index));
+      Set<String> wide =
+        HnswFilteredSearchIT.select(rows, id -> id.compareTo("a2") >= 0 && id.compareTo("a5") < 0);
+      int hits = 0;
+      int queries = 10;
+      for (int i = 0; i < queries; i++) {
+        float[] q = vector(random);
+        List<String> found = query(conn, wideSql, q);
+        assertEquals(10, found.size());
+        assertTrue("rows outside the range: " + found, wide.containsAll(found));
+        assertOrdered(rows, q, found);
+        List<String> expected = HnswFilteredSearchIT.topK(rows, wide, q, 10);
+        hits += expected.stream().filter(found::contains).count();
+      }
+      double recall = hits / (double) (queries * 10);
+      assertTrue("range recall " + recall, recall >= 0.9);
+
+      float[] q = vector(random);
+      Set<String> narrow = HnswFilteredSearchIT.select(rows,
+        id -> id.compareTo("a10") >= 0 && id.compareTo("a102") < 0);
+      assertEquals(HnswFilteredSearchIT.topK(rows, narrow, q, 10),
+        query(conn, sql(table, "", " WHERE ID >= 'a10' AND ID < 'a102'", 10), q));
+
+      // A point lookup uses the data table plan, because no index plan can read fewer rows
+      String inSql = sql(table, "", " WHERE ID IN ('a2', 'a40', 'a1998', 'z1', 'z3', 'z555')", 10);
+      assertFalse(explain(conn, inSql, q).contains("HNSW"));
+      Set<String> in = new HashSet<>(Arrays.asList("a2", "a40", "a1998", "z1", "z3", "z555"));
+      assertEquals(HnswFilteredSearchIT.topK(rows, in, q, 10), query(conn, inSql, q));
+
+      // The compiler makes a SkipScanFilter from two key ranges. The graph search applies its keys
+      String skipSql =
+        sql(table, "", " WHERE (ID >= 'a40' AND ID < 'a41') OR (ID >= 'z55' AND ID < 'z56')", 10);
+      assertTrue(explain(conn, skipSql, q).contains("SERVER HNSW SEARCH " + index));
+      Set<String> skip =
+        HnswFilteredSearchIT.select(rows, id -> id.startsWith("a40") || id.startsWith("z55"));
+      assertTrue(skip.size() > 10);
+      assertEquals(HnswFilteredSearchIT.topK(rows, skip, q, 10), query(conn, skipSql, q));
+    }
+  }
+
+  /**
+   * A query with a distance bound in the WHERE clause uses the HNSW index. It returns only rows
+   * within the bound, with a recall of at least 0.9.
+   */
+  @Test
+  public void testDistancePredicate() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, HnswFilteredSearchIT.Row> rows =
+        HnswFilteredSearchIT.createAndBuild(conn, table, index, 2000);
+      String sql = "SELECT ID FROM " + table + " WHERE COSINE_DISTANCE(V, ?) < 0.6"
+        + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 10";
+      Random random = new Random(5);
+      int hits = 0;
+      int expectedCount = 0;
+      int queries = 10;
+      for (int i = 0; i < queries; i++) {
+        float[] q = vector(random);
+        List<String> found = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+          ps.setArray(1, conn.createArrayOf("FLOAT", box(q)));
+          ps.setArray(2, conn.createArrayOf("FLOAT", box(q)));
+          if (i == 0) {
+            try (PreparedStatement explain = conn.prepareStatement("EXPLAIN " + sql)) {
+              explain.setArray(1, conn.createArrayOf("FLOAT", box(q)));
+              explain.setArray(2, conn.createArrayOf("FLOAT", box(q)));
+              assertTrue(QueryUtil.getExplainPlan(explain.executeQuery())
+                .contains("SERVER HNSW SEARCH " + index));
+            }
+          }
+          try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+              found.add(rs.getString(1));
+            }
+          }
+        }
+        Set<String> within =
+          HnswFilteredSearchIT.select(rows, id -> 1 - cosine(q, rows.get(id).vector) < 0.6);
+        assertTrue("rows outside the radius: " + found, within.containsAll(found));
+        List<String> expected = HnswFilteredSearchIT.topK(rows, within, q, 10);
+        assertEquals(expected.size(), found.size());
+        hits += expected.stream().filter(found::contains).count();
+        expectedCount += expected.size();
+      }
+      double recall = hits / (double) expectedCount;
+      assertTrue("distance predicate recall " + recall, recall >= 0.9);
+    }
+  }
+
+  /**
+   * Tests a filter that passes fewer rows than LIMIT, with rows that pass in both regions. The
+   * probe of each region asks for more candidates, up to a read of the full range of the region.
+   * Thus the query returns the exact result.
+   */
+  @Test
+  public void testFilteredQueryAcrossSplit() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Map<String, HnswFilteredSearchIT.Row> rows =
+        HnswFilteredSearchIT.createAndBuild(conn, table, index, 2000);
+      Set<String> passing = HnswFilteredSearchIT.select(rows, id -> rows.get(id).category < 3);
+      assertTrue(passing.stream().anyMatch(id -> id.startsWith("a"))
+        && passing.stream().anyMatch(id -> id.startsWith("z")));
+      String sql = sql(table, "", " WHERE C < 3", 10);
+      float[] q = vector(new Random(7));
+      assertTrue(explain(conn, sql, q).contains("SERVER HNSW SEARCH " + index));
+      assertEquals(HnswFilteredSearchIT.topK(rows, passing, q, 10), query(conn, sql, q));
+      assertEquals(query(conn, sql(table, "/*+ NO_INDEX */", " WHERE C < 3", 10), q),
+        query(conn, sql, q));
+    }
+  }
+
+  /**
+   * A query at an SCN does not use the HNSW index, because the graph holds only the current data.
+   * The query scans the data table and returns the exact result.
+   */
+  @Test
+  public void testScnQueryDoesNotUseIndex() throws Exception {
     String table = generateUniqueName();
     String index = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       Map<String, float[]> rows = createAndBuild(conn, table, index, 200);
-      float[] q = vector(new Random(31));
-      String sql = sql(table, "", " WHERE ID > 'm'", 5);
-      assertFalse(explain(conn, sql, q).contains("HNSW"));
-      Map<String, float[]> upper =
-        rows.entrySet().stream().filter(e -> e.getKey().compareTo("m") > 0)
-          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-      assertEquals(bruteForce(upper, q, 5), query(conn, sql, q));
+      Properties props = new Properties();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+        Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
+      try (Connection scn = DriverManager.getConnection(getUrl(), props)) {
+        float[] q = vector(new Random(9));
+        String sql = sql(table, "", "", 5);
+        assertFalse(explain(scn, sql, q).contains("HNSW"));
+        assertEquals(bruteForce(rows, q, 5), query(scn, sql, q));
+      }
     }
   }
 
