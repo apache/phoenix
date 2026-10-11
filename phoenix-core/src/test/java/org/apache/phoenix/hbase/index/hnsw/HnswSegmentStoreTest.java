@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.hnsw;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +48,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -72,28 +74,35 @@ import org.mockito.ArgumentCaptor;
 
 /**
  * Verifies the shared rules of the segment stores, the listing scan and the payload read, with a
- * read-only {@link HnswSegmentStore.TableStore}. The tests also verify the flush wait of a
- * {@link HnswSegmentStore.RegionStore} write.
+ * read-only {@link HnswSegmentStore.TableStore}. The tests also verify that a base write of a
+ * {@link HnswSegmentStore.RegionStore} waits for the flush, and that a delta write does not wait.
  */
 public class HnswSegmentStoreTest {
   private static final byte[] FAMILY = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
   private static final byte[] KEY = Bytes.toBytes("HNSW_INDEX");
   private static final HnswSegment.Descriptor DESCRIPTOR =
-    new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 100L, Bytes.toBytes("f"), 10, 90L,
+    new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 100L, Bytes.toBytes("f"), 10, null, 90L,
       HnswSegment.definitionDigest("definition"));
   private static final byte[] PAYLOAD_QUALIFIER =
     HnswSegment.qualifier(DESCRIPTOR.identity, HnswSegment.PAYLOAD_TAG);
 
   /**
    * The listing scans only the cells of the index in {@code V#}, and gets MOB references as stored.
-   * It decodes the segments of all rows. A filter on the server removes the payload cells, which
-   * hold the full payload until the {@code V#} flush.
+   * It decodes the segments of all rows. A filter on the server removes the payload cells and the
+   * tombstones cells. Until the {@code V#} flush, these cells hold their full values, which can be
+   * large. The filter keeps the base time of a delta.
    */
   @Test
   public void testList() throws Exception {
     HnswSegment.Descriptor other = new HnswSegment.Descriptor(KEY, Bytes.toBytes("f"), 200L,
-      new byte[0], 3, 200L, DESCRIPTOR.definition);
+      new byte[0], 3, null, 200L, DESCRIPTOR.definition);
+    HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 150L,
+      Bytes.toBytes("f"), 2, 100L, 150L, DESCRIPTOR.definition);
     List<Cell> first = new ArrayList<>(HnswSegmentTest.cells(DESCRIPTOR.anchor, DESCRIPTOR, true));
+    first.addAll(HnswSegmentTest.cells(delta.anchor, delta, true));
+    first.add(new KeyValue(delta.anchor, FAMILY,
+      HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG),
+      HnswSegment.encodeKeys(new byte[][] { Bytes.toBytes("c") })));
     List<Cell> second = new ArrayList<>(HnswSegmentTest.cells(other.anchor, other, true));
     Table table = mock(Table.class);
     ResultScanner scanner = mock(ResultScanner.class);
@@ -103,10 +112,13 @@ public class HnswSegmentStoreTest {
     when(table.getScanner(scan.capture())).thenReturn(scanner);
 
     List<HnswSegment.Descriptor> listed = new HnswSegmentStore.TableStore(table).list(KEY);
-    assertEquals(2, listed.size());
+    assertEquals(3, listed.size());
     HnswSegmentTest.assertDescriptor(DESCRIPTOR, listed.get(0));
-    HnswSegmentTest.assertDescriptor(other, listed.get(1));
-    assertArrayEquals(HnswSegmentTest.WRITER, listed.get(0).writer);
+    HnswSegmentTest.assertDescriptor(delta, listed.get(1));
+    HnswSegmentTest.assertDescriptor(other, listed.get(2));
+    for (HnswSegment.Descriptor d : listed) {
+      assertArrayEquals(HnswSegmentTest.WRITER, d.writer);
+    }
     Scan s = scan.getValue();
     assertEquals(1, s.getFamilyMap().size());
     assertTrue(s.getFamilyMap().containsKey(FAMILY));
@@ -115,14 +127,15 @@ public class HnswSegmentStoreTest {
     for (Cell cell : first) {
       byte tag =
         cell.getQualifierArray()[cell.getQualifierOffset() + cell.getQualifierLength() - 1];
-      assertEquals(Character.toString((char) tag), tag != HnswSegment.PAYLOAD_TAG,
+      assertEquals(Character.toString((char) tag),
+        tag != HnswSegment.PAYLOAD_TAG && tag != HnswSegment.TOMBSTONES_TAG,
         filter.filterCell(cell) == Filter.ReturnCode.INCLUDE);
     }
     // The filter also removes the cells of another index whose key starts with the key of this
     // index
-    for (Cell cell : HnswSegmentTest.cells(DESCRIPTOR.anchor,
-      new HnswSegment.Descriptor(Bytes.toBytes("HNSW_INDEX2"), DESCRIPTOR.startKey, 100L,
-        DESCRIPTOR.endKey, 10, 90L, DESCRIPTOR.definition),
+    for (Cell cell : HnswSegmentTest.cells(
+      DESCRIPTOR.anchor, new HnswSegment.Descriptor(Bytes.toBytes("HNSW_INDEX2"),
+        DESCRIPTOR.startKey, 100L, DESCRIPTOR.endKey, 10, null, 90L, DESCRIPTOR.definition),
       true)) {
       assertFalse(filter.filterCell(cell) == Filter.ReturnCode.INCLUDE);
     }
@@ -146,6 +159,82 @@ public class HnswSegmentStoreTest {
     assertTrue(g.getFamilyMap().get(FAMILY).contains(PAYLOAD_QUALIFIER));
     assertEquals(1, g.getFamilyMap().get(FAMILY).size());
     assertTrue(Bytes.toBoolean(g.getAttribute(MobConstants.EMPTY_VALUE_ON_MOBCELL_MISS)));
+  }
+
+  /**
+   * A tombstones read gets the tombstones cell and the count cell of a delta from the anchor row.
+   * It asks HBase for an empty value if the MOB file of the reference is missing or corrupt. A
+   * delta without a tombstones cell records no deleted rows. A missing count cell means that the
+   * region retired the segment after the listing.
+   */
+  @Test
+  public void testReadTombstones() throws Exception {
+    HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 150L,
+      Bytes.toBytes("f"), 0, 100L, 150L, DESCRIPTOR.definition);
+    byte[] tombstones = HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG);
+    byte[] count = HnswSegment.qualifier(delta.identity, HnswSegment.COUNT_TAG);
+    KeyValue countCell = new KeyValue(delta.anchor, FAMILY, count, Bytes.toBytes(0));
+    Table table = mock(Table.class);
+    ArgumentCaptor<Get> get = ArgumentCaptor.forClass(Get.class);
+    when(table.get(get.capture())).thenReturn(Result.create(Arrays.asList(countCell,
+      new KeyValue(delta.anchor, FAMILY, tombstones, Bytes.toBytes("bytes")))));
+    HnswSegmentStore store = new HnswSegmentStore.TableStore(table);
+    Cell cell = store.readTombstones(delta);
+    assertEquals("bytes",
+      Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+    Get g = get.getValue();
+    assertArrayEquals(Bytes.toBytes("b\0"), g.getRow());
+    assertEquals(2, g.getFamilyMap().get(FAMILY).size());
+    assertTrue(g.getFamilyMap().get(FAMILY).contains(tombstones));
+    assertTrue(g.getFamilyMap().get(FAMILY).contains(count));
+    assertTrue(Bytes.toBoolean(g.getAttribute(MobConstants.EMPTY_VALUE_ON_MOBCELL_MISS)));
+
+    when(table.get(any(Get.class))).thenReturn(Result.create(Arrays.asList(countCell)));
+    assertNull(store.readTombstones(delta));
+    when(table.get(any(Get.class))).thenReturn(Result.EMPTY_RESULT);
+    try {
+      store.readTombstones(delta);
+      fail("the tombstones of a retired delta must not be read");
+    } catch (HnswSegment.NotFoundException expected) {
+    }
+  }
+
+  /**
+   * The write of a delta adds its base time and its tombstones to the cells of a segment. The write
+   * of a base adds neither. All cells have the segment time as their timestamp.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testWriteDelta() throws Exception {
+    MockRegion r = new MockRegion();
+    r.flushed.set(true);
+    ArgumentCaptor<List<Mutation>> mutations = ArgumentCaptor.forClass(List.class);
+    HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 150L,
+      Bytes.toBytes("f"), 1, 100L, 150L, DESCRIPTOR.definition);
+    byte[][] tombstones = { Bytes.toBytes("c"), Bytes.toBytes("d") };
+    HnswSegmentStore.RegionStore store = new HnswSegmentStore.RegionStore(r.env);
+    store.write(delta, Bytes.toBytes("payload"), tombstones);
+    store.write(DESCRIPTOR, Bytes.toBytes("payload"), new byte[0][]);
+    verify(r.region, times(2)).mutateRowsWithLocks(mutations.capture(), anyCollection(), anyLong(),
+      anyLong());
+    Put deltaPut = (Put) mutations.getAllValues().get(0).get(0);
+    Put basePut = (Put) mutations.getAllValues().get(1).get(0);
+    assertEquals(Durability.SKIP_WAL, deltaPut.getDurability());
+    assertEquals(HnswSegment.TAGS.length, deltaPut.getFamilyCellMap().get(FAMILY).size());
+    assertEquals(HnswSegment.TAGS.length - 2, basePut.getFamilyCellMap().get(FAMILY).size());
+    for (Cell cell : deltaPut.getFamilyCellMap().get(FAMILY)) {
+      assertEquals(delta.time, cell.getTimestamp());
+    }
+    assertEquals(100L, Bytes.toLong(CellUtil.cloneValue(deltaPut
+      .get(FAMILY, HnswSegment.qualifier(delta.identity, HnswSegment.BASE_TIME_TAG)).get(0))));
+    assertArrayEquals(HnswSegment.encodeKeys(tombstones), CellUtil.cloneValue(deltaPut
+      .get(FAMILY, HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG)).get(0)));
+    assertTrue(
+      basePut.get(FAMILY, HnswSegment.qualifier(DESCRIPTOR.identity, HnswSegment.BASE_TIME_TAG))
+        .isEmpty());
+    assertTrue(
+      basePut.get(FAMILY, HnswSegment.qualifier(DESCRIPTOR.identity, HnswSegment.TOMBSTONES_TAG))
+        .isEmpty());
   }
 
   /**
@@ -183,8 +272,8 @@ public class HnswSegmentStoreTest {
   }
 
   /**
-   * A write asks the flush requester to flush {@code V#} until the {@code V#} memstore is empty.
-   * The store repeats a refused request after a delay.
+   * A base write asks the flush requester to flush {@code V#} until the {@code V#} memstore is
+   * empty. The store repeats a refused request after a delay.
    */
   @Test
   @SuppressWarnings("unchecked")
@@ -204,7 +293,7 @@ public class HnswSegmentStoreTest {
         tracker.afterExecution();
         return true;
       });
-    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null);
+    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null, new byte[0][]);
     assertEquals(2, r.requests.get());
     assertTrue(r.flushed.get());
     assertTrue(System.nanoTime() - start >= TimeUnit.MILLISECONDS.toNanos(100));
@@ -241,7 +330,7 @@ public class HnswSegmentStoreTest {
         }).start();
         return true;
       });
-    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null);
+    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null, new byte[0][]);
     assertEquals(1, r.requests.get());
     assertTrue(r.flushed.get());
   }
@@ -265,7 +354,7 @@ public class HnswSegmentStoreTest {
         }
         return true;
       });
-    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null);
+    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null, new byte[0][]);
     assertEquals(2, r.requests.get());
     assertTrue(r.flushed.get());
     assertTrue(System.nanoTime() - start >= TimeUnit.MILLISECONDS.toNanos(200));
@@ -282,7 +371,7 @@ public class HnswSegmentStoreTest {
         return false;
       });
     when(r.region.isClosing()).thenAnswer(i -> r.requests.get() >= 2);
-    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null);
+    new HnswSegmentStore.RegionStore(r.env).write(DESCRIPTOR, null, new byte[0][]);
     assertEquals(2, r.requests.get());
     assertFalse(r.flushed.get());
   }
@@ -299,7 +388,7 @@ public class HnswSegmentStoreTest {
     r.flushed.set(true);
     ArgumentCaptor<List<Mutation>> mutations = ArgumentCaptor.forClass(List.class);
     HnswSegmentStore.RegionStore store = new HnswSegmentStore.RegionStore(r.env);
-    store.write(DESCRIPTOR, Bytes.toBytes("payload"));
+    store.write(DESCRIPTOR, Bytes.toBytes("payload"), new byte[0][]);
     store.retire(Collections.singletonList(DESCRIPTOR));
     verify(r.region, times(2)).mutateRowsWithLocks(mutations.capture(), anyCollection(), anyLong(),
       anyLong());
@@ -330,6 +419,35 @@ public class HnswSegmentStoreTest {
     for (Cell cell : put.getFamilyCellMap().get(FAMILY)) {
       assertTrue(deleted.contains(Bytes.toStringBinary(CellUtil.cloneQualifier(cell))));
     }
+  }
+
+  /**
+   * A delta write asks for a flush of {@code V#} and does not wait for it. One thread writes the
+   * deltas of all regions of the server. While a store of a region has too many files, the
+   * requester delays the flush of the region. A wait would then delay the deltas of other regions.
+   */
+  @Test(timeout = 10_000)
+  @SuppressWarnings("unchecked")
+  public void testDeltaWriteDoesNotWaitForFlush() throws Exception {
+    MockRegion r = new MockRegion();
+    // The requester accepts the request and delays the flush past the end of the test
+    when(r.requester.requestFlush(eq(r.region), anyList(), any(FlushLifeCycleTracker.class)))
+      .thenAnswer(i -> {
+        r.requests.incrementAndGet();
+        return true;
+      });
+    HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 150L,
+      Bytes.toBytes("f"), 1, 100L, 150L, DESCRIPTOR.definition);
+    new HnswSegmentStore.RegionStore(r.env).write(delta, Bytes.toBytes("payload"),
+      new byte[][] { Bytes.toBytes("c") });
+    verify(r.region).mutateRowsWithLocks(anyList(), anyCollection(), anyLong(), anyLong());
+    assertEquals(1, r.requests.get());
+    assertFalse(r.flushed.get());
+    ArgumentCaptor<List<byte[]>> families = ArgumentCaptor.forClass(List.class);
+    verify(r.requester).requestFlush(eq(r.region), families.capture(),
+      any(FlushLifeCycleTracker.class));
+    assertEquals(1, families.getValue().size());
+    assertArrayEquals(FAMILY, families.getValue().get(0));
   }
 
   // A mock region whose V# memstore holds data until the test marks it as flushed

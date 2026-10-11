@@ -1165,8 +1165,11 @@ public class IndexTool extends Configured implements Tool {
           long bar = requested != null ? requested + 1 : since.applyAsLong(region);
           boolean built = HnswSegment.anchor(region.getStartKey(), region.getEndKey()) == null;
           for (HnswSegment.Descriptor d : segments) {
-            built |= d.time >= bar && d.covers(region.getStartKey(), region.getEndKey())
-              && Bytes.equals(d.definition, definition);
+            // Only a base segment shows a rebuild. A delta can cover the same key range, but it
+            // holds only the changes of a flush
+            built |=
+              !d.isDelta() && d.time >= bar && d.covers(region.getStartKey(), region.getEndKey())
+                && Bytes.equals(d.definition, definition);
           }
           if (!built) {
             missing.add(region);

@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.jbellis.jvector.graph.GraphIndexBuilder;
@@ -41,6 +42,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -69,7 +71,7 @@ public class HnswSegmentTest {
   // The encoded name of the region that wrote the segments of the listing tests
   static final byte[] WRITER = Bytes.toBytes("0123456789abcdef0123456789abcdef");
   private static final HnswSegment.Descriptor DESCRIPTOR =
-    new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], COUNT, 100L, DEFINITION);
+    new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], COUNT, null, 100L, DEFINITION);
 
   @Test
   public void testDescriptorCoversAndOverlaps() {
@@ -77,7 +79,7 @@ public class HnswSegmentTest {
     byte[] end = Bytes.toBytes("f");
     long time = 100L;
     HnswSegment.Descriptor d =
-      new HnswSegment.Descriptor(KEY, start, time, end, 10, time, DEFINITION);
+      new HnswSegment.Descriptor(KEY, start, time, end, 10, null, time, DEFINITION);
 
     assertTrue(d.covers(Bytes.toBytes("b"), Bytes.toBytes("f")));
     assertFalse(d.covers(Bytes.toBytes("a"), Bytes.toBytes("f")));
@@ -113,7 +115,32 @@ public class HnswSegmentTest {
   }
 
   private static HnswSegment.Descriptor segment(byte[] start, long time, byte[] end) {
-    return new HnswSegment.Descriptor(KEY, start, time, end, 10, time, DEFINITION);
+    return new HnswSegment.Descriptor(KEY, start, time, end, 10, null, time, DEFINITION);
+  }
+
+  private static HnswSegment.Descriptor delta(byte[] start, long time, byte[] end, long base) {
+    return new HnswSegment.Descriptor(KEY, start, time, end, 5, base, time, DEFINITION);
+  }
+
+  /** A delta segment never covers a range, alone or with bases. */
+  @Test
+  public void testCoverageOnlyConsidersBases() {
+    byte[] startA = Bytes.toBytes("a");
+    byte[] midM = Bytes.toBytes("m");
+    byte[] endZ = Bytes.toBytes("z");
+
+    HnswSegment.Descriptor base1 = segment(startA, 100L, midM);
+    HnswSegment.Descriptor delta2 = delta(midM, 200L, endZ, 50L);
+    HnswSegment.Descriptor base2 = segment(midM, 300L, endZ);
+
+    List<HnswSegment.Descriptor> mixed = Arrays.asList(base1, delta2);
+    assertFalse("Delta must not contribute to coverage", HnswSegment.covered(startA, endZ, mixed));
+
+    List<HnswSegment.Descriptor> bases = Arrays.asList(base1, base2);
+    assertTrue("Two adjacent bases must cover", HnswSegment.covered(startA, endZ, bases));
+
+    List<HnswSegment.Descriptor> deltaOnly = Collections.singletonList(delta2);
+    assertFalse("Delta alone must not cover", HnswSegment.covered(midM, endZ, deltaOnly));
   }
 
   /**
@@ -144,7 +171,7 @@ public class HnswSegmentTest {
       assertTrue(what, c[1].length == 0 || Bytes.compareTo(anchor, c[1]) < 0);
     }
     try {
-      new HnswSegment.Descriptor(KEY, empty, 1L, zero, 0, 1L, DEFINITION);
+      new HnswSegment.Descriptor(KEY, empty, 1L, zero, 0, null, 1L, DEFINITION);
       fail("a segment of a range without an anchor row must not be described");
     } catch (IllegalArgumentException expected) {
     }
@@ -239,9 +266,10 @@ public class HnswSegmentTest {
 
   /**
    * A listing returns the well-formed segments at their anchor rows, with the region that wrote
-   * them, and never reads a payload cell. It skips cells whose qualifiers do not decode. It also
-   * skips a segment with a missing cell or a cell of the wrong length. A segment without its writer
-   * is malformed. It skips a segment whose row is not the anchor of its range.
+   * them, and never reads a payload cell or a tombstones cell. It tells deltas from bases by their
+   * base time. It skips cells whose qualifiers do not decode. It also skips a segment with a
+   * missing cell or a cell of the wrong length. A segment without its writer is malformed. It skips
+   * a segment whose row is not the anchor of its range.
    */
   @Test
   public void testListing() {
@@ -249,12 +277,27 @@ public class HnswSegmentTest {
     byte[] end = Bytes.toBytes("t");
     byte[] anchor = HnswSegment.anchor(start, end);
     HnswSegment.Descriptor good =
-      new HnswSegment.Descriptor(KEY, start, 10L, end, 5, 8L, DEFINITION);
+      new HnswSegment.Descriptor(KEY, start, 10L, end, 5, null, 8L, DEFINITION);
     HnswSegment.Descriptor empty =
-      new HnswSegment.Descriptor(KEY, start, 11L, end, 0, 11L, DEFINITION);
+      new HnswSegment.Descriptor(KEY, start, 11L, end, 0, null, 11L, DEFINITION);
+    HnswSegment.Descriptor delta =
+      new HnswSegment.Descriptor(KEY, start, 16L, end, 2, 10L, 16L, DEFINITION);
     List<KeyValue> cells = new ArrayList<>();
     cells.addAll(cells(anchor, good, true));
     cells.addAll(cells(anchor, empty, false));
+    cells.addAll(cells(anchor, delta, true));
+    cells.add(new KeyValue(anchor, FAMILY,
+      HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG), new byte[0]));
+    // A delta with a base time of the wrong length
+    HnswSegment.Descriptor shortBase = delta(start, 17L, end, 10L);
+    for (KeyValue kv : cells(anchor, shortBase, true)) {
+      boolean base = kv.getQualifierArray()[kv.getQualifierOffset() + kv.getQualifierLength() - 1]
+          == HnswSegment.BASE_TIME_TAG;
+      cells.add(base
+        ? new KeyValue(anchor, FAMILY,
+          HnswSegment.qualifier(shortBase.identity, HnswSegment.BASE_TIME_TAG), new byte[4])
+        : kv);
+    }
     // A segment at a row that is not the anchor of its range
     cells.addAll(cells(Bytes.toBytes("m1"), segment(start, 12L, end), true));
     // A segment without its definition digest, and one with a short count
@@ -288,9 +331,12 @@ public class HnswSegmentTest {
       listing.add(kv);
     }
     List<HnswSegment.Descriptor> listed = listing.descriptors();
-    assertEquals(listed.toString(), 2, listed.size());
+    assertEquals(listed.toString(), 3, listed.size());
     assertDescriptor(good, listed.get(0));
     assertDescriptor(empty, listed.get(1));
+    assertDescriptor(delta, listed.get(2));
+    assertFalse(listed.get(0).isDelta());
+    assertTrue(listed.get(2).isDelta());
     for (HnswSegment.Descriptor d : listed) {
       assertArrayEquals(WRITER, d.writer);
     }
@@ -310,6 +356,10 @@ public class HnswSegmentTest {
       HnswSegment.qualifier(d.identity, HnswSegment.DEFINITION_TAG), d.definition));
     cells.add(
       new KeyValue(row, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG), WRITER));
+    if (d.isDelta()) {
+      cells.add(new KeyValue(row, FAMILY,
+        HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG), Bytes.toBytes(d.baseTime)));
+    }
     if (payload) {
       cells.add(new KeyValue(row, FAMILY,
         HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), new byte[0]));
@@ -324,6 +374,7 @@ public class HnswSegmentTest {
     assertArrayEquals(expected.endKey, actual.endKey);
     assertEquals(expected.time, actual.time);
     assertEquals(expected.count, actual.count);
+    assertEquals(expected.baseTime, actual.baseTime);
     assertEquals(expected.replayFrom, actual.replayFrom);
     assertArrayEquals(expected.anchor, actual.anchor);
     assertArrayEquals(expected.definition, actual.definition);
@@ -415,7 +466,7 @@ public class HnswSegmentTest {
     for (String quantization : new String[] { "NONE", "SQ8", "PQ" }) {
       HnswSegment segment =
         HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE",
-          HnswSegment.build(index(quantization), vectors, keys()));
+          HnswSegment.build(index(quantization), vectors, keys()), new byte[0][]);
       try {
         assertEquals(quantization, 100,
           segment.search(vectors.getVector(0), 100, 16, Bits.ALL).getNodes().length);
@@ -491,7 +542,8 @@ public class HnswSegmentTest {
       assertEquals(quantization, 0x484E5357,
         Bytes.toInt(payload, payload.length - Bytes.SIZEOF_INT));
       HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
-      HnswSegment segment = HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", payload);
+      HnswSegment segment =
+        HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", payload, new byte[0][]);
       assertEquals(COUNT, segment.size());
       assertEquals(quantization, segment.ordinalOf(new ImmutableBytesPtr(keys[0])),
         segment.search(vectors.getVector(0), 1, 32, Bits.ALL).getNodes()[0].node);
@@ -517,8 +569,8 @@ public class HnswSegmentTest {
   @Test
   public void testOrdinalOf() throws Exception {
     byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys());
-    HnswSegment segment =
-      HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE", payload);
+    HnswSegment segment = HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE),
+      "COSINE", payload, new byte[0][]);
     for (int i = 0; i < segment.size(); i++) {
       byte[] key = segment.getKey(i);
       byte[] padded = new byte[key.length + 4];
@@ -544,7 +596,8 @@ public class HnswSegmentTest {
     byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys);
     HnswSegmentStore store = store(payload);
     HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
-    HnswSegment segment = HnswSegment.of(store, DESCRIPTOR, allocator, "COSINE", payload);
+    HnswSegment segment =
+      HnswSegment.of(store, DESCRIPTOR, allocator, "COSINE", payload, new byte[0][]);
     verifyNoInteractions(store);
     long charge = allocator.getAllocatedBytes();
     assertTrue(charge > 0);
@@ -604,7 +657,8 @@ public class HnswSegmentTest {
     // JVector magic.
     Bytes.putInt(payload, Bytes.SIZEOF_INT, Integer.MAX_VALUE);
     try {
-      HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE", payload);
+      HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE", payload,
+        new byte[0][]);
       fail("a segment with a corrupt graph must not load");
     } catch (DoNotRetryIOException e) {
       assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
@@ -619,7 +673,7 @@ public class HnswSegmentTest {
   public void testEmptyPayloadRejected() throws Exception {
     HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
     try {
-      HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", new byte[0]);
+      HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", new byte[0], new byte[0][]);
       fail("an empty payload must not load");
     } catch (DoNotRetryIOException e) {
       assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
@@ -638,13 +692,61 @@ public class HnswSegmentTest {
   public void testOpenWithoutVectors() throws Exception {
     HnswSegmentStore store = mock(HnswSegmentStore.class);
     HnswSegment.Descriptor d =
-      new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], 0, 100L, DEFINITION);
+      new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], 0, null, 100L, DEFINITION);
     HnswSegment segment =
       HnswSegment.open(store, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
     assertEquals(0, segment.size());
     assertEquals(0, segment.search(vectors().getVector(0), 5, 16, Bits.ALL).getNodes().length);
     verifyNoInteractions(store);
     segment.close();
+  }
+
+  /**
+   * A delta segment that holds only deletes has no payload. Its open reads only its tombstones.
+   */
+  @Test
+  public void testOpenDeleteOnlyDelta() throws Exception {
+    HnswSegment.Descriptor d =
+      new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 0, 100L, 200L, DEFINITION);
+    byte[][] tombstones = { Bytes.toBytes("a"), Bytes.toBytes("b") };
+    HnswSegmentStore store = mock(HnswSegmentStore.class);
+    when(store.readTombstones(d)).thenReturn(
+      new KeyValue(d.anchor, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG),
+        HnswSegment.encodeKeys(tombstones)));
+    HnswSegment segment =
+      HnswSegment.open(store, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+    assertEquals(0, segment.size());
+    assertEquals(2, segment.getTombstones().length);
+    assertArrayEquals(tombstones[0], segment.getTombstones()[0]);
+    assertArrayEquals(tombstones[1], segment.getTombstones()[1]);
+    verify(store).readTombstones(d);
+    verifyNoMoreInteractions(store);
+    segment.close();
+  }
+
+  /**
+   * A delta segment with corrupt tombstones fails to open with a corrupt segment error. Thus the
+   * region rebuilds its segments. HBase returns an empty value for a tombstones cell whose MOB file
+   * is lost, and this value is also corrupt. The open does not read the payload.
+   */
+  @Test
+  public void testCorruptTombstones() throws Exception {
+    HnswSegment.Descriptor d =
+      new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 3, 100L, 200L, DEFINITION);
+    byte[] qualifier = HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG);
+    // Two corrupt values: a count of five with no keys, and the empty value of a lost MOB file
+    for (byte[] value : new byte[][] { Bytes.toBytes(5), new byte[0] }) {
+      HnswSegmentStore store = mock(HnswSegmentStore.class);
+      when(store.readTombstones(d)).thenReturn(new KeyValue(d.anchor, FAMILY, qualifier, value));
+      try {
+        HnswSegment.open(store, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+        fail("a segment with corrupt tombstones must not open");
+      } catch (DoNotRetryIOException e) {
+        assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+      }
+      verify(store).readTombstones(d);
+      verifyNoMoreInteractions(store);
+    }
   }
 
   // A mock segment store whose payload cell for DESCRIPTOR holds the given value

@@ -122,7 +122,7 @@ public class HnswCandidateProbeTest {
     // An empty base segment of the region covers the region, so that searches restrict the scans
     cells.put(
       new HnswSegment.Descriptor(Bytes.toBytes(INDEX), HConstants.EMPTY_START_ROW, 1,
-        HConstants.EMPTY_END_ROW, 0, 1,
+        HConstants.EMPTY_END_ROW, 0, null, 1,
         HnswSegment.definitionDigest(HnswIndexManager.definition(index()))),
       null, info.getEncodedNameAsBytes());
   }
