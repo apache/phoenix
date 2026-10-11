@@ -59,12 +59,16 @@ public class HnswScanPlan extends ScanPlan {
     int efSearch = VectorIndexScanPlan.getHintInt(statement.getHint(), Hint.HNSW_EF_SEARCH,
       context.getConnection().getQueryServices().getProps()
         .getInt(QueryServices.HNSW_EF_SEARCH_ATTRIB, QueryServicesOptions.DEFAULT_HNSW_EF_SEARCH));
-    this.candidates = Math.max(efSearch, limit + (offset != null ? offset : 0));
+    int target = limit + (offset != null ? offset : 0);
+    this.candidates = Math.max(efSearch, target);
     float[] query = queryVector(orderBy);
-    byte[] search = new byte[Bytes.SIZEOF_INT * (1 + query.length)];
+    // The search attribute holds the candidate count, the target row count and the query vector.
+    // The client merges the rows of all regions, so each region tries to return the target count
+    byte[] search = new byte[Bytes.SIZEOF_INT * (2 + query.length)];
     Bytes.putInt(search, 0, candidates);
+    Bytes.putInt(search, Bytes.SIZEOF_INT, target);
     for (int i = 0; i < query.length; i++) {
-      Bytes.putFloat(search, Bytes.SIZEOF_INT * (1 + i), query[i]);
+      Bytes.putFloat(search, Bytes.SIZEOF_INT * (2 + i), query[i]);
     }
     // A view inherits the index as <view>#<index>. The regions keep one graph under the index name
     context.getScan().setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX,
@@ -85,9 +89,9 @@ public class HnswScanPlan extends ScanPlan {
   /**
    * Estimates the cost as point reads of the candidate rows of each scan, because each region scan
    * searches its own graph. The estimate is at most the rows of the scanned range. Returns
-   * {@link Cost#UNKNOWN} if the statistics give no row estimate. The estimate assumes that each
-   * scan reads only its candidates. On a table with a TTL, a scan reads every row of its range. A
-   * region without a covering base segment also reads every row of its range.
+   * {@link Cost#UNKNOWN} if the statistics give no row estimate. The estimate does not include the
+   * rows that a scan adds when its candidates fail the filter. Such a scan can read every row of
+   * its range. A region without a covering base segment also reads every row of its range.
    */
   @Override
   public Cost getCost() {

@@ -78,7 +78,7 @@ public class HnswMutableGraphTest {
   private static ImmutableBytesPtr nearest(HnswIndexManager.MutableGraph graph, float[] v) {
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
     graph.search(VectorizationProvider.getInstance().getVectorTypeSupport().createFloatVector(v),
-      10, scores, null);
+      10, scores, null, k -> true);
     ImmutableBytesPtr best = null;
     for (Map.Entry<ImmutableBytesPtr, Float> e : scores.entrySet()) {
       if (best == null || e.getValue() > scores.get(best)) {
