@@ -54,6 +54,7 @@ import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -611,14 +612,23 @@ public class VectorIndexCompilerTest extends BaseConnectionlessQueryTest {
         + "WITH (algorithm='HNSW', metric='COSINE')");
       // A new HNSW index stays in BUILDING state until IndexTool builds its segments
       conn.createStatement().execute("ALTER INDEX I_VEC_COST ON T_VEC_COST ACTIVE");
-      String query = "SELECT /*+ INDEX(T_VEC_COST I_VEC_COST) */ ID FROM T_VEC_COST "
+      String query = "SELECT /*+ INDEX(T_VEC_COST I_VEC_COST) */ ID FROM T_VEC_COST%s "
         + "ORDER BY COSINE_DISTANCE(V, ?) LIMIT 10";
-      PhoenixPreparedStatement ps =
-        conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-      ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1f, 0f }));
-      QueryPlan plan = ps.optimizeQuery();
-      assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
-      assertTrue(plan.getCost().isUnknown());
+      for (String where : new String[] { "", " WHERE ID IN ('a', 'b')" }) {
+        PhoenixPreparedStatement ps =
+          conn.prepareStatement(String.format(query, where)).unwrap(PhoenixPreparedStatement.class);
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1f, 0f }));
+        QueryPlan plan = ps.optimizeQuery();
+        assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
+        if (where.isEmpty()) {
+          assertTrue(plan.getCost().isUnknown());
+        } else {
+          // The cost is at most the rows of the scanned range. Two point lookups read two rows,
+          // which is fewer than the candidate count
+          assertEquals(CostUtil.estimateLookupCost(2, plan.getTableRef().getTable()),
+            plan.getCost());
+        }
+      }
     }
   }
 
