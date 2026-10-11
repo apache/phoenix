@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.hbase.index.metrics.HnswMetricValues.value;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -46,6 +47,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -91,18 +93,22 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.hnsw.HnswOffheapAllocator;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
+import org.apache.phoenix.hbase.index.metrics.HnswMetricValues;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
 import org.apache.phoenix.index.vector.HnswRegionRequests;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.bson.BinaryVector;
 import org.bson.BsonBinary;
 import org.bson.BsonDocument;
@@ -1386,7 +1392,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     List<String> ids = new ArrayList<>();
     try (PreparedStatement ps = conn
       .prepareStatement("SELECT ID FROM " + table + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 2")) {
-      ps.setArray(1, conn.createArrayOf("FLOAT", boxed(v)));
+      ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
           ids.add(rs.getString(1));
@@ -1716,13 +1722,13 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       try (PreparedStatement ps = conn
         .prepareStatement("SELECT ID FROM " + table + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 1")) {
         for (String id : new String[] { "z1", "a0" }) {
-          ps.setArray(1, conn.createArrayOf("FLOAT", boxed(rows.get(id))));
+          ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(rows.get(id))));
           try (ResultSet rs = ps.executeQuery()) {
             assertTrue(rs.next());
             assertEquals(id, rs.getString(1));
           }
         }
-        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(moved)));
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(moved)));
         try (ResultSet rs = ps.executeQuery()) {
           assertTrue(rs.next());
           assertEquals("z3", rs.getString(1));
@@ -1800,21 +1806,13 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
-  private static Float[] boxed(float[] v) {
-    Float[] boxed = new Float[v.length];
-    for (int i = 0; i < v.length; i++) {
-      boxed[i] = v[i];
-    }
-    return boxed;
-  }
-
   private static void upsert(Connection conn, String table, String id, float[] v, float[] w)
     throws SQLException {
     try (PreparedStatement ps =
       conn.prepareStatement("UPSERT INTO " + table + " (ID, V, W) VALUES (?, ?, ?)")) {
       ps.setString(1, id);
-      ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
-      ps.setArray(3, conn.createArrayOf("FLOAT", boxed(w)));
+      ps.setArray(2, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+      ps.setArray(3, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(w)));
       ps.executeUpdate();
     }
     conn.commit();
@@ -1857,15 +1855,15 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       float[] v = vector(new Random(22));
       try (PreparedStatement ps =
         conn.prepareStatement("UPSERT INTO " + view + " (V, W) VALUES (?, ?)")) {
-        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(v)));
-        ps.setArray(2, conn.createArrayOf("FLOAT", boxed(new float[dimW])));
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+        ps.setArray(2, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(new float[dimW])));
         ps.executeUpdate();
       }
       conn.commit();
       assertEquals("zview", nearest(table, index, "zview", v));
       try (PreparedStatement ps = conn
         .prepareStatement("SELECT ID FROM " + table + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 1")) {
-        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(v)));
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
         try (ResultSet rs = ps.executeQuery()) {
           assertTrue(rs.next());
           assertEquals("zview", rs.getString(1));
@@ -2126,7 +2124,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       assertNotFound(table, index, "z3", rows.get("z3"));
       try (PreparedStatement ps = conn
         .prepareStatement("SELECT ID FROM " + table + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 1")) {
-        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(moved)));
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(moved)));
         try (ResultSet rs = ps.executeQuery()) {
           assertTrue(rs.next());
           assertEquals("a2", rs.getString(1));
@@ -2350,10 +2348,189 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * The scan metrics of a filtered HNSW query include the rows that the candidate probe of each
+   * region reads. This is also true for a region in which no row passes the filter, and whose probe
+   * then reads the region without restriction. A query without a filter on a table without a TTL
+   * does not probe. Its scans read only the candidate rows.
+   */
+  @Test
+  public void testProbeRowsInScanMetrics() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    Properties props = new Properties();
+    props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      Map<String, float[]> rows = createAndBuild(conn, table, index, 400);
+      float[] v = vector(new Random(73));
+      // The first filter passes about one row in five in each region. The second filter passes no
+      // row of the region before 'm', because the IDs of that region end in an even digit. The
+      // probe of that region widens until it reads the region without restriction
+      for (String filter : new String[] { "ID LIKE '%0' OR ID LIKE '%5'", "ID LIKE '%5'" }) {
+        long probed = value(HnswMetric.PROBE_ROWS_READ, index);
+        long unrestricted = value(HnswMetric.UNRESTRICTED_LIMIT, index);
+        long scanned = rowsScanned(conn, "SELECT ID FROM " + table + " WHERE " + filter
+          + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 3", v);
+        probed = value(HnswMetric.PROBE_ROWS_READ, index) - probed;
+        unrestricted = value(HnswMetric.UNRESTRICTED_LIMIT, index) - unrestricted;
+        assertTrue(filter + ": probe rows " + probed, probed > 0);
+        // The probe reads at least each candidate row. A scan without restriction reads all the
+        // rows of its region, and each region holds one half of the rows. The other scans read at
+        // least the rows that the query returns. Thus the bound fails if a region drops its probe
+        // rows
+        long bound = probed + unrestricted * (rows.size() / 2) + 3;
+        assertTrue(filter + ": rows scanned " + scanned + ", bound " + bound, scanned >= bound);
+      }
+
+      long probed = value(HnswMetric.PROBE_ROWS_READ, index);
+      long scanned =
+        rowsScanned(conn, "SELECT ID FROM " + table + " ORDER BY COSINE_DISTANCE(V, ?) LIMIT 3", v);
+      assertEquals(probed, value(HnswMetric.PROBE_ROWS_READ, index));
+      assertTrue("rows scanned " + scanned, scanned >= 3 && scanned < rows.size());
+    }
+  }
+
+  // Runs a query for the 3 nearest rows to the vector, and returns the rows that its scans read.
+  // The client collects the scan metrics when it closes the scans, so the method reads them after
+  // it closes the result set
+  private static long rowsScanned(Connection conn, String sql, float[] v) throws SQLException {
+    ResultSet rs;
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+      rs = ps.executeQuery();
+      int found = 0;
+      while (rs.next()) {
+        found++;
+      }
+      assertEquals(3, found);
+      rs.close();
+    }
+    long scanned = 0;
+    for (Map<MetricType, Long> metrics : PhoenixRuntime.getRequestReadMetricInfo(rs).values()) {
+      Long value = metrics.get(MetricType.COUNT_ROWS_SCANNED);
+      if (value != null) {
+        scanned += value;
+      }
+    }
+    return scanned;
+  }
+
   private static long count(Statement stmt, String sql) throws SQLException {
     try (ResultSet rs = stmt.executeQuery(sql)) {
       assertTrue(rs.next());
       return rs.getLong(1);
+    }
+  }
+
+  /**
+   * The VectorIndex metrics source publishes the HNSW telemetry of each index. A build, writes past
+   * the flush threshold and a filtered query update the metrics of the index. A failed open of a
+   * name that is not an HNSW index counts only for the server. A drop of the index closes its
+   * managers, so the gauges of the index return to 0.
+   */
+  @Test
+  public void testMetrics() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createAndBuild(conn, table, index, 400);
+      assertEquals(2, value(HnswMetric.REGIONS, index));
+      assertEquals(2, value(HnswMetric.SEGMENTS, index));
+      assertEquals(0, value(HnswMetric.REGIONS_UNCOVERED, index));
+      assertEquals(0, value(HnswMetric.REGIONS_UNRESTRICTED, index));
+      assertEquals(2, value(HnswMetric.OPEN_TIME, index));
+      assertTrue(value(HnswMetric.REBUILDS, index) >= 2);
+      assertEquals(value(HnswMetric.REBUILDS, index), value(HnswMetric.REBUILD_TIME, index));
+      assertTrue(value(HnswMetric.STORE_FLUSH_WAIT_TIME, index) >= 2);
+      assertTrue(value(HnswMetric.SEGMENT_BYTES_WRITTEN, index) > 0);
+      assertTrue(value(HnswMetric.OFFHEAP_RESIDENT_SEGMENTS) >= 2);
+      assertTrue(value(HnswMetric.OFFHEAP_ALLOCATED_BYTES) > 0);
+      assertTrue(value(HnswMetric.OFFHEAP_MAX_BYTES) > 0);
+
+      // Write past the flush threshold of the lower region. Its base is small, so the flush
+      // queues a full rebuild
+      long rebuilds = value(HnswMetric.REBUILDS, index);
+      long applied = value(HnswMetric.CHANGES_APPLIED, index);
+      int written = HnswIndexManager.FLUSH_THRESHOLD + 100;
+      conn.setAutoCommit(false);
+      Random random = new Random(71);
+      try (
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + table + " VALUES (?, ?)")) {
+        for (int i = 0; i < written; i++) {
+          ps.setString(1, String.format("b%05d", i));
+          ps.setArray(2, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(vector(random))));
+          ps.executeUpdate();
+          if (i % 1000 == 999) {
+            conn.commit();
+          }
+        }
+      }
+      conn.commit();
+      conn.setAutoCommit(true);
+      assertEquals(applied + written, value(HnswMetric.CHANGES_APPLIED, index));
+      for (int i = 0; i < 600 && value(HnswMetric.REBUILDS, index) <= rebuilds; i++) {
+        Thread.sleep(100);
+      }
+      assertTrue(value(HnswMetric.REBUILDS, index) > rebuilds);
+      awaitCovered(table, index);
+      assertTrue(value(HnswMetric.MUTABLE_ENTRIES, index) < HnswIndexManager.FLUSH_THRESHOLD);
+
+      // A filtered query probes its candidates in each region
+      String query =
+        "SELECT ID FROM " + table + " WHERE ID LIKE '%5' ORDER BY COSINE_DISTANCE(V, ?) LIMIT 3";
+      float[] v = vector(random);
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + query)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+        assertTrue(QueryUtil.getExplainPlan(ps.executeQuery()).contains("HNSW SEARCH"));
+      }
+      long searches = value(HnswMetric.SEARCHES, index);
+      long searchTimes = value(HnswMetric.SEARCH_TIME, index);
+      long rounds = value(HnswMetric.PROBE_ROUNDS, index);
+      long rowsRead = value(HnswMetric.PROBE_ROWS_READ, index);
+      long visited = value(HnswMetric.NODES_VISITED, index);
+      try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", HnswIndexFsckIT.boxed(v)));
+        try (ResultSet rs = ps.executeQuery()) {
+          int found = 0;
+          while (rs.next()) {
+            assertTrue(rs.getString(1).endsWith("5"));
+            found++;
+          }
+          assertEquals(3, found);
+        }
+      }
+      long searched = value(HnswMetric.SEARCHES, index) - searches;
+      assertTrue("searches " + searched, searched >= 2);
+      assertEquals(searched, value(HnswMetric.SEARCH_TIME, index) - searchTimes);
+      assertTrue(value(HnswMetric.PROBE_ROUNDS, index) >= rounds + 2);
+      assertTrue(value(HnswMetric.PROBE_ROWS_READ, index) > rowsRead);
+      assertTrue(value(HnswMetric.NODES_VISITED, index) > visited);
+
+      // A build request that names no HNSW index fails to open a manager. The failure counts only
+      // for the server, so a request cannot add metrics for any name
+      String other = generateUniqueName();
+      long failures = value(HnswMetric.OPEN_FAILURES);
+      List<RegionInfo> regions = regionInfos(conn, table);
+      try (Table t = dataTable(conn, index)) {
+        HnswRegionRequests.send(t, regions, BaseScannerRegionObserverConstants.HNSW_BUILD,
+          region -> Bytes.add(Bytes.toBytes(Long.MAX_VALUE), Bytes.toBytes(other)),
+          (region, value, failure) -> assertNotNull(failure));
+      }
+      assertEquals(failures + regions.size(), value(HnswMetric.OPEN_FAILURES));
+      assertEquals(0, value(HnswMetric.OPEN_FAILURES, index));
+      assertNull(HnswMetricValues.server().getMetricsRegistry()
+        .get(HnswMetric.OPEN_FAILURES.metricName() + "." + other));
+
+      // The drop purges the segments, and the purge closes the managers
+      conn.createStatement().execute("DROP INDEX " + index + " ON " + table);
+      for (int i = 0; i < 600 && value(HnswMetric.REGIONS, index) > 0; i++) {
+        Thread.sleep(100);
+      }
+      for (HnswMetric gauge : new HnswMetric[] { HnswMetric.REGIONS, HnswMetric.SEGMENTS,
+        HnswMetric.REGIONS_UNCOVERED, HnswMetric.REGIONS_UNRESTRICTED,
+        HnswMetric.MUTABLE_ENTRIES }) {
+        assertEquals(gauge.metricName(), 0, value(gauge, index));
+      }
     }
   }
 }

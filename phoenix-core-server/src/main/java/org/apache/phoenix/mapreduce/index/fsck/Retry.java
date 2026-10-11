@@ -88,7 +88,7 @@ public final class Retry {
    * HBase rules apply: a socket timeout is not an interrupt, although it is an
    * {@link java.io.InterruptedIOException}.
    */
-  static boolean isInterrupt(Throwable t) {
+  public static boolean isInterrupt(Throwable t) {
     for (Throwable cause = t; cause != null; cause = cause.getCause()) {
       if (ExceptionUtil.isInterrupt(cause)) {
         return true;

@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.vector;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -67,6 +68,7 @@ import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -77,7 +79,9 @@ import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -85,6 +89,8 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
+import org.apache.phoenix.hbase.index.metrics.HnswMetricValues;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
@@ -97,6 +103,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.stubbing.Answer;
 
 /**
  * Unit tests for {@link HnswCandidateProbe}, which limits an HNSW search scan to candidate rows. A
@@ -150,23 +157,44 @@ public class HnswCandidateProbeTest {
       }
       MultiRowRangeFilter candidates = candidates(scan.getFilter());
       List<byte[]> found = new ArrayList<>();
+      // The number of candidate rows that the client filter removes
+      int[] filtered = new int[1];
       if (candidates != null) {
         probes.add(candidates.getRowRanges().size());
         for (RowRange range : candidates.getRowRanges()) {
-          if (rows.containsKey(range.getStartRow()) && passes.test(range.getStartRow())) {
-            found.add(range.getStartRow());
+          if (rows.containsKey(range.getStartRow())) {
+            if (passes.test(range.getStartRow())) {
+              found.add(range.getStartRow());
+            } else {
+              filtered[0]++;
+            }
           }
         }
       }
       Iterator<byte[]> it = found.iterator();
       RegionScanner scanner = mock(RegionScanner.class);
-      when(scanner.next(anyList())).thenAnswer(next -> {
+      Answer<Boolean> next = inv2 -> {
         if (it.hasNext()) {
           byte[] key = it.next();
-          List<Cell> cells = next.getArgument(0);
+          List<Cell> cells = inv2.getArgument(0);
           cells.add(new KeyValue(key, FAMILY, V, encode(rows.get(key))));
         }
         return it.hasNext();
+      };
+      when(scanner.next(anyList())).thenAnswer(next);
+      // As a region scanner does, the scanner counts each row that it reads in a context that
+      // tracks metrics. It also counts each row that the filter removes
+      when(scanner.next(anyList(), any(ScannerContext.class))).thenAnswer(inv2 -> {
+        ScannerContext context = inv2.getArgument(1);
+        if (context.isTrackingMetrics()) {
+          ServerSideScanMetrics metrics = context.getMetrics();
+          metrics.addToCounter(ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME,
+            filtered[0] + (it.hasNext() ? 1 : 0));
+          metrics.addToCounter(ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME,
+            filtered[0]);
+          filtered[0] = 0;
+        }
+        return next.answer(inv2);
       });
       return scanner;
     });
@@ -578,6 +606,80 @@ public class HnswCandidateProbeTest {
     assertEquals(Collections.singletonList(CANDIDATES), probes);
   }
 
+  // The search metrics that testSearchMetrics checks, in this order
+  private static final HnswMetric[] SEARCH_METRICS =
+    { HnswMetric.SEARCHES, HnswMetric.SEARCH_TIME, HnswMetric.UNRESTRICTED_UNCOVERED,
+      HnswMetric.UNRESTRICTED_LIMIT, HnswMetric.PROBE_ROUNDS, HnswMetric.PROBE_ROWS_READ };
+
+  private static long[] searchMetrics() {
+    long[] values = new long[SEARCH_METRICS.length];
+    for (int i = 0; i < values.length; i++) {
+      values[i] = HnswMetricValues.value(SEARCH_METRICS[i], INDEX);
+    }
+    return values;
+  }
+
+  // Runs a search, and checks the changes of the search metrics of the index
+  private static void assertSearchMetrics(Runnable search, long... changes) {
+    long[] before = searchMetrics();
+    search.run();
+    long[] after = searchMetrics();
+    for (int i = 0; i < changes.length; i++) {
+      assertEquals(SEARCH_METRICS[i].metricName(), changes[i], after[i] - before[i]);
+    }
+  }
+
+  private void assertFilter(HnswIndexManager manager, Scan scan, float[] query, int candidates,
+    boolean restricted) {
+    try {
+      Filter filter =
+        HnswCandidateProbe.candidateFilter(env, manager, scan, query, candidates, TARGET);
+      assertEquals(restricted, filter != null);
+    } catch (IOException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  /**
+   * Each HNSW scan counts one search and its time. A scan without candidate restriction counts
+   * exactly one reason: the region is uncovered, or a candidate limit applies. A restricted scan
+   * counts no reason. Each probe round counts the candidate rows that it reads.
+   */
+  @Test
+  public void testSearchMetrics() throws Exception {
+    HnswIndexManager manager = open();
+    load(manager, 3000);
+    float[] query = vector(new Random(29));
+    Scan filtered = new Scan().setFilter(new FirstKeyOnlyFilter());
+    long visited = HnswMetricValues.value(HnswMetric.NODES_VISITED, INDEX);
+    assertSearchMetrics(() -> assertFilter(manager, new Scan(), query, CANDIDATES, true), 1, 1, 0,
+      0, 0, 0);
+    assertTrue(HnswMetricValues.value(HnswMetric.NODES_VISITED, INDEX) > visited);
+    assertSearchMetrics(() -> assertFilter(manager, filtered, query, CANDIDATES, true), 1, 1, 0, 0,
+      1, CANDIDATES);
+    // The client asks for more candidates than the maximum
+    assertSearchMetrics(
+      () -> assertFilter(manager, new Scan(), query, HnswCandidateProbe.MAX_CANDIDATES + 1, false),
+      1, 1, 0, 1, 0, 0);
+    // Few candidates pass, so the widening needs too many candidates
+    byte[] only = ranked(query).get(5);
+    passes = key -> Bytes.equals(key, only);
+    assertSearchMetrics(() -> assertFilter(manager, filtered, query, CANDIDATES, false), 1, 1, 0, 1,
+      1, CANDIDATES);
+    passes = key -> true;
+
+    // A region without coverage
+    manager.close();
+    cells.clear();
+    HnswIndexManager uncovered = open();
+    load(uncovered, 100);
+    assertFalse(uncovered.covered());
+    assertSearchMetrics(() -> assertFilter(uncovered, filtered, query, CANDIDATES, false), 1, 1, 1,
+      0, 0, 0);
+    assertSearchMetrics(() -> assertFilter(uncovered, new Scan(), query, CANDIDATES, false), 1, 1,
+      1, 0, 0, 0);
+  }
+
   /**
    * The client sets the candidate count. A count over the maximum reads the range without
    * restriction. The search does not keep a candidate range for each of that many rows.
@@ -684,6 +786,93 @@ public class HnswCandidateProbeTest {
     } catch (IOException e) {
       assertTrue(e.toString(), e.getCause() instanceof ArithmeticException);
     }
+  }
+
+  /**
+   * The scan metrics of the client include the rows that the probe of a search reads. The probe
+   * runs before HBase makes the scanner context of the RPC. Thus the scan carries the counts to the
+   * scanner. The scanner adds them once, to the first context that tracks metrics. A client value
+   * of the carrier attribute does not reach the metrics. A search that does not probe, or a client
+   * that does not track scan metrics, gets the scanner without a wrapper.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testProbeRowsReachScanMetrics() throws Exception {
+    HnswIndexManager manager = open();
+    load(manager, 3000);
+    IndexRegionObserver observer = new IndexRegionObserver();
+    Field field = IndexRegionObserver.class.getDeclaredField("vectorIndexManagers");
+    field.setAccessible(true);
+    ((Map<String, VectorIndexManager>) field.get(observer)).put(INDEX, manager);
+    ObserverContext<RegionCoprocessorEnvironment> c = mock(ObserverContext.class);
+    when(c.getEnvironment()).thenReturn(env);
+    float[] query = vector(new Random(37));
+    // About half of the candidates pass the client filter
+    passes = key -> key[key.length - 1] % 2 == 0;
+    byte[] forged = Bytes.add(Bytes.toBytes(1_000_000L), Bytes.toBytes(1_000_000L));
+
+    Scan scan = new Scan().setFilter(new FirstKeyOnlyFilter());
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX, Bytes.toBytes(INDEX));
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY,
+      search(CANDIDATES, TARGET, query));
+    scan.setAttribute(HnswProbeScanMetrics.ATTRIBUTE, forged);
+    scan.setScanMetricsEnabled(true);
+    long read = HnswMetricValues.value(HnswMetric.PROBE_ROWS_READ, INDEX);
+    observer.preScannerOpen(c, scan);
+    read = HnswMetricValues.value(HnswMetric.PROBE_ROWS_READ, INDEX) - read;
+    assertTrue(read >= CANDIDATES);
+    byte[] counts = scan.getAttribute(HnswProbeScanMetrics.ATTRIBUTE);
+    assertNotNull(counts);
+    // Each candidate is a row of the region, so the probe scans each candidate that it reads
+    long scanned = Bytes.toLong(counts, 0);
+    long filtered = Bytes.toLong(counts, Bytes.SIZEOF_LONG);
+    assertEquals(read, scanned);
+    assertTrue(filtered > 0 && filtered < scanned);
+
+    // The wrapper is a Phoenix scanner, so a later observer adds no paging and TTL scanners
+    RegionScanner s = mock(RegionScanner.class);
+    RegionScanner wrapped = HnswProbeScanMetrics.wrap(env, scan, s);
+    assertNotSame(s, wrapped);
+    assertTrue(wrapped instanceof DelegateRegionScanner);
+    assertNull(scan.getAttribute(HnswProbeScanMetrics.ATTRIBUTE));
+    // A context that does not track metrics gets nothing. The first context that tracks metrics
+    // gets the counts, and a later context gets nothing
+    ScannerContext untracked = ScannerContext.newBuilder().build();
+    wrapped.nextRaw(new ArrayList<>(), untracked);
+    for (int rpc = 0; rpc < 2; rpc++) {
+      ScannerContext context = ScannerContext.newBuilder().setTrackMetrics(true).build();
+      wrapped.nextRaw(new ArrayList<>(), context);
+      wrapped.next(new ArrayList<>(), context);
+      assertEquals(rpc == 0 ? scanned : 0, context.getMetrics().countOfRowsScanned.get());
+      assertEquals(rpc == 0 ? filtered : 0, context.getMetrics().countOfRowsFiltered.get());
+    }
+
+    // A client that does not track scan metrics gets no counts, and the forged value is removed
+    scan = new Scan().setFilter(new FirstKeyOnlyFilter());
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX, Bytes.toBytes(INDEX));
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY,
+      search(CANDIDATES, TARGET, query));
+    scan.setAttribute(HnswProbeScanMetrics.ATTRIBUTE, forged);
+    observer.preScannerOpen(c, scan);
+    assertNull(scan.getAttribute(HnswProbeScanMetrics.ATTRIBUTE));
+    assertSame(s, HnswProbeScanMetrics.wrap(env, scan, s));
+
+    // No search removes the value of a scan that is not a search, so the wrapper ignores it
+    scan = new Scan();
+    scan.setAttribute(HnswProbeScanMetrics.ATTRIBUTE, forged);
+    scan.setScanMetricsEnabled(true);
+    assertSame(s, HnswProbeScanMetrics.wrap(env, scan, s));
+    assertNull(scan.getAttribute(HnswProbeScanMetrics.ATTRIBUTE));
+
+    // A search without a filter on a table without a TTL does not probe
+    scan = new Scan();
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_INDEX, Bytes.toBytes(INDEX));
+    scan.setAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY,
+      search(CANDIDATES, TARGET, query));
+    scan.setScanMetricsEnabled(true);
+    observer.preScannerOpen(c, scan);
+    assertNull(scan.getAttribute(HnswProbeScanMetrics.ATTRIBUTE));
+    assertSame(s, HnswProbeScanMetrics.wrap(env, scan, s));
   }
 
   /**

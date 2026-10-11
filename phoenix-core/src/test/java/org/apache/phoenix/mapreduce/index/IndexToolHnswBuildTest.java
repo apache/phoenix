@@ -222,7 +222,7 @@ public class IndexToolHnswBuildTest {
     region("m", "");
     segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 1_000));
     segments.add(segment(Bytes.toBytes("m"), HConstants.EMPTY_END_ROW, 1_200));
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertTrue(triggered.toString(), triggered.isEmpty());
   }
 
@@ -295,7 +295,7 @@ public class IndexToolHnswBuildTest {
     region("m", "");
     segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 500));
     serverTime.set(800);
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertEquals(Arrays.asList("", "m"), triggered);
   }
 
@@ -310,7 +310,7 @@ public class IndexToolHnswBuildTest {
     segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 900));
     segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 2_000, 900L, definition));
     segments.add(segment(Bytes.toBytes("m"), HConstants.EMPTY_END_ROW, 1_500));
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertEquals(Arrays.asList(""), triggered);
   }
 
@@ -341,7 +341,7 @@ public class IndexToolHnswBuildTest {
       segments.add(segment(next.getStartKey(), next.getEndKey(), Long.MAX_VALUE / 2));
       return scanner(new ArrayList<>(segments));
     };
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertTrue(pending.isEmpty());
     assertTrue(
       polls.get() * (IndexTool.HNSW_BUILD_STALL_MS * 3 / 4) > 2 * IndexTool.HNSW_BUILD_STALL_MS);
@@ -361,7 +361,7 @@ public class IndexToolHnswBuildTest {
     // The rebuilds on the servers stop or fail, so no segment appears
     serversBuild = false;
     try {
-      IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+      IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
       fail();
     } catch (DoNotRetryIOException expected) {
       assertTrue(expected.getMessage(), expected.getMessage().contains("stalled"));
@@ -394,7 +394,7 @@ public class IndexToolHnswBuildTest {
         .add(segment(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, serverTime.get() - 1));
       return scanner(Collections.singletonList(accepted(serverTime.get())));
     };
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertEquals(3, polls.get());
     assertEquals(1, requests.size());
     byte[] request = requests.get(0);
@@ -416,7 +416,42 @@ public class IndexToolHnswBuildTest {
     byte[] other = HnswSegment.definitionDigest("other");
     segments.add(segment(Bytes.toBytes("\0"), Bytes.toBytes("m"), 1_200, other));
     segments.add(segment(Bytes.toBytes("m"), HConstants.EMPTY_END_ROW, 1_200));
-    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
     assertEquals(Collections.singletonList("\\x00"), triggered);
+  }
+
+  /**
+   * A new base counts as a rebuild only when it is newer than each base segment that overlapped the
+   * region before the rebuild. The time of a delta does not count.
+   */
+  @Test
+  public void testRebuiltSince() {
+    byte[] m = Bytes.toBytes("m");
+    List<HnswSegment.Descriptor> before = Arrays.asList(
+      new HnswSegment.Descriptor(INDEX, HConstants.EMPTY_START_ROW, 10L, m, 5, null, 10L,
+        definition),
+      new HnswSegment.Descriptor(INDEX, HConstants.EMPTY_START_ROW, 30L, m, 1, 10L, 30L,
+        definition),
+      new HnswSegment.Descriptor(INDEX, HConstants.EMPTY_START_ROW, 4L, HConstants.EMPTY_END_ROW, 9,
+        null, 4L, definition),
+      new HnswSegment.Descriptor(INDEX, m, 20L, HConstants.EMPTY_END_ROW, 5, null, 20L,
+        definition));
+    RegionInfo lower = RegionInfoBuilder.newBuilder(TableName.valueOf("T"))
+      .setStartKey(HConstants.EMPTY_START_ROW).setEndKey(m).build();
+    RegionInfo upper = RegionInfoBuilder.newBuilder(TableName.valueOf("T")).setStartKey(m)
+      .setEndKey(HConstants.EMPTY_END_ROW).build();
+    assertEquals(11, IndexTool.rebuiltSince(before, lower));
+    assertEquals(21, IndexTool.rebuiltSince(before, upper));
+    assertEquals(Long.MIN_VALUE, IndexTool.rebuiltSince(Collections.emptyList(), upper));
+  }
+
+  /** A region that the selection leaves out gets no request, and the build does not wait for it. */
+  @Test(timeout = 30_000)
+  public void testOnlySelectedRegionsAreBuilt() throws Exception {
+    region("", "m");
+    RegionInfo upper = region("m", "");
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable,
+      r -> r.getEncodedName().equals(upper.getEncodedName()), r -> 1_000);
+    assertEquals(Collections.singletonList("m"), triggered);
   }
 }

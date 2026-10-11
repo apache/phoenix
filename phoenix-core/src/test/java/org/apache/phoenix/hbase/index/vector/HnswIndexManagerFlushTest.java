@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.vector;
 
+import static org.apache.phoenix.hbase.index.metrics.HnswMetricValues.value;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -78,6 +79,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.exceptions.RequestTooBigException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mob.MobConstants;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -91,6 +93,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.hnsw.HnswOffheapAllocator;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -2288,6 +2291,47 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
+   * A full rebuild deletes the cells of the index in its region that are in no well-formed segment.
+   * Examples are a segment without a W cell, a payload without small cells, and a cell whose
+   * qualifier does not decode. No listing names these cells, so only this step deletes them. The
+   * rebuild keeps its new base and the cells of another index.
+   */
+  @Test
+  public void testRebuildRetiresMalformedCells() throws Exception {
+    Harness h = new Harness("malformed");
+    h.load(30, new Random(53));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+    byte[] key = Bytes.toBytes(h.index);
+    HnswSegment.Descriptor noWriter = new HnswSegment.Descriptor(key, h.start, base.time - 10,
+      h.end, 1, null, base.time - 10, base.definition);
+    CELLS.put(noWriter, Bytes.toBytes("payload"), Bytes.toBytes("writer"));
+    CELLS.remove(noWriter, HnswSegment.WRITER_TAG);
+    byte[] payloadOnly = HnswSegment.qualifier(HnswSegment.identity(key, h.start, base.time - 20),
+      HnswSegment.PAYLOAD_TAG);
+    CELLS.put(base.anchor, payloadOnly, base.time - 20, Bytes.toBytes("payload"));
+    byte[] junk = Bytes.add(HnswSegment.prefix(key), Bytes.toBytes("junk"));
+    CELLS.put(base.anchor, junk, 5L, Bytes.toBytes(1));
+    HnswSegment.Descriptor other = new HnswSegment.Descriptor(Bytes.add(key, Bytes.toBytes("X")),
+      h.start, base.time, h.end, 0, null, base.time, base.definition);
+    CELLS.put(other, null, Bytes.toBytes("writer"));
+    byte[] family = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
+    Get malformed = new Get(base.anchor).addColumn(family, payloadOnly).addColumn(family, junk);
+    for (byte tag : new byte[] { HnswSegment.END_KEY_TAG, HnswSegment.COUNT_TAG,
+      HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG, HnswSegment.PAYLOAD_TAG }) {
+      malformed.addColumn(family, HnswSegment.qualifier(noWriter.identity, tag));
+    }
+    assertEquals(7, CELLS.get(malformed).size());
+
+    HnswSegment.Descriptor rebuilt = h.rebuild(manager);
+    await("the malformed cells deleted", () -> CELLS.get(malformed).isEmpty());
+    assertEquals(1, h.segments().size());
+    assertEquals(rebuilt.time, h.segments().get(0).time);
+    assertEquals(1, CELLS.list(other.indexKey).size());
+  }
+
+  /**
    * A build request can repeat an earlier request after the rebuild that serves it ends. The
    * repeated request returns the time of the earlier request, and queues no other rebuild.
    */
@@ -2452,5 +2496,170 @@ public class HnswIndexManagerFlushTest {
     List<HnswSegment.Descriptor> segments = h.segments();
     assertEquals(1, segments.size());
     assertFalse(segments.get(0).isDelta());
+  }
+
+  // The gauges that a region adds to while its manager is open
+  private static final HnswMetric[] REGION_GAUGES = { HnswMetric.REGIONS, HnswMetric.SEGMENTS,
+    HnswMetric.REGIONS_UNCOVERED, HnswMetric.REGIONS_UNRESTRICTED, HnswMetric.MUTABLE_ENTRIES };
+
+  // Returns the values of the region gauges for the index, or for the server if index is null
+  private static long[] regionGauges(String index) {
+    long[] values = new long[REGION_GAUGES.length];
+    for (int i = 0; i < values.length; i++) {
+      values[i] = index == null ? value(REGION_GAUGES[i]) : value(REGION_GAUGES[i], index);
+    }
+    return values;
+  }
+
+  private static void assertRegionGauges(String index, long... expected) {
+    long[] values = regionGauges(index);
+    for (int i = 0; i < values.length; i++) {
+      assertEquals(REGION_GAUGES[i].metricName(), expected[i], values[i]);
+    }
+  }
+
+  /**
+   * The gauges of an index follow the state of its regions: the open managers, the uncovered
+   * regions, the searched segments and the entries of the mutable graphs. Rebuilds, delta flushes
+   * and replays update their counters and histograms. A close removes the contribution of the
+   * region, so the gauges of the index and of the server return to their values before the open.
+   */
+  @Test
+  public void testMetricsFollowLifecycle() throws Exception {
+    Harness h = new Harness("metrics");
+    Harness waiting = new Harness("metricswait");
+    long[] server = regionGauges(null);
+    h.load(30, new Random(61));
+    waiting.load(30, new Random(62));
+    // Hold the first base write, so that the region stays uncovered and the next rebuild waits
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (h.isRow(put)) {
+        entered.countDown();
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswIndexManager other;
+    try {
+      assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertRegionGauges(h.index, 1, 0, 1, 1, 0);
+      assertEquals(1, value(HnswMetric.OPEN_TIME, h.index));
+      assertEquals(1, value(HnswMetric.REPAIR_REQUESTS, h.index));
+      assertEquals(1, value(HnswMetric.REBUILD_WAIT_TIME, h.index));
+      other = waiting.open(true);
+      await("a queued rebuild", () -> value(HnswMetric.REBUILD_QUEUE) >= 1);
+      h.upsert(manager, "x0", point(1, 1));
+      h.upsert(manager, "x0", point(1, 2));
+      h.delete(manager, "r001");
+      // Two vector changes and one deleted key
+      assertRegionGauges(h.index, 1, 0, 1, 1, 3);
+      assertEquals(3, value(HnswMetric.CHANGES_APPLIED, h.index));
+    } finally {
+      release.countDown();
+    }
+    h.awaitBase(manager, since);
+    waiting.awaitBase(other, since);
+    await("the rebuild counted", () -> value(HnswMetric.REBUILDS, h.index) == 1);
+    assertEquals(1, value(HnswMetric.REBUILD_TIME, h.index));
+    assertEquals(1, value(HnswMetric.STORE_FLUSH_WAIT_TIME, h.index));
+    assertTrue(value(HnswMetric.SEGMENT_BYTES_WRITTEN, h.index) > 0);
+    assertEquals(1, value(HnswMetric.REBUILD_WAIT_TIME, waiting.index));
+    // The rebuild swapped before the three changes, so the mutable graph still holds them
+    assertRegionGauges(h.index, 1, 1, 0, 0, 3);
+
+    long bytes = value(HnswMetric.SEGMENT_BYTES_WRITTEN, h.index);
+    h.upsert(manager, "r000", point(50, 0));
+    h.delete(manager, "r003");
+    assertRegionGauges(h.index, 1, 1, 0, 0, 5);
+    request("a delta flush", manager::flush, () -> value(HnswMetric.DELTA_FLUSHES, h.index) == 1);
+    assertEquals(2, h.segments().size());
+    assertEquals(1, value(HnswMetric.DELTA_FLUSH_TIME, h.index));
+    assertTrue(value(HnswMetric.SEGMENT_BYTES_WRITTEN, h.index) > bytes);
+    assertRegionGauges(h.index, 1, 2, 0, 0, 0);
+    long visited = value(HnswMetric.NODES_VISITED, h.index);
+    assertEquals("r002", h.nearest(manager, h.rows.get(h.key("r002"))));
+    assertTrue(value(HnswMetric.NODES_VISITED, h.index) > visited);
+
+    manager.close();
+    other.close();
+    // A second close changes nothing
+    manager.close();
+    assertRegionGauges(h.index, 0, 0, 0, 0, 0);
+    assertRegionGauges(waiting.index, 0, 0, 0, 0, 0);
+    assertRegionGauges(null, server);
+
+    // The open replays the rows that changed after the replay start of the segments
+    HnswIndexManager reopened = h.open(true);
+    long replayed = value(HnswMetric.REPLAYED_ROWS, h.index);
+    assertTrue(replayed > 0);
+    assertRegionGauges(h.index, 1, 2, 0, 0, replayed);
+    reopened.close();
+    assertRegionGauges(h.index, 0, 0, 0, 0, 0);
+    assertRegionGauges(null, server);
+    await("an empty rebuild queue", () -> value(HnswMetric.REBUILD_QUEUE) == 0);
+  }
+
+  /**
+   * A failed flush counts as a maintenance failure. A failure that a retry repeats is also stalled.
+   * A region that cannot read a segment at open leaves it out, and a change that fails to apply
+   * requests a repair.
+   */
+  @Test
+  public void testFailureMetrics() throws Exception {
+    Harness h = new Harness("failmetrics");
+    h.load(30, new Random(63));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+    assertEquals(0, value(HnswMetric.MAINTENANCE_FAILURES, h.index));
+
+    AtomicInteger failed = new AtomicInteger();
+    putHook = put -> {
+      if (h.isRow(put) && isDelta(put)) {
+        failed.incrementAndGet();
+        throw new IOException("injected");
+      }
+    };
+    h.upsert(manager, "r000", point(50, 0));
+    request("a failed delta flush", manager::flush, () -> failed.get() > 0);
+    await("the failure counted", () -> value(HnswMetric.MAINTENANCE_FAILURES, h.index) == 1);
+    assertEquals(0, value(HnswMetric.MAINTENANCE_STALLED, h.index));
+
+    putHook = put -> {
+      if (h.isRow(put)) {
+        failed.incrementAndGet();
+        throw new RequestTooBigException("injected");
+      }
+    };
+    int attempts = failed.get();
+    manager.rebuild(Long.MAX_VALUE);
+    await("a failed rebuild", () -> failed.get() > attempts);
+    await("the stall counted", () -> value(HnswMetric.MAINTENANCE_STALLED, h.index) == 1);
+    assertEquals(2, value(HnswMetric.MAINTENANCE_FAILURES, h.index));
+    putHook = put -> {
+    };
+    manager.close();
+    assertEquals(1, h.segments().size());
+    assertEquals(base.time, h.segments().get(0).time);
+
+    // The open leaves out the base without its payload, and requests a repair
+    long repairs = value(HnswMetric.REPAIR_REQUESTS, h.index);
+    CELLS.remove(base, HnswSegment.PAYLOAD_TAG);
+    HnswIndexManager reopened = h.open(true);
+    assertEquals(1, value(HnswMetric.SEGMENTS_LEFT_OUT, h.index));
+    assertEquals(repairs + 1, value(HnswMetric.REPAIR_REQUESTS, h.index));
+
+    // A change that fails to apply requests a repair
+    h.failing = row -> Bytes.equals(row, h.key("r002"));
+    h.upsert(reopened, "r002", point(5, 5));
+    assertEquals(repairs + 2, value(HnswMetric.REPAIR_REQUESTS, h.index));
+    reopened.close();
   }
 }
