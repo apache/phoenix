@@ -183,10 +183,11 @@ public interface QueryServices extends SQLCloseable {
   // The default search width (ef_search) of an HNSW query. The HNSW_EF_SEARCH hint overrides it
   public static final String HNSW_EF_SEARCH_ATTRIB = "phoenix.vector.hnsw.ef_search.default";
   // A RegionServer setting, an integer. A region asks the master to split it when the mutable
-  // HNSW graph of one of its indexes holds this many times the flush threshold of entries. The
-  // region refuses writes at four times the flush threshold. Thus a value of 4 or more gives almost
-  // no split requests, and a value of 0 or less turns them off. A value of 2 or less asks for
-  // splits at usual flush levels
+  // HNSW graph of one of its indexes holds this many times the flush threshold of entries. A split
+  // limits the rebuild time of a region, and thus the time that the region stays in overflow. The
+  // region enters overflow at four times the flush threshold. Thus a value of 4 or more gives
+  // almost no split requests, and a value of 0 or less turns them off. A value of 2 or less asks
+  // for splits at usual flush levels
   public static final String HNSW_SPLIT_MULTIPLIER_ATTRIB = "phoenix.vector.hnsw.split.multiplier";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";

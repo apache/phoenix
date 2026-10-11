@@ -22,6 +22,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -65,7 +66,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -341,6 +341,10 @@ public class HnswIndexManagerFlushTest {
     volatile CountDownLatch scanGate;
     // The scans of the data rows that the managers send to the region
     final List<Scan> scans = new CopyOnWriteArrayList<>();
+    // The counts of the gets of data rows that the managers send to the region, and of the data
+    // rows that the scans return
+    final AtomicInteger gets = new AtomicInteger();
+    final AtomicInteger scanned = new AtomicInteger();
 
     Harness(String name) throws IOException {
       this(name, 0);
@@ -378,6 +382,7 @@ public class HnswIndexManagerFlushTest {
             gate.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
           }
           if (it.hasNext()) {
+            scanned.incrementAndGet();
             Map.Entry<byte[], float[]> e = it.next();
             long ts = times.getOrDefault(e.getKey(), HConstants.LATEST_TIMESTAMP);
             List<Cell> cells = next.getArgument(0);
@@ -393,6 +398,7 @@ public class HnswIndexManagerFlushTest {
         if (SegmentCells.isSegmentGet(inv.getArgument(0))) {
           return CELLS.get(inv.getArgument(0));
         }
+        gets.incrementAndGet();
         byte[] row = ((Get) inv.getArgument(0)).getRow();
         float[] v = rows.get(row);
         return v == null
@@ -739,55 +745,276 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * While a flush runs, the manager refuses writes when the mutable graph reaches its limit. A
-   * refused write does not start a flush, so the flush that runs starts the next flush when it
-   * ends.
+   * The mutable graph reaches the overflow limit while a full rebuild runs. The region does not
+   * refuse the writes, but enters overflow. It drops the mutable graph, and applies no change until
+   * the swap of its repair. Its scans read without candidate restriction. The running rebuild
+   * swapped before the overflow, so its cutover does not end the overflow. The repair rebuild
+   * follows it. After the swap of the repair, the graph takes changes again. The scans stay
+   * unrestricted until the repair cuts over. The base of the repair holds the rows that the dropped
+   * graph held.
    */
   @Test
-  public void testWritesWaitForFullGraph() throws Exception {
+  public void testOverflowDuringRebuildOutlivesItsCutover() throws Exception {
     Harness h = new Harness("full");
-    HnswIndexManager manager = h.open(false);
-    CountDownLatch entered = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
+    h.load(30, new Random(5));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    h.awaitBase(manager, since);
+    AtomicReference<CountDownLatch> gate = new AtomicReference<>(new CountDownLatch(1));
+    AtomicInteger puts = new AtomicInteger();
     putHook = put -> {
-      if (h.isRow(put)) {
-        entered.countDown();
+      if (h.isRow(put) && !isDelta(put)) {
+        CountDownLatch held = gate.get();
+        puts.incrementAndGet();
         try {
-          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
           throw new IOException(e);
         }
       }
     };
-    int limit = HnswIndexManager.BLOCK_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
-    Put current = new Put(h.key("x")).addColumn(FAMILY, V, encode(point(1, 1)));
-    for (int i = 0; i < HnswIndexManager.FLUSH_THRESHOLD; i++) {
-      manager.onMutation(new Put(h.key("d" + i)).addColumn(FAMILY, V, encode(point(1, 1))), null,
-        null);
-    }
-    assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    for (int i = HnswIndexManager.FLUSH_THRESHOLD; i
-        < HnswIndexManager.FLUSH_THRESHOLD + limit - 1; i++) {
-      manager.onMutation(new Put(h.key("d" + i)).addColumn(FAMILY, V, encode(point(1, 1))), null,
-        null);
-    }
-    manager.checkResources();
-    manager.onMutation(current, null, null);
+    int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
+    float[] dropped = point(50, 50);
+    float[] during = point(-50, -50);
+    float[] after = point(0, 80);
     try {
-      manager.checkResources();
-      fail("a full mutable graph must refuse writes");
-    } catch (RegionTooBusyException e) {
-      // Expected
+      // The rebuild swaps, and the hook holds its segment write
+      manager.rebuild(Long.MAX_VALUE);
+      await("a held rebuild", () -> puts.get() == 1);
+      h.upsert(manager, "dropped", dropped);
+      assertTrue(h.found(manager, dropped, "dropped"));
+      deleteKeys(manager, h, "d", 0, limit - 2);
+      assertFalse(manager.overflowed());
+      assertNotNull(candidates(manager, dropped));
+      deleteKeys(manager, h, "e", 0, 1);
+      assertTrue(manager.overflowed());
+      assertTrue(manager.covered());
+      assertNull(candidates(manager, dropped));
+      assertFalse(h.found(manager, dropped, "dropped"));
+      h.upsert(manager, "during", during);
+      assertFalse(h.found(manager, during, "during"));
+
+      // The cutover of the running rebuild keeps the overflow, and the repair rebuild swaps
+      CountDownLatch held = gate.get();
+      gate.set(new CountDownLatch(1));
+      held.countDown();
+      await("the held repair rebuild", () -> puts.get() == 2);
+      await("the cutover of the first rebuild", () -> {
+        try {
+          return h.segments().size() == 1;
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      });
+      assertTrue(manager.overflowed());
+      assertNull(candidates(manager, dropped));
+      h.upsert(manager, "after", after);
+      assertTrue(h.found(manager, after, "after"));
+      assertNull(candidates(manager, after));
+    } finally {
+      gate.get().countDown();
     }
-    release.countDown();
-    await("writes to be accepted again", () -> {
-      try {
-        manager.checkResources();
-        return true;
-      } catch (RegionTooBusyException e) {
-        return false;
+    await("the end of the overflow", () -> !manager.overflowed());
+    assertNotNull(candidates(manager, dropped));
+    assertTrue(h.found(manager, dropped, "dropped"));
+    assertTrue(h.found(manager, during, "during"));
+    assertTrue(h.found(manager, after, "after"));
+  }
+
+  /**
+   * A region in overflow writes no delta, also for a compaction, until the swap of its repair. A
+   * delta would move the replay start of the region past the dropped changes. Two rules keep the
+   * deltas away: the region applies no change until the swap, and the repair blocks the deltas. The
+   * repair of a region in overflow runs before the routine rebuilds that wait for the rebuild
+   * thread. The rebuild of an uncovered region does the same. This is also true when the region
+   * queued its rebuild before the overflow.
+   */
+  @Test
+  public void testNoDeltaWhileOverflowed() throws Exception {
+    Harness blocker = new Harness("oblocker");
+    blocker.load(30, new Random(45));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager blocking = blocker.open(true);
+    blocker.awaitBase(blocking, since);
+    Harness covered = new Harness("ocovered");
+    covered.load(30, new Random(46));
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager routine = covered.open(true);
+    covered.awaitBase(routine, since);
+    Harness h = new Harness("ooverflow");
+    h.load(30, new Random(47));
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+    List<String> order = new CopyOnWriteArrayList<>();
+    CountDownLatch deltaEntered = new CountDownLatch(1);
+    CountDownLatch deltaGate = new CountDownLatch(1);
+    putHook = put -> {
+      if (h.isRow(put) && isDelta(put)) {
+        deltaEntered.countDown();
+        try {
+          deltaGate.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
       }
-    });
+      for (Harness r : Arrays.asList(covered, h)) {
+        if (r.isRow(put) && !isDelta(put)) {
+          order.add(Bytes.toString(r.start));
+        }
+      }
+    };
+    int threshold = HnswIndexManager.FLUSH_THRESHOLD;
+    int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * threshold;
+    float[] dropped = point(50, 50);
+    // The rebuild of another region holds the rebuild thread in its region scan
+    blocker.scanEntered = new CountDownLatch(1);
+    blocker.scanGate = new CountDownLatch(1);
+    try {
+      blocking.rebuild(Long.MAX_VALUE);
+      assertTrue(blocker.scanEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      routine.rebuild(Long.MAX_VALUE);
+      // The flush queues a routine rebuild behind the other routine rebuild. While it waits, a
+      // delta drains the graph, and the hook holds the delta
+      deleteKeys(manager, h, "d", 0, HnswIndexManager.QUEUED_FLUSH_MULTIPLIER * threshold);
+      assertTrue(deltaEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      h.upsert(manager, "dropped", dropped);
+      deleteKeys(manager, h, "e", 0, limit - 1);
+      assertTrue(manager.overflowed());
+      assertNull(candidates(manager, dropped));
+      deltaGate.countDown();
+      await("the cutover of the held delta", () -> {
+        try {
+          return h.segments().size() == 2;
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      });
+      deleteKeys(manager, h, "f", 0, HnswIndexManager.QUEUED_FLUSH_MULTIPLIER * threshold + 1);
+      manager.flush();
+      Thread.sleep(500);
+      List<HnswSegment.Descriptor> segments = h.segments();
+      assertEquals(2, segments.size());
+      assertEquals(Long.valueOf(base.time), segments.get(0).baseTime);
+      assertTrue(manager.overflowed());
+    } finally {
+      deltaGate.countDown();
+      blocker.scanGate.countDown();
+    }
+    await("the rebuilds of both regions", () -> order.size() == 2);
+    assertEquals(Arrays.asList(Bytes.toString(h.start), Bytes.toString(covered.start)), order);
+    await("the end of the overflow", () -> !manager.overflowed());
+    assertTrue(h.found(manager, dropped, "dropped"));
+  }
+
+  /**
+   * The repair rebuild of an overflow can take over the graph of a failed flush. That flush is a
+   * delta flush, or the full rebuild that ran at the overflow. A row can change after the swap of
+   * that graph and before the overflow. Then only the row of the region and the new base hold that
+   * change. The cutover of the repair must not mask the row, because the overflow dropped the graph
+   * that held the change. After the overflow, the scans restrict their candidates again, and a
+   * search finds the row.
+   */
+  @Test
+  public void testTakeoverAfterOverflowFindsChangedRows() throws Exception {
+    int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
+    float[] changed = point(50, 50);
+    for (boolean full : new boolean[] { false, true }) {
+      Harness h = new Harness(full ? "otakefull" : "otakedelta");
+      h.load(30, new Random(full ? 49 : 48));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager manager = h.open(true);
+      h.awaitBase(manager, since);
+      // The hook makes the first segment write of the flush fail. It holds the write of a full
+      // rebuild until the overflow. The retry of the failed flush comes after one minute
+      AtomicInteger writes = new AtomicInteger();
+      CountDownLatch gate = new CountDownLatch(1);
+      putHook = put -> {
+        if (h.isRow(put) && isDelta(put) != full && writes.getAndIncrement() == 0) {
+          try {
+            gate.await(full ? TIMEOUT_MS : 0, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            throw new IOException(e);
+          }
+          throw new IOException("injected");
+        }
+      };
+      try {
+        request(full ? "a held rebuild" : "a failed delta flush",
+          full ? () -> manager.rebuild(Long.MAX_VALUE) : manager::flush, () -> writes.get() > 0);
+        h.upsert(manager, "changed", changed);
+        assertTrue(h.found(manager, changed, "changed"));
+        deleteKeys(manager, h, "d", 0, limit - 1);
+        assertTrue("full=" + full, manager.overflowed());
+      } finally {
+        gate.countDown();
+      }
+      await("the end of the overflow", () -> !manager.overflowed());
+      assertNotNull(candidates(manager, changed));
+      assertTrue("full=" + full, h.found(manager, changed, "changed"));
+    }
+  }
+
+  /**
+   * A replay at open that reaches the overflow limit stops. It reads no more changed rows than the
+   * limit, and applies none of them. The region enters overflow and requests its repair. It reads
+   * without candidate restriction until the repair cuts over.
+   */
+  @Test
+  public void testReplayAtOpenStopsAtLimit() throws Exception {
+    Harness blocker = new Harness("pblocker");
+    blocker.load(30, new Random(48));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager blocking = blocker.open(true);
+    blocker.awaitBase(blocking, since);
+    Harness h = new Harness("preplay");
+    h.load(30, new Random(49));
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager closed = h.open(true);
+    h.awaitBase(closed, since);
+    closed.close();
+    int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
+    // These rows changed after the base. The replay scan of the mock region reads every row
+    float[] v = point(1, 1);
+    for (int i = 0; i < limit; i++) {
+      h.rows.put(h.key(String.format("b%05d", i)), v);
+    }
+    // The rebuild of another region holds the rebuild thread in its region scan
+    blocker.scanEntered = new CountDownLatch(1);
+    blocker.scanGate = new CountDownLatch(1);
+    HnswIndexManager manager;
+    try {
+      blocking.rebuild(Long.MAX_VALUE);
+      assertTrue(blocker.scanEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      h.scanned.set(0);
+      manager = h.open(true);
+      assertEquals(limit, h.scanned.get());
+      assertTrue(manager.overflowed());
+      assertTrue(manager.covered());
+      assertEquals(0, h.gets.get());
+      assertEquals(30, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
+      assertNull(candidates(manager, v));
+      // The repair scans the region after the rebuild of the other region
+      h.scanEntered = new CountDownLatch(1);
+      h.scanGate = new CountDownLatch(1);
+    } finally {
+      blocker.scanGate.countDown();
+    }
+    try {
+      assertTrue(h.scanEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(manager.overflowed());
+      manager.close();
+    } finally {
+      h.scanGate.countDown();
+    }
+  }
+
+  // Returns the candidates of an HNSW scan of the whole region for the vector, or null if the scan
+  // reads the region without candidate restriction
+  private static List<byte[]> candidates(HnswIndexManager manager, float[] v) throws IOException {
+    HnswIndexManager.Candidates found =
+      manager.candidates(v, 10, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
+    return found == null ? null : found.keys;
   }
 
   /**
@@ -1855,7 +2082,7 @@ public class HnswIndexManagerFlushTest {
           throw new RuntimeException(e);
         }
       });
-      manager.checkResources();
+      assertFalse(manager.overflowed());
       for (HnswSegment.Descriptor d : h.segments()) {
         assertTrue(d.isDelta() || d.time == base.time);
       }
@@ -1984,7 +2211,7 @@ public class HnswIndexManagerFlushTest {
         List<HnswSegment.Descriptor> segments = h.segments();
         assertEquals(Bytes.toString(h.start), 1, segments.size());
         assertTrue(HnswIndexManager.replayStartTime(segments) < requested);
-        opened.get(h).checkResources();
+        assertFalse(opened.get(h).overflowed());
       }
     } finally {
       blocker.scanGate.countDown();
@@ -2499,8 +2726,9 @@ public class HnswIndexManagerFlushTest {
   }
 
   // The gauges that a region adds to while its manager is open
-  private static final HnswMetric[] REGION_GAUGES = { HnswMetric.REGIONS, HnswMetric.SEGMENTS,
-    HnswMetric.REGIONS_UNCOVERED, HnswMetric.REGIONS_UNRESTRICTED, HnswMetric.MUTABLE_ENTRIES };
+  private static final HnswMetric[] REGION_GAUGES =
+    { HnswMetric.REGIONS, HnswMetric.SEGMENTS, HnswMetric.REGIONS_UNCOVERED,
+      HnswMetric.REGIONS_UNRESTRICTED, HnswMetric.MUTABLE_ENTRIES, HnswMetric.REGIONS_OVERFLOWED };
 
   // Returns the values of the region gauges for the index, or for the server if index is null
   private static long[] regionGauges(String index) {
@@ -2513,7 +2741,7 @@ public class HnswIndexManagerFlushTest {
 
   private static void assertRegionGauges(String index, long... expected) {
     long[] values = regionGauges(index);
-    for (int i = 0; i < values.length; i++) {
+    for (int i = 0; i < expected.length; i++) {
       assertEquals(REGION_GAUGES[i].metricName(), expected[i], values[i]);
     }
   }
@@ -2661,5 +2889,116 @@ public class HnswIndexManagerFlushTest {
     h.upsert(reopened, "r002", point(5, 5));
     assertEquals(repairs + 2, value(HnswMetric.REPAIR_REQUESTS, h.index));
     reopened.close();
+  }
+
+  // Returns the counts of the scans without candidate restriction because the region is uncovered,
+  // and because it is in overflow
+  private static long[] reasons(String index) {
+    return new long[] { value(HnswMetric.UNRESTRICTED_UNCOVERED, index),
+      value(HnswMetric.UNRESTRICTED_OVERFLOW, index) };
+  }
+
+  private static void assertReasons(String index, long[] before, long uncovered, long overflow) {
+    long[] after = reasons(index);
+    assertEquals(uncovered, after[0] - before[0]);
+    assertEquals(overflow, after[1] - before[1]);
+  }
+
+  /**
+   * Overflow drops the mutable graph, so the entries leave the gauge. The region counts as
+   * overflowed and as unrestricted until the cutover that ends the overflow, which records the time
+   * of the overflow. A dropped change counts as dropped, not as applied. A scan of a region in
+   * overflow counts as an overflow fallback, also when the region is uncovered. A close during an
+   * overflow records the time up to the close, and the gauges return to their values before the
+   * open.
+   */
+  @Test
+  public void testOverflowMetrics() throws Exception {
+    long[] server = regionGauges(null);
+    Harness h = new Harness("overflowmetrics");
+    h.load(30, new Random(64));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    h.awaitBase(manager, since);
+    AtomicReference<CountDownLatch> gate = new AtomicReference<>(new CountDownLatch(1));
+    AtomicInteger puts = new AtomicInteger();
+    putHook = put -> {
+      if (h.isRow(put) && !isDelta(put)) {
+        CountDownLatch held = gate.get();
+        puts.incrementAndGet();
+        try {
+          held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    int limit = HnswIndexManager.OVERFLOW_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD;
+    float[] v = point(50, 50);
+    try {
+      // The rebuild swaps, and the hook holds its segment write
+      manager.rebuild(Long.MAX_VALUE);
+      await("a held rebuild", () -> puts.get() == 1);
+      deleteKeys(manager, h, "d", 0, limit - 1);
+      assertRegionGauges(h.index, 1, 1, 0, 0, limit - 1, 0);
+      deleteKeys(manager, h, "e", 0, 1);
+      assertTrue(manager.overflowed());
+      assertEquals(1, value(HnswMetric.OVERFLOW_ENTRIES, h.index));
+      assertRegionGauges(h.index, 1, 1, 0, 1, 0, 1);
+      long applied = value(HnswMetric.CHANGES_APPLIED, h.index);
+      h.upsert(manager, "during", v);
+      assertEquals(1, value(HnswMetric.CHANGES_DROPPED, h.index));
+      assertEquals(applied, value(HnswMetric.CHANGES_APPLIED, h.index));
+      assertRegionGauges(h.index, 1, 1, 0, 1, 0, 1);
+      long[] before = reasons(h.index);
+      assertNull(candidates(manager, v));
+      assertReasons(h.index, before, 0, 1);
+
+      // The cutover of the held rebuild keeps the overflow, and the repair rebuild swaps
+      CountDownLatch held = gate.get();
+      gate.set(new CountDownLatch(1));
+      held.countDown();
+      await("the held repair rebuild", () -> puts.get() == 2);
+      assertTrue(manager.overflowed());
+      assertEquals(0, value(HnswMetric.OVERFLOW_TIME, h.index));
+    } finally {
+      gate.get().countDown();
+    }
+    await("the end of the overflow", () -> value(HnswMetric.OVERFLOW_TIME, h.index) == 1);
+    assertFalse(manager.overflowed());
+    assertRegionGauges(h.index, 1, 1, 0, 0, 0, 0);
+    assertEquals(1, value(HnswMetric.OVERFLOW_ENTRIES, h.index));
+    manager.close();
+
+    // An uncovered region enters overflow while its first rebuild waits, and closes in overflow
+    Harness u = new Harness("overflowclose");
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (u.isRow(put) && !isDelta(put)) {
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    HnswIndexManager uncovered = u.open(false);
+    try {
+      for (int i = 0; i < 4 * limit && !uncovered.overflowed(); i++) {
+        deleteKeys(uncovered, u, "d", i, i + 1);
+      }
+      assertTrue(uncovered.overflowed());
+      assertFalse(uncovered.covered());
+      assertRegionGauges(u.index, 1, 0, 1, 1, 0, 1);
+      long[] before = reasons(u.index);
+      assertNull(candidates(uncovered, v));
+      assertReasons(u.index, before, 0, 1);
+      uncovered.close();
+      assertEquals(1, value(HnswMetric.OVERFLOW_TIME, u.index));
+      assertRegionGauges(u.index, 0, 0, 0, 0, 0, 0);
+    } finally {
+      release.countDown();
+    }
+    assertRegionGauges(null, server);
   }
 }

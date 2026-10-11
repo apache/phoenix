@@ -58,7 +58,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -121,8 +120,20 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * buffered changes as a delta segment on the base of the region. A newer delta masks the older
  * entries of its rows in its stack. A flush queues a full rebuild instead when the deltas reach
  * their limits, or when the region has no exact base. The full rebuild replaces the stack. If the
- * flushes are slower than the writes, the manager requests a split of the region, and then refuses
- * writes at a limit.
+ * flushes are slower than the writes, the manager requests a split of the region. At a higher
+ * limit, the region enters overflow.
+ * <p>
+ * <b>Overflow.</b> The region never refuses a write because of its mutable graph. Overflow bounds
+ * the heap use of the graph instead. When the mutable graph holds {@link #OVERFLOW_MULTIPLIER}
+ * times {@link #FLUSH_THRESHOLD} entries, the manager requests a repair. A repair is a full rebuild
+ * that swaps before the next delta. The manager then drops the mutable graph. Until the repair
+ * swaps, it applies no change to the graph or to the segment masks. The rows of the region keep the
+ * dropped changes. The region scan of the repair starts after its swap, so the new base holds them.
+ * The region answers HNSW scans without candidate restriction, as an uncovered region does. This
+ * continues until a full rebuild that swapped after the newest overflow cuts over. Thus the results
+ * stay exact. No delta moves the replay start past the dropped changes, because a repair blocks the
+ * deltas. If the replay at open reaches the limit, the region also enters overflow. The repair of a
+ * region in overflow runs before the rebuilds of regions that restrict their scans.
  * <p>
  * The region opens the manager when a write or a scan first names the index. The manager then
  * replays the rows that changed at or after the replay start of the newest segments. This recovers
@@ -202,12 +213,14 @@ public final class HnswIndexManager implements VectorIndexManager {
    * one for each vector change, and the deleted row keys.
    */
   public static final int FLUSH_THRESHOLD = 10_000;
-  // The manager refuses writes while the mutable graph holds this many times FLUSH_THRESHOLD
-  // entries or more
-  static final int BLOCK_MULTIPLIER = 4;
+  /**
+   * The region enters overflow when the mutable graph holds this many times
+   * {@link #FLUSH_THRESHOLD} entries.
+   */
+  public static final int OVERFLOW_MULTIPLIER = 4;
   // While a full rebuild is in the queue, a delta flush starts only when the mutable graph holds
   // this many times FLUSH_THRESHOLD entries. The full rebuild replaces the stack, so these deltas
-  // only keep the graph below the BLOCK_MULTIPLIER limit. A full rebuild that starts first swaps
+  // only keep the graph below the OVERFLOW_MULTIPLIER limit. A full rebuild that starts first swaps
   // the graph instead
   static final int QUEUED_FLUSH_MULTIPLIER = 2;
   /**
@@ -343,9 +356,17 @@ public final class HnswIndexManager implements VectorIndexManager {
     // Whether the bases of the sources cover all of the range of the region. A scan that searches a
     // state without coverage reads the range without candidate restriction
     final boolean covered;
+    // Whether the region is in overflow: no full rebuild that swapped after the newest overflow
+    // has cut over. A scan that searches such a state reads the range without candidate
+    // restriction, because the graphs and the segments can miss the dropped changes
+    final boolean overflowed;
+    // Whether an apply drops its change: the region entered overflow, and the full rebuild of the
+    // repair has not swapped yet
+    final boolean dropping;
 
     State(List<Source> sources, MutableGraph mutable, MutableGraph flushing,
-      Set<ImmutableBytesPtr> changedSinceSwap, long swapTime, long replayFrom, boolean covered) {
+      Set<ImmutableBytesPtr> changedSinceSwap, long swapTime, long replayFrom, boolean covered,
+      boolean overflowed, boolean dropping) {
       this.sources = sources;
       this.mutable = mutable;
       this.flushing = flushing;
@@ -353,7 +374,15 @@ public final class HnswIndexManager implements VectorIndexManager {
       this.swapTime = swapTime;
       this.replayFrom = replayFrom;
       this.covered = covered;
+      this.overflowed = overflowed;
+      this.dropping = dropping;
     }
+  }
+
+  // Returns true if an HNSW scan that searches the state reads its range without candidate
+  // restriction
+  private static boolean unrestricted(State s) {
+    return !s.covered || s.overflowed;
   }
 
   private volatile State state;
@@ -376,17 +405,18 @@ public final class HnswIndexManager implements VectorIndexManager {
   }
 
   /**
-   * A queued full rebuild. The rebuild thread runs the rebuilds of uncovered regions first, and the
-   * other rebuilds in the order of their requests.
+   * A queued full rebuild. The rebuild thread first runs the rebuilds of regions that are uncovered
+   * or in overflow, because these regions read without candidate restriction. It runs the other
+   * rebuilds in the order of their requests.
    */
   static final class Rebuild implements Runnable, Comparable<Rebuild> {
     private final Runnable task;
-    private final boolean uncovered;
+    private final boolean unrestricted;
     private final long sequence = REBUILD_SEQUENCE.getAndIncrement();
 
-    Rebuild(Runnable task, boolean uncovered) {
+    Rebuild(Runnable task, boolean unrestricted) {
       this.task = task;
-      this.uncovered = uncovered;
+      this.unrestricted = unrestricted;
     }
 
     @Override
@@ -396,8 +426,8 @@ public final class HnswIndexManager implements VectorIndexManager {
 
     @Override
     public int compareTo(Rebuild other) {
-      if (uncovered != other.uncovered) {
-        return uncovered ? -1 : 1;
+      if (unrestricted != other.unrestricted) {
+        return unrestricted ? -1 : 1;
       }
       return Long.compare(sequence, other.sequence);
     }
@@ -437,6 +467,13 @@ public final class HnswIndexManager implements VectorIndexManager {
   // Whether a major compaction ended while a flush held a graph. That flush swapped before the
   // compaction, so a flush that swaps after the compaction must follow. The next swap clears it
   private boolean compactionPending;
+  // The overflow generation: the number of times that the region entered overflow
+  private long overflow;
+  // The overflow generation at the swap of the full rebuild that runs. The cutover of that rebuild
+  // ends the overflow only if the generation did not change after the swap
+  private long fullSwapOverflow;
+  // The time at which the region entered its current overflow, for the overflow time metric
+  private long overflowStart;
   private volatile boolean closed;
 
   /**
@@ -698,22 +735,23 @@ public final class HnswIndexManager implements VectorIndexManager {
       }
     }
     this.state = new State(sources, new MutableGraph(vectorIndex, similarity), null, null, 0, 0,
-      HnswSegment.covered(startKey, endKey, readable));
+      HnswSegment.covered(startKey, endKey, readable), false, false);
     // From here, a failure closes the manager, and the close removes this contribution
     publish(null, state);
     metrics.update(HnswMetric.SEGMENTS_LEFT_OUT, unreadable.size());
     try {
       applyStackMasks(sources);
       long replayStart = current.isEmpty() ? Long.MAX_VALUE : replayStartTime(current);
-      if (!current.isEmpty()) {
-        replay(replayStart);
-      }
+      boolean overflowed = !current.isEmpty() && !replay(replayStart);
       LOG.info("Opened HNSW index {} for region {} with {} segments", indexName,
         region.getRegionInfo().getEncodedName(), sources.size());
-      // Rebuild immediately if the region cannot read a segment. Also rebuild if the region has no
-      // exact base stack that it can trust. A region of a BUILDING index without segments waits for
-      // IndexTool
-      if (
+      // Enter overflow if the replay reached the overflow limit. The overflow requests the repair,
+      // so the other checks are not necessary. Rebuild immediately if the region cannot read a
+      // segment. Also rebuild if the region has no exact base stack that it can trust. A region of
+      // a BUILDING index without segments waits for IndexTool
+      if (overflowed) {
+        overflow(state.mutable);
+      } else if (
         !unreadable.isEmpty() || !trusted(current, replayStart) && (active || !current.isEmpty())
       ) {
         repair();
@@ -734,7 +772,8 @@ public final class HnswIndexManager implements VectorIndexManager {
     gauge(HnswMetric.REGIONS, from, to, s -> 1);
     gauge(HnswMetric.SEGMENTS, from, to, s -> s.sources.size());
     gauge(HnswMetric.REGIONS_UNCOVERED, from, to, s -> s.covered ? 0 : 1);
-    gauge(HnswMetric.REGIONS_UNRESTRICTED, from, to, s -> s.covered ? 0 : 1);
+    gauge(HnswMetric.REGIONS_UNRESTRICTED, from, to, s -> unrestricted(s) ? 1 : 0);
+    gauge(HnswMetric.REGIONS_OVERFLOWED, from, to, s -> s.overflowed ? 1 : 0);
     if (from != null && (to == null || to.mutable != from.mutable)) {
       // The mutable graph leaves the state, for a flush or at close. No change can enter the graph
       // after this point, because changes hold the read lock
@@ -1051,23 +1090,28 @@ public final class HnswIndexManager implements VectorIndexManager {
         List<Source> sources = new ArrayList<>(s.sources);
         sources.remove(lost);
         install(new State(sources, s.mutable, s.flushing, s.changedSinceSwap, s.swapTime,
-          s.replayFrom, false));
+          s.replayFrom, false, s.overflowed, s.dropping));
       } finally {
         stateLock.writeLock().unlock();
       }
       metrics.update(HnswMetric.SEGMENTS_LEFT_OUT, 1);
       LOG.error("HNSW segment {} of index {} for region {} cannot be read; rebuilding",
         lost.descriptor, indexName, region.getRegionInfo().getEncodedName());
-      repair();
-      // If the region queued its rebuild while it was covered, queue the rebuild again as
-      // uncovered, so that it runs before the rebuilds of covered regions. If the rebuild thread
-      // already took the task from its queue, the task runs next
-      if (full == Full.QUEUED && !queued.uncovered && REBUILDS.remove(queued)) {
-        metrics.update(HnswMetric.REBUILD_QUEUE, -1);
-        queueFull();
-      }
+      repairFirst();
     }
     lost.segment.close();
+  }
+
+  // Requests a repair for a region that now reads without candidate restriction. That repair must
+  // run before the rebuilds of regions that restrict their scans. Thus a rebuild that the region
+  // queued while it restricted its scans goes into the queue again. If the rebuild thread already
+  // took that task from its queue, the task runs next. The caller holds the monitor
+  private void repairFirst() {
+    repair();
+    if (full == Full.QUEUED && !queued.unrestricted && REBUILDS.remove(queued)) {
+      metrics.update(HnswMetric.REBUILD_QUEUE, -1);
+      queueFull();
+    }
   }
 
   /**
@@ -1133,20 +1177,6 @@ public final class HnswIndexManager implements VectorIndexManager {
     return false;
   }
 
-  /**
-   * Refuses a write with a retryable {@link RegionTooBusyException} while the mutable graph holds
-   * BLOCK_MULTIPLIER times FLUSH_THRESHOLD entries or more. This bounds the heap use while a flush
-   * is queued, runs or waits for its retry. The limit is for each manager, so the heap use of a
-   * server grows with its number of regions and HNSW indexes.
-   */
-  @Override
-  public void checkResources() throws RegionTooBusyException {
-    if (state.mutable.size() >= BLOCK_MULTIPLIER * FLUSH_THRESHOLD) {
-      throw new RegionTooBusyException("Over HNSW mutable graph limit, index=" + indexName
-        + ", region=" + region.getRegionInfo().getEncodedName());
-    }
-  }
-
   // Applies a vector change or a delete to the mutable graph, and masks the older entries of the
   // row in the segments. Changes to different rows run in parallel. Row locks order the changes to
   // one row
@@ -1155,6 +1185,12 @@ public final class HnswIndexManager implements VectorIndexManager {
     stateLock.readLock().lock();
     try {
       s = state;
+      if (s.dropping) {
+        // The region is in overflow and drops the change. The row keeps the change, and the region
+        // scan of the repair reads it
+        metrics.update(HnswMetric.CHANGES_DROPPED, 1);
+        return;
+      }
       // Add the new version before the masks hide the older ones. A search reads the sources oldest
       // first, so it finds one of the versions. A search that overlaps a swap runs again
       int added = vector != null ? s.mutable.upsert(key, vector) : s.mutable.delete(key);
@@ -1182,10 +1218,53 @@ public final class HnswIndexManager implements VectorIndexManager {
     if (size >= splitTrigger && splitArmed.compareAndSet(true, false)) {
       requestSplit();
     }
+    if (size >= OVERFLOW_MULTIPLIER * FLUSH_THRESHOLD) {
+      overflow(s.mutable);
+      return;
+    }
     // A flush that holds a graph starts the next flush when it ends
     if (s.flushing == null && size >= FLUSH_THRESHOLD) {
       flush(false);
     }
+  }
+
+  /**
+   * Enters overflow if the mutable graph is still the given graph. The manager requests a repair.
+   * It installs a state with an empty mutable graph, and that state drops the changes until the
+   * repair swaps. The rows of the region keep the dropped changes, and the region scan of the
+   * repair starts after its swap. The region reads without candidate restriction until a full
+   * rebuild that swapped after this overflow cuts over. A search that holds the old state finishes
+   * on it.
+   * <p>
+   * The new state has an empty set of keys that changed after the swap, because only the dropped
+   * graph held their new versions. The repair can take over the graph of a failed or queued flush.
+   * The base of the repair then holds these new versions, so its cutover must not mask these keys.
+   */
+  private synchronized void overflow(MutableGraph graph) {
+    State s = state;
+    if (closed || s.mutable != graph || s.dropping) {
+      // A swap or another overflow replaced the graph
+      return;
+    }
+    overflow++;
+    if (!s.overflowed) {
+      overflowStart = EnvironmentEdgeManager.currentTimeMillis();
+    }
+    metrics.update(HnswMetric.OVERFLOW_ENTRIES, 1);
+    stateLock.writeLock().lock();
+    try {
+      // The install removes the entries of the dropped graph from the gauge
+      install(new State(s.sources, new MutableGraph(vectorIndex, similarity), s.flushing,
+        s.changedSinceSwap == null ? null : ConcurrentHashMap.newKeySet(), s.swapTime, s.replayFrom,
+        s.covered, true, true));
+    } finally {
+      stateLock.writeLock().unlock();
+    }
+    LOG.info(
+      "HNSW index {} region {} entered overflow {}: it dropped its mutable graph, and reads"
+        + " without candidate restriction until a full rebuild cuts over",
+      indexName, region.getRegionInfo().getEncodedName(), overflow);
+    repairFirst();
   }
 
   /**
@@ -1235,9 +1314,13 @@ public final class HnswIndexManager implements VectorIndexManager {
   }
 
   // Reads again each row that changed at or after the given time, and applies its current vector or
-  // its delete to the mutable graph. This recovers the changes that no segment holds
-  private void replay(long since) throws IOException {
+  // its delete to the mutable graph. This recovers the changes that no segment holds. Each changed
+  // row adds one entry to the empty graph of the open. Thus the replay stops when the changed rows
+  // reach the overflow limit. It then applies no change and returns false, and the region enters
+  // overflow. The set of changed keys thus never holds more keys than the limit
+  private boolean replay(long since) throws IOException {
     Set<ImmutableBytesPtr> changed = new HashSet<>();
+    int limit = OVERFLOW_MULTIPLIER * FLUSH_THRESHOLD;
     try (RegionScanner scanner = region.getScanner(changedRowsScan(maintainer, since))) {
       List<Cell> cells = new ArrayList<>();
       boolean more;
@@ -1247,7 +1330,12 @@ public final class HnswIndexManager implements VectorIndexManager {
           changed.add(new ImmutableBytesPtr(CellUtil.cloneRow(cells.get(0))));
           cells.clear();
         }
-      } while (more);
+      } while (more && changed.size() < limit);
+    }
+    if (changed.size() >= limit) {
+      LOG.info("HNSW index {} region {} has {} or more rows changed since {}; the replay stops",
+        indexName, region.getRegionInfo().getEncodedName(), limit, since);
+      return false;
     }
     for (ImmutableBytesPtr key : changed) {
       apply(key, vectorOf(maintainer, region.get(new Get(key.copyBytesIfNecessary()))));
@@ -1255,6 +1343,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     metrics.update(HnswMetric.REPLAYED_ROWS, changed.size());
     LOG.info("Replayed {} rows changed since {} into HNSW index {} for region {}", changed.size(),
       since, indexName, region.getRegionInfo().getEncodedName());
+    return true;
   }
 
   /**
@@ -1325,7 +1414,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   /**
    * Returns a scanner that answers a build scan with one cell at the start key of the region. The
    * cell holds the time at which the region accepted the request. A purge scan gets the same answer
-   * with the number of deleted cells.
+   * with the number of deleted cells, and an overflow scan with 1 or 0.
    */
   public static RegionScanner acceptedScanner(RegionScanner scanner, long accepted) {
     return new DelegateRegionScanner(scanner) {
@@ -1418,8 +1507,8 @@ public final class HnswIndexManager implements VectorIndexManager {
     submitDelta();
   }
 
-  // Queues a full rebuild task. The task runs before the rebuilds of covered regions if this region
-  // is not covered. The caller holds the monitor
+  // Queues a full rebuild task. The task runs before the rebuilds of regions that restrict their
+  // scans if this region reads without candidate restriction. The caller holds the monitor
   private void queueFull() {
     full = Full.QUEUED;
     long queuedAt = EnvironmentEdgeManager.currentTimeMillis();
@@ -1428,7 +1517,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       metrics.update(HnswMetric.REBUILD_WAIT_TIME,
         EnvironmentEdgeManager.currentTimeMillis() - queuedAt);
       rebuildSegment(0);
-    }, !state.covered);
+    }, unrestricted(state));
     metrics.update(HnswMetric.REBUILD_QUEUE, 1);
     REBUILDS.execute(queued);
   }
@@ -1453,7 +1542,8 @@ public final class HnswIndexManager implements VectorIndexManager {
   // becomes the graph of the flush, and a new mutable graph takes the writes. Otherwise both graphs
   // stay, and only the swap time changes. The new swap time gives the segment a new identity, so it
   // shares no cells with a failed segment. The time is also later than all earlier build requests.
-  // The caller holds the monitor
+  // After the swap, the mutable graph takes the changes again. Only a full rebuild swaps while the
+  // region drops changes, because a repair blocks the deltas. The caller holds the monitor
   private void swap(State s) {
     stateLock.writeLock().lock();
     try {
@@ -1461,9 +1551,9 @@ public final class HnswIndexManager implements VectorIndexManager {
       clock = Math.max(now, clock + 1);
       install(s.flushing == null
         ? new State(s.sources, new MutableGraph(vectorIndex, similarity), s.mutable,
-          ConcurrentHashMap.newKeySet(), clock, replayFrom(now), s.covered)
+          ConcurrentHashMap.newKeySet(), clock, replayFrom(now), s.covered, s.overflowed, false)
         : new State(s.sources, s.mutable, s.flushing, s.changedSinceSwap, clock, replayFrom(now),
-          s.covered));
+          s.covered, s.overflowed, false));
     } finally {
       stateLock.writeLock().unlock();
     }
@@ -1487,10 +1577,11 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     deltaTask = 0;
     deltaBase = null;
-    // The swap follows the change or the compaction of a repair
+    // The swap follows the change, the compaction or the overflow of a repair
     repair = false;
     swap(state);
     fullSwapTime = state.swapTime;
+    fullSwapOverflow = overflow;
     full = Full.RUNNING;
     return true;
   }
@@ -1588,7 +1679,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         // Queue a full rebuild that a caller requested during this task. Run the flush of a
         // compaction that ended during the task. Start the next flush if the mutable graph is at
         // the flush threshold. No write starts that flush, because an apply starts no flush while
-        // a flush holds a graph, and checkResources can refuse all writes
+        // a flush holds a graph
         if (rebuildPending && full == Full.NONE) {
           rebuildPending = false;
           flush(true);
@@ -1780,6 +1871,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       return false;
     }
     List<Source> sources = new ArrayList<>(isDelta ? s.sources.size() + 1 : 1);
+    boolean overflowed;
     stateLock.writeLock().lock();
     try {
       if (segment != null) {
@@ -1796,8 +1888,11 @@ public final class HnswIndexManager implements VectorIndexManager {
         sources.addAll(s.sources);
       }
       // A new base covers the range of the region exactly, so the new state is covered. A delta
-      // does not change the coverage
-      install(new State(sources, s.mutable, null, null, 0, 0, !isDelta || s.covered));
+      // does not change the coverage. A new base ends the overflow if the region did not enter
+      // overflow after the swap of its rebuild. A delta does not end the overflow
+      overflowed = isDelta ? s.overflowed : overflow != fullSwapOverflow;
+      install(new State(sources, s.mutable, null, null, 0, 0, !isDelta || s.covered, overflowed,
+        s.dropping));
     } finally {
       stateLock.writeLock().unlock();
     }
@@ -1805,6 +1900,12 @@ public final class HnswIndexManager implements VectorIndexManager {
       for (Source old : s.sources) {
         old.segment.close();
       }
+    }
+    if (s.overflowed && !overflowed) {
+      metrics.update(HnswMetric.OVERFLOW_TIME,
+        EnvironmentEdgeManager.currentTimeMillis() - overflowStart);
+      LOG.info("HNSW index {} region {} left overflow {}", indexName,
+        region.getRegionInfo().getEncodedName(), overflow);
     }
     return true;
   }
@@ -1985,22 +2086,25 @@ public final class HnswIndexManager implements VectorIndexManager {
   /**
    * Finds the candidate rows of an HNSW scan, as
    * {@link #search(float[], int, byte[], byte[], Predicate)} does. Returns null if the state that
-   * the search reads does not cover the region, also after the search runs again on a new state.
-   * The scan then reads its key range without candidate restriction. Otherwise the result also
-   * gives the count of indexed rows in the key range of that state. The coverage, the candidates
-   * and the count thus come from the same state.
+   * the search reads does not cover the region or is in overflow. This is also true after the
+   * search runs again on a new state. The scan then reads its key range without candidate
+   * restriction. Otherwise the result also gives the count of indexed rows in the key range of that
+   * state. The coverage, the overflow, the candidates and the count thus come from the same state.
    */
   Candidates candidates(float[] query, int topK, byte[] startRow, byte[] stopRow,
     Predicate<byte[]> keyFilter) throws IOException {
     return search(query, topK, startRow, stopRow, keyFilter, true);
   }
 
-  // Searches the current state. If covering is true, returns null for a state without coverage
+  // Searches the current state. If covering is true, returns null for a state without coverage or
+  // in overflow
   private Candidates search(float[] query, int topK, byte[] startRow, byte[] stopRow,
     Predicate<byte[]> keyFilter, boolean covering) throws IOException {
     State s = state;
-    if (covering && !s.covered) {
-      metrics.update(HnswMetric.UNRESTRICTED_UNCOVERED, 1);
+    if (covering && unrestricted(s)) {
+      // Overflow comes first: an uncovered region in overflow counts as in overflow
+      metrics.update(
+        s.overflowed ? HnswMetric.UNRESTRICTED_OVERFLOW : HnswMetric.UNRESTRICTED_UNCOVERED, 1);
       return null;
     }
     byte[] from = Bytes.compareTo(startRow, startKey) > 0 ? startRow : startKey;
@@ -2149,6 +2253,15 @@ public final class HnswIndexManager implements VectorIndexManager {
     return state.covered;
   }
 
+  /**
+   * Returns true if the region is in overflow. Its mutable graph overflowed, and no full rebuild
+   * that swapped after the overflow has cut over. Until then, an HNSW scan of the region reads its
+   * range without candidate restriction.
+   */
+  public boolean overflowed() {
+    return state.overflowed;
+  }
+
   @Override
   public boolean isClosed() {
     return closed;
@@ -2164,6 +2277,11 @@ public final class HnswIndexManager implements VectorIndexManager {
       try {
         if (!closed) {
           publish(state, null);
+          if (state.overflowed) {
+            // The overflow ends with the manager, so record its time up to the close
+            metrics.update(HnswMetric.OVERFLOW_TIME,
+              EnvironmentEdgeManager.currentTimeMillis() - overflowStart);
+          }
         }
         closed = true;
       } finally {
@@ -2249,7 +2367,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
 
     // The number of entries: the graph nodes, one for each vector change, and the deleted keys. The
-    // flush threshold, the split trigger and the write limit use this count
+    // flush threshold, the split trigger and the overflow limit use this count
     int size() {
       return next.get() + deleted.size();
     }

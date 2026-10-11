@@ -43,13 +43,17 @@ import java.util.Set;
 import java.util.TreeMap;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.MD5Hash;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
+import org.apache.phoenix.index.vector.HnswRegionRequests;
 import org.apache.phoenix.mapreduce.index.fsck.IndexFsckContext;
 import org.apache.phoenix.mapreduce.index.fsck.Report;
+import org.apache.phoenix.mapreduce.index.fsck.Retry;
 import org.apache.phoenix.query.QueryServicesOptions;
 
 /**
@@ -79,7 +83,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
  * vector.</li>
  * <li>{@code delta}: For each data region, the newest segment time, the replay start, and the
  * number of data rows changed since each time. The region can hold the rows changed since the
- * replay start only in memory.</li>
+ * replay start only in memory. Also if the region is in overflow. The tool asks each region for
+ * this state. A region in overflow dropped its mutable graph. It reads without candidate
+ * restriction until a full rebuild cuts over.</li>
  * </ul>
  */
 public class HnswIndexInspector {
@@ -700,16 +706,19 @@ public class HnswIndexInspector {
     return e;
   }
 
-  private void delta(Report report) throws IOException {
+  private void delta(Report report) throws Exception {
     List<HnswSegment.Descriptor> all = reader.listSegments();
+    List<RegionInfo> listed = reader.listRegions();
+    Set<String> overflowed = overflowed(listed);
     List<Map<String, Object>> regions = new ArrayList<>();
-    for (RegionInfo region : reader.listRegions()) {
+    for (RegionInfo region : listed) {
       byte[] start = region.getStartKey();
       byte[] end = region.getEndKey();
       List<HnswSegment.Descriptor> current = HnswIndexManager
         .currentSegments(reader.fenced(HnswIndexReader.held(all, start, end)), start, end);
       Map<String, Object> r = new LinkedHashMap<>();
       r.put("region", region.getEncodedName());
+      r.put("overflowed", overflowed.contains(region.getEncodedName()));
       if (current.isEmpty()) {
         r.put("segments", 0);
       } else {
@@ -724,5 +733,27 @@ public class HnswIndexInspector {
       regions.add(r);
     }
     report.putInspection("regions", regions);
+  }
+
+  // Returns the encoded names of the regions that are in overflow for the index. Only a region
+  // knows this state, so the tool asks each region
+  private Set<String> overflowed(List<RegionInfo> regions) throws Exception {
+    Set<String> overflowed = new HashSet<>();
+    try (Table data = hnsw.getConnection().getQueryServices()
+      .getTable(hnsw.getDataTable().getPhysicalName().getBytes())) {
+      Retry.run("Read the overflow state of the HNSW index regions", () -> {
+        overflowed.clear();
+        HnswRegionRequests.send(data, regions, BaseScannerRegionObserverConstants.HNSW_OVERFLOW,
+          region -> hnsw.getIndexKey(), (region, value, failure) -> {
+            if (failure != null) {
+              throw failure;
+            }
+            if (value != null && Bytes.toLong(value) != 0) {
+              overflowed.add(region.getEncodedName());
+            }
+          });
+      });
+    }
+    return overflowed;
   }
 }

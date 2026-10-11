@@ -66,7 +66,9 @@ import org.slf4j.LoggerFactory;
  * A row that changed at or after the replay start of the region is backlog, not an error. Such a
  * row can be only in the in-memory graph of the region until the next flush. A row that changes
  * while the task scans the region is also backlog. The data phase checks the cell timestamps of the
- * row. The segment phase lists the rows changed since the replay start again after the scan.
+ * row. The segment phase lists the rows changed since the replay start again after the scan. A
+ * region in overflow drops the changes of its rows until the swap of its repair rebuild. No segment
+ * moves the replay start past these changes, so these rows are backlog too.
  * <p>
  * A region that its segments do not cover reads its rows without the index, until a rebuild writes
  * a base that covers it. An example is the upper daughter of a split before its first build. A row

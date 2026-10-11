@@ -827,15 +827,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * A repeated request of the same build starts no rebuild if a full rebuild that swapped after the
    * earlier request runs or is complete. For an HNSW purge scan, deletes the segment cells of a
    * dropped HNSW index from the region. The scan returns one cell that holds the number of deleted
-   * cells.
+   * cells. For an HNSW overflow scan, the scan returns one cell that holds 1 if the region is in
+   * overflow for the index, and 0 otherwise.
    */
   @Override
   public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
     RegionScanner s) throws IOException {
     byte[] request = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD);
     byte[] purge = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_PURGE);
+    byte[] overflow = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_OVERFLOW);
     if (
-      (request == null && purge == null)
+      (request == null && purge == null && overflow == null)
         || !RegionReplicaUtil.isDefaultReplica(c.getEnvironment().getRegionInfo())
     ) {
       return s;
@@ -843,6 +845,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     try {
       if (purge != null) {
         return HnswIndexManager.acceptedScanner(s, purgeVectorIndex(Bytes.toString(purge)));
+      }
+      if (overflow != null) {
+        // Only an open manager can be in overflow, so the request opens no manager
+        VectorIndexManager manager =
+          vectorIndexManagers.get(CentroidManager.getCentroidIndexName(Bytes.toString(overflow)));
+        return HnswIndexManager.acceptedScanner(s,
+          manager != null && !manager.isClosed() && ((HnswIndexManager) manager).overflowed()
+            ? 1
+            : 0);
       }
       String index = Bytes.toString(request, Bytes.SIZEOF_LONG, request.length - Bytes.SIZEOF_LONG);
       long accepted =
@@ -2340,11 +2351,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             hnswBatches.merge(context.hnswBatchStart, 1, Integer::sum);
           }
         }
-        // Keep the manager for the batch. The batch then changes the graph of the manager whose
-        // resources it checked. If the manager closes, the batch does not open a new manager while
-        // it holds its row locks
+        // Keep the manager for the batch. If the manager closes, the batch does not open a new
+        // manager while it holds its row locks
         VectorIndexManager manager = getVectorIndexManager(indexMaintainer.getLogicalIndexName());
-        manager.checkResources();
         context.hnswManagers.put(indexMaintainer.getLogicalIndexName(), manager);
       }
     }
