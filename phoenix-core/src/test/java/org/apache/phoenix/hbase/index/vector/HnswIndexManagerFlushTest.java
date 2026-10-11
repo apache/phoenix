@@ -70,6 +70,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -118,6 +119,8 @@ public class HnswIndexManagerFlushTest {
     .setDistanceMetric("L2").setDimension(DIM).setHnswM(16).setHnswEfConstruction(100)
     .setHnswAlpha(1.2).setQuantizationType("NONE").build();
   private static final byte[] FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+  private static final byte[] SEGMENT_FAMILY =
+    QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
   private static final byte[] V = Bytes.toBytes("V");
   private static final byte[] X = Bytes.toBytes("X");
   // A column family that the index does not read
@@ -133,9 +136,19 @@ public class HnswIndexManagerFlushTest {
     void before(Put put) throws IOException;
   }
 
+  /**
+   * Runs before a region deletes the cells of segments in one anchor row. The hook can block the
+   * delete, or make it fail.
+   */
+  interface DeleteHook {
+    void before(Delete delete) throws IOException;
+  }
+
   // The V# cells of every region. A region reads only the anchor rows in its own range
   private static final SegmentCells CELLS = new SegmentCells();
   private static volatile PutHook putHook = put -> {
+  };
+  private static volatile DeleteHook deleteHook = delete -> {
   };
   // The scans of V# that the regions receive
   private static final List<Scan> SEGMENT_SCANS = new CopyOnWriteArrayList<>();
@@ -163,6 +176,8 @@ public class HnswIndexManagerFlushTest {
     CELLS.setHook(m -> {
       if (m instanceof Put) {
         putHook.before((Put) m);
+      } else if (m instanceof Delete) {
+        deleteHook.before((Delete) m);
       }
     });
     connection = mock(Connection.class);
@@ -183,6 +198,8 @@ public class HnswIndexManagerFlushTest {
   public void tearDown() {
     putHook = put -> {
     };
+    deleteHook = delete -> {
+    };
     for (HnswIndexManager manager : managers) {
       manager.close();
     }
@@ -193,6 +210,42 @@ public class HnswIndexManagerFlushTest {
     Cell cell = put.getFamilyCellMap().values().iterator().next().get(0);
     return HnswSegment.parseQualifier(cell.getQualifierArray(), cell.getQualifierOffset(),
       cell.getQualifierLength()).time;
+  }
+
+  // Returns true if a segment write writes a delta segment, which has a base time cell
+  private static boolean isDelta(Put put) {
+    for (List<Cell> cells : put.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        HnswSegment.Qualifier q = HnswSegment.parseQualifier(cell.getQualifierArray(),
+          cell.getQualifierOffset(), cell.getQualifierLength());
+        if (q != null && q.tag == HnswSegment.BASE_TIME_TAG) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Stores the cells of a segment write, as a region does before the writer gets a failure
+  private static void store(Put put) {
+    for (List<Cell> cells : put.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        CELLS.put(CellUtil.cloneRow(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp(),
+          CellUtil.cloneValue(cell));
+      }
+    }
+  }
+
+  // Returns true if the delete removes cells of the segment
+  private static boolean deletes(Delete delete, HnswSegment.Descriptor d) {
+    for (List<Cell> cells : delete.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        if (Bytes.startsWith(CellUtil.cloneQualifier(cell), d.identity)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private static byte[] encode(float[] v) {
@@ -415,14 +468,24 @@ public class HnswIndexManagerFlushTest {
       return segments;
     }
 
-    // Whether the region has exactly one segment, with a time at or after the given time, and the
-    // manager searches that segment. The manager retires older segments only after it installs a
-    // new segment. Before it installs its first segment, the manager counts no rows
+    // Whether the region has exactly one segment, and the manager searches it. That segment must be
+    // a base with a time at or after the given time. The manager retires older segments only after
+    // it installs a new segment. The row count shows the install of the first segment, because the
+    // manager counts no rows before then
     boolean hasBase(HnswIndexManager manager, long since) {
       try {
         List<HnswSegment.Descriptor> segments = segments();
-        return segments.size() == 1 && segments.get(0).time >= since
+        return segments.size() == 1 && !segments.get(0).isDelta() && segments.get(0).time >= since
           && manager.count() >= segments.get(0).count;
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    // Whether the region has a segment with the given time
+    boolean hasSegment(long time) {
+      try {
+        return segments().stream().anyMatch(d -> d.time == time);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -517,6 +580,38 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
+   * A rebuild request that comes while a delta flush runs must swap after the delta flush ends.
+   * IndexTool must then find a base segment that is newer than the request.
+   */
+  @Test
+  public void testRebuildRequestedDuringDeltaFlush() throws Exception {
+    Harness h = new Harness("pending");
+    h.load(30, new Random(2));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    h.awaitBase(manager, since);
+
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (h.isRow(put) && isDelta(put)) {
+        entered.countDown();
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    h.upsert(manager, "r000", point(50, 0));
+    request("a delta flush", manager::flush, () -> entered.getCount() == 0);
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    manager.rebuild(Long.MAX_VALUE);
+    release.countDown();
+    h.awaitBase(manager, since);
+  }
+
+  /**
    * A failed flush runs again when its retry delay ends. A flush request before then has no effect.
    */
   @Test
@@ -546,46 +641,95 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * A full rebuild swaps when its task starts, so its retry writes a newer segment than the failed
-   * one. The manager searches the segment of a retried rebuild and retires the segment that it
-   * replaces.
+   * When its retry runs, a failed delta flush writes the segment of its original swap. A full
+   * rebuild swaps when its task starts, so its retry writes a base that is newer than the failed
+   * base. The manager then searches the new base, and retires the base that it replaces.
    */
   @Test
   public void testFailedFlushIsRetried() throws Exception {
     // The retry delay is one minute, so the test calls the retry method directly
     Method retryFlush = HnswIndexManager.class.getDeclaredMethod("retryFlush");
     retryFlush.setAccessible(true);
-    Harness h = new Harness("retryfull");
-    h.load(30, new Random(25));
+    for (boolean full : new boolean[] { false, true }) {
+      Harness h = new Harness(full ? "retryfull" : "retrydelta");
+      h.load(30, new Random(25));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager manager = h.open(true);
+      HnswSegment.Descriptor base = h.awaitBase(manager, since);
+
+      AtomicReference<Long> failed = new AtomicReference<>();
+      putHook = put -> {
+        if (h.isRow(put)) {
+          failed.compareAndSet(null, time(put));
+          throw new IOException("injected");
+        }
+      };
+      float[] moved = point(50, 0);
+      h.upsert(manager, "r000", moved);
+      long requested = EnvironmentEdgeManager.currentTimeMillis();
+      request(full ? "a failed rebuild" : "a failed delta flush",
+        full ? () -> manager.rebuild(Long.MAX_VALUE) : manager::flush, () -> failed.get() != null);
+      putHook = put -> {
+      };
+      // A retry that starts before the failed task ends has no effect, so the test runs it again
+      request("the retry", () -> {
+        try {
+          retryFlush.invoke(manager);
+        } catch (ReflectiveOperationException e) {
+          throw new RuntimeException(e);
+        }
+      }, () -> full ? h.hasBase(manager, requested) : h.hasSegment(failed.get()));
+      HnswSegment.Descriptor written = h.segments().get(0);
+      if (full) {
+        assertTrue(written.time > failed.get());
+        assertEquals(30, written.count);
+      } else {
+        assertEquals((long) failed.get(), written.time);
+        assertEquals(Long.valueOf(base.time), written.baseTime);
+        assertEquals(1, written.count);
+      }
+      assertEquals("full=" + full, "r000", h.nearest(manager, moved));
+    }
+  }
+
+  /**
+   * A forced rebuild after a failed delta flush takes a new swap time, so its base has a new
+   * identity. {@code V#} can still hold the cells of the failed delta. A base with the identity of
+   * the delta would have the base time and tombstones cells of the delta.
+   */
+  @Test
+  public void testForcedRebuildOfFailedDeltaWritesNewRow() throws Exception {
+    Harness h = new Harness("rewrite");
+    h.load(30, new Random(4));
     long since = EnvironmentEdgeManager.currentTimeMillis();
     HnswIndexManager manager = h.open(true);
-    h.awaitBase(manager, since);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
 
-    AtomicReference<Long> failed = new AtomicReference<>();
+    AtomicInteger failed = new AtomicInteger();
     putHook = put -> {
-      if (h.isRow(put)) {
-        failed.compareAndSet(null, time(put));
+      if (h.isRow(put) && isDelta(put)) {
+        // V# stores the cells of the put, but the writer gets a failure
+        store(put);
+        failed.incrementAndGet();
         throw new IOException("injected");
       }
     };
-    float[] moved = point(50, 0);
-    h.upsert(manager, "r000", moved);
-    long requested = EnvironmentEdgeManager.currentTimeMillis();
-    request("a failed rebuild", () -> manager.rebuild(Long.MAX_VALUE), () -> failed.get() != null);
-    putHook = put -> {
-    };
-    // A retry that starts before the failed task ends has no effect, so the test runs it again
-    request("the retry", () -> {
-      try {
-        retryFlush.invoke(manager);
-      } catch (ReflectiveOperationException e) {
-        throw new RuntimeException(e);
-      }
-    }, () -> h.hasBase(manager, requested));
-    HnswSegment.Descriptor written = h.segments().get(0);
-    assertTrue(written.time > failed.get());
-    assertEquals(30, written.count);
-    assertEquals("r000", h.nearest(manager, moved));
+    h.upsert(manager, "r000", point(50, 0));
+    h.delete(manager, "r001");
+    request("a failed delta flush", manager::flush, () -> failed.get() > 0);
+    List<HnswSegment.Descriptor> segments = h.segments();
+    assertEquals(2, segments.size());
+    assertEquals(Long.valueOf(base.time), segments.get(0).baseTime);
+
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    manager.rebuild(Long.MAX_VALUE);
+    HnswSegment.Descriptor rebuilt = h.awaitBase(manager, since);
+    assertTrue(rebuilt.time > segments.get(0).time);
+    for (byte tag : new byte[] { HnswSegment.BASE_TIME_TAG, HnswSegment.TOMBSTONES_TAG }) {
+      assertTrue(CELLS.get(new Get(rebuilt.anchor).addColumn(SEGMENT_FAMILY,
+        HnswSegment.qualifier(rebuilt.identity, tag))).isEmpty());
+    }
+    assertEquals(29, rebuilt.count);
   }
 
   /**
@@ -655,9 +799,8 @@ public class HnswIndexManagerFlushTest {
 
     CountDownLatch entered = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
-    AtomicInteger puts = new AtomicInteger();
     putHook = put -> {
-      if (h.isRow(put) && puts.getAndIncrement() == 0) {
+      if (h.isRow(put) && isDelta(put) && entered.getCount() > 0) {
         entered.countDown();
         try {
           release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -676,49 +819,73 @@ public class HnswIndexManagerFlushTest {
       h.upsert(manager, "r001", vector(random));
     }
     release.countDown();
-    await("a second flush", () -> puts.get() >= 2);
+    await("a second delta flush", () -> {
+      try {
+        return h.segments().stream().filter(HnswSegment.Descriptor::isDelta).count() == 2;
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 
   /**
-   * A row that changes after the swap and before the cutover is masked in the new segment. The new
-   * segment holds the scanned version of the row from before the change. The mutable graph does not
-   * hold a deleted row, so only the mask hides the old version of that row.
+   * The cutover masks the entry of the new segment for a row that changes after the swap and before
+   * the cutover. The new segment holds the version of the row from before the change. For a delta,
+   * this is the buffered version. For a full rebuild, this is the scanned version. The mutable
+   * graph does not hold a deleted row, so only the mask hides the old version of that row.
    */
   @Test
   public void testRowChangedBeforeCutoverIsMasked() throws Exception {
-    Harness h = new Harness("cutfull");
-    h.load(30, new Random(12));
-    long since = EnvironmentEdgeManager.currentTimeMillis();
-    HnswIndexManager manager = h.open(true);
-    h.awaitBase(manager, since);
-    float[] deleted = point(50, 0);
-    float[] stale = point(0, 50);
-    h.upsert(manager, "r000", deleted);
-    h.upsert(manager, "r001", stale);
+    for (boolean full : new boolean[] { false, true }) {
+      Harness h = new Harness(full ? "cutfull" : "cutdelta");
+      h.load(30, new Random(12));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager manager = h.open(true);
+      h.awaitBase(manager, since);
+      // Changes buffered before the swap, so a delta holds these versions
+      float[] deleted = point(50, 0);
+      float[] stale = point(0, 50);
+      h.upsert(manager, "r000", deleted);
+      h.upsert(manager, "r001", stale);
 
-    CountDownLatch entered = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    putHook = put -> {
-      if (h.isRow(put)) {
-        entered.countDown();
-        try {
-          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-          throw new IOException(e);
+      CountDownLatch entered = new CountDownLatch(1);
+      CountDownLatch release = new CountDownLatch(1);
+      putHook = put -> {
+        if (h.isRow(put)) {
+          entered.countDown();
+          try {
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            throw new IOException(e);
+          }
         }
+      };
+      since = EnvironmentEdgeManager.currentTimeMillis();
+      request(full ? "a held rebuild" : "a held delta flush",
+        full ? () -> manager.rebuild(Long.MAX_VALUE) : manager::flush,
+        () -> entered.getCount() == 0);
+      // Changes after the swap. A full rebuild scans the region before it writes, so its scan does
+      // not hold these changes
+      h.delete(manager, "r000");
+      float[] moved = point(-50, 0);
+      h.upsert(manager, "r001", moved);
+      release.countDown();
+      if (full) {
+        h.awaitBase(manager, since);
+      } else {
+        // The next flush can swap only after the cutover of the held flush
+        request("a second delta", manager::flush, () -> {
+          try {
+            return h.segments().stream().filter(HnswSegment.Descriptor::isDelta).count() == 2;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
       }
-    };
-    since = EnvironmentEdgeManager.currentTimeMillis();
-    request("a held rebuild", () -> manager.rebuild(Long.MAX_VALUE), () -> entered.getCount() == 0);
-    // Changes after the swap. A full rebuild scans the region before it writes, so its scan does
-    // not hold these changes
-    h.delete(manager, "r000");
-    float[] moved = point(-50, 0);
-    h.upsert(manager, "r001", moved);
-    release.countDown();
-    h.awaitBase(manager, since);
-    assertFalse("a deleted row found by its old vector", h.found(manager, deleted, "r000"));
-    assertEquals("r001", h.nearest(manager, moved));
+      assertFalse("full=" + full + ": a deleted row found by its old vector",
+        h.found(manager, deleted, "r000"));
+      assertEquals("full=" + full, "r001", h.nearest(manager, moved));
+    }
   }
 
   /**
@@ -948,11 +1115,17 @@ public class HnswIndexManagerFlushTest {
     h.load(30, new Random(12));
     long since = EnvironmentEdgeManager.currentTimeMillis();
     HnswIndexManager manager = h.open(true);
-    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+    h.awaitBase(manager, since);
     long batch = EnvironmentEdgeManager.currentTimeMillis() - 300_000;
     h.oldestBatch = batch;
     h.upsert(manager, "r000", point(50, 0));
-    request("a flush", manager::flush, () -> h.hasBase(manager, base.time + 1));
+    request("a delta flush", manager::flush, () -> {
+      try {
+        return h.segments().get(0).isDelta();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
     List<HnswSegment.Descriptor> segments = h.segments();
     assertEquals(batch, segments.get(0).replayFrom);
     assertEquals(batch, HnswIndexManager.replayStartTime(segments));
@@ -1038,6 +1211,64 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
+   * The writer fence applies to each segment of an exact stack, not only to its base. The region
+   * wrote the base of its stack, and another region wrote the delta. The region searches the stack
+   * at once, and also rebuilds at once. Its new base records its own name, and holds the change of
+   * the delta.
+   */
+  @Test
+  public void testDeltaOfAnotherRegionIsRebuilt() throws Exception {
+    Harness h = new Harness("foreigndelta");
+    h.load(30, new Random(31));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager first = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(first, since);
+    float[] moved = point(50, 0);
+    h.upsert(first, "r000", moved);
+    request("a delta flush", first::flush, () -> {
+      try {
+        return h.segments().get(0).isDelta();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    HnswSegment.Descriptor delta = h.segments().get(0);
+    first.close();
+    byte[] name = h.region.getRegionInfo().getEncodedNameAsBytes();
+    assertArrayEquals(name, base.writer);
+    assertArrayEquals(name, delta.writer);
+    CELLS.put(delta.anchor, HnswSegment.qualifier(delta.identity, HnswSegment.WRITER_TAG),
+      delta.time, Bytes.toBytes("another region"));
+
+    // The rebuild waits, so the test sees the region search the stack
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (h.isRow(put)) {
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    long reopened = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager second;
+    try {
+      second = h.open(true);
+      assertTrue(second.covered());
+      assertEquals(2, h.segments().size());
+      assertEquals("r000", h.nearest(second, moved));
+    } finally {
+      release.countDown();
+    }
+    HnswSegment.Descriptor rebuilt = h.awaitBase(second, reopened);
+    assertEquals(30, rebuilt.count);
+    assertArrayEquals(name, rebuilt.writer);
+    assertTrue(second.covered());
+    assertEquals("r000", h.nearest(second, moved));
+  }
+
+  /**
    * A major compaction purges the delete markers of rows that only the memory of a closed manager
    * deleted. Thus a manager rebuilds when it opens after a major compaction of an indexed family
    * that is newer than the replay start of its segments. Each store compacts on its own schedule,
@@ -1081,10 +1312,11 @@ public class HnswIndexManagerFlushTest {
     assertTrue(compacted > base.replayFrom);
     h.compacted(FAMILY, compacted);
     first.flush();
-    await("a segment written after the compaction", () -> {
+    await("a delta segment written after the compaction", () -> {
       try {
         List<HnswSegment.Descriptor> segments = h.segments();
-        return segments.size() == 1 && segments.get(0).replayFrom >= compacted;
+        return segments.size() == 2 && segments.get(0).isDelta()
+          && segments.get(0).replayFrom >= compacted;
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -1096,7 +1328,7 @@ public class HnswIndexManagerFlushTest {
     Thread.sleep(500);
     // The open sends only the replay scan, and no rebuild scan
     assertEquals(1, h.scans.size());
-    assertTrue(h.segments().get(0).time > base.time);
+    assertEquals(base.time, h.segments().get(1).time);
     assertEquals("r005", h.nearest(second, h.rows.get(h.key("r005"))));
   }
 
@@ -1114,7 +1346,7 @@ public class HnswIndexManagerFlushTest {
     CountDownLatch entered = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
     putHook = put -> {
-      if (h.isRow(put) && entered.getCount() > 0) {
+      if (h.isRow(put) && isDelta(put) && entered.getCount() > 0) {
         entered.countDown();
         try {
           release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -1130,14 +1362,42 @@ public class HnswIndexManagerFlushTest {
     long compacted = EnvironmentEdgeManager.currentTimeMillis();
     manager.flush();
     release.countDown();
-    await("a second segment written after the compaction", () -> {
+    await("a second delta segment written after the compaction", () -> {
       try {
         List<HnswSegment.Descriptor> segments = h.segments();
-        return segments.size() == 1 && segments.get(0).replayFrom >= compacted;
+        return segments.size() == 3 && segments.get(0).isDelta()
+          && segments.get(0).replayFrom >= compacted;
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
     });
+  }
+
+  /**
+   * The index of the manager is stale: a user dropped it, or created it again with another
+   * definition or on another table. A delta flush then closes the manager and writes no segment,
+   * because the index name can now belong to another index or definition.
+   */
+  @Test
+  public void testStaleManagerDeltaFlushClosesWithoutWriting() throws Exception {
+    Harness h = new Harness("staledelta");
+    h.load(30, new Random(23));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+    h.upsert(manager, "r000", point(50, 0));
+    List<Scan> checked = new CopyOnWriteArrayList<>();
+    h.catalog = scan -> {
+      checked.add(scan);
+      return false;
+    };
+    manager.flush();
+    await("the stale manager to close", manager::isClosed);
+    // A delta flush gives no rebuild scan to the catalog check
+    assertNull(checked.get(0));
+    List<HnswSegment.Descriptor> segments = h.segments();
+    assertEquals(1, segments.size());
+    assertEquals(base.time, segments.get(0).time);
   }
 
   /**
@@ -1231,6 +1491,62 @@ public class HnswIndexManagerFlushTest {
     HnswIndexManager second = h.open(true);
     assertEquals(30, h.awaitBase(second, reopened).count);
     assertEquals("r005", h.nearest(second, h.rows.get(h.key("r005"))));
+  }
+
+  /**
+   * HBase returns an empty value for a payload or a tombstones cell whose MOB file is gone. The
+   * region of a delta with such a cell cannot read the delta at open. The region opens without the
+   * delta, and rebuilds. The replay starts after the changes of the lost delta, so the base of its
+   * stack does not hold them. Thus the region is not covered until the rebuild lands, and an HNSW
+   * scan reads the range without candidate restriction.
+   */
+  @Test
+  public void testLostDeltaIsRebuilt() throws Exception {
+    for (byte tag : new byte[] { HnswSegment.TOMBSTONES_TAG, HnswSegment.PAYLOAD_TAG }) {
+      Harness h = new Harness("lostdelta" + (char) tag);
+      h.load(30, new Random(29));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager first = h.open(true);
+      h.awaitBase(first, since);
+      float[] moved = point(50, 0);
+      float[] deleted = h.rows.get(h.key("r001"));
+      h.upsert(first, "r000", moved);
+      h.delete(first, "r001");
+      request("a delta flush", first::flush, () -> {
+        try {
+          return h.segments().get(0).isDelta();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      });
+      HnswSegment.Descriptor delta = h.segments().get(0);
+      first.close();
+      CELLS.put(delta.anchor, HnswSegment.qualifier(delta.identity, tag), delta.time, new byte[0]);
+
+      // The rebuild waits, so the test sees the uncovered region
+      CountDownLatch release = new CountDownLatch(1);
+      putHook = put -> {
+        if (h.isRow(put)) {
+          try {
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            throw new IOException(e);
+          }
+        }
+      };
+      long reopened = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager second;
+      try {
+        second = h.open(true);
+        assertFalse("lost " + (char) tag, second.covered());
+      } finally {
+        release.countDown();
+      }
+      assertEquals(29, h.awaitBase(second, reopened).count);
+      assertTrue(second.covered());
+      assertEquals("r000", h.nearest(second, moved));
+      assertFalse(h.found(second, deleted, "r001"));
+    }
   }
 
   /**
@@ -1433,6 +1749,53 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
+   * A full rebuild swaps the mutable graph when its task starts. While the rebuild waits behind the
+   * rebuild of another region, a region with a base flushes deltas. It flushes a delta when the
+   * graph reaches QUEUED_FLUSH_MULTIPLIER times the flush threshold, so its writes do not fill the
+   * graph.
+   */
+  @Test
+  public void testDeltasFlushWhileRebuildQueued() throws Exception {
+    Harness blocker = new Harness("blocker");
+    blocker.load(30, new Random(27));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager blocking = blocker.open(true);
+    blocker.awaitBase(blocking, since);
+    Harness h = new Harness("waiting");
+    h.load(30, new Random(28));
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor base = h.awaitBase(manager, since);
+
+    // The rebuild of the other region holds the rebuild thread in its region scan
+    blocker.scanEntered = new CountDownLatch(1);
+    blocker.scanGate = new CountDownLatch(1);
+    long requested;
+    try {
+      blocking.rebuild(Long.MAX_VALUE);
+      assertTrue(blocker.scanEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      requested = manager.rebuild(Long.MAX_VALUE);
+      deleteKeys(manager, h, "w", 0,
+        HnswIndexManager.QUEUED_FLUSH_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD);
+      await("a delta flush while the rebuild waits", () -> {
+        try {
+          return h.segments().stream()
+            .anyMatch(d -> d.isDelta() && d.baseTime == base.time && d.time > requested);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      });
+      manager.checkResources();
+      for (HnswSegment.Descriptor d : h.segments()) {
+        assertTrue(d.isDelta() || d.time == base.time);
+      }
+    } finally {
+      blocker.scanGate.countDown();
+    }
+    h.awaitBase(manager, requested + 1);
+  }
+
+  /**
    * A build request that arrives while a full rebuild runs gets a time no earlier than the swap of
    * the running rebuild. Another rebuild follows, and its base is newer than the request. A
    * repeated request that the running rebuild serves joins the running rebuild.
@@ -1446,7 +1809,7 @@ public class HnswIndexManagerFlushTest {
     h.awaitBase(manager, since);
     List<Long> written = new CopyOnWriteArrayList<>();
     putHook = put -> {
-      if (h.isRow(put)) {
+      if (h.isRow(put) && !isDelta(put)) {
         written.add(time(put));
       }
     };
@@ -1497,12 +1860,15 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * A change that fails to apply, a major compaction of a table with a TTL, and a segment that a
-   * region does not trust when it opens each queue a full rebuild. Writes buffer until the rebuild
-   * starts, and its segment holds the change.
+   * A change that fails to apply queues a full rebuild that must swap before the next delta flush.
+   * A major compaction of a table with a TTL does the same. A stack that a region does not trust
+   * when it opens also does the same. A delta that the region writes while the rebuild waits would
+   * move the replay start of the region past the change or the compaction. A region that opens
+   * would then trust its stack. Thus writes buffer until the rebuild starts, and the base of the
+   * rebuild holds the change.
    */
   @Test
-  public void testRepairRebuildIsQueued() throws Exception {
+  public void testRepairRebuildPrecedesDeltas() throws Exception {
     Harness blocker = new Harness("rblocker");
     blocker.load(30, new Random(32));
     long since = EnvironmentEdgeManager.currentTimeMillis();
@@ -1540,7 +1906,8 @@ public class HnswIndexManagerFlushTest {
       opened.get(ttl).flush();
       opened.put(reopened, reopened.open(true));
       for (Harness h : regions) {
-        deleteKeys(opened.get(h), h, "w", 0, HnswIndexManager.FLUSH_THRESHOLD + 1);
+        deleteKeys(opened.get(h), h, "w", 0,
+          HnswIndexManager.QUEUED_FLUSH_MULTIPLIER * HnswIndexManager.FLUSH_THRESHOLD + 1);
       }
       Thread.sleep(500);
       for (Harness h : regions) {
@@ -1748,46 +2115,66 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * A purge of a dropped index closes the manager of the index and deletes its cells. A rebuild
-   * that writes its segment after the purge scan deletes the cells that it wrote. Thus no cells of
-   * the dropped index stay.
+   * A purge of a dropped index closes the manager of the index and deletes its cells. A rebuild or
+   * a delta flush that writes its segment after the purge scan deletes the cells that it wrote.
+   * Thus no cells of the dropped index stay.
    */
   @Test
   public void testPurgeDuringSegmentWriteLeavesNoCells() throws Exception {
-    Harness h = new Harness("purgewrite");
-    h.load(30, new Random(45));
-    long since = EnvironmentEdgeManager.currentTimeMillis();
-    HnswIndexManager manager = h.open(true);
-    h.awaitBase(manager, since);
-    CountDownLatch entered = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    putHook = put -> {
-      if (h.isRow(put)) {
-        entered.countDown();
-        try {
-          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-          throw new IOException(e);
+    for (boolean full : new boolean[] { true, false }) {
+      Harness h = new Harness(full ? "purgewrite" : "purgedelta");
+      h.load(30, new Random(45));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager manager = h.open(true);
+      h.awaitBase(manager, since);
+      CountDownLatch entered = new CountDownLatch(1);
+      CountDownLatch release = new CountDownLatch(1);
+      putHook = put -> {
+        if (h.isRow(put)) {
+          entered.countDown();
+          try {
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            throw new IOException(e);
+          }
         }
+      };
+      try {
+        if (full) {
+          manager.rebuild(Long.MAX_VALUE);
+        } else {
+          h.upsert(manager, "r000", point(50, 0));
+          manager.flush();
+        }
+        assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        // The purge closes the manager, and deletes the cells before the flush writes its segment
+        manager.close();
+        assertEquals(6, HnswIndexManager.purge(h.env, h.index));
+        assertTrue(CELLS.list(Bytes.toBytes(h.index)).isEmpty());
+      } finally {
+        release.countDown();
       }
-    };
-    try {
-      manager.rebuild(Long.MAX_VALUE);
-      assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      // The purge closes the manager, and deletes the cells before the rebuild writes its segment
-      manager.close();
-      assertEquals(6, HnswIndexManager.purge(h.env, h.index));
+      putHook = put -> {
+      };
+      // The rebuild thread and the delta thread run the tasks of other regions after the tasks of
+      // the purged index. Thus the flush of the purged index has ended when the other segment lands
+      Harness next = new Harness(full ? "purgenext" : "purgenextdelta");
+      next.load(10, new Random(46));
+      since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager other = next.open(true);
+      next.awaitBase(other, since);
+      if (!full) {
+        next.upsert(other, "r000", point(50, 0));
+        request("a delta flush", other::flush, () -> {
+          try {
+            return next.segments().get(0).isDelta();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
+      }
       assertTrue(CELLS.list(Bytes.toBytes(h.index)).isEmpty());
-    } finally {
-      release.countDown();
     }
-    // The rebuild thread runs the rebuild of another region after the rebuild of the purged index.
-    // Thus the rebuild of the purged index has ended when the other base lands
-    Harness next = new Harness("purgenext");
-    next.load(10, new Random(46));
-    since = EnvironmentEdgeManager.currentTimeMillis();
-    next.awaitBase(next.open(true), since);
-    assertTrue(CELLS.list(Bytes.toBytes(h.index)).isEmpty());
   }
 
   /**
@@ -1879,5 +2266,121 @@ public class HnswIndexManagerFlushTest {
     long accepted = manager.rebuild(Long.MAX_VALUE);
     assertTrue(accepted >= ahead.time);
     assertTrue(h.awaitBase(manager, accepted + 1).time > ahead.time);
+  }
+
+  /**
+   * A delta flush can swap after the cutover of a full rebuild, while the rebuild retires the
+   * segments that it replaces. When this delta flush fails, its retry runs it again, because the
+   * full rebuild does not own its graph.
+   */
+  @Test
+  public void testFailedDeltaAfterCutoverIsRetried() throws Exception {
+    Method retryFlush = HnswIndexManager.class.getDeclaredMethod("retryFlush");
+    retryFlush.setAccessible(true);
+    Harness h = new Harness("aftercut");
+    h.load(30, new Random(36));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    HnswSegment.Descriptor first = h.awaitBase(manager, since);
+    CountDownLatch retiring = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    deleteHook = delete -> {
+      if (deletes(delete, first)) {
+        retiring.countDown();
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    AtomicInteger deltaPuts = new AtomicInteger();
+    putHook = put -> {
+      if (h.isRow(put) && isDelta(put) && deltaPuts.getAndIncrement() == 0) {
+        throw new IOException("injected");
+      }
+    };
+    BooleanSupplier hasDelta = () -> {
+      try {
+        return h.segments().stream().anyMatch(HnswSegment.Descriptor::isDelta);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    };
+    try {
+      manager.rebuild(Long.MAX_VALUE);
+      assertTrue(retiring.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      float[] moved = point(50, 0);
+      h.upsert(manager, "r000", moved);
+      request("a failed delta flush", manager::flush, () -> deltaPuts.get() > 0);
+      assertFalse(hasDelta.getAsBoolean());
+      // A retry that starts before the failed task ends has no effect, so the test runs it again
+      request("the retry while the rebuild retires", () -> {
+        try {
+          retryFlush.invoke(manager);
+        } catch (ReflectiveOperationException e) {
+          throw new RuntimeException(e);
+        }
+      }, hasDelta);
+      assertEquals("r000", h.nearest(manager, moved));
+    } finally {
+      release.countDown();
+    }
+  }
+
+  /**
+   * A full rebuild can start while a delta flush task of its region waits behind the delta flushes
+   * of other regions. The rebuild then takes over the graph of the task, and does not wait for the
+   * task. The task then writes nothing.
+   */
+  @Test
+  public void testRebuildTakesOverQueuedDelta() throws Exception {
+    Harness blocker = new Harness("dblocker");
+    blocker.load(30, new Random(37));
+    long since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager blocking = blocker.open(true);
+    blocker.awaitBase(blocking, since);
+    Harness h = new Harness("dqueued");
+    h.load(30, new Random(38));
+    since = EnvironmentEdgeManager.currentTimeMillis();
+    HnswIndexManager manager = h.open(true);
+    h.awaitBase(manager, since);
+
+    // The delta flush of the other region holds the delta thread in its segment write
+    CountDownLatch held = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (blocker.isRow(put) && isDelta(put)) {
+        held.countDown();
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    float[] moved = point(-50, 0);
+    try {
+      blocker.upsert(blocking, "r000", point(50, 0));
+      request("a held delta flush", blocking::flush, () -> held.getCount() == 0);
+      h.upsert(manager, "r000", moved);
+      manager.flush();
+      long requested = manager.rebuild(Long.MAX_VALUE);
+      h.awaitBase(manager, requested + 1);
+      assertEquals("r000", h.nearest(manager, moved));
+    } finally {
+      release.countDown();
+    }
+    await("the held delta flush", () -> {
+      try {
+        return blocker.segments().get(0).isDelta();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    Thread.sleep(200);
+    List<HnswSegment.Descriptor> segments = h.segments();
+    assertEquals(1, segments.size());
+    assertFalse(segments.get(0).isDelta());
   }
 }
