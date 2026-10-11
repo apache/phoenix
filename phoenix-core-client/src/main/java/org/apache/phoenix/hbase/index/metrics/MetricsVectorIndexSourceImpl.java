@@ -20,6 +20,9 @@ package org.apache.phoenix.hbase.index.metrics;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.MetricHistogram;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableHistogram;
+import org.apache.hadoop.metrics2.lib.MutableMetric;
 
 public class MetricsVectorIndexSourceImpl extends BaseSourceImpl
   implements MetricsVectorIndexSource {
@@ -28,6 +31,8 @@ public class MetricsVectorIndexSourceImpl extends BaseSourceImpl
   private final MutableFastCounter vectorCentroidReassignments;
   private final MetricHistogram vectorScorecardFlushTimeHisto;
   private final MetricHistogram vectorScorecardReconcileTimeHisto;
+  // The server values of the HNSW metrics, by ordinal
+  private final MutableMetric[] hnswMetrics = new MutableMetric[HnswMetric.values().length];
 
   public MetricsVectorIndexSourceImpl() {
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
@@ -46,6 +51,22 @@ public class MetricsVectorIndexSourceImpl extends BaseSourceImpl
       VECTOR_SCORECARD_FLUSH_TIME_DESC);
     vectorScorecardReconcileTimeHisto = getMetricsRegistry()
       .newHistogram(VECTOR_SCORECARD_RECONCILE_TIME, VECTOR_SCORECARD_RECONCILE_TIME_DESC);
+
+    for (HnswMetric metric : HnswMetric.values()) {
+      switch (metric.kind()) {
+        case COUNTER:
+          hnswMetrics[metric.ordinal()] =
+            getMetricsRegistry().newCounter(metric.metricName(), metric.description(), 0L);
+          break;
+        case GAUGE:
+          hnswMetrics[metric.ordinal()] =
+            getMetricsRegistry().newGauge(metric.metricName(), metric.description(), 0L);
+          break;
+        default:
+          hnswMetrics[metric.ordinal()] =
+            getMetricsRegistry().newHistogram(metric.metricName(), metric.description());
+      }
+    }
   }
 
   @Override
@@ -70,6 +91,52 @@ public class MetricsVectorIndexSourceImpl extends BaseSourceImpl
   public void updateVectorScorecardReconcileTime(String indexName, long timeMs) {
     incrementIndexSpecificHistogram(VECTOR_SCORECARD_RECONCILE_TIME, indexName, timeMs);
     vectorScorecardReconcileTimeHisto.add(timeMs);
+  }
+
+  @Override
+  public HnswIndexMetrics getHnswIndexMetrics(String indexName) {
+    MutableMetric[] index = new MutableMetric[hnswMetrics.length];
+    for (HnswMetric metric : HnswMetric.values()) {
+      if (metric.serverOnly()) {
+        continue;
+      }
+      String name = getCounterName(metric.metricName(), indexName);
+      switch (metric.kind()) {
+        case COUNTER:
+          index[metric.ordinal()] = getMetricsRegistry().getCounter(name, 0L);
+          break;
+        case GAUGE:
+          index[metric.ordinal()] = getMetricsRegistry().getGauge(name, 0L);
+          break;
+        default:
+          index[metric.ordinal()] = getMetricsRegistry().getHistogram(name);
+      }
+    }
+    return (metric, value) -> {
+      MutableMetric m = index[metric.ordinal()];
+      if (m != null) {
+        updateHnsw(m, metric.kind(), value);
+      }
+      updateHnsw(hnswMetrics[metric.ordinal()], metric.kind(), value);
+    };
+  }
+
+  @Override
+  public void updateHnsw(HnswMetric metric, long value) {
+    updateHnsw(hnswMetrics[metric.ordinal()], metric.kind(), value);
+  }
+
+  private static void updateHnsw(MutableMetric m, HnswMetricKind kind, long value) {
+    switch (kind) {
+      case COUNTER:
+        ((MutableFastCounter) m).incr(value);
+        break;
+      case GAUGE:
+        ((MutableGaugeLong) m).incr(value);
+        break;
+      default:
+        ((MutableHistogram) m).add(value);
+    }
   }
 
   private void incrementIndexSpecificCounter(String baseCounterName, String indexName, long count) {
