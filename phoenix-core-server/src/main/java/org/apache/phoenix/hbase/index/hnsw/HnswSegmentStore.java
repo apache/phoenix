@@ -63,11 +63,11 @@ import org.apache.phoenix.query.QueryConstants;
 /**
  * Reads and writes the cells of HNSW segments in the hidden family {@code V#} of a data table.
  * {@link HnswSegment} describes the cell layout. A listing reads only the small cells of the
- * segments. It never reads a payload cell or a MOB file. A payload read resolves the MOB reference.
- * If the payload cell is missing, the region retired the segment after the listing, and the read
- * throws {@link HnswSegment.NotFoundException}. A payload whose MOB file is missing or corrupt
- * reads as an empty value. The payload framing check of {@link HnswSegment} rejects this value as a
- * corrupt segment.
+ * segments. It never reads a payload cell, a tombstones cell or a MOB file. A payload read resolves
+ * the MOB reference. If the payload cell is missing, the region retired the segment after the
+ * listing, and the read throws {@link HnswSegment.NotFoundException}. A payload whose MOB file is
+ * missing or corrupt reads as an empty value. The payload framing check of {@link HnswSegment}
+ * rejects this value as a corrupt segment. The tombstones of a delta segment follow the same rules.
  * <p>
  * {@link RegionStore} serves the RegionServer. Its reads and writes are calls on the region, and
  * make no RPC. {@link TableStore} serves client tools, and only reads.
@@ -107,6 +107,27 @@ public abstract class HnswSegmentStore {
     return cell;
   }
 
+  /**
+   * Returns the tombstones cell of a delta segment, with the MOB reference resolved. Returns null
+   * if the delta records no deleted rows. The cell can be larger than the MOB threshold, so the
+   * listing does not read it. HBase returns an empty value for a reference whose MOB file is
+   * missing or corrupt, as for a payload. {@link HnswSegment} then rejects the value as a corrupt
+   * segment.
+   * @throws HnswSegment.NotFoundException if the count cell of the segment is missing, as after the
+   *                                       retirement of the segment
+   */
+  public Cell readTombstones(HnswSegment.Descriptor d) throws IOException {
+    byte[] tombstones = HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG);
+    byte[] count = HnswSegment.qualifier(d.identity, HnswSegment.COUNT_TAG);
+    Get get = new Get(d.anchor).addColumn(FAMILY, tombstones).addColumn(FAMILY, count);
+    get.setAttribute(MobConstants.EMPTY_VALUE_ON_MOBCELL_MISS, Bytes.toBytes(true));
+    Result result = get(get);
+    if (result.getColumnLatestCell(FAMILY, count) == null) {
+      throw new HnswSegment.NotFoundException(d.identity, this);
+    }
+    return result.getColumnLatestCell(FAMILY, tombstones);
+  }
+
   // Returns a scan of all cells of an index. The scan returns MOB reference cells as stored, and
   // reads no MOB file.
   static Scan indexScan(byte[] indexKey) {
@@ -117,12 +138,13 @@ public abstract class HnswSegmentStore {
   }
 
   // Returns a scan of the cells of an index that a listing decodes. A filter on the server removes
-  // the payload cells. MOB_SCAN_RAW has no effect on a payload in the memstore, because the
-  // memstore holds the full value until the flush.
+  // the payload cells and the tombstones cells, which can be large. MOB_SCAN_RAW has no effect on a
+  // cell in the memstore, because the memstore holds the full value until the flush.
   static Scan listScan(byte[] indexKey) {
     RegexStringComparator tags = new RegexStringComparator("["
-      + Bytes.toString(new byte[] { HnswSegment.END_KEY_TAG, HnswSegment.COUNT_TAG,
-        HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG, HnswSegment.WRITER_TAG })
+      + Bytes.toString(
+        new byte[] { HnswSegment.END_KEY_TAG, HnswSegment.COUNT_TAG, HnswSegment.BASE_TIME_TAG,
+          HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG, HnswSegment.WRITER_TAG })
       + "]\\z");
     // ISO-8859-1 maps each byte to one char, so the pattern matches the last byte of the qualifier
     tags.setCharset(StandardCharsets.ISO_8859_1);
@@ -191,11 +213,22 @@ public abstract class HnswSegmentStore {
     }
 
     /**
-     * Writes the cells of a segment to its anchor row without the WAL. Then it flushes {@code V#},
-     * so the payload moves to a MOB file. A null payload writes a segment with no vectors. The W
-     * cell holds the encoded name of this region.
+     * Writes the cells of a segment to its anchor row without the WAL. Then it asks for a flush of
+     * {@code V#}, so the payload and large tombstones move to MOB files. A null payload writes a
+     * segment with no vectors. The W cell holds the encoded name of this region, for a base and for
+     * a delta. A delta segment also records its base time, and its tombstones if it has any.
+     * <p>
+     * A base write waits for the flush. A delta write asks once and does not wait. One thread
+     * writes the deltas of all regions of the server. HBase can delay the flush of a region for a
+     * long time, for example while a store of the region has too many files. A wait would then
+     * delay the deltas of all regions. No retirement depends on a delta. If a crash loses a delta
+     * before its flush, the region replays from the replay start of the segments that remain. The
+     * loss of a base has the same result. HBase does not do the requested flush while another flush
+     * of the region is queued or runs. A later flush of {@code V#} then writes the delta, for
+     * example the flush of the next base write.
      */
-    public void write(HnswSegment.Descriptor d, byte[] payload) throws IOException {
+    public void write(HnswSegment.Descriptor d, byte[] payload, byte[][] tombstones)
+      throws IOException {
       Put put = new Put(d.anchor, d.time)
         .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), d.endKey)
         .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.COUNT_TAG),
@@ -206,6 +239,10 @@ public abstract class HnswSegmentStore {
           d.definition)
         .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG),
           region.getRegionInfo().getEncodedNameAsBytes());
+      if (d.isDelta()) {
+        put.addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG),
+          Bytes.toBytes(d.baseTime));
+      }
       if (payload != null) {
         // The cell refers to the payload and does not copy it
         put.add(
@@ -213,9 +250,17 @@ public abstract class HnswSegmentStore {
             .setQualifier(HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG))
             .setTimestamp(d.time).setType(Cell.Type.Put).setValue(payload).build());
       }
+      if (tombstones.length > 0) {
+        put.addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG),
+          HnswSegment.encodeKeys(tombstones));
+      }
       put.setDurability(Durability.SKIP_WAL);
       mutate(Collections.singletonList(put));
-      flush();
+      if (!d.isDelta()) {
+        flush();
+      } else if (region.getStore(FAMILY).getFlushableSize().getDataSize() > 0) {
+        requestFlush(Collections.singletonList(FAMILY));
+      }
     }
 
     /**

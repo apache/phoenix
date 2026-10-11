@@ -85,7 +85,9 @@ import org.apache.phoenix.schema.PTable;
  * cells are small and stay in the store files. One small cell holds the encoded name of the region
  * that wrote the segment.
  * <p>
- * Full rebuilds make base segments.
+ * Full rebuilds make base segments. Flushes make delta segments, and each delta segment stacks on
+ * one base segment. A delta segment holds the rows that changed, a tombstone for each deleted row,
+ * and the time of its base segment.
  * <p>
  * Without quantization, the graph stores the full vectors. With quantization, it stores only
  * quantized codes: NVQ for SQ8, and fused PQ with NVQ for PQ. JVector reranks PQ candidates with a
@@ -107,6 +109,13 @@ public final class HnswSegment {
   public static final byte END_KEY_TAG = 'E';
   /** The tag of the cell that holds the number of vectors in the segment. */
   public static final byte COUNT_TAG = 'N';
+  /** The tag of the cell that holds the base segment time of a delta segment. */
+  public static final byte BASE_TIME_TAG = 'B';
+  /**
+   * The tag of the cell that holds the deleted row keys of a delta segment. After many deletes, the
+   * cell is large, so it can go to a MOB file.
+   */
+  public static final byte TOMBSTONES_TAG = 'T';
   /**
    * The tag of the cell that holds the replay start of the segment, {@link Descriptor#replayFrom}.
    */
@@ -121,8 +130,8 @@ public final class HnswSegment {
    */
   public static final byte WRITER_TAG = 'W';
   /** The tags of the cells of a segment. */
-  static final byte[] TAGS =
-    { PAYLOAD_TAG, END_KEY_TAG, COUNT_TAG, REPLAY_FROM_TAG, DEFINITION_TAG, WRITER_TAG };
+  static final byte[] TAGS = { PAYLOAD_TAG, END_KEY_TAG, COUNT_TAG, BASE_TIME_TAG, TOMBSTONES_TAG,
+    REPLAY_FROM_TAG, DEFINITION_TAG, WRITER_TAG };
   /** The length of a definition digest, which is a SHA-256 digest. */
   public static final int DEFINITION_LENGTH = 32;
   /** The last int of each segment payload, the ASCII text "HNSW". */
@@ -137,6 +146,7 @@ public final class HnswSegment {
   private final HnswOffheapAllocator allocator;
   private final VectorSimilarityFunction similarity;
   private final byte[][] keys;
+  private final byte[][] tombstones;
   // The loaded graph, or null after eviction or close
   private final AtomicReference<Resident> resident = new AtomicReference<>();
   // The graph that graph() returned. The segment keeps it until close().
@@ -158,17 +168,18 @@ public final class HnswSegment {
   }
 
   private HnswSegment(HnswSegmentStore store, Descriptor descriptor, HnswOffheapAllocator allocator,
-    VectorSimilarityFunction similarity, byte[][] keys) {
+    VectorSimilarityFunction similarity, byte[][] keys, byte[][] tombstones) {
     this.store = store;
     this.descriptor = descriptor;
     this.allocator = allocator;
     this.similarity = similarity;
     this.keys = keys;
+    this.tombstones = tombstones;
   }
 
   /**
-   * The metadata of a stored segment: its identity, key range, time, vector count, replay start,
-   * anchor row, index definition digest and writer region.
+   * The metadata of a stored segment: its identity, key range, time, vector count, base segment
+   * time, replay start, anchor row, index definition digest and writer region.
    */
   public static final class Descriptor {
     /** The identity of the segment, {@link #identity(byte[], byte[], long)}. */
@@ -179,6 +190,8 @@ public final class HnswSegment {
     public final byte[] endKey;
     public final long time;
     public final int count;
+    /** The time of the base segment of a delta segment, or null for a base segment. */
+    public final Long baseTime;
     /**
      * The time from which a region replays the row changes that the segment can miss. It is the
      * segment time, or an earlier start of a write batch that changed the graph after the segment
@@ -201,13 +214,13 @@ public final class HnswSegment {
      * @throws IllegalArgumentException if the key range has no anchor row
      */
     public Descriptor(byte[] indexKey, byte[] startKey, long time, byte[] endKey, int count,
-      long replayFrom, byte[] definition) {
-      this(indexKey, startKey, time, endKey, count, replayFrom, definition, null);
+      Long baseTime, long replayFrom, byte[] definition) {
+      this(indexKey, startKey, time, endKey, count, baseTime, replayFrom, definition, null);
     }
 
     // Creates the descriptor of a listed segment, with the region that wrote it
     private Descriptor(byte[] indexKey, byte[] startKey, long time, byte[] endKey, int count,
-      long replayFrom, byte[] definition, byte[] writer) {
+      Long baseTime, long replayFrom, byte[] definition, byte[] writer) {
       this.anchor = anchor(startKey, endKey);
       if (anchor == null) {
         throw new IllegalArgumentException("The key range [" + Bytes.toStringBinary(startKey) + ", "
@@ -219,9 +232,15 @@ public final class HnswSegment {
       this.endKey = endKey;
       this.time = time;
       this.count = count;
+      this.baseTime = baseTime;
       this.replayFrom = replayFrom;
       this.definition = definition;
       this.writer = writer;
+    }
+
+    /** Returns true for a delta segment. */
+    public boolean isDelta() {
+      return baseTime != null;
     }
 
     /** Returns true if the segment covers the exact key range {@code [start, end)}. */
@@ -253,21 +272,27 @@ public final class HnswSegment {
     public String toString() {
       return "Descriptor{" + "indexKey=" + Bytes.toStringBinary(indexKey) + ", startKey="
         + Bytes.toStringBinary(startKey) + ", endKey=" + Bytes.toStringBinary(endKey) + ", time="
-        + time + ", count=" + count + ", replayFrom=" + replayFrom + ", writer="
-        + Bytes.toStringBinary(writer) + '}';
+        + time + ", count=" + count + (isDelta() ? ", baseTime=" + baseTime : "") + ", replayFrom="
+        + replayFrom + ", writer=" + Bytes.toStringBinary(writer) + '}';
     }
   }
 
   /**
-   * Returns true if the given segments together cover all of the key range {@code [from, to)}. An
-   * empty start key or end key has no limit on that side.
+   * Returns true if the given base segments together cover all of the key range {@code [from, to)}.
+   * An empty start key or end key has no limit on that side. A delta segment holds only the changes
+   * of a flush, so it never covers a range or hides an older segment. This method ignores deltas.
    * @param from     the start key of the range, inclusive
    * @param to       the end key of the range, exclusive. An empty array has no upper limit.
    * @param segments the segments that can cover the range
    * @return true if the segments cover all of the range
    */
   public static boolean covered(byte[] from, byte[] to, List<Descriptor> segments) {
-    List<Descriptor> sorted = new ArrayList<>(segments);
+    List<Descriptor> sorted = new ArrayList<>();
+    for (Descriptor d : segments) {
+      if (!d.isDelta()) {
+        sorted.add(d);
+      }
+    }
     sorted.sort((a, b) -> Bytes.compareTo(a.startKey, b.startKey));
     byte[] reached = from;
     for (Descriptor d : sorted) {
@@ -396,8 +421,9 @@ public final class HnswSegment {
   /**
    * Collects the segment cells of a scan of {@code V#} and decodes the well-formed segments. A
    * well-formed segment has qualifiers that decode, an E cell, an int N, a long R, a digest D and a
-   * W cell. Its cells must also be in the anchor row of its key range. The listing ignores the
-   * payload cell. It copies the data that it keeps, so the scanner can release the cells.
+   * W cell. A B cell is optional, and it must be a long. The cells must also be in the anchor row
+   * of the key range. The listing ignores the payload cell and the tombstones cell. It copies the
+   * data that it keeps, so the scanner can release the cells.
    */
   static final class Listing {
     private final Map<ImmutableBytesPtr, Cells> segments = new LinkedHashMap<>();
@@ -408,6 +434,7 @@ public final class HnswSegment {
       final Qualifier qualifier;
       byte[] endKey;
       byte[] count;
+      byte[] baseTime;
       byte[] replayFrom;
       byte[] definition;
       byte[] writer;
@@ -421,7 +448,7 @@ public final class HnswSegment {
     void add(Cell cell) {
       Qualifier q = parseQualifier(cell.getQualifierArray(), cell.getQualifierOffset(),
         cell.getQualifierLength());
-      if (q == null || q.tag == PAYLOAD_TAG) {
+      if (q == null || q.tag == PAYLOAD_TAG || q.tag == TOMBSTONES_TAG) {
         return;
       }
       byte[] row = CellUtil.cloneRow(cell);
@@ -436,6 +463,9 @@ public final class HnswSegment {
           break;
         case COUNT_TAG:
           cells.count = value;
+          break;
+        case BASE_TIME_TAG:
+          cells.baseTime = value;
           break;
         case REPLAY_FROM_TAG:
           cells.replayFrom = value;
@@ -456,13 +486,15 @@ public final class HnswSegment {
       for (Cells c : segments.values()) {
         if (
           c.endKey != null && c.count != null && c.count.length == Bytes.SIZEOF_INT
+            && (c.baseTime == null || c.baseTime.length == Bytes.SIZEOF_LONG)
             && c.replayFrom != null && c.replayFrom.length == Bytes.SIZEOF_LONG
             && c.definition != null && c.definition.length == DEFINITION_LENGTH && c.writer != null
             && Bytes.equals(c.row, anchor(c.qualifier.startKey, c.endKey))
         ) {
           descriptors
             .add(new Descriptor(c.qualifier.indexKey, c.qualifier.startKey, c.qualifier.time,
-              c.endKey, Bytes.toInt(c.count), Bytes.toLong(c.replayFrom), c.definition, c.writer));
+              c.endKey, Bytes.toInt(c.count), c.baseTime != null ? Bytes.toLong(c.baseTime) : null,
+              Bytes.toLong(c.replayFrom), c.definition, c.writer));
         }
       }
       return descriptors;
@@ -616,8 +648,9 @@ public final class HnswSegment {
   }
 
   /**
-   * Signals that the payload cell of a segment with vectors is missing, as after the retirement of
-   * the segment. A search of a closed segment also throws this exception. A payload cell whose MOB
+   * Signals that a necessary cell of a segment is missing, as after the retirement of the segment.
+   * This cell is the payload cell of a segment with vectors, or the count cell of a delta segment.
+   * A search of a closed segment also throws this exception. A payload or tombstones cell whose MOB
    * file is missing or corrupt is present. HBase returns an empty value for it, and the segment
    * fails as a corrupt segment.
    */
@@ -644,24 +677,35 @@ public final class HnswSegment {
   /**
    * Opens a segment from a segment store and loads its graph off-heap. If the graph is larger than
    * the off-heap budget, the segment does not load it. A search of that segment then fails with
-   * {@link TooLargeException}, but the row keys are available.
+   * {@link TooLargeException}, but the row keys are available. The open of a delta segment also
+   * reads its tombstones. Lost or corrupt tombstones fail the open as a corrupt segment, as a lost
+   * or corrupt payload does.
    * @param store      the segment store
    * @param descriptor the segment descriptor
    * @param allocator  the off-heap memory allocator
    * @param metric     the distance metric name
    * @return the open segment
-   * @throws NotFoundException if the payload of a segment with vectors is missing
+   * @throws NotFoundException if the payload of a segment with vectors is missing, or if the count
+   *                           cell of a delta segment is missing
    * @throws IOException       if the read or the load of the segment fails
    */
   public static HnswSegment open(HnswSegmentStore store, Descriptor descriptor,
     HnswOffheapAllocator allocator, String metric) throws IOException {
+    byte[][] tombstones = new byte[0][];
+    if (descriptor.isDelta()) {
+      Cell cell = store.readTombstones(descriptor);
+      if (cell != null) {
+        tombstones = decodeKeys(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+          descriptor.identity);
+      }
+    }
     if (descriptor.count == 0) {
       return new HnswSegment(store, descriptor, allocator, similarityFunction(metric),
-        new byte[0][]);
+        new byte[0][], tombstones);
     }
     Cell payloadCell = store.readPayload(descriptor);
     HnswSegment segment = create(store, descriptor, allocator, metric, payloadCell.getValueArray(),
-      payloadCell.getValueOffset(), payloadCell.getValueLength());
+      payloadCell.getValueOffset(), payloadCell.getValueLength(), tombstones);
     try {
       segment.load(payloadCell.getValueArray(), payloadCell.getValueOffset(),
         graphLength(payloadCell.getValueArray(), payloadCell.getValueOffset(),
@@ -680,12 +724,14 @@ public final class HnswSegment {
    * cells.
    */
   public static HnswSegment of(HnswSegmentStore store, Descriptor descriptor,
-    HnswOffheapAllocator allocator, String metric, byte[] payload) throws IOException {
+    HnswOffheapAllocator allocator, String metric, byte[] payload, byte[][] tombstones)
+    throws IOException {
     if (payload == null) {
       return new HnswSegment(store, descriptor, allocator, similarityFunction(metric),
-        new byte[0][]);
+        new byte[0][], tombstones);
     }
-    HnswSegment segment = create(store, descriptor, allocator, metric, payload, 0, payload.length);
+    HnswSegment segment =
+      create(store, descriptor, allocator, metric, payload, 0, payload.length, tombstones);
     segment.load(payload, 0, graphLength(payload, 0, payload.length, descriptor.identity)).block
       .release();
     return segment;
@@ -693,12 +739,13 @@ public final class HnswSegment {
 
   // Returns the segment of a payload, with its row keys and without its graph
   private static HnswSegment create(HnswSegmentStore store, Descriptor descriptor,
-    HnswOffheapAllocator allocator, String metric, byte[] bytes, int offset, int length)
-    throws IOException {
+    HnswOffheapAllocator allocator, String metric, byte[] bytes, int offset, int length,
+    byte[][] tombstones) throws IOException {
     int graphLength = graphLength(bytes, offset, length, descriptor.identity);
     byte[][] keys =
       decodeKeys(bytes, offset + graphLength, length - graphLength - 8, descriptor.identity);
-    return new HnswSegment(store, descriptor, allocator, similarityFunction(metric), keys);
+    return new HnswSegment(store, descriptor, allocator, similarityFunction(metric), keys,
+      tombstones);
   }
 
   // Checks the payload framing and returns the length of the graph. HBase returns an empty payload
@@ -745,8 +792,9 @@ public final class HnswSegment {
     return r;
   }
 
-  // Encodes the key mapping of a payload: [count (int)] ([key length (int)][key])*
-  private static byte[] encodeKeys(byte[][] keys) throws IOException {
+  // Encodes row keys as [count (int)] ([key length (int)][key])*. The key mapping of a payload and
+  // the tombstones of a delta segment share this format
+  static byte[] encodeKeys(byte[][] keys) throws IOException {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     DataOutputStream out = new DataOutputStream(bytes);
     out.writeInt(keys.length);
@@ -758,8 +806,9 @@ public final class HnswSegment {
     return bytes.toByteArray();
   }
 
-  // Decodes the key mapping of a payload. The failure for a corrupt payload is permanent, because
-  // a new read fails the same way.
+  // Decodes the key mapping of a payload or the tombstones of a delta segment. The failure for
+  // corrupt keys is permanent, because a new read fails the same way. HBase returns an empty value
+  // for a MOB reference whose file is lost, and this method rejects that value as corrupt.
   private static byte[][] decodeKeys(byte[] bytes, int offset, int length, byte[] identity)
     throws DoNotRetryIOException {
     try {
@@ -838,6 +887,11 @@ public final class HnswSegment {
   /** Returns the data table row key of a vector ordinal. */
   public byte[] getKey(int ordinal) {
     return keys[ordinal];
+  }
+
+  /** Returns the deleted row keys that this segment records. Only a delta segment records them. */
+  public byte[][] getTombstones() {
+    return tombstones;
   }
 
   /**

@@ -111,9 +111,12 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * mutable graph, and masks the older entries of the row in the segments. A search reads the
  * segments and the in-memory graphs.
  * <p>
- * A flush starts when the mutable graph holds {@link #FLUSH_THRESHOLD} entries. Each flush is a
- * full rebuild that replaces the segments of the region. If the flushes are slower than the writes,
- * the manager requests a split of the region, and then refuses writes at a limit.
+ * A flush starts when the mutable graph holds {@link #FLUSH_THRESHOLD} entries. A flush writes the
+ * buffered changes as a delta segment on the base of the region. A newer delta masks the older
+ * entries of its rows in its stack. A flush queues a full rebuild instead when the deltas reach
+ * their limits, or when the region has no exact base. The full rebuild replaces the stack. If the
+ * flushes are slower than the writes, the manager requests a split of the region, and then refuses
+ * writes at a limit.
  * <p>
  * The region opens the manager when a write or a scan first names the index. The manager then
  * replays the rows that changed at or after the replay start of the newest segments. This recovers
@@ -123,9 +126,9 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * region. The manager reads and writes them through {@link HnswSegmentStore.RegionStore}, with
  * region-local operations and no RPC. Discovery reads all the segments of the index in the family
  * of the region, in all anchor rows. It ignores the segments of another index definition. The
- * region searches the newest segments that cover its range, clipped to the range. A region retires
- * only the segments that its own family holds. It retires a segment when newer bases cover the part
- * of its range that is in the region.
+ * region searches the newest bases that cover its range, clipped to the range, and their deltas. A
+ * region retires only the segments that its own family holds. It retires a base when newer bases
+ * cover the part of its range that is in the region. A delta follows its base.
  * <p>
  * <b>Uncovered regions.</b> The bases of a region can leave a part of its range without coverage.
  * This occurs in the upper daughter of a split, in a region of an active index after a TRUNCATE,
@@ -196,6 +199,21 @@ public final class HnswIndexManager implements VectorIndexManager {
   // The manager refuses writes while the mutable graph holds this many times FLUSH_THRESHOLD
   // entries or more
   static final int BLOCK_MULTIPLIER = 4;
+  // While a full rebuild is in the queue, a delta flush starts only when the mutable graph holds
+  // this many times FLUSH_THRESHOLD entries. The full rebuild replaces the stack, so these deltas
+  // only keep the graph below the BLOCK_MULTIPLIER limit. A full rebuild that starts first swaps
+  // the graph instead
+  static final int QUEUED_FLUSH_MULTIPLIER = 2;
+  /**
+   * The largest number of deltas on a base while no full rebuild is in the queue. A flush that
+   * needs one more delta queues a full rebuild. Each delta adds a segment that each search reads.
+   */
+  private static final int MAX_DELTAS = 4;
+  /**
+   * A flush queues a full rebuild when the changes reach this fraction of the rows in the base. The
+   * changes are the row changes in the deltas and in the mutable graph.
+   */
+  private static final double REBUILD_RATIO = 0.25;
   /** The time to wait before the manager tries a failed flush, rebuild or split request again. */
   public static final long RETRY_DELAY_MS = 60_000;
   // The number of rows that a full rebuild scans between two checks for a closed manager
@@ -210,6 +228,13 @@ public final class HnswIndexManager implements VectorIndexManager {
     });
   // Gives each rebuild request a sequence number, so that the queue keeps the order of the requests
   private static final AtomicLong REBUILD_SEQUENCE = new AtomicLong();
+  // Delta flushes have their own thread, so they do not wait behind the full rebuilds of other
+  // regions
+  private static final ExecutorService DELTAS = Executors.newSingleThreadExecutor(r -> {
+    Thread t = new Thread(r, "hnsw-delta");
+    t.setDaemon(true);
+    return t;
+  });
   private static final ScheduledExecutorService RETRIES =
     Executors.newSingleThreadScheduledExecutor(r -> {
       Thread t = new Thread(r, "hnsw-rebuild-retry");
@@ -265,7 +290,7 @@ public final class HnswIndexManager implements VectorIndexManager {
      * Returns false if the index was dropped, or created again with a different definition or on a
      * different table. The manager is then stale. For a full rebuild, this method also sets the
      * Phoenix TTL attributes of the data table on the region scan. It also adds the columns that
-     * TTL masking reads.
+     * TTL masking reads. A delta flush passes null, because it does not scan the region.
      */
     boolean isCurrent(Scan rebuildScan) throws IOException;
   }
@@ -274,6 +299,9 @@ public final class HnswIndexManager implements VectorIndexManager {
   private static final class Source {
     final HnswSegment segment;
     final HnswSegment.Descriptor descriptor;
+    // The number of row changes that the segment holds, which are its vectors and its tombstones.
+    // REBUILD_RATIO counts them
+    final int changes;
     // The ordinals of entries that a newer change of the same row replaces or deletes
     final Set<Integer> mask = ConcurrentHashMap.newKeySet();
     // Whether the segment covers rows outside this region, for example a segment of a split parent
@@ -283,6 +311,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     Source(HnswSegment segment, HnswSegment.Descriptor descriptor, boolean wider) {
       this.segment = segment;
       this.descriptor = descriptor;
+      this.changes = segment.size() + segment.getTombstones().length;
       this.wider = wider;
     }
   }
@@ -326,9 +355,14 @@ public final class HnswIndexManager implements VectorIndexManager {
   /** The phase of the full rebuild task of the manager. */
   private enum Full {
     NONE,
-    // Queued on the rebuild thread. The task swaps the mutable graph when it starts
+    // The task is in the queue of the rebuild thread, for example behind the rebuilds of other
+    // regions. It swaps the mutable graph only when it starts. Until then, the region continues to
+    // write deltas, unless a repair is pending
     QUEUED,
-    // The task swapped the graphs, and builds and writes the segment
+    // The task started, and waits for the end of the delta flush task that runs. No delta flush
+    // starts in this phase
+    STARTING,
+    // The task swapped the graphs, and builds and writes the base segment
     RUNNING
   }
 
@@ -363,12 +397,29 @@ public final class HnswIndexManager implements VectorIndexManager {
   private Full full = Full.NONE;
   // The task of the full rebuild in the queue of the rebuild thread, while full is QUEUED
   private Rebuild queued;
+  // The number of the delta flush task that is queued or runs, or 0
+  private long deltaTask;
+  // Whether that task runs. A full rebuild that starts waits for the end of a delta flush task that
+  // runs. It takes over the graph of a delta flush task in the queue, and that task then does
+  // nothing
+  private boolean deltaRunning;
+  // The number of the last delta flush task that the manager submitted
+  private long deltaTasks;
   // Whether a request for a full rebuild came while a full rebuild runs. The running rebuild
   // swapped before the request, so the request cannot join it. The end of the running rebuild
   // queues it
   private boolean rebuildPending;
+  // Whether a full rebuild must swap before the next delta flush. A change that fails to apply sets
+  // this flag. A major compaction that purges expired rows also sets it. Segments that the region
+  // cannot trust at open also set it. A delta would move the replay start of the region past the
+  // change or the compaction. A region that opens after that delta would then trust segments that
+  // do not hold the change
+  private boolean repair;
   // The swap time of the full rebuild that runs
   private long fullSwapTime;
+  // The base time of the delta flush that owns the graph of the flush. It is null if a full rebuild
+  // owns that graph
+  private Long deltaBase;
   // The newest swap time or build request time. At open, it is the newest segment time of the
   // region. A swap takes a time later than all earlier swaps and requests. Thus swap times are
   // unique, and a full rebuild that starts after a build request swaps at a later time. Another
@@ -597,17 +648,26 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     List<HnswSegment.Descriptor> readable = new ArrayList<>(current);
     readable.removeAll(unreadable);
+    for (HnswSegment.Descriptor d : unreadable) {
+      // The replay starts after the changes of a lost delta, so the stack of the delta misses
+      // them. Thus the base of that stack does not count toward the coverage of the region
+      if (d.isDelta()) {
+        readable.removeIf(r -> stackId(r).equals(stackId(d)));
+      }
+    }
     this.state = new State(sources, new MutableGraph(vectorIndex, similarity), null, null, 0, 0,
       HnswSegment.covered(startKey, endKey, readable));
     try {
+      applyStackMasks(sources);
       long replayStart = current.isEmpty() ? Long.MAX_VALUE : replayStartTime(current);
       if (!current.isEmpty()) {
         replay(replayStart);
       }
       LOG.info("Opened HNSW index {} for region {} with {} segments", indexName,
         region.getRegionInfo().getEncodedName(), sources.size());
-      // Rebuild immediately if a segment cannot be read, or if the region has no exact segment that
-      // it can trust. A region of a BUILDING index without segments waits for IndexTool
+      // Rebuild immediately if the region cannot read a segment. Also rebuild if the region has no
+      // exact base stack that it can trust. A region of a BUILDING index without segments waits for
+      // IndexTool
       if (
         !unreadable.isEmpty() || !trusted(current, replayStart) && (active || !current.isEmpty())
       ) {
@@ -619,10 +679,11 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
   }
 
-  // Returns true if the region can keep its exact segment, and false if it must rebuild. The region
-  // trusts only the segments that it wrote itself. HBase can archive the MOB files of a segment
-  // after the region that wrote it is gone, also while other regions use them. The region searches
-  // the exact segment of another region until its rebuild replaces it
+  // Returns true if the region can keep its exact base stack after the replay, and false if it must
+  // rebuild. The region trusts only the segments that it wrote itself, the base and each delta.
+  // HBase can archive the MOB files of a segment after the region that wrote it is gone, also while
+  // other regions use them. The region searches the exact stack of another region until its rebuild
+  // replaces it
   private boolean trusted(List<HnswSegment.Descriptor> current, long replayStart)
     throws IOException {
     if (exactBase(current, startKey, endKey) == null) {
@@ -656,10 +717,97 @@ public final class HnswIndexManager implements VectorIndexManager {
     return true;
   }
 
-  /** Returns the replay start of the region: the oldest replay start of the given segments. */
+  private static final class StackId {
+    final ImmutableBytesPtr startKey;
+    final long baseTime;
+
+    StackId(byte[] startKey, long baseTime) {
+      this.startKey = new ImmutableBytesPtr(startKey);
+      this.baseTime = baseTime;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof StackId)) {
+        return false;
+      }
+      StackId other = (StackId) o;
+      return baseTime == other.baseTime && startKey.equals(other.startKey);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * startKey.hashCode() + Long.hashCode(baseTime);
+    }
+  }
+
+  private static StackId stackId(HnswSegment.Descriptor d) {
+    return new StackId(d.startKey, d.isDelta() ? d.baseTime : d.time);
+  }
+
+  /** Masks each segment entry that a newer delta of the same stack replaces or deletes. */
+  private static void applyStackMasks(List<Source> sources) {
+    List<HnswSegment.Descriptor> descriptors = new ArrayList<>(sources.size());
+    List<HnswSegment> segments = new ArrayList<>(sources.size());
+    for (Source source : sources) {
+      descriptors.add(source.descriptor);
+      segments.add(source.segment);
+    }
+    List<Set<Integer>> masks = stackMasks(descriptors, segments);
+    for (int i = 0; i < sources.size(); i++) {
+      sources.get(i).mask.addAll(masks.get(i));
+    }
+  }
+
+  /**
+   * Returns the masked ordinals of each segment. A delta masks the older entries of its rows in its
+   * stack. The rows of a delta are its entries and its tombstones. The segments are in newest first
+   * order, and each descriptor has the same position as its segment. The fsck tools use the same
+   * rule.
+   */
+  public static List<Set<Integer>> stackMasks(List<HnswSegment.Descriptor> descriptors,
+    List<HnswSegment> segments) {
+    Map<StackId, Set<ImmutableBytesPtr>> newerKeys = new HashMap<>();
+    List<Set<Integer>> masks = new ArrayList<>(segments.size());
+    for (int s = 0; s < segments.size(); s++) {
+      HnswSegment.Descriptor descriptor = descriptors.get(s);
+      HnswSegment segment = segments.get(s);
+      Set<ImmutableBytesPtr> newer =
+        newerKeys.computeIfAbsent(stackId(descriptor), k -> new HashSet<>());
+      Set<Integer> mask = new HashSet<>();
+      for (ImmutableBytesPtr key : newer) {
+        int ordinal = segment.ordinalOf(key);
+        if (ordinal >= 0) {
+          mask.add(ordinal);
+        }
+      }
+      if (descriptor.isDelta()) {
+        for (int i = 0; i < segment.size(); i++) {
+          newer.add(new ImmutableBytesPtr(segment.getKey(i)));
+        }
+        for (byte[] tombstone : segment.getTombstones()) {
+          newer.add(new ImmutableBytesPtr(tombstone));
+        }
+      }
+      masks.add(mask);
+    }
+    return masks;
+  }
+
+  /**
+   * Returns the replay start of the region: the oldest replay start of the newest segments of the
+   * stacks. A stack holds all changes before the replay start of its newest segment.
+   */
   static long replayStartTime(List<HnswSegment.Descriptor> current) {
-    long start = Long.MAX_VALUE;
+    Map<StackId, HnswSegment.Descriptor> newestPerStack = new HashMap<>();
     for (HnswSegment.Descriptor d : current) {
+      newestPerStack.merge(stackId(d), d, (a, b) -> a.time >= b.time ? a : b);
+    }
+    long start = Long.MAX_VALUE;
+    for (HnswSegment.Descriptor d : newestPerStack.values()) {
       start = Math.min(start, d.replayFrom);
     }
     return start;
@@ -667,23 +815,28 @@ public final class HnswIndexManager implements VectorIndexManager {
 
   /**
    * Returns the current segments of a region of the range {@code [startKey, endKey)}, newest first.
-   * A segment is current if it overlaps the range, and newer segments do not cover its part of the
-   * range.
+   * These are the bases that overlap the range and that newer bases do not cover within the range.
+   * The deltas of these bases are also current.
    */
   static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
     byte[] startKey, byte[] endKey) {
-    List<HnswSegment.Descriptor> overlapping = new ArrayList<>();
+    List<HnswSegment.Descriptor> overlappingBases = new ArrayList<>();
+    List<HnswSegment.Descriptor> overlappingDeltas = new ArrayList<>();
     for (HnswSegment.Descriptor d : all) {
       if (d.overlaps(startKey, endKey)) {
-        overlapping.add(d);
+        if (d.isDelta()) {
+          overlappingDeltas.add(d);
+        } else {
+          overlappingBases.add(d);
+        }
       }
     }
-    List<HnswSegment.Descriptor> current = new ArrayList<>();
-    for (HnswSegment.Descriptor b : overlapping) {
-      List<HnswSegment.Descriptor> newer = new ArrayList<>();
-      for (HnswSegment.Descriptor n : overlapping) {
+    List<HnswSegment.Descriptor> currentBases = new ArrayList<>();
+    for (HnswSegment.Descriptor b : overlappingBases) {
+      List<HnswSegment.Descriptor> newerBases = new ArrayList<>();
+      for (HnswSegment.Descriptor n : overlappingBases) {
         if (n.time > b.time) {
-          newer.add(n);
+          newerBases.add(n);
         }
       }
       byte[] from = Bytes.compareTo(b.startKey, startKey) > 0 ? b.startKey : startKey;
@@ -691,8 +844,17 @@ public final class HnswIndexManager implements VectorIndexManager {
         endKey.length == 0 || (b.endKey.length > 0 && Bytes.compareTo(b.endKey, endKey) < 0)
           ? b.endKey
           : endKey;
-      if (!HnswSegment.covered(from, to, newer)) {
-        current.add(b);
+      if (!HnswSegment.covered(from, to, newerBases)) {
+        currentBases.add(b);
+      }
+    }
+    List<HnswSegment.Descriptor> current = new ArrayList<>(currentBases);
+    for (HnswSegment.Descriptor d : overlappingDeltas) {
+      for (HnswSegment.Descriptor b : currentBases) {
+        if (d.baseTime == b.time && Bytes.equals(d.startKey, b.startKey)) {
+          current.add(d);
+          break;
+        }
       }
     }
     current.sort((a, b) -> Long.compare(b.time, a.time));
@@ -714,12 +876,12 @@ public final class HnswIndexManager implements VectorIndexManager {
 
   /**
    * Returns the sources of the given segments, newest first. The method uses the sources that are
-   * open already, and opens the others. A base that holds no vectors gets no source. Returns null
-   * if a segment was retired after the listing, and the caller then lists again. A segment whose
-   * payload cannot be read, because it is lost or corrupt, is not used and goes into
-   * {@code unreadable}. A full rebuild then replaces it. A segment is also unreadable if a new
-   * listing still returns it after a load found no payload cell. Thus the caller does not list
-   * again without end.
+   * open already, and opens the others. A base that holds no vectors gets no source. A delta always
+   * gets a source, because its tombstones mask older entries. Returns null if the region retired a
+   * segment after the listing. The caller then lists again. The method leaves out a segment whose
+   * payload or tombstones are lost or corrupt, and adds it to {@code unreadable}. A full rebuild
+   * then replaces it. A segment is also unreadable if a new listing still returns it after a load
+   * found no payload cell. Thus the caller does not list again without end.
    * @param missing the identities of the segments that a load found without a payload cell. The
    *                caller keeps this set across listings.
    */
@@ -732,7 +894,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       for (HnswSegment.Descriptor d : current) {
         ImmutableBytesPtr identity = new ImmutableBytesPtr(d.identity);
         Source source = open.get(identity);
-        if (source == null && d.count > 0) {
+        if (source == null && (d.count > 0 || d.isDelta())) {
           if (missing.contains(identity)) {
             LOG.error("HNSW segment {} of index {} for region {} has no payload; rebuilding", d,
               indexName, region.getRegionInfo().getEncodedName());
@@ -842,9 +1004,11 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
   }
 
-  // Requests a full rebuild. A full rebuild that runs now can have read the rows before the change
-  // or the compaction, and its segment does not mask them. Thus another full rebuild follows it
+  // Requests a full rebuild that swaps before the next delta flush. A full rebuild that runs now
+  // can have read the rows before the change or the compaction. Its segment can then miss the
+  // change or the compaction, so another full rebuild follows it
   private synchronized void repair() {
+    repair = true;
     rebuildPending |= full == Full.RUNNING;
     flush(true);
   }
@@ -1031,12 +1195,12 @@ public final class HnswIndexManager implements VectorIndexManager {
   }
 
   /**
-   * Requests a full rebuild after a major compaction of an indexed family. The compaction purges
-   * the delete markers of rows that only the buffered changes delete, and the expired rows. The
-   * rebuild writes a segment also when no change is buffered. The segment holds the buffered
-   * changes, and moves the replay start of the region past the compaction. On a table with a TTL,
-   * the rebuild also removes the expired rows from the segments. A region whose replay start is
-   * before the compaction rebuilds when it opens.
+   * Updates the segments after a major compaction of an indexed family. The compaction purges the
+   * delete markers of rows that only the buffered changes delete. This method writes these changes
+   * to a segment, and moves the replay start of the region past the compaction. It writes a segment
+   * also when the manager buffers no change, to move the replay start. On a table with a TTL, the
+   * region rebuilds instead, so that the expired rows leave the segments. A region whose replay
+   * start is before a major compaction rebuilds when it opens.
    */
   public void flush() {
     if (ttl) {
@@ -1056,13 +1220,10 @@ public final class HnswIndexManager implements VectorIndexManager {
    * @param after the time that an earlier request of the same build returned, or Long.MAX_VALUE
    */
   public synchronized long rebuild(long after) {
-    // Find the exact base of the region, if there is one
-    List<HnswSegment.Descriptor> segments = new ArrayList<>(state.sources.size());
-    for (Source source : state.sources) {
-      segments.add(source.descriptor);
-    }
-    HnswSegment.Descriptor base = exactBase(segments, startKey, endKey);
-    if (full == Full.RUNNING && fullSwapTime > after || base != null && base.time > after) {
+    // The time of the exact base of the region, or null. A rebuild request needs only the base, so
+    // the delta limits do not apply
+    Long base = deltaBase(state.sources, 0, startKey, endKey, true);
+    if (full == Full.RUNNING && fullSwapTime > after || base != null && base > after) {
       return after;
     }
     clock = Math.max(clock, EnvironmentEdgeManager.currentTimeMillis());
@@ -1113,9 +1274,9 @@ public final class HnswIndexManager implements VectorIndexManager {
     flush(force, false);
   }
 
-  // Queues a full rebuild, which swaps the mutable graph when its task starts. A flush for a
-  // compaction writes a segment also when nothing is buffered. It follows a flush that swapped
-  // before the compaction
+  // Queues a full rebuild, or swaps the mutable graph and submits a delta flush. A full rebuild
+  // swaps when its task starts. A flush for a compaction writes a segment also when the manager
+  // buffers no change. It follows a flush that swapped before the compaction
   private synchronized void flush(boolean force, boolean compaction) {
     State s = state;
     if (closed) {
@@ -1129,26 +1290,67 @@ public final class HnswIndexManager implements VectorIndexManager {
       // joins it, unless the caller set rebuildPending
       return;
     }
-    if (s.flushing != null || full == Full.RUNNING) {
-      // A flush runs or waits for its retry. The end of that task starts the next flush
+    if (s.flushing != null || full == Full.STARTING) {
+      // A flush holds a graph, or a full rebuild waits to swap. The end of that task starts the
+      // next flush
       compactionPending |= compaction;
+      return;
+    }
+    if (repair) {
+      // The full rebuild of a repair is in the queue, or follows the full rebuild that runs. It
+      // swaps after the compaction, and its region scan holds the buffered changes
       return;
     }
     if (!compaction && s.mutable.isEmpty() && !hasMasks(s)) {
       return;
     }
-    // A queued full rebuild swaps after the compaction
-    if (full == Full.NONE) {
+    if (
+      full == Full.NONE
+        && deltaBase(s.sources, s.mutable.changes(), startKey, endKey, false) == null
+    ) {
       queueFull();
     }
+    if (
+      full == Full.QUEUED
+        && (compaction || s.mutable.size() < QUEUED_FLUSH_MULTIPLIER * FLUSH_THRESHOLD)
+    ) {
+      // The queued full rebuild swaps after the compaction, so a compaction needs no delta. Below
+      // the QUEUED_FLUSH_MULTIPLIER limit, the graph waits for the swap of that rebuild
+      return;
+    }
+    // Until a queued full rebuild starts, a region with an exact base continues to write deltas.
+    // Its writes then do not wait for the full rebuilds of other regions
+    Long base = deltaBase(s.sources, s.mutable.changes(), startKey, endKey, full == Full.QUEUED);
+    if (base == null) {
+      return;
+    }
+    deltaBase = base;
+    swap(s);
+    submitDelta();
   }
 
   // Queues a full rebuild task. The task runs before the rebuilds of covered regions if this region
   // is not covered. The caller holds the monitor
   private void queueFull() {
     full = Full.QUEUED;
-    queued = new Rebuild(this::rebuildSegment, !state.covered);
+    queued = new Rebuild(() -> rebuildSegment(0), !state.covered);
     REBUILDS.execute(queued);
+  }
+
+  // Submits a delta flush task for the graph of the swap. The caller holds the monitor
+  private void submitDelta() {
+    long task = ++deltaTasks;
+    deltaTask = task;
+    DELTAS.submit(() -> {
+      synchronized (this) {
+        if (deltaTask != task) {
+          // A full rebuild that started took over the graph of this task
+          return;
+        }
+        deltaRunning = true;
+      }
+      rebuildSegment(task);
+    });
   }
 
   // Swaps the graphs and takes a new swap time. If no flush holds a graph, the mutable graph
@@ -1176,12 +1378,25 @@ public final class HnswIndexManager implements VectorIndexManager {
     compactionPending = false;
   }
 
-  // Starts a queued full rebuild: swaps the mutable graph, or takes over the graph of a failed
-  // flush. The caller holds the monitor
-  private void startFull() {
+  // Starts a queued full rebuild. It waits for the end of a delta flush task that runs, and then
+  // swaps. It takes over the graph of a delta flush task that is in the queue or that failed.
+  // Returns false if the manager closed. The caller holds the monitor
+  private boolean startFull() throws InterruptedException {
+    full = Full.STARTING;
+    while (deltaRunning && !closed) {
+      wait();
+    }
+    if (closed) {
+      return false;
+    }
+    deltaTask = 0;
+    deltaBase = null;
+    // The swap follows the change or the compaction of a repair
+    repair = false;
     swap(state);
     fullSwapTime = state.swapTime;
     full = Full.RUNNING;
+    return true;
   }
 
   // Returns the replay start of the segment that a swap at the given time writes. A batch takes its
@@ -1192,13 +1407,18 @@ public final class HnswIndexManager implements VectorIndexManager {
     return Math.min(swapTime, oldestBatch.getAsLong());
   }
 
-  // Queues the full rebuild of a failed flush again, unless the manager closed or a full rebuild is
-  // queued or runs
+  // Tries a failed flush again. A failed delta flush runs again, unless a full rebuild that starts
+  // takes over its graph. A failed full rebuild goes into the queue again. If another full rebuild
+  // is in the queue or started, that rebuild takes over the graph instead
   private synchronized void retryFlush() {
-    if (closed || full != Full.NONE || state.flushing == null) {
+    if (closed || deltaTask != 0 || state.flushing == null) {
       return;
     }
-    queueFull();
+    if (deltaBase != null && full != Full.STARTING) {
+      submitDelta();
+    } else if (deltaBase == null && full == Full.NONE) {
+      queueFull();
+    }
   }
 
   private static boolean hasMasks(State s) {
@@ -1210,18 +1430,21 @@ public final class HnswIndexManager implements VectorIndexManager {
     return false;
   }
 
-  // Runs the full rebuild task, which swaps when it starts
-  private void rebuildSegment() {
+  // Runs the delta flush task with the given number. Task number 0 is the full rebuild task, which
+  // swaps when it starts
+  private void rebuildSegment(long task) {
+    boolean fullTask = task == 0;
+    Long base = null;
     try {
       State s;
       synchronized (this) {
-        if (closed) {
+        if (closed || fullTask && !startFull()) {
           return;
         }
-        startFull();
         s = state;
+        base = deltaBase;
       }
-      Scan scan = new Scan().setCacheBlocks(false);
+      Scan scan = base != null ? null : new Scan().setCacheBlocks(false);
       if (!catalog.isCurrent(scan)) {
         // The index was dropped, or created again with another definition. A write or a scan that
         // names the index opens a new manager
@@ -1230,20 +1453,39 @@ public final class HnswIndexManager implements VectorIndexManager {
         close();
         return;
       }
-      writeFull(s, scan);
+      if (base != null) {
+        writeDelta(s, base);
+      } else {
+        writeFull(s, scan);
+      }
     } catch (Throwable t) {
+      if (t instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
       if (scheduleRetry(t, RETRIES, this::retryFlush)) {
-        LOG.error("HNSW index {} rebuild failed for region {}; will retry", indexName,
-          region.getRegionInfo().getEncodedName(), t);
+        LOG.error("HNSW index {} {} failed for region {}; will retry", indexName,
+          base != null ? "delta flush" : "rebuild", region.getRegionInfo().getEncodedName(), t);
       } else {
         LOG.error(
-          "HNSW index {} rebuild failed for region {}; a retry fails the same way, so it is not"
+          "HNSW index {} {} failed for region {}; a retry fails the same way, so it is not"
             + " retried until a rebuild is requested",
-          indexName, region.getRegionInfo().getEncodedName(), t);
+          indexName, base != null ? "delta flush" : "rebuild",
+          region.getRegionInfo().getEncodedName(), t);
       }
     } finally {
       synchronized (this) {
-        full = Full.NONE;
+        if (fullTask) {
+          full = Full.NONE;
+        } else {
+          deltaRunning = false;
+          // Clear the task number only if no newer delta flush task is in the queue. Such a task
+          // swapped after the cutover of this task
+          if (deltaTask == task) {
+            deltaTask = 0;
+          }
+          // Wake a full rebuild that waits for the end of this task
+          notifyAll();
+        }
         // Queue a full rebuild that a caller requested during this task. Run the flush of a
         // compaction that ended during the task. Start the next flush if the mutable graph is at
         // the flush threshold. No write starts that flush, because an apply starts no flush while
@@ -1278,10 +1520,10 @@ public final class HnswIndexManager implements VectorIndexManager {
     return true;
   }
 
-  // Scans the region, and writes and installs a new segment. The scan starts after the swap, and
-  // each graph change follows the commit of its row. As a result, the scan holds every change that
-  // the graphs held at the swap. The manager does not hold its monitor during the write, because
-  // the write waits for region row locks
+  // Scans the region, and writes and installs a new base segment. The scan starts after the swap,
+  // and each graph change follows the commit of its row. As a result, the scan holds every change
+  // that the graphs held at the swap. The manager does not hold its monitor during the write,
+  // because the write waits for region row locks
   private void writeFull(State s, Scan scan) throws IOException {
     Map<ImmutableBytesPtr, float[]> vectors = scanRegion(scan);
     if (vectors == null || closed) {
@@ -1303,31 +1545,86 @@ public final class HnswIndexManager implements VectorIndexManager {
       return;
     }
     HnswSegment.Descriptor written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime,
-      endKey, keys.length, s.replayFrom, definition);
+      endKey, keys.length, null, s.replayFrom, definition);
     // Load the segment into off-heap memory before the write. Thus the region never writes a
     // segment that this server cannot load
     HnswSegment segment = payload != null
-      ? HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(), payload)
+      ? HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(), payload,
+        new byte[0][])
       : null;
     try {
-      store.write(written, payload);
+      store.write(written, payload, new byte[0][]);
     } catch (IOException | RuntimeException e) {
       if (segment != null) {
         segment.close();
       }
       throw e;
     }
-    if (cutover(segment, written)) {
-      retireSupersededSegments();
-    } else if (!region.isClosing() && !region.isClosed()) {
-      // A purge closed the manager during the write, and the purge scan can come before the
-      // write. Thus the manager deletes the cells that it wrote, so that no cells of a dropped
-      // index stay
-      store.retire(Collections.singletonList(written));
+    if (!cutover(segment, written)) {
+      retireAfterClose(written);
       return;
     }
+    retireSupersededSegments();
     LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
       region.getRegionInfo().getEncodedName(), keys.length);
+  }
+
+  // Writes the changes in the graph of the flush as a delta segment on the given base. Then it
+  // installs the delta. The manager does not hold its monitor during the write, because the write
+  // waits for region row locks
+  private void writeDelta(State s, long baseTime) throws IOException {
+    Map<ImmutableBytesPtr, float[]> live = s.flushing.live();
+    List<VectorFloat<?>> values = new ArrayList<>(live.size());
+    byte[][] keys = new byte[live.size()][];
+    int i = 0;
+    for (Map.Entry<ImmutableBytesPtr, float[]> e : live.entrySet()) {
+      keys[i++] = e.getKey().copyBytesIfNecessary();
+      values.add(VTS.createFloatVector(e.getValue()));
+    }
+    byte[] payload = keys.length > 0
+      ? HnswSegment.build(vectorIndex,
+        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
+      : null;
+
+    Set<ImmutableBytesPtr> deleted = s.flushing.deleted();
+    byte[][] deletedKeys = new byte[deleted.size()][];
+    int d = 0;
+    for (ImmutableBytesPtr del : deleted) {
+      deletedKeys[d++] = del.copyBytesIfNecessary();
+    }
+    if (closed) {
+      return;
+    }
+    HnswSegment.Descriptor written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime,
+      endKey, keys.length, baseTime, s.replayFrom, definition);
+    // Load the segment before the write, as for a base. Thus the region never writes a delta that
+    // this server cannot load
+    HnswSegment segment = HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(),
+      payload, deletedKeys);
+    try {
+      store.write(written, payload, deletedKeys);
+    } catch (IOException | RuntimeException e) {
+      segment.close();
+      throw e;
+    }
+    if (!cutover(segment, written)) {
+      retireAfterClose(written);
+      return;
+    }
+    LOG.info(
+      "Wrote HNSW delta for index {} region {} stacked on base {} with {} vectors and {} tombstones",
+      indexName, region.getRegionInfo().getEncodedName(), baseTime, keys.length,
+      deletedKeys.length);
+  }
+
+  // Deletes the cells of a segment that the manager wrote while it closed, unless the region
+  // closes. A purge can close the manager during the write, and the purge scan can come before the
+  // write. The purge then misses these cells, so the manager deletes them. Thus no cells of a
+  // dropped index stay
+  private void retireAfterClose(HnswSegment.Descriptor written) throws IOException {
+    if (!region.isClosing() && !region.isClosed()) {
+      store.retire(Collections.singletonList(written));
+    }
   }
 
   // Returns the full-precision vectors of the rows of the region that have not expired, or null if
@@ -1359,18 +1656,19 @@ public final class HnswIndexManager implements VectorIndexManager {
     return vectors;
   }
 
-  // Installs a written base segment in place of all the segments, and releases the graph of the
-  // flush. The cutover masks the entries of the new segment for rows that changed after the swap.
-  // Returns false if the manager closed
+  // Installs a written segment and releases the graph of the flush. A base replaces all the
+  // segments, and a delta goes on top of them. The cutover masks the entries of the new segment for
+  // rows that changed after the swap. Returns false if the manager closed
   private synchronized boolean cutover(HnswSegment segment, HnswSegment.Descriptor written) {
     State s = state;
+    boolean isDelta = written.isDelta();
     if (closed) {
       if (segment != null) {
         segment.close();
       }
       return false;
     }
-    List<Source> sources = new ArrayList<>(1);
+    List<Source> sources = new ArrayList<>(isDelta ? s.sources.size() + 1 : 1);
     stateLock.writeLock().lock();
     try {
       if (segment != null) {
@@ -1383,33 +1681,83 @@ public final class HnswIndexManager implements VectorIndexManager {
         }
         sources.add(source);
       }
-      // The new base covers the range of the region exactly, so the new state is covered
-      state = new State(sources, s.mutable, null, null, 0, 0, true);
+      if (isDelta) {
+        sources.addAll(s.sources);
+      }
+      // A new base covers the range of the region exactly, so the new state is covered. A delta
+      // does not change the coverage
+      state = new State(sources, s.mutable, null, null, 0, 0, !isDelta || s.covered);
     } finally {
       stateLock.writeLock().unlock();
     }
-    for (Source old : s.sources) {
-      old.segment.close();
+    if (!isDelta) {
+      for (Source old : s.sources) {
+        old.segment.close();
+      }
     }
     return true;
   }
 
   /**
-   * Returns the segment if the given segments are one segment that covers exactly the given key
-   * range. Otherwise returns null.
+   * Returns the base time on which a flush can stack a delta, or null if a full rebuild is
+   * necessary. A full rebuild is necessary when the deltas are over their limits. It is also
+   * necessary when the stack does not cover exactly the key range of the region, as after a split
+   * or a merge. While a full rebuild is in the queue, the limits do not apply, because the rebuild
+   * replaces the stack.
+   * <p>
+   * A stack holds at most {@link #MAX_DELTAS} deltas when no rebuild is in the queue. Thus the
+   * manager requests a full rebuild at least once every MAX_DELTAS + 1 flushes, about every 50,000
+   * graph entries. For a base of up to (MAX_DELTAS + 1) * FLUSH_THRESHOLD / REBUILD_RATIO = 200,000
+   * rows, REBUILD_RATIO decides. The amortized rebuild cost per change is then O(log N). For a
+   * larger base, MAX_DELTAS decides. The amortized rebuild cost per change is then O(N log N /
+   * 50,000), which grows with N.
    */
-  static HnswSegment.Descriptor exactBase(List<HnswSegment.Descriptor> segments, byte[] startKey,
-    byte[] endKey) {
-    return segments.size() == 1 && segments.get(0).covers(startKey, endKey)
-      ? segments.get(0)
-      : null;
+  static Long deltaBase(List<Source> sources, int flushChanges, byte[] startKey, byte[] endKey,
+    boolean rebuildQueued) {
+    List<HnswSegment.Descriptor> stack = new ArrayList<>(sources.size());
+    int changes = flushChanges;
+    for (Source source : sources) {
+      stack.add(source.descriptor);
+      if (source.descriptor.isDelta()) {
+        changes += source.changes;
+      }
+    }
+    HnswSegment.Descriptor base = exactBase(stack, startKey, endKey);
+    return base != null
+      && (rebuildQueued || stack.size() <= MAX_DELTAS && changes < REBUILD_RATIO * base.count)
+        ? base.time
+        : null;
   }
 
   /**
-   * Retires the segments of the index that the family of the region holds, if newer bases of the
-   * index cover their part of the range of the region. Each region retires only its own cells. Thus
-   * the lower daughter of a split retires the parent segments that it holds, and a merged region
-   * retires the segments of its predecessors.
+   * Returns the base if the given segments are one stack that covers exactly the given key range.
+   * The base and each delta must cover exactly that range. Otherwise returns null.
+   */
+  static HnswSegment.Descriptor exactBase(List<HnswSegment.Descriptor> segments, byte[] startKey,
+    byte[] endKey) {
+    HnswSegment.Descriptor base = null;
+    for (HnswSegment.Descriptor d : segments) {
+      if (!d.covers(startKey, endKey) || (!d.isDelta() && base != null)) {
+        return null;
+      }
+      if (!d.isDelta()) {
+        base = d;
+      }
+    }
+    for (HnswSegment.Descriptor d : segments) {
+      if (base == null || (d != base && d.baseTime != base.time)) {
+        return null;
+      }
+    }
+    return base;
+  }
+
+  /**
+   * Retires the superseded segments of the index in the family of the region. Newer bases of the
+   * index supersede a base when they cover its part of the range of the region. The region retires
+   * a delta with its base, or when the listing has no base for it. Each region retires only its own
+   * cells. Thus the lower daughter of a split retires the parent segments that it holds. A merged
+   * region retires the segments of its predecessors.
    */
   private void retireSupersededSegments() throws IOException {
     List<HnswSegment.Descriptor> toRetire =
@@ -1421,9 +1769,10 @@ public final class HnswIndexManager implements VectorIndexManager {
 
   /**
    * Returns the segments that a region of the range {@code [startKey, endKey)} retires. These are
-   * the segments of its family that newer bases of the given definition cover within the range. A
-   * segment of another definition, for example of an index that was dropped and created again,
-   * never covers a segment. A newer base of the definition supersedes it.
+   * the bases of its family that newer bases of the given definition cover within the range. They
+   * also include the deltas of these bases, and the deltas whose base is not in the listing. A
+   * segment of another definition never covers a segment. An example is a segment of an index that
+   * a user dropped and created again. A newer base of the definition supersedes it.
    * @param all        the segments of the index in the family of the region
    * @param startKey   the start key of the region
    * @param endKey     the end key of the region
@@ -1431,25 +1780,51 @@ public final class HnswIndexManager implements VectorIndexManager {
    */
   public static List<HnswSegment.Descriptor> segmentsToRetire(List<HnswSegment.Descriptor> all,
     byte[] startKey, byte[] endKey, byte[] definition) {
-    List<HnswSegment.Descriptor> toRetire = new ArrayList<>();
+    List<HnswSegment.Descriptor> bases = new ArrayList<>();
+    List<HnswSegment.Descriptor> deltas = new ArrayList<>();
+    Set<StackId> listedBases = new HashSet<>();
+
     for (HnswSegment.Descriptor d : all) {
-      if (d.overlaps(startKey, endKey)) {
-        List<HnswSegment.Descriptor> newer = new ArrayList<>();
-        for (HnswSegment.Descriptor n : all) {
-          if (n.time > d.time && Bytes.equals(n.definition, definition)) {
-            newer.add(n);
+      if (d.isDelta()) {
+        deltas.add(d);
+      } else {
+        bases.add(d);
+        listedBases.add(new StackId(d.startKey, d.time));
+      }
+    }
+
+    Set<StackId> retiredBases = new HashSet<>();
+    List<HnswSegment.Descriptor> toRetire = new ArrayList<>();
+
+    for (HnswSegment.Descriptor b : bases) {
+      if (b.overlaps(startKey, endKey)) {
+        List<HnswSegment.Descriptor> newerBases = new ArrayList<>();
+        for (HnswSegment.Descriptor n : bases) {
+          if (n.time > b.time && Bytes.equals(n.definition, definition)) {
+            newerBases.add(n);
           }
         }
-        byte[] from = Bytes.compareTo(d.startKey, startKey) > 0 ? d.startKey : startKey;
+        byte[] from = Bytes.compareTo(b.startKey, startKey) > 0 ? b.startKey : startKey;
         byte[] to =
-          endKey.length == 0 || (d.endKey.length > 0 && Bytes.compareTo(d.endKey, endKey) < 0)
-            ? d.endKey
+          endKey.length == 0 || (b.endKey.length > 0 && Bytes.compareTo(b.endKey, endKey) < 0)
+            ? b.endKey
             : endKey;
-        if (HnswSegment.covered(from, to, newer)) {
+        if (HnswSegment.covered(from, to, newerBases)) {
+          toRetire.add(b);
+          retiredBases.add(new StackId(b.startKey, b.time));
+        }
+      }
+    }
+
+    for (HnswSegment.Descriptor d : deltas) {
+      if (d.overlaps(startKey, endKey)) {
+        StackId baseId = new StackId(d.startKey, d.baseTime);
+        if (retiredBases.contains(baseId) || !listedBases.contains(baseId)) {
           toRetire.add(d);
         }
       }
     }
+
     return toRetire;
   }
 
@@ -1579,6 +1954,8 @@ public final class HnswIndexManager implements VectorIndexManager {
     synchronized (this) {
       closed = true;
       sources = state.sources;
+      // Wake a full rebuild that waits in startFull, so that it ends
+      notifyAll();
     }
     for (Source source : sources) {
       source.segment.close();

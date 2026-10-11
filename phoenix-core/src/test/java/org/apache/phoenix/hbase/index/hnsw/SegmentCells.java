@@ -249,7 +249,7 @@ public final class SegmentCells {
 
   /**
    * Writes the cells of a segment at its anchor row. A null payload writes no payload cell. The W
-   * cell holds the encoded name of the writer region.
+   * cell holds the encoded name of the writer region. A delta also gets its base time cell.
    */
   public void put(HnswSegment.Descriptor d, byte[] payload, byte[] writer) {
     put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), d.time, d.endKey);
@@ -260,6 +260,10 @@ public final class SegmentCells {
     put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.DEFINITION_TAG), d.time,
       d.definition);
     put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG), d.time, writer);
+    if (d.isDelta()) {
+      put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG), d.time,
+        Bytes.toBytes(d.baseTime));
+    }
     if (payload != null) {
       put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), d.time, payload);
     }

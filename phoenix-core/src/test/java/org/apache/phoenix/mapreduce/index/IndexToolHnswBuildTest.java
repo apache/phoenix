@@ -172,9 +172,21 @@ public class IndexToolHnswBuildTest {
   // Returns the cells of a base segment of the index with the given definition, as a listing scan
   // of V# returns them
   private static Result segment(byte[] start, byte[] end, long time, byte[] definition) {
+    return segment(start, end, time, null, definition);
+  }
+
+  // Returns the cells of a segment as a listing scan of V# returns them. A base time makes the
+  // segment a delta
+  private static Result segment(byte[] start, byte[] end, long time, Long baseTime,
+    byte[] definition) {
     HnswSegment.Descriptor d =
-      new HnswSegment.Descriptor(INDEX, start, time, end, 1, time, definition);
+      new HnswSegment.Descriptor(INDEX, start, time, end, 1, baseTime, time, definition);
     List<Cell> cells = new ArrayList<>();
+    if (baseTime != null) {
+      cells.add(
+        new KeyValue(d.anchor, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG),
+          time, Bytes.toBytes(baseTime)));
+    }
     cells.add(new KeyValue(d.anchor, FAMILY,
       HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), time, end));
     cells.add(new KeyValue(d.anchor, FAMILY,
@@ -285,6 +297,21 @@ public class IndexToolHnswBuildTest {
     serverTime.set(800);
     IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
     assertEquals(Arrays.asList("", "m"), triggered);
+  }
+
+  /**
+   * A delta newer than the bar is not a rebuild. A base older than the bar is also not a rebuild.
+   * The build triggers only the stale region, and waits for its new base.
+   */
+  @Test(timeout = 30_000)
+  public void testDeltaIsNotRebuild() throws Exception {
+    region("", "m");
+    region("m", "");
+    segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 900));
+    segments.add(segment(Bytes.toBytes(""), Bytes.toBytes("m"), 2_000, 900L, definition));
+    segments.add(segment(Bytes.toBytes("m"), HConstants.EMPTY_END_ROW, 1_500));
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> 1_000);
+    assertEquals(Arrays.asList(""), triggered);
   }
 
   /**
