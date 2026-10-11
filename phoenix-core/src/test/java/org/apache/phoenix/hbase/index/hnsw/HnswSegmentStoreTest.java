@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -66,6 +67,7 @@ import org.apache.hadoop.hbase.regionserver.FlushRequester;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.MemStoreSize;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
@@ -448,6 +450,170 @@ public class HnswSegmentStoreTest {
       any(FlushLifeCycleTracker.class));
     assertEquals(1, families.getValue().size());
     assertArrayEquals(FAMILY, families.getValue().get(0));
+  }
+
+  /**
+   * A listing also returns the row and the identity of each segment that has small cells but is not
+   * well-formed. The test uses a segment without a W cell, and a segment outside the anchor row of
+   * its key range.
+   */
+  @Test
+  public void testListMalformed() throws Exception {
+    HnswSegment.Descriptor noWriter = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 101L,
+      Bytes.toBytes("f"), 1, null, 101L, DESCRIPTOR.definition);
+    HnswSegment.Descriptor offAnchor = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 102L,
+      Bytes.toBytes("f"), 1, null, 102L, DESCRIPTOR.definition);
+    List<Cell> cells = new ArrayList<>(HnswSegmentTest.cells(DESCRIPTOR.anchor, DESCRIPTOR, true));
+    for (Cell cell : HnswSegmentTest.cells(noWriter.anchor, noWriter, true)) {
+      if (
+        !Bytes.equals(CellUtil.cloneQualifier(cell),
+          HnswSegment.qualifier(noWriter.identity, HnswSegment.WRITER_TAG))
+      ) {
+        cells.add(cell);
+      }
+    }
+    cells.sort(CellComparator.getInstance());
+    byte[] wrongRow = Bytes.toBytes("c");
+    List<Cell> other = new ArrayList<>(HnswSegmentTest.cells(wrongRow, offAnchor, true));
+    Table table = mock(Table.class);
+    ResultScanner scanner = mock(ResultScanner.class);
+    when(scanner.iterator())
+      .thenReturn(Arrays.asList(Result.create(cells), Result.create(other)).iterator());
+    when(table.getScanner(any(Scan.class))).thenReturn(scanner);
+    List<byte[][]> malformed = new ArrayList<>();
+    List<HnswSegment.Descriptor> listed =
+      new HnswSegmentStore.TableStore(table).list(KEY, malformed);
+    assertEquals(1, listed.size());
+    HnswSegmentTest.assertDescriptor(DESCRIPTOR, listed.get(0));
+    assertEquals(2, malformed.size());
+    assertArrayEquals(noWriter.anchor, malformed.get(0)[0]);
+    assertArrayEquals(noWriter.identity, malformed.get(0)[1]);
+    assertArrayEquals(wrongRow, malformed.get(1)[0]);
+    assertArrayEquals(offAnchor.identity, malformed.get(1)[1]);
+  }
+
+  /**
+   * A listing of all cells of {@code V#} reads the MOB references as stored, and gets the length of
+   * each value in place of the value. Thus it never transfers a payload, also when the payload is
+   * in the memstore.
+   */
+  @Test
+  public void testListCells() throws Exception {
+    Table table = mock(Table.class);
+    ResultScanner scanner = mock(ResultScanner.class);
+    when(scanner.iterator()).thenReturn(Collections.<Result> emptyList().iterator());
+    ArgumentCaptor<Scan> scan = ArgumentCaptor.forClass(Scan.class);
+    when(table.getScanner(scan.capture())).thenReturn(scanner);
+    List<Cell> cells = new ArrayList<>();
+    new HnswSegmentStore.TableStore(table).listCells(cells::add);
+    assertTrue(cells.isEmpty());
+    Scan s = scan.getValue();
+    assertEquals(1, s.getFamilyMap().size());
+    assertTrue(s.getFamilyMap().containsKey(FAMILY));
+    assertNull(s.getFamilyMap().get(FAMILY));
+    assertTrue(MobUtils.isRawMobScan(s));
+    Cell payload = new KeyValue(DESCRIPTOR.anchor, FAMILY, PAYLOAD_QUALIFIER, new byte[5000]);
+    Filter filter = s.getFilter();
+    assertEquals(Filter.ReturnCode.INCLUDE, filter.filterCell(payload));
+    Cell length = filter.transformCell(payload);
+    assertEquals(Bytes.SIZEOF_INT, length.getValueLength());
+    assertEquals(5000, Bytes.toInt(length.getValueArray(), length.getValueOffset()));
+  }
+
+  /**
+   * The size of a payload comes from the length of the stored value. The store reads a short value:
+   * a MOB reference holds the length of the payload, and a short payload ends with the magic. A
+   * long value is a payload, also in the memstore, and the store does not read it.
+   */
+  @Test
+  public void testPayloadSize() throws Exception {
+    Table table = mock(Table.class);
+    HnswSegmentStore store = new HnswSegmentStore.TableStore(table);
+    List<Get> gets = new ArrayList<>();
+    byte[][] stored = new byte[1][];
+    when(table.get(any(Get.class))).thenAnswer(i -> {
+      Get get = i.getArgument(0);
+      gets.add(get);
+      assertTrue(MobUtils.isRawMobScan(new Scan(get)));
+      if (stored[0] == null) {
+        return Result.EMPTY_RESULT;
+      }
+      Cell cell = new KeyValue(DESCRIPTOR.anchor, FAMILY, PAYLOAD_QUALIFIER, stored[0]);
+      if (get.getFilter() != null) {
+        cell = get.getFilter().transformCell(cell);
+      }
+      return Result.create(Collections.singletonList(cell));
+    });
+    assertEquals(-1, store.payloadSize(DESCRIPTOR));
+
+    stored[0] = new byte[2_000_000];
+    gets.clear();
+    assertEquals(2_000_000, store.payloadSize(DESCRIPTOR));
+    assertEquals(1, gets.size());
+
+    stored[0] = Bytes.add(Bytes.toBytes(70_000), Bytes.toBytes("d41d8cd98f00b204_0123456789"));
+    gets.clear();
+    assertEquals(70_000, store.payloadSize(DESCRIPTOR));
+    assertEquals(2, gets.size());
+    assertArrayEquals(DESCRIPTOR.anchor, gets.get(1).getRow());
+
+    stored[0] = Bytes.add(new byte[100], Bytes.toBytes(HnswSegment.MAGIC));
+    assertEquals(104, store.payloadSize(DESCRIPTOR));
+  }
+
+  /**
+   * The retirement of malformed cells uses one scan of the cells of the index. It deletes each cell
+   * that is not in a well-formed segment. Examples are a segment without a W cell, a payload
+   * without small cells, and a cell whose qualifier does not decode. It keeps the well-formed
+   * segments of every definition with their payloads, and the cells of other indexes. The deletes
+   * skip the WAL.
+   */
+  @Test
+  public void testRetireMalformed() throws Exception {
+    SegmentCells cells = new SegmentCells();
+    Region region = mock(Region.class);
+    when(region.getRegionInfo())
+      .thenReturn(RegionInfoBuilder.newBuilder(TableName.valueOf("T")).build());
+    cells.stubOnly(region);
+    RegionCoprocessorEnvironment env = mock(RegionCoprocessorEnvironment.class);
+    when(env.getRegion()).thenReturn(region);
+    List<Durability> durability = new ArrayList<>();
+    cells.setHook(m -> durability.add(m.getDurability()));
+
+    cells.put(DESCRIPTOR, Bytes.toBytes("payload"), HnswSegmentTest.WRITER);
+    HnswSegment.Descriptor noWriter = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 101L,
+      Bytes.toBytes("f"), 1, null, 101L, DESCRIPTOR.definition);
+    cells.put(noWriter, Bytes.toBytes("payload"), HnswSegmentTest.WRITER);
+    cells.remove(noWriter, HnswSegment.WRITER_TAG);
+    HnswSegment.Descriptor payloadOnly = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"), 102L,
+      Bytes.toBytes("f"), 1, null, 102L, DESCRIPTOR.definition);
+    cells.put(payloadOnly.anchor,
+      HnswSegment.qualifier(payloadOnly.identity, HnswSegment.PAYLOAD_TAG), 102L,
+      Bytes.toBytes("payload"));
+    cells.put(DESCRIPTOR.anchor, Bytes.add(HnswSegment.prefix(KEY), Bytes.toBytes("junk")), 5L,
+      Bytes.toBytes(1));
+    HnswSegment.Descriptor other = new HnswSegment.Descriptor(Bytes.toBytes("OTHER"),
+      Bytes.toBytes("b"), 103L, Bytes.toBytes("f"), 1, null, 103L, DESCRIPTOR.definition);
+    cells.put(other, null, HnswSegmentTest.WRITER);
+    // A well-formed segment of another definition of the index stays. A manager that does not yet
+    // know a re-created index must not delete the segments of the new definition
+    HnswSegment.Descriptor otherDefinition = new HnswSegment.Descriptor(KEY, Bytes.toBytes("b"),
+      104L, Bytes.toBytes("f"), 1, null, 104L, HnswSegment.definitionDigest("other"));
+    cells.put(otherDefinition, Bytes.toBytes("payload"), HnswSegmentTest.WRITER);
+    int kept = 2 * (HnswSegment.TAGS.length - 2) + 5;
+
+    assertEquals(HnswSegment.TAGS.length - 3 + 1 + 1,
+      new HnswSegmentStore.RegionStore(env).retireMalformed(KEY));
+    assertEquals(kept, cells.size());
+    List<HnswSegment.Descriptor> listed = cells.list(KEY);
+    assertEquals(listed.toString(), 2, listed.size());
+    for (HnswSegment.Descriptor d : listed) {
+      HnswSegmentTest.assertDescriptor(d.time == DESCRIPTOR.time ? DESCRIPTOR : otherDefinition, d);
+    }
+    assertEquals(1, cells.list(Bytes.toBytes("OTHER")).size());
+    assertEquals(Collections.singletonList(Durability.SKIP_WAL), durability);
+    assertEquals(0, new HnswSegmentStore.RegionStore(env).retireMalformed(KEY));
+    assertEquals(1, durability.size());
   }
 
   // A mock region whose V# memstore holds data until the test marks it as flushed

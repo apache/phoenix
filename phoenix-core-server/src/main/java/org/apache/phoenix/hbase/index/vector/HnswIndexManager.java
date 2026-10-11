@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.LongSupplier;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -80,6 +81,10 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.hnsw.HnswOffheapAllocator;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswIndexMetrics;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
@@ -283,6 +288,9 @@ public final class HnswIndexManager implements VectorIndexManager {
   // Whether the manager can request a split. A request clears it. A swap that replaces the mutable
   // graph sets it again. The end of the retry delay after a failed request also sets it again
   private final AtomicBoolean splitArmed = new AtomicBoolean(true);
+  // The metrics of the index. The manager gets them once, so that its updates do no registry
+  // lookup. The gauges hold the contribution of each open manager, and close removes it
+  private final HnswIndexMetrics metrics;
 
   /** Reads SYSTEM.CATALOG before a segment write, so that a stale manager writes no segment. */
   @FunctionalInterface
@@ -446,19 +454,37 @@ public final class HnswIndexManager implements VectorIndexManager {
    */
   static HnswIndexManager open(RegionCoprocessorEnvironment env, String indexName,
     LongSupplier oldestBatch) throws IOException {
+    // The name of the index after the check that it is an HNSW index of the table. A failed open of
+    // another name counts only for the server. Thus a scan cannot add metrics for any name
+    String hnswIndex = null;
+    boolean opened = false;
     try (PhoenixConnection conn =
       QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
       PTable index = conn.getTableNoCache(indexName);
       PTable data = dataTableOf(conn, index);
       checkIndexOf(index, data, env.getRegion().getRegionInfo().getTable());
+      hnswIndex = index.getName().getString();
       String definition = definition(index);
-      return new HnswIndexManager(env, index, index.getIndexMaintainer(data, conn),
-        index.getIndexState() == PIndexState.ACTIVE, hasTtl(data, env.getRegion()),
-        scan -> isCurrent(env, indexName, definition, scan), oldestBatch);
+      HnswIndexManager manager =
+        new HnswIndexManager(env, index, index.getIndexMaintainer(data, conn),
+          index.getIndexState() == PIndexState.ACTIVE, hasTtl(data, env.getRegion()),
+          scan -> isCurrent(env, indexName, definition, scan), oldestBatch);
+      opened = true;
+      return manager;
     } catch (org.apache.phoenix.schema.TableNotFoundException e) {
       throw new DoNotRetryIOException("Cannot open HNSW index " + indexName, e);
     } catch (SQLException e) {
       throw new IOException("Cannot open HNSW index " + indexName, e);
+    } finally {
+      if (!opened) {
+        MetricsVectorIndexSource source =
+          MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource();
+        if (hnswIndex != null) {
+          source.getHnswIndexMetrics(hnswIndex).update(HnswMetric.OPEN_FAILURES, 1);
+        } else {
+          source.updateHnsw(HnswMetric.OPEN_FAILURES, 1);
+        }
+      }
     }
   }
 
@@ -587,33 +613,48 @@ public final class HnswIndexManager implements VectorIndexManager {
     throws IOException {
     try (PhoenixConnection conn =
       QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-      PTable index;
-      PTable data;
-      try {
-        index = conn.getTableNoCache(indexName);
-        data = dataTableOf(conn, index);
-      } catch (org.apache.phoenix.schema.TableNotFoundException e) {
-        return;
-      }
       TableName table = env.getRegion().getRegionInfo().getTable();
-      try {
-        checkIndexOf(index, data, table);
-      } catch (DoNotRetryIOException e) {
-        return;
+      if (isHnswIndexOf(conn, indexName, table)) {
+        throw new DoNotRetryIOException("HNSW index " + indexName + " of table " + table
+          + " exists; its segments are not purged");
       }
-      throw new DoNotRetryIOException(
-        "HNSW index " + indexName + " of table " + table + " exists; its segments are not purged");
     } catch (SQLException e) {
       throw new IOException("Cannot read HNSW index " + indexName, e);
+    }
+  }
+
+  /**
+   * Returns true if the catalog has an HNSW index of the given name on the data table that
+   * {@code table} stores. A region refuses to purge the segments of such an index. The tools report
+   * the cells of every other index key as stray.
+   */
+  public static boolean isHnswIndexOf(PhoenixConnection conn, String indexName, TableName table)
+    throws SQLException {
+    PTable index;
+    PTable data;
+    try {
+      index = conn.getTableNoCache(indexName);
+      data = dataTableOf(conn, index);
+    } catch (org.apache.phoenix.schema.TableNotFoundException e) {
+      return false;
+    }
+    try {
+      checkIndexOf(index, data, table);
+      return true;
+    } catch (DoNotRetryIOException e) {
+      return false;
     }
   }
 
   @VisibleForTesting
   HnswIndexManager(RegionCoprocessorEnvironment env, PTable index, IndexMaintainer maintainer,
     boolean active, boolean ttl, Catalog catalog, LongSupplier oldestBatch) throws IOException {
+    long openStart = EnvironmentEdgeManager.currentTimeMillis();
     this.env = env;
     this.region = env.getRegion();
     this.indexName = index.getName().getString();
+    this.metrics = MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource()
+      .getHnswIndexMetrics(indexName);
     this.startKey = region.getRegionInfo().getStartKey();
     this.endKey = region.getRegionInfo().getEndKey();
     this.vectorIndex = index.getVectorIndex();
@@ -658,6 +699,9 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     this.state = new State(sources, new MutableGraph(vectorIndex, similarity), null, null, 0, 0,
       HnswSegment.covered(startKey, endKey, readable));
+    // From here, a failure closes the manager, and the close removes this contribution
+    publish(null, state);
+    metrics.update(HnswMetric.SEGMENTS_LEFT_OUT, unreadable.size());
     try {
       applyStackMasks(sources);
       long replayStart = current.isEmpty() ? Long.MAX_VALUE : replayStartTime(current);
@@ -674,10 +718,47 @@ public final class HnswIndexManager implements VectorIndexManager {
       ) {
         repair();
       }
+      metrics.update(HnswMetric.OPEN_TIME, EnvironmentEdgeManager.currentTimeMillis() - openStart);
     } catch (IOException | RuntimeException e) {
       close();
       throw e;
     }
+  }
+
+  /**
+   * Moves the contribution of the region to the gauges from one state to the next. A null state
+   * stands for no open manager. The caller holds the write lock of the state, or the manager is not
+   * yet visible to other threads.
+   */
+  private void publish(State from, State to) {
+    gauge(HnswMetric.REGIONS, from, to, s -> 1);
+    gauge(HnswMetric.SEGMENTS, from, to, s -> s.sources.size());
+    gauge(HnswMetric.REGIONS_UNCOVERED, from, to, s -> s.covered ? 0 : 1);
+    gauge(HnswMetric.REGIONS_UNRESTRICTED, from, to, s -> s.covered ? 0 : 1);
+    if (from != null && (to == null || to.mutable != from.mutable)) {
+      // The mutable graph leaves the state, for a flush or at close. No change can enter the graph
+      // after this point, because changes hold the read lock
+      metrics.update(HnswMetric.MUTABLE_ENTRIES, -from.mutable.size());
+    }
+  }
+
+  private void gauge(HnswMetric metric, State from, State to, ToIntFunction<State> value) {
+    int change =
+      (to == null ? 0 : value.applyAsInt(to)) - (from == null ? 0 : value.applyAsInt(from));
+    if (change != 0) {
+      metrics.update(metric, change);
+    }
+  }
+
+  // Installs a new state and moves the gauges to it. The caller holds the write lock of the state
+  private void install(State next) {
+    publish(state, next);
+    state = next;
+  }
+
+  // Returns the metrics of the index, which the candidate probe also updates
+  HnswIndexMetrics metrics() {
+    return metrics;
   }
 
   // Returns true if the region can keep its exact base stack after the replay, and false if it must
@@ -802,7 +883,7 @@ public final class HnswIndexManager implements VectorIndexManager {
    * Returns the replay start of the region: the oldest replay start of the newest segments of the
    * stacks. A stack holds all changes before the replay start of its newest segment.
    */
-  static long replayStartTime(List<HnswSegment.Descriptor> current) {
+  public static long replayStartTime(List<HnswSegment.Descriptor> current) {
     Map<StackId, HnswSegment.Descriptor> newestPerStack = new HashMap<>();
     for (HnswSegment.Descriptor d : current) {
       newestPerStack.merge(stackId(d), d, (a, b) -> a.time >= b.time ? a : b);
@@ -819,7 +900,7 @@ public final class HnswIndexManager implements VectorIndexManager {
    * These are the bases that overlap the range and that newer bases do not cover within the range.
    * The deltas of these bases are also current.
    */
-  static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
+  public static List<HnswSegment.Descriptor> currentSegments(List<HnswSegment.Descriptor> all,
     byte[] startKey, byte[] endKey) {
     List<HnswSegment.Descriptor> overlappingBases = new ArrayList<>();
     List<HnswSegment.Descriptor> overlappingDeltas = new ArrayList<>();
@@ -969,11 +1050,12 @@ public final class HnswIndexManager implements VectorIndexManager {
         State s = state;
         List<Source> sources = new ArrayList<>(s.sources);
         sources.remove(lost);
-        state = new State(sources, s.mutable, s.flushing, s.changedSinceSwap, s.swapTime,
-          s.replayFrom, false);
+        install(new State(sources, s.mutable, s.flushing, s.changedSinceSwap, s.swapTime,
+          s.replayFrom, false));
       } finally {
         stateLock.writeLock().unlock();
       }
+      metrics.update(HnswMetric.SEGMENTS_LEFT_OUT, 1);
       LOG.error("HNSW segment {} of index {} for region {} cannot be read; rebuilding",
         lost.descriptor, indexName, region.getRegionInfo().getEncodedName());
       repair();
@@ -981,6 +1063,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       // uncovered, so that it runs before the rebuilds of covered regions. If the rebuild thread
       // already took the task from its queue, the task runs next
       if (full == Full.QUEUED && !queued.uncovered && REBUILDS.remove(queued)) {
+        metrics.update(HnswMetric.REBUILD_QUEUE, -1);
         queueFull();
       }
     }
@@ -1009,6 +1092,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   // can have read the rows before the change or the compaction. Its segment can then miss the
   // change or the compaction, so another full rebuild follows it
   private synchronized void repair() {
+    metrics.update(HnswMetric.REPAIR_REQUESTS, 1);
     repair = true;
     rebuildPending |= full == Full.RUNNING;
     flush(true);
@@ -1073,10 +1157,12 @@ public final class HnswIndexManager implements VectorIndexManager {
       s = state;
       // Add the new version before the masks hide the older ones. A search reads the sources oldest
       // first, so it finds one of the versions. A search that overlaps a swap runs again
-      if (vector != null) {
-        s.mutable.upsert(key, vector);
-      } else {
-        s.mutable.delete(key);
+      int added = vector != null ? s.mutable.upsert(key, vector) : s.mutable.delete(key);
+      if (!closed) {
+        // The close removes the entries of the graph from the gauge under the write lock. A change
+        // after the close does not add to the gauge
+        metrics.update(HnswMetric.MUTABLE_ENTRIES, added);
+        metrics.update(HnswMetric.CHANGES_APPLIED, 1);
       }
       if (s.changedSinceSwap != null) {
         s.changedSinceSwap.add(key);
@@ -1114,6 +1200,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         return;
       }
       String name = region.getRegionInfo().getEncodedName();
+      metrics.update(HnswMetric.SPLIT_REQUESTS, 1);
       try (Admin admin = ServerUtil.ConnectionFactory
         .getConnection(ConnectionType.DEFAULT_SERVER_CONNECTION, env).getAdmin()) {
         admin.splitRegionAsync(region.getRegionInfo().getRegionName()).get(SPLIT_TIMEOUT_MS,
@@ -1165,6 +1252,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     for (ImmutableBytesPtr key : changed) {
       apply(key, vectorOf(maintainer, region.get(new Get(key.copyBytesIfNecessary()))));
     }
+    metrics.update(HnswMetric.REPLAYED_ROWS, changed.size());
     LOG.info("Replayed {} rows changed since {} into HNSW index {} for region {}", changed.size(),
       since, indexName, region.getRegionInfo().getEncodedName());
   }
@@ -1334,7 +1422,14 @@ public final class HnswIndexManager implements VectorIndexManager {
   // is not covered. The caller holds the monitor
   private void queueFull() {
     full = Full.QUEUED;
-    queued = new Rebuild(() -> rebuildSegment(0), !state.covered);
+    long queuedAt = EnvironmentEdgeManager.currentTimeMillis();
+    queued = new Rebuild(() -> {
+      metrics.update(HnswMetric.REBUILD_QUEUE, -1);
+      metrics.update(HnswMetric.REBUILD_WAIT_TIME,
+        EnvironmentEdgeManager.currentTimeMillis() - queuedAt);
+      rebuildSegment(0);
+    }, !state.covered);
+    metrics.update(HnswMetric.REBUILD_QUEUE, 1);
     REBUILDS.execute(queued);
   }
 
@@ -1364,11 +1459,11 @@ public final class HnswIndexManager implements VectorIndexManager {
     try {
       long now = EnvironmentEdgeManager.currentTimeMillis();
       clock = Math.max(now, clock + 1);
-      state = s.flushing == null
+      install(s.flushing == null
         ? new State(s.sources, new MutableGraph(vectorIndex, similarity), s.mutable,
           ConcurrentHashMap.newKeySet(), clock, replayFrom(now), s.covered)
         : new State(s.sources, s.mutable, s.flushing, s.changedSinceSwap, clock, replayFrom(now),
-          s.covered);
+          s.covered));
     } finally {
       stateLock.writeLock().unlock();
     }
@@ -1445,6 +1540,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         s = state;
         base = deltaBase;
       }
+      long started = EnvironmentEdgeManager.currentTimeMillis();
       Scan scan = base != null ? null : new Scan().setCacheBlocks(false);
       if (!catalog.isCurrent(scan)) {
         // The index was dropped, or created again with another definition. A write or a scan that
@@ -1455,18 +1551,20 @@ public final class HnswIndexManager implements VectorIndexManager {
         return;
       }
       if (base != null) {
-        writeDelta(s, base);
+        writeDelta(s, base, started);
       } else {
-        writeFull(s, scan);
+        writeFull(s, scan, started);
       }
     } catch (Throwable t) {
       if (t instanceof InterruptedException) {
         Thread.currentThread().interrupt();
       }
+      metrics.update(HnswMetric.MAINTENANCE_FAILURES, 1);
       if (scheduleRetry(t, RETRIES, this::retryFlush)) {
         LOG.error("HNSW index {} {} failed for region {}; will retry", indexName,
           base != null ? "delta flush" : "rebuild", region.getRegionInfo().getEncodedName(), t);
       } else {
+        metrics.update(HnswMetric.MAINTENANCE_STALLED, 1);
         LOG.error(
           "HNSW index {} {} failed for region {}; a retry fails the same way, so it is not"
             + " retried until a rebuild is requested",
@@ -1525,7 +1623,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   // and each graph change follows the commit of its row. As a result, the scan holds every change
   // that the graphs held at the swap. The manager does not hold its monitor during the write,
   // because the write waits for region row locks
-  private void writeFull(State s, Scan scan) throws IOException {
+  private void writeFull(State s, Scan scan, long started) throws IOException {
     Map<ImmutableBytesPtr, float[]> vectors = scanRegion(scan);
     if (vectors == null || closed) {
       return;
@@ -1554,7 +1652,9 @@ public final class HnswIndexManager implements VectorIndexManager {
         new byte[0][])
       : null;
     try {
-      store.write(written, payload, new byte[0][]);
+      long flushWait = store.write(written, payload, new byte[0][]);
+      metrics.update(HnswMetric.STORE_FLUSH_WAIT_TIME, flushWait);
+      metrics.update(HnswMetric.SEGMENT_BYTES_WRITTEN, payload != null ? payload.length : 0);
     } catch (IOException | RuntimeException e) {
       if (segment != null) {
         segment.close();
@@ -1565,6 +1665,8 @@ public final class HnswIndexManager implements VectorIndexManager {
       retireAfterClose(written);
       return;
     }
+    metrics.update(HnswMetric.REBUILDS, 1);
+    metrics.update(HnswMetric.REBUILD_TIME, EnvironmentEdgeManager.currentTimeMillis() - started);
     retireSupersededSegments();
     LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
       region.getRegionInfo().getEncodedName(), keys.length);
@@ -1573,7 +1675,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   // Writes the changes in the graph of the flush as a delta segment on the given base. Then it
   // installs the delta. The manager does not hold its monitor during the write, because the write
   // waits for region row locks
-  private void writeDelta(State s, long baseTime) throws IOException {
+  private void writeDelta(State s, long baseTime, long started) throws IOException {
     Map<ImmutableBytesPtr, float[]> live = s.flushing.live();
     List<VectorFloat<?>> values = new ArrayList<>(live.size());
     byte[][] keys = new byte[live.size()][];
@@ -1589,9 +1691,13 @@ public final class HnswIndexManager implements VectorIndexManager {
 
     Set<ImmutableBytesPtr> deleted = s.flushing.deleted();
     byte[][] deletedKeys = new byte[deleted.size()][];
+    // The size of the tombstones cell: the key count, and each key with its length
+    long bytes = payload != null ? payload.length : 0;
+    bytes += deleted.isEmpty() ? 0 : Bytes.SIZEOF_INT;
     int d = 0;
     for (ImmutableBytesPtr del : deleted) {
       deletedKeys[d++] = del.copyBytesIfNecessary();
+      bytes += Bytes.SIZEOF_INT + del.getLength();
     }
     if (closed) {
       return;
@@ -1604,6 +1710,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       payload, deletedKeys);
     try {
       store.write(written, payload, deletedKeys);
+      metrics.update(HnswMetric.SEGMENT_BYTES_WRITTEN, bytes);
     } catch (IOException | RuntimeException e) {
       segment.close();
       throw e;
@@ -1612,6 +1719,9 @@ public final class HnswIndexManager implements VectorIndexManager {
       retireAfterClose(written);
       return;
     }
+    metrics.update(HnswMetric.DELTA_FLUSHES, 1);
+    metrics.update(HnswMetric.DELTA_FLUSH_TIME,
+      EnvironmentEdgeManager.currentTimeMillis() - started);
     LOG.info(
       "Wrote HNSW delta for index {} region {} stacked on base {} with {} vectors and {} tombstones",
       indexName, region.getRegionInfo().getEncodedName(), baseTime, keys.length,
@@ -1687,7 +1797,7 @@ public final class HnswIndexManager implements VectorIndexManager {
       }
       // A new base covers the range of the region exactly, so the new state is covered. A delta
       // does not change the coverage
-      state = new State(sources, s.mutable, null, null, 0, 0, !isDelta || s.covered);
+      install(new State(sources, s.mutable, null, null, 0, 0, !isDelta || s.covered));
     } finally {
       stateLock.writeLock().unlock();
     }
@@ -1758,9 +1868,16 @@ public final class HnswIndexManager implements VectorIndexManager {
    * index supersede a base when they cover its part of the range of the region. The region retires
    * a delta with its base, or when the listing has no base for it. Each region retires only its own
    * cells. Thus the lower daughter of a split retires the parent segments that it holds. A merged
-   * region retires the segments of its predecessors.
+   * region retires the segments of its predecessors. First, the region deletes the cells of the
+   * index that are in no well-formed segment, which no listing names. Thus a tool that sees the
+   * superseded segments retired also sees these cells deleted.
    */
   private void retireSupersededSegments() throws IOException {
+    int malformed = store.retireMalformed(indexKey);
+    if (malformed > 0) {
+      LOG.info("HNSW index {} region {} deleted {} cells of malformed segments", indexName,
+        region.getRegionInfo().getEncodedName(), malformed);
+    }
     List<HnswSegment.Descriptor> toRetire =
       segmentsToRetire(store.list(indexKey), startKey, endKey, definition);
     if (!toRetire.isEmpty()) {
@@ -1883,6 +2000,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     Predicate<byte[]> keyFilter, boolean covering) throws IOException {
     State s = state;
     if (covering && !s.covered) {
+      metrics.update(HnswMetric.UNRESTRICTED_UNCOVERED, 1);
       return null;
     }
     byte[] from = Bytes.compareTo(startRow, startKey) > 0 ? startRow : startKey;
@@ -1907,6 +2025,7 @@ public final class HnswIndexManager implements VectorIndexManager {
     // shares the segment masks, so an apply to it can mask a row that this search finds in no
     // source. The search then runs again on the new state
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
+    long visited = 0;
     for (int i = s.sources.size() - 1; i >= 0; i--) {
       Source source = s.sources.get(i);
       HnswSegment segment = source.segment;
@@ -1937,14 +2056,16 @@ public final class HnswIndexManager implements VectorIndexManager {
         leaveOut(s.sources, source);
         throw new IOException("HNSW segment " + source.descriptor + " cannot be read", e);
       }
+      visited += result.getVisitedCount();
       for (SearchResult.NodeScore ns : result.getNodes()) {
         scores.put(new ImmutableBytesPtr(segment.getKey(ns.node)), ns.score);
       }
     }
     if (s.flushing != null) {
-      s.flushing.search(q, topK, scores, s.changedSinceSwap, accept);
+      visited += s.flushing.search(q, topK, scores, s.changedSinceSwap, accept);
     }
-    s.mutable.search(q, topK, scores, null, accept);
+    visited += s.mutable.search(q, topK, scores, null, accept);
+    metrics.update(HnswMetric.NODES_VISITED, visited);
     if (state.mutable != s.mutable) {
       return search(query, topK, startRow, stopRow, keyFilter, covering);
     }
@@ -2037,7 +2158,17 @@ public final class HnswIndexManager implements VectorIndexManager {
   public void close() {
     List<Source> sources;
     synchronized (this) {
-      closed = true;
+      // Remove the contribution of the region from the gauges once. The write lock orders the
+      // close after the changes that hold the read lock, so the gauge counts no later change
+      stateLock.writeLock().lock();
+      try {
+        if (!closed) {
+          publish(state, null);
+        }
+        closed = true;
+      } finally {
+        stateLock.writeLock().unlock();
+      }
       sources = state.sources;
       // Wake a full rebuild that waits in startFull, so that it ends
       notifyAll();
@@ -2128,30 +2259,34 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
 
     // Adds the node of the new version before the node becomes current for the key. As a result, a
-    // search finds one of the two versions
-    void upsert(ImmutableBytesPtr key, float[] vector) {
+    // search finds one of the two versions. Returns the change of size()
+    int upsert(ImmutableBytesPtr key, float[] vector) {
       VectorFloat<?> v = VTS.createFloatVector(vector);
       int ordinal = next.getAndIncrement();
       vectors.put(ordinal, v);
       keys.put(ordinal, key);
       builder.addGraphNode(ordinal, v);
       live.put(key, vector);
-      deleted.remove(key);
+      boolean undeleted = deleted.remove(key);
       ordinals.put(key, ordinal);
+      return undeleted ? 0 : 1;
     }
 
-    void delete(ImmutableBytesPtr key) {
+    // Returns the change of size()
+    int delete(ImmutableBytesPtr key) {
       live.remove(key);
-      deleted.add(key);
+      boolean added = deleted.add(key);
       ordinals.remove(key);
+      return added ? 1 : 0;
     }
 
     // Adds the scores of the nearest current nodes to scores. A result key must pass accept and
-    // must not be in excluded. The other nodes stay in the graph traversal
-    void search(VectorFloat<?> query, int topK, Map<ImmutableBytesPtr, Float> scores,
+    // must not be in excluded. The other nodes stay in the graph traversal. Returns the number of
+    // nodes that the search visited
+    int search(VectorFloat<?> query, int topK, Map<ImmutableBytesPtr, Float> scores,
       Set<ImmutableBytesPtr> excluded, Predicate<byte[]> accept) {
       if (ordinals.isEmpty()) {
-        return;
+        return 0;
       }
       // The keys of reached nodes that are not current. The search sees the graph as it was at the
       // start. It can then miss the new node of a key that changes during the search
@@ -2185,6 +2320,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         }
       }
       scores.putAll(found);
+      return result.getVisitedCount();
     }
 
     int count(byte[] from, byte[] to) {
