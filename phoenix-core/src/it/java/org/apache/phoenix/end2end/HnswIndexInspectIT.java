@@ -213,6 +213,8 @@ public class HnswIndexInspectIT extends ParallelStatsDisabledIT {
 
       HnswIndexIT.upsert(conn, table, "z900", HnswIndexIT.vector(new Random(5)));
       List<Map<String, Object>> delta = list(inspect(table, index, "delta"), "regions");
+      assertEquals(false, delta.get(0).get("overflowed"));
+      assertEquals(false, delta.get(1).get("overflowed"));
       assertEquals(0, delta.get(0).get("changedRows"));
       assertEquals(1, delta.get(1).get("changedRows"));
       // No write batch ran when the newest segment swapped, so the replay starts at its time
