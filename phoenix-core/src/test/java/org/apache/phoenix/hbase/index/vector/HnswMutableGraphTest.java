@@ -442,7 +442,8 @@ public class HnswMutableGraphTest {
     graph.upsert(key("gone"), point(0.5f));
     graph.delete(key("gone"));
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(point(0)), 10, scores, null, k -> true, 1000);
+    int scored = graph.search(query(point(0)), 10, scores, null, k -> true, 1000);
+    assertEquals(graph.live().size(), scored);
     assertFalse(scores.containsKey(key("gone")));
     assertEquals(key("moved"), best(scores));
     float current = HnswSegment.similarityFunction("L2").compare(query(point(0)), query(point(50)));

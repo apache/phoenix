@@ -54,6 +54,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.vector.HnswProbeScanMetrics;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
@@ -338,18 +339,20 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
       // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region
       // scanner. We assume here every Phoenix region scanner extends DelegateRegionScanner.
+      RegionScanner holder;
       if (s instanceof DelegateRegionScanner) {
-        return new RegionScannerHolder(c, scan, s);
-      } else {
+        holder = new RegionScannerHolder(c, scan, s);
+      } else if (emptyCF != null && emptyCQ != null) {
         // An old client may not set these attributes which are required by TTLRegionScanner
-        if (emptyCF != null && emptyCQ != null) {
-          return new RegionScannerHolder(c, scan, new TTLRegionScanner(c.getEnvironment(), scan,
-            new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan)));
-        }
-        return new RegionScannerHolder(c, scan,
+        holder = new RegionScannerHolder(c, scan, new TTLRegionScanner(c.getEnvironment(), scan,
+          new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan)));
+      } else {
+        holder = new RegionScannerHolder(c, scan,
           new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
-
       }
+      // The HNSW search probes rows before the scanner opens. The probe wrapper is above the
+      // scanners of this observer. Thus no Phoenix scanner below it can drop or replace it
+      return HnswProbeScanMetrics.wrap(c.getEnvironment(), scan, holder);
     } catch (Throwable t) {
       // If the exception is NotServingRegionException then throw it as
       // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase

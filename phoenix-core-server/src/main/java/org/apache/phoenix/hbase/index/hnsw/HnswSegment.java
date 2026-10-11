@@ -65,6 +65,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
  * An immutable HNSW graph segment. The cells of a segment are in the hidden MOB family {@code V#}
@@ -435,7 +436,7 @@ public final class HnswSegment {
    * of the key range. The listing ignores the payload cell and the tombstones cell. It copies the
    * data that it keeps, so the scanner can release the cells.
    */
-  static final class Listing {
+  public static final class Listing {
     private final Map<ImmutableBytesPtr, Cells> segments = new LinkedHashMap<>();
 
     // The cells of one segment in one row
@@ -462,10 +463,7 @@ public final class HnswSegment {
         return;
       }
       byte[] row = CellUtil.cloneRow(cell);
-      byte[] identity = q.identity();
-      Cells cells = segments.computeIfAbsent(
-        new ImmutableBytesPtr(Bytes.add(Bytes.toBytes(row.length), row, identity)),
-        k -> new Cells(row, q));
+      Cells cells = segments.computeIfAbsent(key(row, q.identity()), k -> new Cells(row, q));
       byte[] value = CellUtil.cloneValue(cell);
       switch (q.tag) {
         case END_KEY_TAG:
@@ -491,16 +489,15 @@ public final class HnswSegment {
       }
     }
 
+    /** Returns the key that identifies the cells of one segment in one row. */
+    public static ImmutableBytesPtr key(byte[] row, byte[] identity) {
+      return new ImmutableBytesPtr(Bytes.add(Bytes.toBytes(row.length), row, identity));
+    }
+
     List<Descriptor> descriptors() {
       List<Descriptor> descriptors = new ArrayList<>(segments.size());
       for (Cells c : segments.values()) {
-        if (
-          c.endKey != null && c.count != null && c.count.length == Bytes.SIZEOF_INT
-            && (c.baseTime == null || c.baseTime.length == Bytes.SIZEOF_LONG)
-            && c.replayFrom != null && c.replayFrom.length == Bytes.SIZEOF_LONG
-            && c.definition != null && c.definition.length == DEFINITION_LENGTH && c.writer != null
-            && Bytes.equals(c.row, anchor(c.qualifier.startKey, c.endKey))
-        ) {
+        if (wellFormed(c)) {
           descriptors
             .add(new Descriptor(c.qualifier.indexKey, c.qualifier.startKey, c.qualifier.time,
               c.endKey, Bytes.toInt(c.count), c.baseTime != null ? Bytes.toLong(c.baseTime) : null,
@@ -508,6 +505,28 @@ public final class HnswSegment {
         }
       }
       return descriptors;
+    }
+
+    /**
+     * Returns the row and the identity of each segment that the listing collected but that is not
+     * well-formed. The descriptors of the listing do not include these segments.
+     */
+    List<byte[][]> malformed() {
+      List<byte[][]> malformed = new ArrayList<>();
+      for (Cells c : segments.values()) {
+        if (!wellFormed(c)) {
+          malformed.add(new byte[][] { c.row, c.qualifier.identity() });
+        }
+      }
+      return malformed;
+    }
+
+    private static boolean wellFormed(Cells c) {
+      return c.endKey != null && c.count != null && c.count.length == Bytes.SIZEOF_INT
+        && (c.baseTime == null || c.baseTime.length == Bytes.SIZEOF_LONG) && c.replayFrom != null
+        && c.replayFrom.length == Bytes.SIZEOF_LONG && c.definition != null
+        && c.definition.length == DEFINITION_LENGTH && c.writer != null
+        && Bytes.equals(c.row, anchor(c.qualifier.startKey, c.endKey));
     }
   }
 
@@ -765,13 +784,15 @@ public final class HnswSegment {
       return new HnswSegment(store, descriptor, allocator, similarityFunction(metric),
         new byte[0][], tombstones);
     }
+    long loadStart = EnvironmentEdgeManager.currentTimeMillis();
     Cell payloadCell = store.readPayload(descriptor);
     HnswSegment segment = create(store, descriptor, allocator, metric, payloadCell.getValueArray(),
       payloadCell.getValueOffset(), payloadCell.getValueLength(), tombstones);
     try {
       segment.load(payloadCell.getValueArray(), payloadCell.getValueOffset(),
         graphLength(payloadCell.getValueArray(), payloadCell.getValueOffset(),
-          payloadCell.getValueLength(), descriptor.identity)).block.release();
+          payloadCell.getValueLength(), descriptor.identity),
+        loadStart).block.release();
     } catch (TooLargeException e) {
       // Writes need only the row keys. A search fails the same way, and does not read the payload
       segment.tooLarge = e;
@@ -792,10 +813,11 @@ public final class HnswSegment {
       return new HnswSegment(store, descriptor, allocator, similarityFunction(metric),
         new byte[0][], tombstones);
     }
+    long loadStart = EnvironmentEdgeManager.currentTimeMillis();
     HnswSegment segment =
       create(store, descriptor, allocator, metric, payload, 0, payload.length, tombstones);
-    segment.load(payload, 0, graphLength(payload, 0, payload.length, descriptor.identity)).block
-      .release();
+    segment.load(payload, 0, graphLength(payload, 0, payload.length, descriptor.identity),
+      loadStart).block.release();
     return segment;
   }
 
@@ -824,8 +846,9 @@ public final class HnswSegment {
   }
 
   // Copies the graph into an off-heap block and makes it resident. The caller releases the
-  // returned reference.
-  private Resident load(byte[] bytes, int offset, int graphLength) throws IOException {
+  // returned reference. The load time starts at loadStart. Thus it includes the read of the payload
+  private Resident load(byte[] bytes, int offset, int graphLength, long loadStart)
+    throws IOException {
     HnswOffheapAllocator.Block block = allocator.allocate(graphLength);
     Resident r;
     try {
@@ -845,7 +868,7 @@ public final class HnswSegment {
       throw t;
     }
     resident.set(r);
-    allocator.commit(this, block, () -> resident.compareAndSet(r, null));
+    allocator.commit(this, block, () -> resident.compareAndSet(r, null), loadStart);
     if (closed) {
       // close() can run between the publish and the commit, and then not see the resident block
       resident.compareAndSet(r, null);
@@ -910,10 +933,11 @@ public final class HnswSegment {
           if (tooLarge != null) {
             throw new TooLargeException(tooLarge.getMessage());
           }
+          long loadStart = EnvironmentEdgeManager.currentTimeMillis();
           Cell cell = store.readPayload(descriptor);
           try {
             r = load(cell.getValueArray(), cell.getValueOffset(), graphLength(cell.getValueArray(),
-              cell.getValueOffset(), cell.getValueLength(), descriptor.identity));
+              cell.getValueOffset(), cell.getValueLength(), descriptor.identity), loadStart);
           } catch (TooLargeException e) {
             tooLarge = e;
             throw e;

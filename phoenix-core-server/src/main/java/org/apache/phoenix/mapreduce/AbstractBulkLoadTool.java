@@ -338,7 +338,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
           LOGGER.info("Rebuilding HNSW index {} of {}", index.getName(), qualifiedTableName);
           // Each region gets a request. Only a base segment that swaps after the request counts,
           // because an older base segment can lack the loaded rows
-          IndexTool.buildHnswRegions(conn, table, index, region -> Long.MAX_VALUE);
+          IndexTool.buildHnswRegions(conn, table, index, region -> true, region -> Long.MAX_VALUE);
         }
       }
     }

@@ -39,15 +39,18 @@ import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.filter.WhileMatchFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.ServerScanUtil;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
@@ -64,7 +67,8 @@ import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
  * the candidate rows with a region-local scanner and the client filter. This scanner adds only the
  * Phoenix TTL mask. It calls no region observer hooks, and it does not use paging. On a table with
  * a TTL, a search without a filter also probes its candidates. The reason is that the scan masks
- * expired rows that the graph still holds.</li>
+ * expired rows that the graph still holds. If the client tracks scan metrics, the scan metrics of
+ * the client include the rows that the probe reads, as {@link HnswProbeScanMetrics} describes.</li>
  * <li><b>Widening:</b> If fewer candidates pass than the target (LIMIT + OFFSET), the search asks
  * the graph for more candidates. It calculates the new count from the pass rate. While no candidate
  * passes, it multiplies the count by {@code GROWTH}. The probe removes the candidate restriction
@@ -158,7 +162,29 @@ public final class HnswCandidateProbe {
    */
   static Filter candidateFilter(RegionCoprocessorEnvironment env, HnswIndexManager manager,
     Scan scan, float[] query, int candidates, int target, double radius) throws IOException {
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    ScannerContext probeContext = HnswProbeScanMetrics.probeContext(scan);
+    try {
+      Filter filter = restrict(env, manager, scan, query, candidates, target, radius, probeContext);
+      // A search without restriction can also probe before it stops, so it also carries counts
+      HnswProbeScanMetrics.carry(scan, probeContext);
+      return filter;
+    } finally {
+      manager.metrics().update(HnswMetric.SEARCHES, 1);
+      manager.metrics().update(HnswMetric.SEARCH_TIME,
+        EnvironmentEdgeManager.currentTimeMillis() - start);
+    }
+  }
+
+  // Makes the candidate filter, as candidateFilter describes. Each scan without candidate
+  // restriction adds 1 to exactly one reason counter. The manager counts the region state, and
+  // this method counts the candidate limits. The probe context counts the rows that the probes
+  // read. It is null if the client does not track scan metrics
+  private static Filter restrict(RegionCoprocessorEnvironment env, HnswIndexManager manager,
+    Scan scan, float[] query, int candidates, int target, double radius,
+    ScannerContext probeContext) throws IOException {
     if (candidates > MAX_CANDIDATES) {
+      manager.metrics().update(HnswMetric.UNRESTRICTED_LIMIT, 1);
       return null;
     }
     byte[] start = scan.getStartRow();
@@ -197,7 +223,11 @@ public final class HnswCandidateProbe {
           fresh.add(key);
         }
       }
-      passed.addAll(probe(env, scan, filter, fresh));
+      if (!fresh.isEmpty()) {
+        manager.metrics().update(HnswMetric.PROBE_ROUNDS, 1);
+        manager.metrics().update(HnswMetric.PROBE_ROWS_READ, fresh.size());
+      }
+      passed.addAll(probe(env, scan, filter, fresh, probeContext));
       // Stop when enough candidates pass, when the search found every indexed key of the range, or
       // when the farthest candidate is beyond the distance bound. A comparison with NaN is false
       if (
@@ -217,6 +247,7 @@ public final class HnswCandidateProbe {
         : (long) Math.ceil(target * (double) probed.size() / passed.size());
       long least = passed.isEmpty() ? Math.max(next, (long) target * probed.size()) : next;
       if (least * UNRESTRICTED_SHARE >= bound || least > MAX_CANDIDATES) {
+        manager.metrics().update(HnswMetric.UNRESTRICTED_LIMIT, 1);
         return null;
       }
       count = (int) next;
@@ -269,9 +300,10 @@ public final class HnswCandidateProbe {
   }
 
   // Returns the candidate keys whose rows the region holds and that pass the client filter and the
-  // Phoenix TTL mask
+  // Phoenix TTL mask. If the context is not null, the region scanner counts the rows that it reads
+  // in the context
   private static List<byte[]> probe(RegionCoprocessorEnvironment env, Scan scan, Filter filter,
-    List<byte[]> keys) throws IOException {
+    List<byte[]> keys, ScannerContext context) throws IOException {
     List<byte[]> passed = new ArrayList<>();
     if (keys.isEmpty()) {
       return passed;
@@ -294,7 +326,7 @@ public final class HnswCandidateProbe {
       List<Cell> cells = new ArrayList<>();
       boolean more;
       do {
-        more = scanner.next(cells);
+        more = context == null ? scanner.next(cells) : scanner.next(cells, context);
         if (!cells.isEmpty()) {
           passed.add(CellUtil.cloneRow(cells.get(0)));
           cells.clear();

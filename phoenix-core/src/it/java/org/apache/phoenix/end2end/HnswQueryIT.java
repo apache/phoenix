@@ -55,6 +55,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.metrics.HnswMetricValues;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -294,8 +296,9 @@ public class HnswQueryIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * A query with a distance bound that only a few rows meet returns the rows within the bound, with
-   * a recall of at least 0.9.
+   * A distance bound that only a few rows meet stops the search of each region after its first
+   * probe. Without the bound, the low pass rate would make each region read its range without
+   * restriction. The query returns the rows within the bound, with a recall of at least 0.9.
    */
   @Test
   public void testDistanceBoundStopsSearch() throws Exception {
@@ -310,6 +313,8 @@ public class HnswQueryIT extends ParallelStatsDisabledIT {
       int hits = 0;
       int expectedCount = 0;
       int queries = 5;
+      long rounds = HnswMetricValues.value(HnswMetric.PROBE_ROUNDS, index);
+      long unrestricted = HnswMetricValues.value(HnswMetric.UNRESTRICTED_LIMIT, index);
       for (int i = 0; i < queries; i++) {
         float[] q = vector(random);
         // The bound is halfway between the fifth and sixth nearest rows. Thus five rows are within
@@ -336,6 +341,9 @@ public class HnswQueryIT extends ParallelStatsDisabledIT {
       }
       double recall = hits / (double) expectedCount;
       assertTrue("distance bound recall " + recall, recall >= 0.9);
+      // Each of the two regions probes one time for each query
+      assertEquals(2L * queries, HnswMetricValues.value(HnswMetric.PROBE_ROUNDS, index) - rounds);
+      assertEquals(unrestricted, HnswMetricValues.value(HnswMetric.UNRESTRICTED_LIMIT, index));
     }
   }
 
