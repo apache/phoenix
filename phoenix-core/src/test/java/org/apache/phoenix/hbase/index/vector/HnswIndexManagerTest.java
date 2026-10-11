@@ -67,26 +67,79 @@ public class HnswIndexManagerTest {
 
   // Returns a base segment of [start, end) at the given time. Its replay start is the same time
   private static HnswSegment.Descriptor base(byte[] start, byte[] end, long time, int count) {
-    return new HnswSegment.Descriptor(INDEX, start, time, end, count, time, DEFINITION);
+    return new HnswSegment.Descriptor(INDEX, start, time, end, count, null, time, DEFINITION);
+  }
+
+  // Returns a delta segment of [start, end) at the given time on the given base. Its replay start
+  // is the same time
+  private static HnswSegment.Descriptor delta(byte[] start, byte[] end, long time, long baseTime,
+    int count) {
+    return new HnswSegment.Descriptor(INDEX, start, time, end, count, baseTime, time, DEFINITION);
   }
 
   private static HnswSegment.Descriptor baseDescriptor(long time, int count) {
     return base(START, END, time, count);
   }
 
+  private static HnswSegment.Descriptor deltaDescriptor(long time, long baseTime, int count) {
+    return delta(START, END, time, baseTime, count);
+  }
+
   @Test
   public void testExactBase() {
     HnswSegment.Descriptor base = baseDescriptor(100L, 1000);
+    HnswSegment.Descriptor delta1 = deltaDescriptor(110L, 100L, 50);
+    HnswSegment.Descriptor delta2 = deltaDescriptor(120L, 100L, 50);
 
     assertNull(HnswIndexManager.exactBase(Collections.emptyList(), START, END));
     assertEquals(base, HnswIndexManager.exactBase(Collections.singletonList(base), START, END));
+    assertEquals(base, HnswIndexManager.exactBase(Arrays.asList(base, delta1, delta2), START, END));
+    assertNull(HnswIndexManager.exactBase(Collections.singletonList(delta1), START, END));
 
     HnswSegment.Descriptor base2 = baseDescriptor(150L, 500);
     assertNull(HnswIndexManager.exactBase(Arrays.asList(base, base2), START, END));
 
+    HnswSegment.Descriptor rogueDelta = deltaDescriptor(130L, 999L, 50);
+    assertNull(HnswIndexManager.exactBase(Arrays.asList(base, rogueDelta), START, END));
+
     byte[] otherEnd = Bytes.toBytes("z");
     HnswSegment.Descriptor parent = base(START, otherEnd, 100L, 1000);
     assertNull(HnswIndexManager.exactBase(Collections.singletonList(parent), START, END));
+  }
+
+  @Test
+  public void testCurrentSegmentsOnlyBasesCoverAndDeltasOpenedWithBase() {
+    HnswSegment.Descriptor base1 = baseDescriptor(100L, 1000);
+    HnswSegment.Descriptor delta1_1 = deltaDescriptor(110L, 100L, 50);
+    HnswSegment.Descriptor delta1_2 = deltaDescriptor(120L, 100L, 50);
+
+    List<HnswSegment.Descriptor> current =
+      HnswIndexManager.currentSegments(Arrays.asList(base1, delta1_1, delta1_2), START, END);
+    assertEquals(3, current.size());
+    assertEquals(delta1_2, current.get(0));
+    assertEquals(delta1_1, current.get(1));
+    assertEquals(base1, current.get(2));
+
+    HnswSegment.Descriptor base2 = baseDescriptor(200L, 2000);
+    HnswSegment.Descriptor delta2_1 = deltaDescriptor(210L, 200L, 30);
+    current = HnswIndexManager
+      .currentSegments(Arrays.asList(base1, delta1_1, delta1_2, base2, delta2_1), START, END);
+    assertEquals(2, current.size());
+    assertEquals(delta2_1, current.get(0));
+    assertEquals(base2, current.get(1));
+
+    HnswSegment.Descriptor orphanDelta = deltaDescriptor(300L, 999L, 10);
+    current =
+      HnswIndexManager.currentSegments(Arrays.asList(base2, delta2_1, orphanDelta), START, END);
+    assertEquals(2, current.size());
+    assertEquals(delta2_1, current.get(0));
+    assertEquals(base2, current.get(1));
+
+    HnswSegment.Descriptor baseA = baseDescriptor(100L, 100);
+    HnswSegment.Descriptor deltaOther = deltaDescriptor(150L, 50L, 50);
+    current = HnswIndexManager.currentSegments(Arrays.asList(baseA, deltaOther), START, END);
+    assertEquals(1, current.size());
+    assertEquals(baseA, current.get(0));
   }
 
   @Test
@@ -96,23 +149,26 @@ public class HnswIndexManagerTest {
     byte[] midKey = Bytes.toBytes("m");
 
     HnswSegment.Descriptor parentBase = base(parentStart, parentEnd, 50L, 1000);
+    HnswSegment.Descriptor parentDelta = delta(parentStart, parentEnd, 60L, 50L, 50);
 
     List<HnswSegment.Descriptor> d1Current =
-      HnswIndexManager.currentSegments(Arrays.asList(parentBase), parentStart, midKey);
-    assertEquals(1, d1Current.size());
-    assertEquals(parentBase, d1Current.get(0));
+      HnswIndexManager.currentSegments(Arrays.asList(parentBase, parentDelta), parentStart, midKey);
+    assertEquals(2, d1Current.size());
+    assertEquals(parentDelta, d1Current.get(0));
+    assertEquals(parentBase, d1Current.get(1));
 
     HnswSegment.Descriptor d1Base = base(parentStart, midKey, 100L, 500);
 
-    d1Current =
-      HnswIndexManager.currentSegments(Arrays.asList(parentBase, d1Base), parentStart, midKey);
+    d1Current = HnswIndexManager.currentSegments(Arrays.asList(parentBase, parentDelta, d1Base),
+      parentStart, midKey);
     assertEquals(1, d1Current.size());
     assertEquals(d1Base, d1Current.get(0));
 
-    List<HnswSegment.Descriptor> d2Current =
-      HnswIndexManager.currentSegments(Arrays.asList(parentBase, d1Base), midKey, parentEnd);
-    assertEquals(1, d2Current.size());
-    assertEquals(parentBase, d2Current.get(0));
+    List<HnswSegment.Descriptor> d2Current = HnswIndexManager
+      .currentSegments(Arrays.asList(parentBase, parentDelta, d1Base), midKey, parentEnd);
+    assertEquals(2, d2Current.size());
+    assertEquals(parentDelta, d2Current.get(0));
+    assertEquals(parentBase, d2Current.get(1));
   }
 
   @Test
@@ -120,24 +176,74 @@ public class HnswIndexManagerTest {
     HnswSegment.Descriptor base = baseDescriptor(100_000L, 1000);
     assertEquals(100_000L, HnswIndexManager.replayStartTime(Collections.singletonList(base)));
 
-    // The replay start of the region is the oldest replay start of the segments
+    HnswSegment.Descriptor delta1 = deltaDescriptor(150_000L, 100_000L, 50);
+    assertEquals(150_000L, HnswIndexManager.replayStartTime(Arrays.asList(base, delta1)));
+
+    HnswSegment.Descriptor delta2 = deltaDescriptor(200_000L, 100_000L, 50);
+    assertEquals(200_000L, HnswIndexManager.replayStartTime(Arrays.asList(base, delta1, delta2)));
+
     byte[] otherStart = Bytes.toBytes("m");
     byte[] otherEnd = Bytes.toBytes("z");
     HnswSegment.Descriptor base2 = base(otherStart, otherEnd, 80_000L, 1000);
-    assertEquals(80_000L, HnswIndexManager.replayStartTime(Arrays.asList(base, base2)));
+    HnswSegment.Descriptor delta2_1 = delta(otherStart, otherEnd, 180_000L, 80_000L, 50);
+    HnswSegment.Descriptor delta1_3 = deltaDescriptor(250_000L, 100_000L, 50);
 
-    // A batch took its timestamp before the swap of the segment, and applied its changes after the
-    // swap. Thus the replay starts at the timestamp of the batch
+    // The replay start is the oldest replay start of the newest segments of the stacks
+    assertEquals(180_000L,
+      HnswIndexManager.replayStartTime(Arrays.asList(base, delta1, delta1_3, base2, delta2_1)));
+
+    HnswSegment.Descriptor base3 = base(otherStart, otherEnd, 120_000L, 1000);
+    assertEquals(120_000L, HnswIndexManager.replayStartTime(Arrays.asList(base, delta1_3, base3)));
+
+    // A batch took its timestamp before the swap of the newest segment, and applied its changes
+    // after the swap. Thus the newest segment replays from the batch timestamp
     HnswSegment.Descriptor late =
-      new HnswSegment.Descriptor(INDEX, START, 300_000L, END, 50, 120_000L, DEFINITION);
-    assertEquals(120_000L, HnswIndexManager.replayStartTime(Collections.singletonList(late)));
+      new HnswSegment.Descriptor(INDEX, START, 300_000L, END, 50, 100_000L, 120_000L, DEFINITION);
+    assertEquals(120_000L,
+      HnswIndexManager.replayStartTime(Arrays.asList(base, delta1, delta2, late)));
+  }
+
+  @Test
+  public void testSegmentsToRetireBasesAndTheirDeltasRetiredInSamePass() {
+    HnswSegment.Descriptor oldBase = baseDescriptor(100L, 1000);
+    HnswSegment.Descriptor oldDelta1 = deltaDescriptor(110L, 100L, 50);
+    HnswSegment.Descriptor oldDelta2 = deltaDescriptor(120L, 100L, 50);
+    HnswSegment.Descriptor newBase = baseDescriptor(200L, 1100);
+    HnswSegment.Descriptor newDelta = deltaDescriptor(210L, 200L, 10);
+
+    List<HnswSegment.Descriptor> all =
+      Arrays.asList(oldBase, oldDelta1, oldDelta2, newBase, newDelta);
+    List<HnswSegment.Descriptor> toRetire =
+      HnswIndexManager.segmentsToRetire(all, START, END, DEFINITION);
+
+    assertEquals(3, toRetire.size());
+    assertTrue(toRetire.contains(oldBase));
+    assertTrue(toRetire.contains(oldDelta1));
+    assertTrue(toRetire.contains(oldDelta2));
+
+    assertFalse(toRetire.contains(newBase));
+    assertFalse(toRetire.contains(newDelta));
+  }
+
+  @Test
+  public void testSegmentsToRetireOrphanDeltaDeleted() {
+    HnswSegment.Descriptor activeBase = baseDescriptor(200L, 1000);
+    HnswSegment.Descriptor orphanDelta = deltaDescriptor(110L, 100L, 50);
+
+    List<HnswSegment.Descriptor> all = Arrays.asList(activeBase, orphanDelta);
+    List<HnswSegment.Descriptor> toRetire =
+      HnswIndexManager.segmentsToRetire(all, START, END, DEFINITION);
+
+    assertEquals(1, toRetire.size());
+    assertTrue(toRetire.contains(orphanDelta));
+    assertFalse(toRetire.contains(activeBase));
   }
 
   /**
    * A region retires only the segments of its own family, when newer bases cover their part of the
-   * range of the region. The lower daughter of a split holds the parent segment. It retires the
-   * parent segment when its own base lands, independently of the upper daughter. The upper daughter
-   * does not hold the parent segment.
+   * range of the region. The lower daughter of a split holds the parent stack. It retires the
+   * parent base and its deltas when its own base lands, and it does not wait for the upper
+   * daughter. The upper daughter does not hold the parent stack.
    */
   @Test
   public void testSegmentsToRetireIsRegionScoped() {
@@ -145,12 +251,17 @@ public class HnswIndexManagerTest {
     byte[] parentEnd = Bytes.toBytes("z");
     byte[] midKey = Bytes.toBytes("m");
     HnswSegment.Descriptor parentBase = base(parentStart, parentEnd, 50L, 1000);
-    assertTrue(HnswIndexManager
-      .segmentsToRetire(Arrays.asList(parentBase), parentStart, midKey, DEFINITION).isEmpty());
+    HnswSegment.Descriptor parentDelta1 = delta(parentStart, parentEnd, 60L, 50L, 50);
+    HnswSegment.Descriptor parentDelta2 = delta(parentStart, parentEnd, 70L, 50L, 50);
+    assertTrue(
+      HnswIndexManager.segmentsToRetire(Arrays.asList(parentBase, parentDelta1, parentDelta2),
+        parentStart, midKey, DEFINITION).isEmpty());
 
     HnswSegment.Descriptor d1Base = base(parentStart, midKey, 100L, 500);
-    assertEquals(Collections.singletonList(parentBase), HnswIndexManager
-      .segmentsToRetire(Arrays.asList(parentBase, d1Base), parentStart, midKey, DEFINITION));
+    assertEquals(Arrays.asList(parentBase, parentDelta1, parentDelta2),
+      HnswIndexManager.segmentsToRetire(
+        Arrays.asList(parentBase, parentDelta1, parentDelta2, d1Base), parentStart, midKey,
+        DEFINITION));
 
     // A merged region retires both predecessor bases with its own base
     HnswSegment.Descriptor d2Base = base(midKey, parentEnd, 150L, 500);
@@ -177,20 +288,22 @@ public class HnswIndexManagerTest {
   }
 
   /**
-   * The segments of another definition, for example of an index that was dropped and created again
-   * with the same name, are not current. A newer base of the definition retires them. They never
-   * retire a segment of the definition.
+   * The segments of another definition are not current. An example is a segment of an index that a
+   * user dropped and created again with the same name. A newer base of the definition retires them,
+   * with their deltas. They never retire a segment of the definition.
    */
   @Test
   public void testSegmentsOfAnotherDefinition() {
     byte[] other = HnswSegment.definitionDigest("other");
     HnswSegment.Descriptor stale =
-      new HnswSegment.Descriptor(INDEX, START, 50L, END, 10, 50L, other);
+      new HnswSegment.Descriptor(INDEX, START, 50L, END, 10, null, 50L, other);
+    HnswSegment.Descriptor staleDelta =
+      new HnswSegment.Descriptor(INDEX, START, 60L, END, 10, 50L, 60L, other);
     HnswSegment.Descriptor base = baseDescriptor(100L, 10);
     HnswSegment.Descriptor newer =
-      new HnswSegment.Descriptor(INDEX, START, 150L, END, 10, 150L, other);
-    assertEquals(Collections.singletonList(stale),
-      HnswIndexManager.segmentsToRetire(Arrays.asList(stale, base, newer), START, END, DEFINITION));
+      new HnswSegment.Descriptor(INDEX, START, 150L, END, 10, null, 150L, other);
+    assertEquals(Arrays.asList(stale, staleDelta), HnswIndexManager
+      .segmentsToRetire(Arrays.asList(stale, staleDelta, base, newer), START, END, DEFINITION));
   }
 
   /**
@@ -240,7 +353,7 @@ public class HnswIndexManagerTest {
     byte[] payload = HnswSegment.build(vi, new ListRandomAccessVectorValues(vectors, dim), keys);
     try {
       HnswSegment.of(null, baseDescriptor(1, keys.length), new HnswOffheapAllocator(64), "L2",
-        payload);
+        payload, new byte[0][]);
       fail("a segment larger than the off-heap budget must not load");
     } catch (HnswSegment.TooLargeException e) {
       assertFalse(HnswIndexManager.scheduleRetry(e, retries, retry));
@@ -252,13 +365,14 @@ public class HnswIndexManagerTest {
     verifyNoInteractions(retries);
 
     HnswOffheapAllocator busy = new HnswOffheapAllocator(payload.length);
-    HnswSegment held = HnswSegment.of(null, baseDescriptor(1, keys.length), busy, "L2", payload);
+    HnswSegment held =
+      HnswSegment.of(null, baseDescriptor(1, keys.length), busy, "L2", payload, new byte[0][]);
     try {
       // The segment holds its graph until it closes. Thus the budget still counts the graph after
       // the eviction
       held.graph();
       busy.evictAll();
-      HnswSegment.of(null, baseDescriptor(2, keys.length), busy, "L2", payload);
+      HnswSegment.of(null, baseDescriptor(2, keys.length), busy, "L2", payload, new byte[0][]);
       fail("an allocation that the budget cannot fit must be refused");
     } catch (IOException e) {
       assertTrue(HnswIndexManager.scheduleRetry(e, retries, retry));
