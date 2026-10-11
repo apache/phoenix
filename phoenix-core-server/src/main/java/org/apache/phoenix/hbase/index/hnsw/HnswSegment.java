@@ -527,6 +527,36 @@ public final class HnswSegment {
   }
 
   /**
+   * Returns the vector distance that a JVector similarity score gives. The distance has the units
+   * of the Phoenix distance function of the metric: Euclidean distance for L2, and cosine distance
+   * for COSINE. JVector scores EUCLIDEAN as 1 / (1 + d^2), and COSINE as (1 + cosine) / 2.
+   */
+  public static double distance(VectorSimilarityFunction similarity, float score) {
+    switch (similarity) {
+      case EUCLIDEAN:
+        return Math.sqrt(Math.max(0.0, 1.0 / score - 1.0));
+      case COSINE:
+        return 2.0 * (1.0 - score);
+      default:
+        throw new IllegalArgumentException("Unsupported vector similarity " + similarity);
+    }
+  }
+
+  // The score slack of nearestDistance. It is much more than the rounding of the float sums of a
+  // score, and much less than the distance margin of a normal bound
+  static final float SCORE_SLACK = 0x1p-16f;
+
+  /**
+   * Returns a lower estimate of the vector distance that a JVector similarity score gives. JVector
+   * calculates the score in float arithmetic. A score near 1 keeps few bits of a small distance,
+   * and the float sums add rounding. Thus the method uses a score that is nearer to the query by
+   * {@code SCORE_SLACK}. A small distance bound then does not stop a search because of rounding.
+   */
+  public static double nearestDistance(VectorSimilarityFunction similarity, float score) {
+    return distance(similarity, Math.min(1f, score + SCORE_SLACK));
+  }
+
+  /**
    * Builds an HNSW graph from vectors and their row keys, and returns the serialized segment
    * payload. The build sorts the rows by row key, so the graph ordinals follow row key order.
    * @param vi      the vector index metadata

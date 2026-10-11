@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -38,6 +39,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.HnswScanPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,6 +60,7 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -764,6 +767,159 @@ public class VectorIndexCompilerTest extends BaseConnectionlessQueryTest {
   }
 
   /**
+   * An HNSW plan sends the distance bound of a WHERE conjunct to the regions. The conjunct must
+   * compare the ORDER BY distance function, with the same column and query vector, with a constant.
+   * An upper bound in either operand order counts, also inside BETWEEN or a nested AND. The
+   * smallest bound applies, a negative bound becomes 0, and a squared L2 bound becomes an L2
+   * distance. A lower bound, a bound under OR, a non-deterministic bound, another column, another
+   * query vector, a query vector of another type, or another distance function gives no bound. An
+   * ORDER BY on a position in the select list also gets a bound. An index on a vector in a BSON
+   * document gets a bound only from the same column and path. An index expression of another shape,
+   * for example with a condition, gives no bound.
+   */
+  @Test
+  public void testHnswPlanDistanceBound() throws Exception {
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+        .unwrap(PhoenixConnection.class)) {
+      conn.createStatement().execute(
+        "CREATE TABLE T_VEC_RAD (ID VARCHAR NOT NULL PRIMARY KEY, C INTEGER, V VECTOR(FLOAT, 2),"
+          + " W VECTOR(FLOAT, 2))");
+      conn.createStatement().execute(
+        "CREATE VECTOR INDEX I_VEC_RAD ON T_VEC_RAD (V) WITH (algorithm='HNSW', metric='L2')");
+      conn.createStatement().execute("ALTER INDEX I_VEC_RAD ON T_VEC_RAD ACTIVE");
+      Float[] q = { 1f, 0f };
+      Float[] other = { 0f, 1f };
+      String l2 = " ORDER BY L2_DISTANCE(V, ?) LIMIT 10";
+      String squared = " ORDER BY L2_DISTANCE_SQUARED(V, ?) LIMIT 10";
+      assertEquals(0.5f, radius(conn, " WHERE L2_DISTANCE(V, ?) < 0.5" + l2, q, q), 0f);
+      assertEquals(0.5f, radius(conn, " WHERE 0.5 > L2_DISTANCE(V, ?)" + l2, q, q), 0f);
+      assertEquals(0.5f, radius(conn, " WHERE L2_DISTANCE(V, ?) <= ?" + l2, q, 0.5, q), 0f);
+      assertEquals(
+        0.5f, radius(conn,
+          " WHERE C = 1 AND L2_DISTANCE(V, ?) < 0.7 AND L2_DISTANCE(V, ?) < 0.5" + l2, q, q, q),
+        0f);
+      assertEquals(0.5f, radius(conn, " WHERE L2_DISTANCE_SQUARED(V, ?) < 0.25" + squared, q, q),
+        0f);
+      assertEquals(0.5f,
+        radius(conn, " WHERE L2_DISTANCE(V, ?) < 0.5 AND L2_DISTANCE(V, ?) < 0.7" + l2, q, q, q),
+        0f);
+      assertEquals(0.5f,
+        radius(conn, " WHERE C = 1 AND L2_DISTANCE(V, ?) BETWEEN 0 AND 0.5" + l2, q, q), 0f);
+      assertEquals(0.5f,
+        radius(conn, " WHERE (C = 1 AND L2_DISTANCE(V, ?) < 0.5) AND C < 3" + l2, q, q), 0f);
+      assertEquals(0f, radius(conn, " WHERE L2_DISTANCE(V, ?) < -1" + l2, q, q), 0f);
+      assertTrue(Float.isNaN(radius(conn, l2, (Object) q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE(V, ?) > 0.5" + l2, q, q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE(V, ?) < 0.5 OR C = 1" + l2, q, q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE(V, ?) < RAND()" + l2, q, q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE(V, ?) < 0.5" + l2, other, q)));
+      conn.createStatement().execute(
+        "CREATE TABLE T_VEC_RAD_DBL (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(DOUBLE, 2))");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_VEC_RAD_DBL ON T_VEC_RAD_DBL (V)"
+        + " WITH (algorithm='HNSW', metric='L2')");
+      conn.createStatement().execute("ALTER INDEX I_VEC_RAD_DBL ON T_VEC_RAD_DBL ACTIVE");
+      String dbl = "SELECT /*+ INDEX(T_VEC_RAD_DBL I_VEC_RAD_DBL) */ ID FROM T_VEC_RAD_DBL"
+        + " WHERE L2_DISTANCE(V, ?) < 0.5" + l2;
+      Double[] d = { 1.0, 0.0 };
+      // The two query vectors have the same float copy, but different double values
+      Double[] near = { 1.0 + 1e-12, 0.0 };
+      assertEquals(0.5f, sqlRadius(conn, dbl, d, d), 0f);
+      assertTrue(Float.isNaN(sqlRadius(conn, dbl, near, d)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE(W, ?) < 0.5" + l2, q, q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE L2_DISTANCE_SQUARED(V, ?) < 0.25" + l2, q, q)));
+      assertTrue(Float.isNaN(radius(conn, " WHERE C < 0.5" + l2, (Object) q)));
+      assertEquals(0.5f,
+        sqlRadius(conn,
+          "SELECT ID, L2_DISTANCE(V, ?) FROM T_VEC_RAD WHERE L2_DISTANCE(V, ?) < 0.5 ORDER BY 2"
+            + " LIMIT 10",
+          q, q),
+        0f);
+      conn.createStatement().execute("CREATE TABLE T_VEC_RAD_DOC (ID VARCHAR NOT NULL PRIMARY KEY,"
+        + " C INTEGER, K VARCHAR, DOC BSON, DOC2 BSON)");
+      conn.createStatement().execute("CREATE VECTOR INDEX I_VEC_RAD_DOC ON T_VEC_RAD_DOC"
+        + " (BSON_VECTOR_VALUE(DOC, 'v', 2)) WITH (algorithm='HNSW', metric='L2')");
+      conn.createStatement().execute("ALTER INDEX I_VEC_RAD_DOC ON T_VEC_RAD_DOC ACTIVE");
+      String vector = "BSON_VECTOR_VALUE(DOC, 'v', 2)";
+      assertEquals(0.5f, docRadius(conn, "I_VEC_RAD_DOC", vector, vector, q), 0f);
+      assertEquals(0.5f,
+        sqlRadius(conn,
+          "SELECT ID, L2_DISTANCE(" + vector + ", ?) FROM T_VEC_RAD_DOC WHERE L2_DISTANCE(" + vector
+            + ", ?) < 0.5 ORDER BY 2 LIMIT 10",
+          q, q),
+        0f);
+      assertTrue(
+        Float.isNaN(docRadius(conn, "I_VEC_RAD_DOC", vector, "BSON_VECTOR_VALUE(DOC, 'w', 2)", q)));
+      assertTrue(Float
+        .isNaN(docRadius(conn, "I_VEC_RAD_DOC", vector, "BSON_VECTOR_VALUE(DOC2, 'v', 2)", q)));
+      String[][] cases = { { "C > 0", "C <= 0" }, { "C IS NULL", "C IS NOT NULL" },
+        { "K IN ('a', 'b')", "K IN ('c', 'd')" } };
+      for (int i = 0; i < cases.length; i++) {
+        String index = "I_VEC_RAD_CASE" + i;
+        String indexed = caseVector(cases[i][0]);
+        conn.createStatement().execute("CREATE VECTOR INDEX " + index + " ON T_VEC_RAD_DOC ("
+          + indexed + ") WITH (algorithm='HNSW', metric='L2')");
+        conn.createStatement().execute("ALTER INDEX " + index + " ON T_VEC_RAD_DOC ACTIVE");
+        assertTrue(cases[i][0], Float.isNaN(docRadius(conn, index, indexed, indexed, q)));
+        assertTrue(cases[i][1],
+          Float.isNaN(docRadius(conn, index, indexed, caseVector(cases[i][1]), q)));
+      }
+    }
+  }
+
+  // Returns the distance bound of an HNSW query on T_VEC_RAD with the given clauses
+  private static float radius(PhoenixConnection conn, String clauses, Object... binds)
+    throws SQLException {
+    return sqlRadius(conn, "SELECT /*+ INDEX(T_VEC_RAD I_VEC_RAD) */ ID FROM T_VEC_RAD" + clauses,
+      binds);
+  }
+
+  // Returns the distance bound of an HNSW query on T_VEC_RAD_DOC. The ORDER BY ranks by the
+  // distance of the indexed vector. The WHERE clause bounds the distance of the bounded vector
+  private static float docRadius(PhoenixConnection conn, String index, String indexed,
+    String bounded, Float[] q) throws SQLException {
+    return sqlRadius(conn,
+      "SELECT /*+ INDEX(T_VEC_RAD_DOC " + index + ") */ ID FROM T_VEC_RAD_DOC WHERE L2_DISTANCE("
+        + bounded + ", ?) < 0.5 ORDER BY L2_DISTANCE(" + indexed + ", ?) LIMIT 10",
+      q, q);
+  }
+
+  // Returns a vector expression that reads one of two documents, as the condition selects
+  private static String caseVector(String condition) {
+    return "BSON_VECTOR_VALUE(CASE WHEN " + condition + " THEN DOC ELSE DOC2 END, 'v', 2)";
+  }
+
+  // Compiles an HNSW query with the given bind values. Returns the distance bound of the search
+  // attribute of the plan, or NaN if the attribute has no bound
+  private static float sqlRadius(PhoenixConnection conn, String sql, Object... binds)
+    throws SQLException {
+    PhoenixPreparedStatement ps = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+    for (int i = 0; i < binds.length; i++) {
+      if (binds[i] instanceof Float[]) {
+        ps.setArray(i + 1, conn.createArrayOf("FLOAT", (Float[]) binds[i]));
+      } else if (binds[i] instanceof Double[]) {
+        ps.setArray(i + 1, conn.createArrayOf("DOUBLE", (Double[]) binds[i]));
+      } else {
+        ps.setObject(i + 1, binds[i]);
+      }
+    }
+    QueryPlan plan = ps.optimizeQuery();
+    assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
+    byte[] search = plan.getContext().getScan()
+      .getAttribute(BaseScannerRegionObserverConstants.HNSW_SEARCH_QUERY);
+    int length = Bytes.SIZEOF_INT * 4;
+    String explain = String.join("\n", plan.getExplainPlan().getPlanSteps());
+    if (search.length == length) {
+      assertFalse(explain, explain.contains("DISTANCE BOUND"));
+      return Float.NaN;
+    }
+    assertEquals(length + Bytes.SIZEOF_FLOAT, search.length);
+    float radius = Bytes.toFloat(search, length);
+    assertTrue(explain, explain.contains("DISTANCE BOUND " + radius + ")"));
+    return radius;
+  }
+
+  /**
    * Tests the cost of an HNSW plan. Each region scan of the plan reads its own candidates. Thus the
    * cost counts the candidates of each scan, but not more than the rows of the scanned range.
    * Without statistics, the cost is unknown. Thus the cost-based optimizer does not prefer the plan
@@ -780,14 +936,23 @@ public class VectorIndexCompilerTest extends BaseConnectionlessQueryTest {
         + "WITH (algorithm='HNSW', metric='COSINE')");
       // A new HNSW index stays in BUILDING state until IndexTool builds its segments
       conn.createStatement().execute("ALTER INDEX I_VEC_COST ON T_VEC_COST ACTIVE");
-      String query = "SELECT /*+ INDEX(T_VEC_COST I_VEC_COST) */ ID FROM T_VEC_COST "
+      String query = "SELECT /*+ INDEX(T_VEC_COST I_VEC_COST) */ ID FROM T_VEC_COST%s "
         + "ORDER BY COSINE_DISTANCE(V, ?) LIMIT 10";
-      PhoenixPreparedStatement ps =
-        conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-      ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1f, 0f }));
-      QueryPlan plan = ps.optimizeQuery();
-      assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
-      assertTrue(plan.getCost().isUnknown());
+      for (String where : new String[] { "", " WHERE ID IN ('a', 'b')" }) {
+        PhoenixPreparedStatement ps =
+          conn.prepareStatement(String.format(query, where)).unwrap(PhoenixPreparedStatement.class);
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 1f, 0f }));
+        QueryPlan plan = ps.optimizeQuery();
+        assertTrue(plan.getClass().getName(), plan instanceof HnswScanPlan);
+        if (where.isEmpty()) {
+          assertTrue(plan.getCost().isUnknown());
+        } else {
+          // The cost is at most the rows of the scanned range. Two point lookups read two rows,
+          // which is fewer than the candidate count
+          assertEquals(CostUtil.estimateLookupCost(2, plan.getTableRef().getTable()),
+            plan.getCost());
+        }
+      }
     }
   }
 

@@ -213,14 +213,24 @@ public class VectorIndexScanPlan extends ScanPlan {
       return null;
     }
     for (Expression child : expression.getChildren()) {
-      if (
-        child.isStateless() && child.getDataType() != null && child.getDataType().isVectorType()
-      ) {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        if (child.evaluate(null, ptr) && ptr.getLength() > 0) {
-          return CachedCentroids.decode(ptr.get(), ptr.getOffset(), ptr.getLength(),
-            child.getDataType());
-        }
+      float[] vector = constantVector(child);
+      if (vector != null) {
+        return vector;
+      }
+    }
+    return null;
+  }
+
+  /** Returns the value of a constant vector expression, or null if the expression is not one. */
+  static float[] constantVector(Expression expression) {
+    if (
+      expression.isStateless() && expression.getDataType() != null
+        && expression.getDataType().isVectorType()
+    ) {
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      if (expression.evaluate(null, ptr) && ptr.getLength() > 0) {
+        return CachedCentroids.decode(ptr.get(), ptr.getOffset(), ptr.getLength(),
+          expression.getDataType());
       }
     }
     return null;

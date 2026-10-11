@@ -930,7 +930,8 @@ public class QueryCompiler {
             parallelIteratorFactory, groupBy, having, dataPlan)
           : hnswIndex != null
             ? new HnswScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
-              parallelIteratorFactory, allowPageFilter, compiledOffset.getByteOffset(), hnswIndex)
+              parallelIteratorFactory, allowPageFilter, compiledOffset.getByteOffset(), hnswIndex,
+              where)
           : (tableRef.getTable() != null && tableRef.getTable().isVectorIndex()
             && VectorSearchUtil.isVectorSearch(orderBy, limit)
               ? new VectorIndexScanPlan(context, select, tableRef, projector, limit, offset,

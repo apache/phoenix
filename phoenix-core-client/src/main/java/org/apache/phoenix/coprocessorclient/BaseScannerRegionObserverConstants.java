@@ -208,7 +208,7 @@ public class BaseScannerRegionObserverConstants {
   public static final String HNSW_PURGE = "_HnswPurge";
   /** Scan attribute that names the HNSW index of a nearest neighbor search. */
   public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
-  /** Scan attribute that holds the candidate count and the query vector of an HNSW search. */
+  /** Scan attribute that holds the candidate count, the target row count and the query vector. */
   public static final String HNSW_SEARCH_QUERY = "_HnswSearchQuery";
 
   /**

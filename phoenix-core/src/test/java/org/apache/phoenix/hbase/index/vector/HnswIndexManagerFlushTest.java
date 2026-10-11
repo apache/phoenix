@@ -29,7 +29,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -80,7 +79,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mob.MobConstants;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -478,7 +476,8 @@ public class HnswIndexManagerFlushTest {
       try {
         List<HnswSegment.Descriptor> segments = segments();
         return segments.size() == 1 && !segments.get(0).isDelta() && segments.get(0).time >= since
-          && manager.count() >= segments.get(0).count;
+          && manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW)
+              >= segments.get(0).count;
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -511,9 +510,13 @@ public class HnswIndexManagerFlushTest {
     }
 
     // Returns the keys of the k rows nearest to the vector. A search uses its candidate count as
-    // its beam width, so this helper asks for at least 50 candidates
+    // its beam width, so this helper asks for up to 50 candidates. It asks for fewer candidates
+    // than the indexed rows, because a search for all rows returns them without rank order
     List<byte[]> nearest(HnswIndexManager manager, float[] v, int k) throws IOException {
-      List<byte[]> found = manager.search(v, Math.max(k, 50));
+      int candidates = Math.max(k,
+        Math.min(50, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW) - 1));
+      List<byte[]> found =
+        manager.search(v, candidates, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
       return found.subList(0, Math.min(k, found.size()));
     }
 
@@ -831,6 +834,80 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
+   * A search that overlaps a swap of the mutable graph must find a segment row that changes after
+   * the swap. The new state shares the segment masks, so the change masks the row in the segment.
+   * The mutable graph that the search started with does not hold the row, so the search must run
+   * again on the new state.
+   */
+  @Test
+  public void testRowChangedDuringSwapIsFound() throws Exception {
+    rowChangedDuringSwap("swap", true);
+  }
+
+  /**
+   * The same check with the exact search off, so that the searches of the graph of the flush and of
+   * the mutable graph use the graph links.
+   */
+  @Test
+  public void testRowChangedDuringSwapIsFoundByBeamSearch() throws Exception {
+    rowChangedDuringSwap("swapbeam", false);
+  }
+
+  // If exact is false, the manager turns the exact search of the in-memory graphs off
+  private void rowChangedDuringSwap(String name, boolean exact) throws Exception {
+    // With the first topK, the test checks a graph search. With the second topK, it checks the
+    // collection of all rows, because the region holds no more than topK rows
+    for (int topK : new int[] { 5, 100 }) {
+      Harness h = new Harness(name + topK);
+      if (!exact) {
+        h.conf.setInt(QueryServices.HNSW_MUTABLE_EXACT_MAX_ROWS_ATTRIB, 0);
+      }
+      h.load(30, new Random(9));
+      long since = EnvironmentEdgeManager.currentTimeMillis();
+      HnswIndexManager manager = h.open(true);
+      h.awaitBase(manager, since);
+      // Make a buffered change, so that the flush below swaps the mutable graph
+      h.upsert(manager, "m", point(-100, 0));
+
+      CountDownLatch blocked = new CountDownLatch(1);
+      CountDownLatch resume = new CountDownLatch(1);
+      AtomicReference<byte[]> first = new AtomicReference<>();
+      // This key filter stops the search at the first segment row that it tests
+      Predicate<byte[]> keyFilter = key -> {
+        if (first.compareAndSet(null, key)) {
+          blocked.countDown();
+          try {
+            resume.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+        return true;
+      };
+      float[] query = point(100, 0);
+      ExecutorService pool = Executors.newSingleThreadExecutor();
+      try {
+        Future<List<byte[]>> search = pool.submit(() -> manager.search(query, topK,
+          HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, keyFilter));
+        assertTrue(blocked.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        // Swap the mutable graph, then change a segment row that the search has not tested yet
+        String target = Bytes.equals(first.get(), h.key("r000")) ? "r001" : "r000";
+        manager.flush();
+        h.upsert(manager, target, query);
+        resume.countDown();
+        boolean found = false;
+        for (byte[] key : search.get(TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+          found |= Bytes.equals(key, h.key(target));
+        }
+        assertTrue("topK=" + topK + ": the search must find " + target, found);
+      } finally {
+        resume.countDown();
+        pool.shutdownNow();
+      }
+    }
+  }
+
+  /**
    * The cutover masks the entry of the new segment for a row that changes after the swap and before
    * the cutover. The new segment holds the version of the row from before the change. For a delta,
    * this is the buffered version. For a full rebuild, this is the scanned version. The mutable
@@ -891,14 +968,15 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * Returns true if a search near the vector of the given row finds the row first. The search asks
-   * for more rows than the graph holds. Thus it cannot fill its results, and visits each node that
-   * it can reach. It misses the row only if the row is outside its range, or if no node links to
-   * the row.
+   * Returns true if a search near the vector, with a key filter that accepts only the given row,
+   * finds the row. The region holds more rows than the candidate count, so the search uses the
+   * graph. The search cannot fill its results, so it visits each node that it can reach. Thus it
+   * misses the row only if the row is outside its range or no node links to the row.
    */
   private static boolean reaches(HnswIndexManager manager, byte[] row, float[] v)
     throws IOException {
-    List<byte[]> found = manager.search(v, 100);
+    List<byte[]> found = manager.search(v, 10, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+      key -> Bytes.equals(key, row));
     return !found.isEmpty() && Bytes.equals(row, found.get(0));
   }
 
@@ -969,9 +1047,11 @@ public class HnswIndexManagerFlushTest {
       RegionInfo info = lower.region.getRegionInfo();
       assertTrue(opened[0].covered());
       // The lower daughter has an empty mutable graph, so the searches read only the parent segment
-      assertEquals(lower.rows.size(), opened[0].count());
+      assertEquals(lower.rows.size(),
+        opened[0].count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
       // A search for at least as many rows as the range holds returns all rows of the range
-      List<byte[]> all = opened[0].search(point(0, 0), 50);
+      List<byte[]> all = opened[0].search(point(0, 0), 50, HConstants.EMPTY_START_ROW,
+        HConstants.EMPTY_END_ROW, null);
       assertEquals(lower.rows.size(), all.size());
       for (byte[] key : all) {
         assertTrue(Bytes.toStringBinary(key) + " is outside " + info, info.containsRow(key));
@@ -987,8 +1067,10 @@ public class HnswIndexManagerFlushTest {
       }
       // The upper daughter has no segment of the parent
       assertFalse(opened[1].covered());
-      assertEquals(0, opened[1].count());
-      assertTrue(opened[1].search(point(0, 0), 50).isEmpty());
+      assertEquals(0, opened[1].count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
+      assertTrue(opened[1]
+        .search(point(0, 0), 50, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null)
+        .isEmpty());
     } finally {
       release.countDown();
     }
@@ -1016,7 +1098,8 @@ public class HnswIndexManagerFlushTest {
     byte[] expired = h.key("r005");
     float[] old = h.rows.remove(expired);
     manager.onMutation(null, new Put(expired).addColumn(FAMILY, X, Bytes.toBytes(1)), null);
-    List<byte[]> found = manager.search(old, 100);
+    List<byte[]> found =
+      manager.search(old, 100, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
     assertEquals(29, found.size());
     for (byte[] key : found) {
       assertFalse(Bytes.equals(expired, key));
@@ -1061,7 +1144,8 @@ public class HnswIndexManagerFlushTest {
       float[] probe =
         HnswMutableGraphTest.twin((k, v) -> h.upsert(manager, k, v), k -> h.delete(manager, k));
       boolean found = false;
-      for (byte[] key : manager.search(probe, 10)) {
+      for (byte[] key : manager.search(probe, 10, HConstants.EMPTY_START_ROW,
+        HConstants.EMPTY_END_ROW, null)) {
         found |= Bytes.equals(key, h.key("twin"));
       }
       assertEquals("exact=" + exact, exact, found);
@@ -1239,8 +1323,9 @@ public class HnswIndexManagerFlushTest {
       manager = h.open(true);
       h.rows.putAll(first.rows);
       assertTrue(manager.covered());
-      assertEquals(base.count, manager.count());
-      List<byte[]> found = manager.search(point(0, 0), 50);
+      assertEquals(base.count, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
+      List<byte[]> found =
+        manager.search(point(0, 0), 50, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
       assertFalse(found.isEmpty());
       for (byte[] key : found) {
         assertTrue(Bytes.toStringBinary(key), first.rows.containsKey(key));
@@ -1480,7 +1565,7 @@ public class HnswIndexManagerFlushTest {
         assertTrue(e.toString(), e.getCause() instanceof HnswSegment.NotFoundException);
       }
       assertFalse(manager.covered());
-      assertEquals(0, manager.count());
+      assertEquals(0, manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
     } finally {
       release.countDown();
     }
@@ -2074,10 +2159,12 @@ public class HnswIndexManagerFlushTest {
   /**
    * The coverage of a search comes from the state that it searches. A merged region searches the
    * bases of its two predecessors. A search finds the payload of the newer base lost, and leaves
-   * the base out, so the region is not covered. Another search started on the covered state, and
-   * reads the closed base later. It then runs again on the new state. That state is not covered, so
-   * the search gives no candidates, and its scan reads the range of the region without candidate
-   * restriction. Candidates from the new state would leave out all the rows of the lost base.
+   * the base out, so the region is not covered. Another candidate search starts on the covered
+   * state, and reads the closed base later. It then runs again on the new state. That state is not
+   * covered, so the search gives no candidates. Its scan then reads the range of the region without
+   * candidate restriction. Candidates from the new state would leave out all the rows of the lost
+   * base. The searches ask for fewer candidates than the region holds, so they search the graphs
+   * and read the payloads.
    */
   @Test
   public void testSearchOfStateWithoutCoverageGivesNoCandidates() throws Exception {
@@ -2102,19 +2189,21 @@ public class HnswIndexManagerFlushTest {
 
     Harness merged = new Harness(start, end, 2);
     merged.index = lower.index;
-    // The search that the test holds waits in its first call for the region info. That call comes
-    // when the search reads the older base, before it reads the newer base
-    RegionInfo info = merged.region.getRegionInfo();
-    AtomicReference<Thread> held = new AtomicReference<>();
+    // The search that the test holds waits at the first key that its key filter tests. The search
+    // tests that key when it reads the older base, before it reads the newer base
     CountDownLatch entered = new CountDownLatch(1);
     CountDownLatch resume = new CountDownLatch(1);
-    doAnswer(invocation -> {
-      if (Thread.currentThread() == held.get() && entered.getCount() > 0) {
+    Predicate<byte[]> hold = key -> {
+      if (entered.getCount() > 0) {
         entered.countDown();
-        resume.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        try {
+          resume.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
       }
-      return info;
-    }).when(merged.region).getRegionInfo();
+      return true;
+    };
     // The rebuild of the merged region waits, so the region keeps the bases of its predecessors
     CountDownLatch release = new CountDownLatch(1);
     putHook = put -> {
@@ -2132,18 +2221,17 @@ public class HnswIndexManagerFlushTest {
       merged.rows.putAll(lower.rows);
       merged.rows.putAll(upper.rows);
       assertTrue(manager.covered());
-      assertEquals(merged.rows.size(), manager.count());
+      assertEquals(merged.rows.size(),
+        manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
       CELLS.put(lost.anchor, HnswSegment.qualifier(lost.identity, HnswSegment.PAYLOAD_TAG),
         lost.time, new byte[0]);
       HnswOffheapAllocator.get(merged.env.getConfiguration()).evictAll();
       float[] query = upper.rows.get(upper.key("z00"));
-      Future<Filter> candidates = executor.submit(() -> {
-        held.set(Thread.currentThread());
-        return HnswCandidateProbe.candidateFilter(merged.env, manager, new Scan(), query, 50);
-      });
+      Future<HnswIndexManager.Candidates> candidates = executor.submit(() -> manager
+        .candidates(query, 10, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, hold));
       assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
       try {
-        manager.search(query, 50);
+        manager.search(query, 10, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, null);
         fail("a search of a segment without its payload must fail");
       } catch (IOException e) {
         assertTrue(e.toString(), e.getCause() instanceof DoNotRetryIOException);
@@ -2252,7 +2340,7 @@ public class HnswIndexManagerFlushTest {
     try {
       second = h.open(true);
       assertFalse(second.covered());
-      assertEquals(0, second.count());
+      assertEquals(0, second.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
     } finally {
       release.countDown();
     }

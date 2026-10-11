@@ -94,7 +94,7 @@ public class HnswMutableGraphTest {
   private static ImmutableBytesPtr nearest(HnswIndexManager.MutableGraph graph, float[] v,
     int exactMaxRows) {
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(v), 10, scores, null, exactMaxRows);
+    graph.search(query(v), 10, scores, null, k -> true, exactMaxRows);
     return best(scores);
   }
 
@@ -346,7 +346,7 @@ public class HnswMutableGraphTest {
   static Set<ImmutableBytesPtr> search(HnswIndexManager.MutableGraph graph, float[] v,
     int exactMaxRows) {
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(v), 10, scores, null, exactMaxRows);
+    graph.search(query(v), 10, scores, null, k -> true, exactMaxRows);
     return scores.keySet();
   }
 
@@ -392,7 +392,7 @@ public class HnswMutableGraphTest {
     int exactMaxRows = QueryServicesOptions.DEFAULT_HNSW_MUTABLE_EXACT_MAX_ROWS;
     assertTrue(graph.live().size() <= exactMaxRows);
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(probe), 10, scores, null, exactMaxRows);
+    graph.search(query(probe), 10, scores, null, k -> true, exactMaxRows);
     assertEquals(key("twin"), best(scores));
     // The result is the true top 10 of the live rows
     List<Map.Entry<ImmutableBytesPtr, float[]>> ranked = new ArrayList<>(graph.live().entrySet());
@@ -406,7 +406,7 @@ public class HnswMutableGraphTest {
     // The beam miss depends on how JVector builds the graph. Thus the test only assumes it
     for (int topK : new int[] { 10, 64, 100 }) {
       scores.clear();
-      graph.search(query(probe), topK, scores, null, 0);
+      graph.search(query(probe), topK, scores, null, k -> true, 0);
       assumeFalse("beam with " + topK + " candidates", scores.containsKey(key("twin")));
     }
   }
@@ -442,7 +442,7 @@ public class HnswMutableGraphTest {
     graph.upsert(key("gone"), point(0.5f));
     graph.delete(key("gone"));
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(point(0)), 10, scores, null, 1000);
+    graph.search(query(point(0)), 10, scores, null, k -> true, 1000);
     assertFalse(scores.containsKey(key("gone")));
     assertEquals(key("moved"), best(scores));
     float current = HnswSegment.similarityFunction("L2").compare(query(point(0)), query(point(50)));
@@ -451,8 +451,8 @@ public class HnswMutableGraphTest {
   }
 
   /**
-   * The exact search returns only the keys that are not excluded. It returns the nearest of these
-   * keys.
+   * The exact search returns only the keys that pass the accept filter and that are not excluded.
+   * It returns the nearest of these keys.
    */
   @Test
   public void testExactSearchFilters() {
@@ -464,11 +464,19 @@ public class HnswMutableGraphTest {
     excluded.add(key("ka0"));
     excluded.add(key("ka3"));
     Map<ImmutableBytesPtr, Float> scores = new HashMap<>();
-    graph.search(query(point(0)), 3, scores, excluded, 1000);
+    graph.search(query(point(0)), 3, scores, excluded, k -> true, 1000);
     Set<ImmutableBytesPtr> expected = new HashSet<>();
     expected.add(key("kb1"));
     expected.add(key("kc2"));
     expected.add(key("kb4"));
+    assertEquals(expected, scores.keySet());
+
+    scores.clear();
+    graph.search(query(point(0)), 3, scores, excluded, k -> k[1] != 'b', 1000);
+    expected.clear();
+    expected.add(key("kc2"));
+    expected.add(key("kc5"));
+    expected.add(key("ka6"));
     assertEquals(expected, scores.keySet());
   }
 

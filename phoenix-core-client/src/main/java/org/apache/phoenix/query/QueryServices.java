@@ -210,7 +210,8 @@ public interface QueryServices extends SQLCloseable {
   // example a row that repeats the vector of a deleted row. The exact search always finds such a
   // row. Its cost grows with the number of live rows. At the default size and 768 dimensions, the
   // exact search costs about the same as a search that uses the links. Below that size, it costs
-  // less. A value of 0 or less turns the exact search off
+  // less. A key filter adds a test of each live row to the exact search. A value of 0 or less turns
+  // the exact search off
   public static final String HNSW_MUTABLE_EXACT_MAX_ROWS_ATTRIB =
     "phoenix.vector.hnsw.mutable.exact.max.rows";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
