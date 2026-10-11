@@ -188,7 +188,16 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
   private static synchronized HnswSegment.Descriptor descriptor(String indexKey, int count) {
     long t = ++time;
     return new HnswSegment.Descriptor(Bytes.toBytes(indexKey), region.getRegionInfo().getStartKey(),
-      t, region.getRegionInfo().getEndKey(), count, t, DEFINITION);
+      t, region.getRegionInfo().getEndKey(), count, null, t, DEFINITION);
+  }
+
+  // Returns the descriptor of a new delta segment of an index on the given base. The delta covers
+  // the range of the region
+  private static synchronized HnswSegment.Descriptor delta(String indexKey, int count,
+    long baseTime) {
+    long t = ++time;
+    return new HnswSegment.Descriptor(Bytes.toBytes(indexKey), region.getRegionInfo().getStartKey(),
+      t, region.getRegionInfo().getEndKey(), count, baseTime, t, DEFINITION);
   }
 
   private static HnswSegment.Descriptor store(PTable.VectorIndex vi, String indexKey)
@@ -197,7 +206,7 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
       vectors.stream().map(VTS::createFloatVector).collect(Collectors.toList());
     byte[] payload = HnswSegment.build(vi, new ListRandomAccessVectorValues(jv, DIM), keys);
     HnswSegment.Descriptor d = descriptor(indexKey, COUNT);
-    store.write(d, payload);
+    store.write(d, payload, new byte[0][]);
     return d;
   }
 
@@ -233,7 +242,13 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
 
   // The payload cell of a segment as stored, a MOB reference after the V# flush
   private static Cell storedPayload(HnswSegment.Descriptor d) throws IOException {
-    byte[] qualifier = HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG);
+    return stored(d, HnswSegment.PAYLOAD_TAG);
+  }
+
+  // Returns the stored cell of a segment with the given tag. After the V# flush, a large cell is a
+  // MOB reference
+  private static Cell stored(HnswSegment.Descriptor d, byte tag) throws IOException {
+    byte[] qualifier = HnswSegment.qualifier(d.identity, tag);
     Scan raw =
       new Scan().withStartRow(d.anchor).withStopRow(d.anchor, true).addColumn(FAMILY, qualifier);
     raw.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
@@ -245,6 +260,14 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
   private static Path mobFile(Cell reference) {
     return new Path(MobUtils.getMobFamilyPath(getUtility().getConfiguration(), table,
       QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY), MobUtils.getMobFileName(reference));
+  }
+
+  // Writes a base segment of another index, so that V# flushes the deltas of the test. A base write
+  // waits until the V# memstore is empty. A delta write only asks for the V# flush. HBase does not
+  // do the requested flush while another flush of the region is queued or runs
+  private static void flushDeltas() throws IOException {
+    store.write(descriptor("seg-flush", 0), null, new byte[0][]);
+    assertEquals(0, region.getStore(FAMILY).getFlushableSize().getDataSize());
   }
 
   // Returns true if the store lists the segment with all parts of its descriptor. The writer of the
@@ -358,7 +381,7 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     byte[] payload =
       HnswSegment.build(index("PQ", 8), new ListRandomAccessVectorValues(subset, DIM), subKeys);
     HnswSegment.Descriptor d = descriptor("seg-pq-small", count);
-    store.write(d, payload);
+    store.write(d, payload, new byte[0][]);
     HnswSegment segment = open(d, new HnswOffheapAllocator(Long.MAX_VALUE));
     for (int i = 0; i < count; i++) {
       assertArrayEquals(subKeys[i],
@@ -373,7 +396,7 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
   @Test
   public void testCorruptPayloadRejected() throws Exception {
     HnswSegment.Descriptor d = descriptor("seg-corrupt", 1);
-    store.write(d, Bytes.toBytes("not a segment"));
+    store.write(d, Bytes.toBytes("not a segment"), new byte[0][]);
     try {
       open(d, new HnswOffheapAllocator(1 << 20));
       fail("expected IOException");
@@ -407,7 +430,7 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     byte[] payload = HnswSegment.build(vi, new ListRandomAccessVectorValues(large, dim), largeKeys);
     assertTrue(payload.length + " bytes", payload.length > 10L * 1024 * 1024);
     HnswSegment.Descriptor d = descriptor("seg-large", count);
-    store.write(d, payload);
+    store.write(d, payload, new byte[0][]);
     assertEquals(0, region.getStore(FAMILY).getFlushableSize().getDataSize());
     assertEquals(payload.length, MobUtils.getMobValueLength(storedPayload(d)));
     Cell read = store.readPayload(d);
@@ -415,8 +438,8 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
       read.getValueLength()));
     HnswSegment segment = open(d, new HnswOffheapAllocator(Long.MAX_VALUE));
     assertEquals(count, segment.size());
-    HnswSegment expected =
-      HnswSegment.of(null, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE", payload);
+    HnswSegment expected = HnswSegment.of(null, d, new HnswOffheapAllocator(Long.MAX_VALUE),
+      "COSINE", payload, new byte[0][]);
     for (int i = 0; i < count; i += 1000) {
       int[] nodes = nodes(segment.search(large.get(i), TOP_K, 100, Bits.ALL));
       assertEquals(TOP_K, nodes.length);
@@ -437,10 +460,10 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     HnswSegment.Descriptor d1 = descriptor("seg-wal", 0);
     // A segment of a key range in the region, with a different anchor row
     HnswSegment.Descriptor d2 = new HnswSegment.Descriptor(d1.indexKey, Bytes.toBytes("m"),
-      d1.time + 1, Bytes.toBytes("t"), 0, d1.time + 1, DEFINITION);
+      d1.time + 1, Bytes.toBytes("t"), 0, null, d1.time + 1, DEFINITION);
     assertFalse(Bytes.equals(d1.anchor, d2.anchor));
-    store.write(d1, null);
-    store.write(d2, null);
+    store.write(d1, null, new byte[0][]);
+    store.write(d2, null, new byte[0][]);
     assertEquals(Arrays.asList(Collections.singletonList(mutation("Put SKIP_WAL", d1.anchor)),
       Collections.singletonList(mutation("Put SKIP_WAL", d2.anchor))), Recorder.BATCHES);
     assertTrue(listed(store, d1));
@@ -453,10 +476,11 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
       mutation("Delete SKIP_WAL", d2.anchor))), Recorder.BATCHES);
     assertTrue(store.list(d1.indexKey).isEmpty());
 
-    HnswSegment.Descriptor d3 = descriptor("seg-purge", 1);
+    // A delta with a payload and tombstones has a cell for each tag
+    HnswSegment.Descriptor d3 = delta("seg-purge", 1, d1.time);
     HnswSegment.Descriptor d4 = descriptor("seg-purge2", 1);
-    store.write(d3, Bytes.toBytes("payload"));
-    store.write(d4, Bytes.toBytes("payload"));
+    store.write(d3, Bytes.toBytes("payload"), new byte[][] { Bytes.toBytes("deleted") });
+    store.write(d4, Bytes.toBytes("payload"), new byte[0][]);
     Recorder.BATCHES.clear();
     assertEquals(HnswSegment.TAGS.length, store.purge(d3.indexKey));
     assertEquals(Collections.singletonList(
@@ -480,12 +504,14 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     long ahead = EnvironmentEdgeManager.currentTime() + TimeUnit.HOURS.toMillis(1);
     byte[] start = region.getRegionInfo().getStartKey();
     byte[] end = region.getRegionInfo().getEndKey();
+    // Deltas with tombstones, so that the deletes cover the cells of every tag
+    byte[][] tombstones = { Bytes.toBytes("deleted") };
     HnswSegment.Descriptor retired = new HnswSegment.Descriptor(Bytes.toBytes("seg-clock"), start,
-      ahead, end, 0, ahead, DEFINITION);
+      ahead, end, 0, ahead - 1, ahead, DEFINITION);
     HnswSegment.Descriptor purged = new HnswSegment.Descriptor(Bytes.toBytes("seg-clock-purge"),
-      start, ahead, end, 1, ahead, DEFINITION);
-    store.write(retired, null);
-    store.write(purged, Bytes.toBytes("payload"));
+      start, ahead, end, 1, ahead - 1, ahead, DEFINITION);
+    store.write(retired, null, tombstones);
+    store.write(purged, Bytes.toBytes("payload"), tombstones);
     assertEquals(HnswSegment.TAGS.length - 1, cells(retired.indexKey).size());
     assertEquals(HnswSegment.TAGS.length, cells(purged.indexKey).size());
     for (HnswSegment.Descriptor d : Arrays.asList(retired, purged)) {
@@ -513,14 +539,16 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * A listing returns no payload cell. Until the V# flush after a segment write, the payload is a
-   * plain cell in the memstore with the full value. MOB_SCAN_RAW has no effect on this cell. The
-   * server filter removes it from the listing scan, so no payload goes to the client or to the
-   * listing.
+   * A listing returns no payload cell and no tombstones cell. Until the V# flush after a segment
+   * write, these are plain cells in the memstore with the full values. MOB_SCAN_RAW has no effect
+   * on these cells. The server filter removes them from the listing scan, so no payload and no
+   * tombstones go to the client or to the listing.
    */
   @Test
   public void testListingSkipsPayloadInMemstore() throws Exception {
-    HnswSegment.Descriptor d = descriptor("seg-memstore", 1);
+    // A flush that an earlier delta write asked for must not flush the cells of this test
+    flushDeltas();
+    HnswSegment.Descriptor d = delta("seg-memstore", 1, time);
     // The cells of a segment write, without the V# flush that follows the write
     Put put = new Put(d.anchor, d.time)
       .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), d.endKey)
@@ -532,11 +560,15 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
         d.definition)
       .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG),
         region.getRegionInfo().getEncodedNameAsBytes())
+      .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG),
+        Bytes.toBytes(d.baseTime))
       .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG),
+        new byte[1 << 16])
+      .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG),
         new byte[1 << 16]);
     put.setDurability(Durability.SKIP_WAL);
     region.put(put);
-    assertTrue(region.getStore(FAMILY).getFlushableSize().getDataSize() > 1 << 16);
+    assertTrue(region.getStore(FAMILY).getFlushableSize().getDataSize() > 2 << 16);
 
     List<Cell> returned = new ArrayList<>();
     try (Table t = connection.getTable(table)) {
@@ -561,11 +593,12 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
       for (HnswSegmentStore s : Arrays.asList(server, client)) {
         returned.clear();
         assertTrue(listed(s, d));
-        assertEquals(s.toString(), HnswSegment.TAGS.length - 1, returned.size());
+        assertEquals(s.toString(), HnswSegment.TAGS.length - 2, returned.size());
         for (Cell cell : returned) {
+          byte tag =
+            cell.getQualifierArray()[cell.getQualifierOffset() + cell.getQualifierLength() - 1];
           assertFalse(s.toString(),
-            cell.getQualifierArray()[cell.getQualifierOffset() + cell.getQualifierLength() - 1]
-                == HnswSegment.PAYLOAD_TAG);
+            tag == HnswSegment.PAYLOAD_TAG || tag == HnswSegment.TOMBSTONES_TAG);
         }
       }
     }
@@ -610,9 +643,9 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
   @Test
   public void testLostPayload() throws Exception {
     HnswSegment.Descriptor missing = descriptor("seg-missing", COUNT);
-    store.write(missing, null);
+    store.write(missing, null, new byte[0][]);
     HnswSegment.Descriptor empty = descriptor("seg-empty", COUNT);
-    store.write(empty, new byte[0]);
+    store.write(empty, new byte[0], new byte[0][]);
     assertTrue(listed(store, missing));
     try {
       HnswSegment.open(store, missing, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
@@ -621,6 +654,123 @@ public class HnswSegmentIT extends ParallelStatsDisabledIT {
     }
     assertTrue(listed(store, empty));
     assertCorrupt(store, empty);
+  }
+
+  /**
+   * A delta segment keeps its entries, its tombstones and its base time through a write and a load.
+   * Both stores list the base and the delta, tell them apart by the base time, and read the
+   * tombstones of the delta.
+   */
+  @Test
+  public void testDeltaSegmentRoundTripAndTombstones() throws Exception {
+    HnswSegment.Descriptor base = store(index("NONE", null), "seg-delta");
+    List<VectorFloat<?>> jv =
+      vectors.stream().map(VTS::createFloatVector).collect(Collectors.toList());
+    int deltaCount = 10;
+    List<VectorFloat<?>> deltaVectors = new ArrayList<>();
+    byte[][] deltaKeys = new byte[deltaCount][];
+    for (int i = 0; i < deltaCount; i++) {
+      deltaVectors.add(jv.get(i));
+      deltaKeys[i] = Bytes.toBytes("delta-row-" + i);
+    }
+    byte[] deltaPayload = HnswSegment.build(index("NONE", null),
+      new ListRandomAccessVectorValues(deltaVectors, DIM), deltaKeys);
+    byte[][] tombstones = new byte[][] { Bytes.toBytes("deleted-row-1"),
+      Bytes.toBytes("deleted-row-2"), Bytes.toBytes("deleted-row-3") };
+    HnswSegment.Descriptor delta = delta("seg-delta", deltaCount, base.time);
+    store.write(delta, deltaPayload, tombstones);
+    flushDeltas();
+
+    try (Table t = connection.getTable(table)) {
+      for (HnswSegmentStore s : Arrays.asList(store, new HnswSegmentStore.TableStore(t))) {
+        List<HnswSegment.Descriptor> listed = s.list(delta.indexKey);
+        assertEquals(s.toString(), 2, listed.size());
+        for (HnswSegment.Descriptor d : listed) {
+          HnswSegmentTest.assertDescriptor(d.isDelta() ? delta : base, d);
+          assertArrayEquals(region.getRegionInfo().getEncodedNameAsBytes(), d.writer);
+        }
+        HnswSegment deltaSegment =
+          HnswSegment.open(s, delta, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+        assertEquals(deltaCount, deltaSegment.size());
+        byte[][] read = deltaSegment.getTombstones();
+        assertEquals(3, read.length);
+        for (int i = 0; i < read.length; i++) {
+          assertArrayEquals(tombstones[i], read[i]);
+        }
+        SearchResult result = deltaSegment.search(deltaVectors.get(0), 1, 16, Bits.ALL);
+        assertEquals(1, result.getNodes().length);
+        assertArrayEquals(deltaKeys[0], deltaSegment.getKey(result.getNodes()[0].node));
+        deltaSegment.close();
+        HnswSegment baseSegment =
+          HnswSegment.open(s, base, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+        assertEquals(0, baseSegment.getTombstones().length);
+        baseSegment.close();
+      }
+    }
+  }
+
+  /**
+   * A delta segment can hold only tombstones. It has no payload, and a search of it returns no
+   * rows. Many tombstones are larger than the MOB threshold, so they go to a MOB file, as a payload
+   * does. The listing never reads them. If the MOB file of the tombstones is lost, the tombstones
+   * read as an empty value. The open of the delta then fails as for a corrupt segment, not as for a
+   * retired segment.
+   */
+  @Test
+  public void testDeleteOnlyDeltaSegment() throws Exception {
+    HnswSegment.Descriptor small = delta("seg-delonly", 0, time);
+    byte[][] tombstones = new byte[][] { Bytes.toBytes("tomb-a"), Bytes.toBytes("tomb-b") };
+    store.write(small, null, tombstones);
+    assertTrue(listed(store, small));
+    assertTrue(store.list(small.indexKey).get(0).isDelta());
+    HnswSegment segment =
+      HnswSegment.open(store, small, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+    assertEquals(0, segment.size());
+    assertEquals(2, segment.getTombstones().length);
+    assertArrayEquals(tombstones[0], segment.getTombstones()[0]);
+    assertArrayEquals(tombstones[1], segment.getTombstones()[1]);
+    assertEquals(0,
+      segment.search(VTS.createFloatVector(new float[DIM]), 5, 16, Bits.ALL).getNodes().length);
+    segment.close();
+    try {
+      store.readPayload(small);
+      fail("a delete-only delta has no payload");
+    } catch (HnswSegment.NotFoundException expected) {
+    }
+
+    HnswSegment.Descriptor large = delta("seg-delonly-large", 0, time);
+    byte[][] many = new byte[500][];
+    for (int i = 0; i < many.length; i++) {
+      many[i] = Bytes.toBytes(String.format("deleted-row-%05d", i));
+    }
+    store.write(large, null, many);
+    flushDeltas();
+    Cell reference = stored(large, HnswSegment.TOMBSTONES_TAG);
+    assertTrue("tombstones should be a MOB reference", MobUtils.hasValidMobRefCellValue(reference));
+    try (Table t = connection.getTable(table)) {
+      HnswSegmentStore client = new HnswSegmentStore.TableStore(t);
+      for (HnswSegmentStore s : Arrays.asList(store, client)) {
+        assertTrue(listed(s, large));
+        HnswSegment read =
+          HnswSegment.open(s, large, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
+        assertEquals(many.length, read.getTombstones().length);
+        assertArrayEquals(many[many.length - 1], read.getTombstones()[many.length - 1]);
+        read.close();
+      }
+
+      Path mob = mobFile(reference);
+      assertTrue(mob.getFileSystem(getUtility().getConfiguration()).delete(mob, false));
+      for (JVMClusterUtil.RegionServerThread rs : getUtility().getHBaseCluster()
+        .getLiveRegionServerThreads()) {
+        rs.getRegionServer().getMobFileCache()
+          .ifPresent(c -> c.evictFile(MobUtils.getMobFileName(reference)));
+      }
+      for (HnswSegmentStore s : Arrays.asList(store, client)) {
+        assertTrue(listed(s, large));
+        assertEquals(s.toString(), 0, s.readTombstones(large).getValueLength());
+        assertCorrupt(s, large);
+      }
+    }
   }
 
   // Asserts that the open of a segment fails as for a corrupt segment, and not as for a retired one
