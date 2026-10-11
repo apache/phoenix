@@ -34,22 +34,124 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.util.MemorySizeUtil;
 import org.apache.hadoop.hbase.regionserver.MemStoreLAB;
+import org.apache.phoenix.hbase.index.metrics.HnswMetricValues;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSourceImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
 public class HnswOffheapAllocatorTest {
+  private static final AtomicInteger SOURCES = new AtomicInteger();
 
   // Allocates a block and makes it resident for the owner, as a segment load does
   private static HnswOffheapAllocator.Block resident(HnswOffheapAllocator allocator, String owner,
     int size, List<String> evicted) throws IOException {
     HnswOffheapAllocator.Block block = allocator.allocate(size);
-    allocator.commit(owner, block, () -> evicted.add(owner));
+    allocator.commit(owner, block, () -> evicted.add(owner), 0);
     block.release();
     return block;
+  }
+
+  // Returns a new metrics source with a unique name, so that a test reads only its own values
+  private static MetricsVectorIndexSourceImpl newSource() {
+    String name = "HnswAllocatorTest" + SOURCES.incrementAndGet();
+    return new MetricsVectorIndexSourceImpl(name, name, "phoenix", "RegionServer,sub=" + name);
+  }
+
+  private static void assertMetric(MetricsVectorIndexSourceImpl source, HnswMetric metric,
+    long expected) {
+    assertEquals(metric.metricName(), expected, HnswMetricValues.value(source, metric, null));
+  }
+
+  /**
+   * The allocator of a server publishes its budget, its allocated bytes and its resident segments
+   * as gauges. It counts loads, evictions and refused allocations. The gauges return to 0 when no
+   * block is allocated.
+   */
+  @Test
+  public void testMetrics() throws Exception {
+    MetricsVectorIndexSourceImpl source = newSource();
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(100, source);
+    List<String> evicted = new ArrayList<>();
+    assertMetric(source, HnswMetric.OFFHEAP_MAX_BYTES, 100);
+    resident(allocator, "a", 40, evicted);
+    resident(allocator, "b", 30, evicted);
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 70);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 2);
+    assertMetric(source, HnswMetric.SEGMENT_LOADS, 2);
+    assertMetric(source, HnswMetric.SEGMENT_LOAD_TIME, 2);
+    // A new owner block replaces the old one, which is freed without eviction
+    resident(allocator, "b", 20, evicted);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 2);
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 60);
+    assertMetric(source, HnswMetric.OFFHEAP_EVICTIONS, 0);
+
+    // The load evicts the least recently used block
+    resident(allocator, "c", 50, evicted);
+    assertEquals(Collections.singletonList("a"), evicted);
+    assertMetric(source, HnswMetric.OFFHEAP_EVICTIONS, 1);
+    assertMetric(source, HnswMetric.OFFHEAP_EVICTED_BYTES, 40);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 2);
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 70);
+    assertMetric(source, HnswMetric.SEGMENT_LOADS, 4);
+
+    // Memory pressure evicts the other blocks, and an evicted segment loads again
+    allocator.evictAll();
+    assertMetric(source, HnswMetric.OFFHEAP_EVICTIONS, 3);
+    assertMetric(source, HnswMetric.OFFHEAP_EVICTED_BYTES, 110);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 0);
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 0);
+    resident(allocator, "c", 40, evicted);
+    assertMetric(source, HnswMetric.SEGMENT_LOADS, 5);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 1);
+
+    // Refusals: a block that loads cannot be evicted, and a block can be larger than the budget
+    HnswOffheapAllocator.Block loading = allocator.allocate(60);
+    assertRefused(allocator, 50);
+    try {
+      allocator.allocate(101);
+      fail("expected TooLargeException");
+    } catch (HnswSegment.TooLargeException expected) {
+    }
+    assertMetric(source, HnswMetric.OFFHEAP_REFUSALS, 2);
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 100);
+    loading.release();
+    allocator.release("c");
+    assertMetric(source, HnswMetric.OFFHEAP_ALLOCATED_BYTES, 0);
+    assertMetric(source, HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 0);
+    assertMetric(source, HnswMetric.OFFHEAP_MAX_BYTES, 100);
+  }
+
+  /**
+   * An allocator of a JVM without a RegionServer, such as the allocator of an fsck tool, publishes
+   * nothing. The segments of a tool must not count as segments of a server in the same JVM.
+   */
+  @Test
+  public void testClientAllocatorPublishesNothing() throws Exception {
+    List<HnswMetric> serverOnly = new ArrayList<>();
+    List<Long> before = new ArrayList<>();
+    for (HnswMetric metric : HnswMetric.values()) {
+      if (metric.serverOnly()) {
+        serverOnly.add(metric);
+        before.add(HnswMetricValues.value(metric));
+      }
+    }
+    for (HnswOffheapAllocator allocator : new HnswOffheapAllocator[] {
+      HnswOffheapAllocator.getForClient(new Configuration()), new HnswOffheapAllocator(100) }) {
+      List<String> evicted = new ArrayList<>();
+      resident(allocator, "client-a", 60, evicted);
+      resident(allocator, "client-b", 60, evicted);
+      allocator.evictAll();
+    }
+    for (int i = 0; i < serverOnly.size(); i++) {
+      assertEquals(serverOnly.get(i).metricName(), (long) before.get(i),
+        HnswMetricValues.value(serverOnly.get(i)));
+    }
   }
 
   @Test
@@ -113,7 +215,7 @@ public class HnswOffheapAllocatorTest {
           throw new AssertionError("allocator lock held during eviction callback", e);
         }
         called.countDown();
-      });
+      }, 0);
       a.release();
       allocator.allocate(100).release();
       assertTrue(called.await(0, TimeUnit.SECONDS));
@@ -136,7 +238,7 @@ public class HnswOffheapAllocatorTest {
     assertEquals(60, allocator.getAllocatedBytes());
     HnswOffheapAllocator.Block other = allocator.allocate(40);
     assertEquals(100, allocator.getAllocatedBytes());
-    allocator.commit("loading", loading, () -> evicted.add("loading"));
+    allocator.commit("loading", loading, () -> evicted.add("loading"), 0);
     loading.release();
     other.release();
     assertEquals(60, allocator.getAllocatedBytes());

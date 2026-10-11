@@ -22,8 +22,10 @@ import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -36,6 +38,7 @@ import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
@@ -48,6 +51,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.ColumnPrefixFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.hadoop.hbase.mob.MobConstants;
@@ -58,7 +62,9 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
  * Reads and writes the cells of HNSW segments in the hidden family {@code V#} of a data table.
@@ -75,6 +81,9 @@ import org.apache.phoenix.query.QueryConstants;
 public abstract class HnswSegmentStore {
   /** The hidden column family of the segment cells. */
   static final byte[] FAMILY = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
+  // A MOB reference holds the payload length and a file name, and is never longer than this. Thus a
+  // longer value of a payload cell is the payload itself, as in the memstore before the V# flush
+  private static final int MAX_REFERENCE_LENGTH = 1024;
 
   /**
    * Returns the descriptors of the well-formed segments of an index in this store. The listing
@@ -82,9 +91,68 @@ public abstract class HnswSegmentStore {
    * a MOB file.
    */
   public List<HnswSegment.Descriptor> list(byte[] indexKey) throws IOException {
+    return list(indexKey, new ArrayList<>());
+  }
+
+  /**
+   * Lists the segments of an index as {@link #list(byte[])} does. The method also adds to
+   * {@code malformed} the row and the identity of each segment that has small cells but is not
+   * well-formed. The listing does not read payload cells, so it does not find a payload without
+   * small cells.
+   */
+  public List<HnswSegment.Descriptor> list(byte[] indexKey, List<byte[][]> malformed)
+    throws IOException {
     HnswSegment.Listing listing = new HnswSegment.Listing();
     scan(listScan(indexKey), listing::add);
+    malformed.addAll(listing.malformed());
     return listing.descriptors();
+  }
+
+  /**
+   * Gives each cell of {@code V#}, for all indexes, to the consumer. Each cell has the length of
+   * its value in place of the value. The scan never reads a MOB file. It never transfers a payload,
+   * also when the payload is in the memstore. The method keeps no cell, so its memory use does not
+   * increase with the number of cells.
+   */
+  public void listCells(Consumer<Cell> consumer) throws IOException {
+    Scan scan = new Scan().addFamily(FAMILY).setFilter(new KeyOnlyFilter(true));
+    scan.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
+    scan(scan, consumer);
+  }
+
+  /**
+   * Returns the length of the payload of a segment, or -1 if the payload cell is missing. The
+   * method reads only the MOB reference or a short payload. It never reads a MOB file. It never
+   * transfers a long payload, also when the payload is in the memstore.
+   */
+  public long payloadSize(HnswSegment.Descriptor d) throws IOException {
+    byte[] qualifier = HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG);
+    Get length = new Get(d.anchor).addColumn(FAMILY, qualifier).setFilter(new KeyOnlyFilter(true));
+    length.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
+    Cell cell = get(length).getColumnLatestCell(FAMILY, qualifier);
+    if (cell == null) {
+      return -1;
+    }
+    int stored = Bytes.toInt(cell.getValueArray(), cell.getValueOffset());
+    if (stored > MAX_REFERENCE_LENGTH) {
+      return stored;
+    }
+    Get value = new Get(d.anchor).addColumn(FAMILY, qualifier);
+    value.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
+    cell = get(value).getColumnLatestCell(FAMILY, qualifier);
+    if (cell == null) {
+      return -1;
+    }
+    // A short value is a payload or a MOB reference. A payload ends with the magic, and a MOB
+    // reference starts with the length of the payload
+    int end = cell.getValueOffset() + cell.getValueLength();
+    if (
+      cell.getValueLength() < Bytes.SIZEOF_INT
+        || Bytes.toInt(cell.getValueArray(), end - Bytes.SIZEOF_INT) == HnswSegment.MAGIC
+    ) {
+      return cell.getValueLength();
+    }
+    return Bytes.toInt(cell.getValueArray(), cell.getValueOffset());
   }
 
   /**
@@ -226,8 +294,9 @@ public abstract class HnswSegmentStore {
      * loss of a base has the same result. HBase does not do the requested flush while another flush
      * of the region is queued or runs. A later flush of {@code V#} then writes the delta, for
      * example the flush of the next base write.
+     * @return the time in milliseconds that the write waited for the flush, which is 0 for a delta
      */
-    public void write(HnswSegment.Descriptor d, byte[] payload, byte[][] tombstones)
+    public long write(HnswSegment.Descriptor d, byte[] payload, byte[][] tombstones)
       throws IOException {
       Put put = new Put(d.anchor, d.time)
         .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), d.endKey)
@@ -257,10 +326,14 @@ public abstract class HnswSegmentStore {
       put.setDurability(Durability.SKIP_WAL);
       mutate(Collections.singletonList(put));
       if (!d.isDelta()) {
+        long start = EnvironmentEdgeManager.currentTimeMillis();
         flush();
-      } else if (region.getStore(FAMILY).getFlushableSize().getDataSize() > 0) {
+        return EnvironmentEdgeManager.currentTimeMillis() - start;
+      }
+      if (region.getStore(FAMILY).getFlushableSize().getDataSize() > 0) {
         requestFlush(Collections.singletonList(FAMILY));
       }
+      return 0;
     }
 
     /**
@@ -294,6 +367,45 @@ public abstract class HnswSegmentStore {
       });
       mutate(new ArrayList<>(deletes.values()));
       return cells[0];
+    }
+
+    /**
+     * Deletes the cells of an index in this region that are in no well-formed segment. The deletes
+     * cover all anchor rows and skip the WAL. The listing of the index skips these cells, so
+     * {@link #retire(List)} cannot name them. One scan finds the cells and the well-formed
+     * segments. A segment write is atomic, so the scan sees all cells of a segment or none. Thus a
+     * segment that a write adds during the call keeps its cells. The method keeps the well-formed
+     * segments of other definitions. A manager that does not yet know a re-created index must not
+     * delete the segments of the new definition.
+     * @return the number of cells deleted
+     */
+    public int retireMalformed(byte[] indexKey) throws IOException {
+      HnswSegment.Listing listing = new HnswSegment.Listing();
+      List<Cell> cells = new ArrayList<>();
+      scan(indexScan(indexKey), cell -> {
+        listing.add(cell);
+        cells.add(new KeyValue(CellUtil.cloneRow(cell), FAMILY, CellUtil.cloneQualifier(cell),
+          cell.getTimestamp(), KeyValue.Type.Put));
+      });
+      Set<ImmutableBytesPtr> wellFormed = new HashSet<>();
+      for (HnswSegment.Descriptor d : listing.descriptors()) {
+        wellFormed.add(HnswSegment.Listing.key(d.anchor, d.identity));
+      }
+      Map<byte[], Delete> deletes = new TreeMap<>(Bytes.BYTES_COMPARATOR);
+      int deleted = 0;
+      for (Cell cell : cells) {
+        byte[] row = CellUtil.cloneRow(cell);
+        byte[] qualifier = CellUtil.cloneQualifier(cell);
+        HnswSegment.Qualifier q = HnswSegment.parseQualifier(qualifier, 0, qualifier.length);
+        if (q == null || !wellFormed.contains(HnswSegment.Listing.key(row, q.identity()))) {
+          Delete delete = deletes.computeIfAbsent(row, Delete::new);
+          delete.addColumns(FAMILY, qualifier, cell.getTimestamp());
+          delete.setDurability(Durability.SKIP_WAL);
+          deleted++;
+        }
+      }
+      mutate(new ArrayList<>(deletes.values()));
+      return deleted;
     }
 
     // Applies the mutations as one atomic operation under the row locks of their rows

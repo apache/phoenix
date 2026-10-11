@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.mapreduce.index.fsck;
 
+import org.apache.phoenix.mapreduce.index.fsck.hnsw.HnswIndexFsckProvider;
 import org.apache.phoenix.mapreduce.index.fsck.ivf.IvfIndexFsckProvider;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.util.CDCUtil;
 
 /**
@@ -64,13 +66,17 @@ public final class IndexFsckProviders {
       case UNCOVERED_GLOBAL:
         return new GlobalIndexFsckProvider();
       case VECTOR_GLOBAL:
+      case VECTOR_LOCAL:
         String algorithm = indexTable.getVectorIndexAlgorithm();
         if (algorithm == null || algorithm.trim().isEmpty()) {
           throw new IllegalArgumentException(
             "Vector index '" + indexTable.getName().getString() + "' has no algorithm specified");
         }
-        if ("IVF".equalsIgnoreCase(algorithm)) {
+        VectorIndexType type = indexTable.getVectorIndexType();
+        if (type == VectorIndexType.IVF) {
           return new IvfIndexFsckProvider();
+        } else if (type == VectorIndexType.HNSW) {
+          return new HnswIndexFsckProvider();
         } else {
           throw new UnsupportedOperationException(
             "Unsupported vector index algorithm for index tooling: " + algorithm);

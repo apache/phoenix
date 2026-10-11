@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.function.ToLongFunction;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -1062,7 +1063,8 @@ public class IndexTool extends Configured implements Tool {
       pIndexTable.getVectorIndexType() == VectorIndexType.HNSW
         && (indexVerifyType != IndexVerifyType.NONE || sourceTable != SourceTable.DATA_TABLE_SOURCE)
     ) {
-      throw new IllegalArgumentException("IndexTool does not verify HNSW indexes");
+      throw new IllegalArgumentException(
+        "IndexTool does not verify HNSW indexes; use indexfsck.py verify");
     }
     // An HNSW index has no index rows to delete. A build replaces the segments of each region
     if (pIndexTable.getVectorIndexType() == VectorIndexType.HNSW && shouldDeleteBeforeRebuild) {
@@ -1121,30 +1123,30 @@ public class IndexTool extends Configured implements Tool {
     // The server sets the last DDL time when the index enters its current state. A base segment
     // with a later time is fresh. Thus a rerun keeps the regions that an earlier run built
     long since = conn.getTableNoCache(indexName).getLastDDLTimestamp();
-    buildHnswRegions(conn, dataTable, indexTable, region -> since);
+    buildHnswRegions(conn, dataTable, indexTable, region -> true, region -> since);
     IndexUtil.updateIndexState(conn, indexName, PIndexState.ACTIVE, null);
     // A split after the last listing makes daughters without a base. A daughter that opened while
     // the index was BUILDING does not rebuild on its own. Thus the build lists the regions again
     // after the index is ACTIVE
-    buildHnswRegions(conn, dataTable, indexTable, region -> since);
+    buildHnswRegions(conn, dataTable, indexTable, region -> true, region -> since);
     LOGGER.info("Built HNSW index {}", indexName);
   }
 
   /**
-   * Builds the HNSW segments of all the regions of the data table. Each region gets a request for
-   * an asynchronous full rebuild on its server. The method then waits until each region is built.
-   * It lists the segments from the hidden family V# of the data table. A region is built when a
-   * base segment of the index definition covers it exactly and has a time of at least {@code since}
-   * for the region, or when a request of this call built it. A region without an anchor row holds
-   * no rows, so it is built. The build scan of a region returns the server time at which the region
-   * accepted the request. Only a base whose build started later counts, because a rebuild that
-   * already runs at the request can miss rows. A region that is not built gets its request again
-   * every 30 polls, with the time of its last accepted request. Thus a rebuild that serves that
-   * request is not followed by another. The method fails only when no region becomes built for
-   * {@link #HNSW_BUILD_STALL_MS}.
+   * Builds the HNSW segments of each data region that {@code regions} selects. Each selected region
+   * gets a request for an asynchronous full rebuild on its server. The method then waits until each
+   * selected region is built. It lists the segments from the hidden family V# of the data table. A
+   * region is built when a base segment of the index definition covers it exactly and has a time of
+   * at least {@code since} for the region, or when a request of this call built it. A region
+   * without an anchor row holds no rows, so it is built. The build scan of a region returns the
+   * server time at which the region accepted the request. Only a base whose build started later
+   * counts, because a rebuild that already runs at the request can miss rows. A region that is not
+   * built gets its request again every 30 polls, with the time of its last accepted request. Thus a
+   * rebuild that serves that request is not followed by another. The method fails only when no
+   * region becomes built for {@link #HNSW_BUILD_STALL_MS}.
    */
   public static void buildHnswRegions(PhoenixConnection conn, PTable dataTable, PTable indexTable,
-    ToLongFunction<RegionInfo> since) throws Exception {
+    Predicate<RegionInfo> regions, ToLongFunction<RegionInfo> since) throws Exception {
     String indexName = indexTable.getName().getString();
     byte[] indexKey = Bytes.toBytes(CentroidManager.getCentroidIndexName(indexName));
     byte[] definition = HnswSegment.definitionDigest(HnswIndexManager.definition(indexTable));
@@ -1161,6 +1163,9 @@ public class IndexTool extends Configured implements Tool {
         List<HnswSegment.Descriptor> segments = segmentStore.list(indexKey);
         for (HRegionLocation location : services.getAllTableRegions(dataPhysical)) {
           RegionInfo region = location.getRegion();
+          if (!regions.test(region)) {
+            continue;
+          }
           Long requested = accepted.get(region.getEncodedName());
           long bar = requested != null ? requested + 1 : since.applyAsLong(region);
           boolean built = HnswSegment.anchor(region.getStartKey(), region.getEndKey()) == null;
@@ -1211,6 +1216,22 @@ public class IndexTool extends Configured implements Tool {
 
   /** An HNSW build fails when no region becomes built for this time. */
   static final long HNSW_BUILD_STALL_MS = TimeUnit.HOURS.toMillis(1);
+
+  /**
+   * Returns the minimum time that a new base segment of the region must have to count as a rebuild.
+   * The new base must be newer than each base segment in {@code before} that overlaps the region.
+   * Returns Long.MIN_VALUE if no base segment in {@code before} overlaps the region. The method
+   * compares only segment times that the servers wrote, so the client clock has no effect.
+   */
+  public static long rebuiltSince(List<HnswSegment.Descriptor> before, RegionInfo region) {
+    long newest = Long.MIN_VALUE;
+    for (HnswSegment.Descriptor d : before) {
+      if (!d.isDelta() && d.overlaps(region.getStartKey(), region.getEndKey())) {
+        newest = Math.max(newest, d.time + 1);
+      }
+    }
+    return newest;
+  }
 
   public static boolean isTimeRangeSet(Long startTime, Long endTime) {
     return startTime != null || endTime != null;

@@ -85,6 +85,8 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
+import org.apache.phoenix.hbase.index.metrics.HnswMetricValues;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
@@ -576,6 +578,80 @@ public class HnswCandidateProbeTest {
     assertNull(HnswCandidateProbe.candidateFilter(env, manager,
       new Scan().setFilter(new FirstKeyOnlyFilter()), query, CANDIDATES, TARGET));
     assertEquals(Collections.singletonList(CANDIDATES), probes);
+  }
+
+  // The search metrics that testSearchMetrics checks, in this order
+  private static final HnswMetric[] SEARCH_METRICS =
+    { HnswMetric.SEARCHES, HnswMetric.SEARCH_TIME, HnswMetric.UNRESTRICTED_UNCOVERED,
+      HnswMetric.UNRESTRICTED_LIMIT, HnswMetric.PROBE_ROUNDS, HnswMetric.PROBE_ROWS_READ };
+
+  private static long[] searchMetrics() {
+    long[] values = new long[SEARCH_METRICS.length];
+    for (int i = 0; i < values.length; i++) {
+      values[i] = HnswMetricValues.value(SEARCH_METRICS[i], INDEX);
+    }
+    return values;
+  }
+
+  // Runs a search, and checks the changes of the search metrics of the index
+  private static void assertSearchMetrics(Runnable search, long... changes) {
+    long[] before = searchMetrics();
+    search.run();
+    long[] after = searchMetrics();
+    for (int i = 0; i < changes.length; i++) {
+      assertEquals(SEARCH_METRICS[i].metricName(), changes[i], after[i] - before[i]);
+    }
+  }
+
+  private void assertFilter(HnswIndexManager manager, Scan scan, float[] query, int candidates,
+    boolean restricted) {
+    try {
+      Filter filter =
+        HnswCandidateProbe.candidateFilter(env, manager, scan, query, candidates, TARGET);
+      assertEquals(restricted, filter != null);
+    } catch (IOException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  /**
+   * Each HNSW scan counts one search and its time. A scan without candidate restriction counts
+   * exactly one reason: the region is uncovered, or a candidate limit applies. A restricted scan
+   * counts no reason. Each probe round counts the candidate rows that it reads.
+   */
+  @Test
+  public void testSearchMetrics() throws Exception {
+    HnswIndexManager manager = open();
+    load(manager, 3000);
+    float[] query = vector(new Random(29));
+    Scan filtered = new Scan().setFilter(new FirstKeyOnlyFilter());
+    long visited = HnswMetricValues.value(HnswMetric.NODES_VISITED, INDEX);
+    assertSearchMetrics(() -> assertFilter(manager, new Scan(), query, CANDIDATES, true), 1, 1, 0,
+      0, 0, 0);
+    assertTrue(HnswMetricValues.value(HnswMetric.NODES_VISITED, INDEX) > visited);
+    assertSearchMetrics(() -> assertFilter(manager, filtered, query, CANDIDATES, true), 1, 1, 0, 0,
+      1, CANDIDATES);
+    // The client asks for more candidates than the maximum
+    assertSearchMetrics(
+      () -> assertFilter(manager, new Scan(), query, HnswCandidateProbe.MAX_CANDIDATES + 1, false),
+      1, 1, 0, 1, 0, 0);
+    // Few candidates pass, so the widening needs too many candidates
+    byte[] only = ranked(query).get(5);
+    passes = key -> Bytes.equals(key, only);
+    assertSearchMetrics(() -> assertFilter(manager, filtered, query, CANDIDATES, false), 1, 1, 0, 1,
+      1, CANDIDATES);
+    passes = key -> true;
+
+    // A region without coverage
+    manager.close();
+    cells.clear();
+    HnswIndexManager uncovered = open();
+    load(uncovered, 100);
+    assertFalse(uncovered.covered());
+    assertSearchMetrics(() -> assertFilter(uncovered, filtered, query, CANDIDATES, false), 1, 1, 1,
+      0, 0, 0);
+    assertSearchMetrics(() -> assertFilter(uncovered, new Scan(), query, CANDIDATES, false), 1, 1,
+      1, 0, 0, 0);
   }
 
   /**

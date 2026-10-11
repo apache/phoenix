@@ -31,8 +31,12 @@ import org.apache.hadoop.hbase.io.util.MemorySizeUtil;
 import org.apache.hadoop.hbase.util.DirectMemoryUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.UnsafeAccess;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +63,10 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * the direct memory that an off-heap BucketCache and an off-heap memstore do not use. This keeps
  * direct memory available for the RPC buffers of HBase. In other JVMs, such as the fsck tools, the
  * budget is at most half of the direct memory.
+ * <p>
+ * Only the allocator of a RegionServer publishes metrics. It updates them in the locks that it
+ * already holds. The allocator of another JVM publishes nothing, so that the metrics of a server
+ * show only the segments of that server.
  */
 public final class HnswOffheapAllocator {
   private static final Logger LOG = LoggerFactory.getLogger(HnswOffheapAllocator.class);
@@ -68,6 +76,8 @@ public final class HnswOffheapAllocator {
 
   private final long maxBytes;
   private long allocatedBytes;
+  // The metrics source of the server, or null for an allocator that publishes no metrics
+  private final MetricsVectorIndexSource metrics;
   // The resident blocks by owner. The access order gives the LRU eviction order.
   private final LinkedHashMap<Object, Block> resident = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -117,7 +127,8 @@ public final class HnswOffheapAllocator {
       synchronized (HnswOffheapAllocator.class) {
         if (instance == null) {
           instance =
-            new HnswOffheapAllocator(budget(conf, DirectMemoryUtils.getDirectMemorySize(), true));
+            new HnswOffheapAllocator(budget(conf, DirectMemoryUtils.getDirectMemorySize(), true),
+              MetricsIndexerSourceFactory.getInstance().getMetricsVectorIndexSource());
         }
       }
     }
@@ -165,8 +176,23 @@ public final class HnswOffheapAllocator {
     return budget;
   }
 
+  /** Returns an allocator that publishes no metrics. */
   public HnswOffheapAllocator(long maxBytes) {
+    this(maxBytes, null);
+  }
+
+  /** Returns an allocator that publishes its metrics to the given source, if it is not null. */
+  @VisibleForTesting
+  HnswOffheapAllocator(long maxBytes, MetricsVectorIndexSource metrics) {
     this.maxBytes = maxBytes;
+    this.metrics = metrics;
+    publish(HnswMetric.OFFHEAP_MAX_BYTES, maxBytes);
+  }
+
+  private void publish(HnswMetric metric, long value) {
+    if (metrics != null) {
+      metrics.updateHnsw(metric, value);
+    }
   }
 
   /**
@@ -182,6 +208,7 @@ public final class HnswOffheapAllocator {
    */
   Block allocate(int size) throws IOException {
     if (size > maxBytes) {
+      publish(HnswMetric.OFFHEAP_REFUSALS, 1);
       throw new HnswSegment.TooLargeException(
         "HNSW segment of " + size + " bytes exceeds the off-heap budget of " + maxBytes + " bytes ("
           + QueryServices.HNSW_OFFHEAP_MAX_BYTES_ATTRIB + ")");
@@ -194,6 +221,7 @@ public final class HnswOffheapAllocator {
       }
       if (allocatedBytes - evictable + size > maxBytes) {
         // Eviction cannot make enough space, so refuse the allocation before any eviction
+        publish(HnswMetric.OFFHEAP_REFUSALS, 1);
         throw new IOException("Cannot allocate " + size + " bytes for an HNSW segment: segments"
           + " that are loading or still read after eviction hold " + (allocatedBytes - evictable)
           + " bytes of the off-heap budget of " + maxBytes + " bytes ("
@@ -208,6 +236,12 @@ public final class HnswOffheapAllocator {
         evicted.add(victim);
       }
       allocatedBytes += size;
+      publish(HnswMetric.OFFHEAP_ALLOCATED_BYTES, size);
+      if (!evicted.isEmpty()) {
+        publish(HnswMetric.OFFHEAP_EVICTIONS, evicted.size());
+        publish(HnswMetric.OFFHEAP_EVICTED_BYTES, evicting);
+        publish(HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, -evicted.size());
+      }
     }
     if (!evicted.isEmpty()) {
       LOG.info("Evicted {} HNSW segments to allocate {} bytes", evicted.size(), size);
@@ -222,6 +256,7 @@ public final class HnswOffheapAllocator {
       return new Block(ByteBuffer.allocateDirect(size));
     } catch (OutOfMemoryError e) {
       discharge(size);
+      publish(HnswMetric.OFFHEAP_REFUSALS, 1);
       throw new IOException("Cannot allocate " + size + " bytes of direct memory for an HNSW"
         + " segment; -XX:MaxDirectMemorySize must cover "
         + QueryServices.HNSW_OFFHEAP_MAX_BYTES_ATTRIB, e);
@@ -232,13 +267,19 @@ public final class HnswOffheapAllocator {
    * Makes a filled block resident for its owner. The allocator takes its own reference. It drops
    * this reference on eviction, after it calls {@code onEvict}, or on {@link #release}. The caller
    * must still hold its reference.
+   * @param loadStart the time at which the load of the block started, for the load time metric
    */
-  void commit(Object owner, Block block, Runnable onEvict) {
+  void commit(Object owner, Block block, Runnable onEvict, long loadStart) {
     block.refs.incrementAndGet();
     Block replaced;
     synchronized (this) {
       block.onEvict = onEvict;
       replaced = resident.put(owner, block);
+      if (replaced == null) {
+        publish(HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, 1);
+      }
+      publish(HnswMetric.SEGMENT_LOADS, 1);
+      publish(HnswMetric.SEGMENT_LOAD_TIME, EnvironmentEdgeManager.currentTimeMillis() - loadStart);
     }
     if (replaced != null) {
       replaced.release();
@@ -255,6 +296,9 @@ public final class HnswOffheapAllocator {
     Block block;
     synchronized (this) {
       block = resident.remove(owner);
+      if (block != null) {
+        publish(HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, -1);
+      }
     }
     if (block != null) {
       block.release();
@@ -268,6 +312,13 @@ public final class HnswOffheapAllocator {
     synchronized (this) {
       evicted = new ArrayList<>(resident.values());
       resident.clear();
+      long bytes = 0;
+      for (Block block : evicted) {
+        bytes += block.buffer.capacity();
+      }
+      publish(HnswMetric.OFFHEAP_EVICTIONS, evicted.size());
+      publish(HnswMetric.OFFHEAP_EVICTED_BYTES, bytes);
+      publish(HnswMetric.OFFHEAP_RESIDENT_SEGMENTS, -evicted.size());
     }
     for (Block block : evicted) {
       block.onEvict.run();
@@ -277,6 +328,7 @@ public final class HnswOffheapAllocator {
 
   private synchronized void discharge(long size) {
     allocatedBytes -= size;
+    publish(HnswMetric.OFFHEAP_ALLOCATED_BYTES, -size);
   }
 
   /** Returns the number of bytes that the budget counts now. */

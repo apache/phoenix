@@ -44,10 +44,12 @@ import org.apache.phoenix.coprocessor.ServerScanUtil;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.metrics.MetricsVectorIndexSource.HnswMetric;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
@@ -139,7 +141,23 @@ public final class HnswCandidateProbe {
    */
   static Filter candidateFilter(RegionCoprocessorEnvironment env, HnswIndexManager manager,
     Scan scan, float[] query, int candidates, int target) throws IOException {
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    try {
+      return restrict(env, manager, scan, query, candidates, target);
+    } finally {
+      manager.metrics().update(HnswMetric.SEARCHES, 1);
+      manager.metrics().update(HnswMetric.SEARCH_TIME,
+        EnvironmentEdgeManager.currentTimeMillis() - start);
+    }
+  }
+
+  // Makes the candidate filter, as candidateFilter describes. Each scan without candidate
+  // restriction adds 1 to exactly one reason counter. The manager counts the region state, and
+  // this method counts the candidate limits
+  private static Filter restrict(RegionCoprocessorEnvironment env, HnswIndexManager manager,
+    Scan scan, float[] query, int candidates, int target) throws IOException {
     if (candidates > MAX_CANDIDATES) {
+      manager.metrics().update(HnswMetric.UNRESTRICTED_LIMIT, 1);
       return null;
     }
     byte[] start = scan.getStartRow();
@@ -178,6 +196,10 @@ public final class HnswCandidateProbe {
           fresh.add(key);
         }
       }
+      if (!fresh.isEmpty()) {
+        manager.metrics().update(HnswMetric.PROBE_ROUNDS, 1);
+        manager.metrics().update(HnswMetric.PROBE_ROWS_READ, fresh.size());
+      }
       passed.addAll(probe(env, scan, filter, fresh));
       // Stop when enough candidates pass, or when the search found every indexed key of the range
       if (passed.size() >= target || keys.size() < count || count >= bound) {
@@ -190,6 +212,7 @@ public final class HnswCandidateProbe {
         ? (long) count * GROWTH
         : (long) Math.ceil(target * (double) probed.size() / passed.size());
       if (next * UNRESTRICTED_SHARE >= bound || next > MAX_CANDIDATES) {
+        manager.metrics().update(HnswMetric.UNRESTRICTED_LIMIT, 1);
         return null;
       }
       count = (int) next;
