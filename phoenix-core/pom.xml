@@ -377,6 +377,11 @@
       <artifactId>jackson-annotations</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>io.github.jbellis</groupId>
+      <artifactId>jvector</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- logging -->
     <dependency>

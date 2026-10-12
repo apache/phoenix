@@ -474,6 +474,23 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] VECTOR_BUILDING_GENERATION_BYTES =
     Bytes.toBytes(VECTOR_BUILDING_GENERATION);
 
+  public static final String VECTOR_HNSW_M = "VECTOR_HNSW_M";
+  public static final byte[] VECTOR_HNSW_M_BYTES = Bytes.toBytes(VECTOR_HNSW_M);
+
+  public static final String VECTOR_HNSW_EF_CONSTRUCTION = "VECTOR_HNSW_EF_CONSTRUCTION";
+  public static final byte[] VECTOR_HNSW_EF_CONSTRUCTION_BYTES =
+    Bytes.toBytes(VECTOR_HNSW_EF_CONSTRUCTION);
+
+  public static final String VECTOR_HNSW_ALPHA = "VECTOR_HNSW_ALPHA";
+  public static final byte[] VECTOR_HNSW_ALPHA_BYTES = Bytes.toBytes(VECTOR_HNSW_ALPHA);
+
+  public static final String VECTOR_QUANTIZATION_TYPE = "VECTOR_QUANTIZATION_TYPE";
+  public static final byte[] VECTOR_QUANTIZATION_TYPE_BYTES =
+    Bytes.toBytes(VECTOR_QUANTIZATION_TYPE);
+
+  public static final String VECTOR_PQ_SEGMENTS = "VECTOR_PQ_SEGMENTS";
+  public static final byte[] VECTOR_PQ_SEGMENTS_BYTES = Bytes.toBytes(VECTOR_PQ_SEGMENTS);
+
   public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
   public static final String SYSTEM_CHILD_LINK_NAME =
     SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);

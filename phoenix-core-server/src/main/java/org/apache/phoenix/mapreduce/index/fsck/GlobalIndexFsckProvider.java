@@ -276,8 +276,10 @@ public class GlobalIndexFsckProvider implements IndexFsckProvider {
         report.addFinding(new Finding(Severity.ERROR, SCOPE_TABLE, MISSING_COPROCESSOR,
           "Data table " + data.getTableName() + " has no index maintenance coprocessor"));
       }
+      // The physical table of a VECTOR_LOCAL index is the data table, which has no index checker
       if (
-        dataObserver && !indexTable.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME)
+        dataObserver && index.getIndexType() != PTable.IndexType.VECTOR_LOCAL
+          && !indexTable.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME)
       ) {
         report.addFinding(new Finding(Severity.ERROR, SCOPE_TABLE, MISSING_COPROCESSOR,
           "Index table " + indexTable.getTableName() + " has no "

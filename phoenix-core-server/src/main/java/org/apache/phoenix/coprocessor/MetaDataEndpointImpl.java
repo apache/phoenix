@@ -85,9 +85,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
@@ -178,6 +183,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
+import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
@@ -264,6 +270,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.VectorIndexType;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.schema.export.SchemaWriter;
@@ -277,6 +284,7 @@ import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
@@ -445,6 +453,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_CENTROID_GENERATION_BYTES);
   private static final Cell VECTOR_BUILDING_GENERATION_KV = createFirstOnRow(
     ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_BUILDING_GENERATION_BYTES);
+  private static final Cell VECTOR_HNSW_M_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_M_BYTES);
+  private static final Cell VECTOR_HNSW_EF_CONSTRUCTION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_EF_CONSTRUCTION_BYTES);
+  private static final Cell VECTOR_HNSW_ALPHA_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_HNSW_ALPHA_BYTES);
+  private static final Cell VECTOR_QUANTIZATION_TYPE_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_QUANTIZATION_TYPE_BYTES);
+  private static final Cell VECTOR_PQ_SEGMENTS_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_PQ_SEGMENTS_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -465,7 +483,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
     CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV,
     VECTOR_INDEX_ALGORITHM_KV, VECTOR_DISTANCE_METRIC_KV, VECTOR_DIMENSION_KV, VECTOR_IVF_LISTS_KV,
-    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV);
+    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV,
+    VECTOR_HNSW_M_KV, VECTOR_HNSW_EF_CONSTRUCTION_KV, VECTOR_HNSW_ALPHA_KV,
+    VECTOR_QUANTIZATION_TYPE_KV, VECTOR_PQ_SEGMENTS_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -540,6 +560,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     TABLE_KV_COLUMNS.indexOf(VECTOR_CENTROID_GENERATION_KV);
   private static final int VECTOR_BUILDING_GENERATION_INDEX =
     TABLE_KV_COLUMNS.indexOf(VECTOR_BUILDING_GENERATION_KV);
+  private static final int VECTOR_HNSW_M_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_M_KV);
+  private static final int VECTOR_HNSW_EF_CONSTRUCTION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_EF_CONSTRUCTION_KV);
+  private static final int VECTOR_HNSW_ALPHA_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_HNSW_ALPHA_KV);
+  private static final int VECTOR_QUANTIZATION_TYPE_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_QUANTIZATION_TYPE_KV);
+  private static final int VECTOR_PQ_SEGMENTS_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_PQ_SEGMENTS_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1714,6 +1742,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       : oldTable != null ? oldTable.getVectorBuildingGeneration()
       : null);
 
+    Cell kv = tableKeyValues[VECTOR_HNSW_M_INDEX];
+    builder.setVectorHnswM(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswM()
+      : null);
+    kv = tableKeyValues[VECTOR_HNSW_EF_CONSTRUCTION_INDEX];
+    builder.setVectorHnswEfConstruction(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswEfConstruction()
+      : null);
+    kv = tableKeyValues[VECTOR_HNSW_ALPHA_INDEX];
+    builder.setVectorHnswAlpha(kv != null
+      ? (Double) PDouble.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorHnswAlpha()
+      : null);
+    kv = tableKeyValues[VECTOR_QUANTIZATION_TYPE_INDEX];
+    builder.setVectorQuantizationType(kv != null
+      ? (String) PVarchar.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorQuantizationType()
+      : null);
+    kv = tableKeyValues[VECTOR_PQ_SEGMENTS_INDEX];
+    builder.setVectorPqSegments(kv != null
+      ? (Integer) PInteger.INSTANCE.toObject(kv.getValueArray(), kv.getValueOffset(),
+        kv.getValueLength())
+      : oldTable != null ? oldTable.getVectorPqSegments()
+      : null);
+
     // Check the cell tag to see whether the view has modified this property
     final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null)
       ? HConstants.EMPTY_BYTE_ARRAY
@@ -1789,7 +1848,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           // in Phoenix, hence there is no point of calling getTable().
           if (
             !famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
-              && indexType != IndexType.LOCAL
+              && indexType != IndexType.LOCAL && indexType != IndexType.VECTOR_LOCAL
           ) {
             try {
               parentTable = doGetTable(null,
@@ -1823,7 +1882,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           }
 
           if (parentTable == null || isTableDeleted(parentTable)) {
-            if (indexType == IndexType.LOCAL) {
+            if (indexType == IndexType.LOCAL || indexType == IndexType.VECTOR_LOCAL) {
               PName tablePhysicalName = getPhysicalTableName(env.getRegion(), null,
                 SchemaUtil.getSchemaNameFromFullName(famName.getBytes())
                   .getBytes(StandardCharsets.UTF_8),
@@ -1902,9 +1961,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     // Due to failures in Namespace related ITs when isNamespaceMappingEnabled is enabled.
     boolean isMetaIndex =
       (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName.getString()) && (tableType == INDEX));
+    // HNSW segments cover live data rows of any age, so an HNSW index does not inherit the TTL of
+    // its data table
+    boolean isHnswIndex =
+      VectorIndexType.fromAlgorithm(vectorIndexAlgorithm != null ? vectorIndexAlgorithm
+        : oldTable != null ? oldTable.getVectorIndexAlgorithm()
+        : null) == VectorIndexType.HNSW;
     if (
       tableType == INDEX && !isThisAViewIndex && ttl.equals(TTL_EXPRESSION_NOT_DEFINED)
-        && !isMetaIndex
+        && !isMetaIndex && !isHnswIndex
     ) {
       // If this is an index on Table get TTL from Table
       byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
@@ -2692,7 +2757,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           parentTable = doGetTable(tenantIdBytes, parentSchemaName, parentTableName,
             clientTimeStamp, null, request.getClientVersion());
         }
-        if (IndexType.LOCAL == indexType) {
+        if (IndexType.LOCAL == indexType || IndexType.VECTOR_LOCAL == indexType) {
           cPhysicalName = parentTable.getPhysicalName().getBytes();
           cParentPhysicalName = parentTable.getPhysicalName().getBytes();
         } else if (parentTable.getType() == PTableType.VIEW) {
@@ -3077,11 +3142,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   /**
    * Checks the vector index metadata before the server writes it to SYSTEM.CATALOG.
    * <p>
-   * If the table is not a VECTOR_GLOBAL index and has no vector algorithm, the check does nothing.
-   * Only a VECTOR_GLOBAL index can have vector metadata. The algorithm must be IVF, and the
-   * distance metric must be a known {@link DistanceMetric}. The IVF list count must be more than
-   * zero, and the sample size must be equal to or more than the list count. A failed check throws a
-   * SQLException with the applicable vector error code.
+   * If the table is not a vector index and has no vector algorithm, the check does nothing. Only a
+   * vector index can have vector metadata. The algorithm must be a known {@link VectorIndexType}:
+   * HNSW for a VECTOR_LOCAL index and IVF for a VECTOR_GLOBAL index. The distance metric must be a
+   * known {@link DistanceMetric}. For IVF, the list count must be more than zero, and the sample
+   * size must be equal to or more than the list count. For HNSW, the parameters must pass
+   * {@link CreateIndexCompiler#validateHnswIndex}. A failed check throws a SQLException with the
+   * applicable vector error code.
    */
   private static void validateVectorIndexMetadata(List<Mutation> tableMetadata,
     PTableType tableType, IndexType indexType) throws SQLException {
@@ -3092,17 +3159,27 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       && MetaDataUtil.getMutationValue(header, VECTOR_INDEX_ALGORITHM_BYTES, kvBuilder, ptr)
         ? (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
         : null;
-    if (indexType != IndexType.VECTOR_GLOBAL && algorithm == null) {
+    boolean isVectorIndexType =
+      indexType == IndexType.VECTOR_GLOBAL || indexType == IndexType.VECTOR_LOCAL;
+    if (!isVectorIndexType && algorithm == null) {
       return;
     }
-    if (tableType != PTableType.INDEX || indexType != IndexType.VECTOR_GLOBAL) {
+    if (tableType != PTableType.INDEX || !isVectorIndexType) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
-        .setMessage("Vector index metadata is only valid on a VECTOR_GLOBAL index").build()
-        .buildException();
+        .setMessage("Vector index metadata is only valid on a VECTOR_GLOBAL or VECTOR_LOCAL index")
+        .build().buildException();
     }
-    if (!"IVF".equalsIgnoreCase(algorithm)) {
+    VectorIndexType type = VectorIndexType.fromAlgorithm(algorithm);
+    if (type == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
         .setMessage(String.valueOf(algorithm)).build().buildException();
+    }
+    // HNSW keeps its segments in the data table, so it requires VECTOR_LOCAL. IVF keeps its rows in
+    // an index table, so it requires VECTOR_GLOBAL.
+    if ((type == VectorIndexType.HNSW) != (indexType == IndexType.VECTOR_LOCAL)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_ALGORITHM_PARAM_MISMATCH)
+        .setMessage("index type " + indexType + " is not valid for algorithm " + type).build()
+        .buildException();
     }
     String metric =
       MetaDataUtil.getMutationValue(header, VECTOR_DISTANCE_METRIC_BYTES, kvBuilder, ptr)
@@ -3119,10 +3196,35 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       MetaDataUtil.getMutationValue(header, VECTOR_IVF_SAMPLE_SIZE_BYTES, kvBuilder, ptr)
         ? (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
         : null;
-    if (lists == null || lists <= 0 || sampleSize == null || sampleSize < lists) {
+    if (
+      type == VectorIndexType.IVF
+        && (lists == null || lists <= 0 || sampleSize == null || sampleSize < lists)
+    ) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
         .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
     }
+    if (type == VectorIndexType.HNSW) {
+      CreateIndexCompiler
+        .validateHnswIndex(new PTable.VectorIndex.Builder().setDistanceMetric(metric)
+          .setDimension((Integer) getHeaderValue(header, VECTOR_DIMENSION_BYTES, PInteger.INSTANCE))
+          .setHnswM((Integer) getHeaderValue(header, VECTOR_HNSW_M_BYTES, PInteger.INSTANCE))
+          .setHnswEfConstruction(
+            (Integer) getHeaderValue(header, VECTOR_HNSW_EF_CONSTRUCTION_BYTES, PInteger.INSTANCE))
+          .setHnswAlpha((Double) getHeaderValue(header, VECTOR_HNSW_ALPHA_BYTES, PDouble.INSTANCE))
+          .setQuantizationType(
+            (String) getHeaderValue(header, VECTOR_QUANTIZATION_TYPE_BYTES, PVarchar.INSTANCE))
+          .setPqSegments(
+            (Integer) getHeaderValue(header, VECTOR_PQ_SEGMENTS_BYTES, PInteger.INSTANCE))
+          .build());
+    }
+  }
+
+  /** Returns the value of a column in the table header row, or null if the row does not set it. */
+  private static Object getHeaderValue(Put header, byte[] qualifier, PDataType type) {
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    return MetaDataUtil.getMutationValue(header, qualifier, GenericKeyValueBuilder.INSTANCE, ptr)
+      ? type.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
+      : null;
   }
 
   private void exportSchema(List<Mutation> tableMetadata, byte[] tableKey, long clientTimestamp,
@@ -3599,10 +3701,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           EnvironmentEdgeManager.currentTimeMillis(), null);
       }
 
-      // Add to list of HTables to delete, unless it's a view or its a shared index
+      // Add to list of HTables to delete, unless it's a view or its a shared index. A VECTOR_LOCAL
+      // index is never added, because its physical table is its data table.
       if (tableType == INDEX && table.getViewIndexId() != null) {
         sharedTablesToDelete.add(new SharedTableState(table));
-      } else if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
+      } else if (
+        tableType != PTableType.VIEW && tableType != PTableType.CDC
+          && table.getIndexType() != IndexType.VECTOR_LOCAL
+      ) {
         tableNamesToDelete.add(table.getPhysicalName().getBytes());
       }
       invalidateList.add(cacheKey);

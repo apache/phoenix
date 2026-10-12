@@ -74,6 +74,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -740,6 +741,117 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
       assertNull(im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, getter, rowKey, ts, null,
         null, false));
     }
+  }
+
+  /**
+   * The data columns of an HNSW vector expression are indexed columns. HNSW has no key column for
+   * the vector. Without these indexed columns, DROP COLUMN keeps the index, and every later write
+   * fails. With SINGLE_CELL_ARRAY_WITH_OFFSETS, the expression reads the single cell of the family.
+   * The maintainer then finds the data column by its position in that cell.
+   */
+  @Test
+  public void testHnswVectorColumnsAreIndexedColumns() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      for (String create : new String[] { "CREATE TABLE ", "CREATE IMMUTABLE TABLE " }) {
+        String tableName = "T_" + generateUniqueName();
+        String plain = "I_" + generateUniqueName();
+        String functional = "I_" + generateUniqueName();
+        boolean singleCell = create.contains("IMMUTABLE");
+        pconn.createStatement()
+          .execute(create + tableName
+            + " (ID VARCHAR PRIMARY KEY, K VARCHAR, V VECTOR(FLOAT, 2), DOC BSON)"
+            + (singleCell
+              ? " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2"
+              : ""));
+        pconn.createStatement().execute("CREATE VECTOR INDEX " + plain + " ON " + tableName
+          + " (V) WITH (algorithm = 'HNSW', metric = 'L2')");
+        pconn.createStatement().execute("CREATE VECTOR INDEX " + functional + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(DOC, 'v', 2)) WITH (algorithm = 'HNSW', metric = 'L2')");
+        PTable dataTable = pconn.getTable(tableName);
+        assertEquals(create,
+          singleCell
+            ? PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+            : PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+          dataTable.getImmutableStorageScheme());
+        Set<Pair<String, String>> indexed =
+          IndexMaintainer.create(dataTable, pconn.getTable(plain), pconn).getIndexedColumnInfo();
+        assertTrue(create + indexed, indexed.contains(new Pair<>("0", "V")));
+        assertFalse(create + indexed, indexed.contains(new Pair<>("0", "K")));
+        indexed = IndexMaintainer.create(dataTable, pconn.getTable(functional), pconn)
+          .getIndexedColumnInfo();
+        assertTrue(create + indexed, indexed.contains(new Pair<>("0", "DOC")));
+        assertFalse(create + indexed, indexed.contains(new Pair<>("0", "V")));
+      }
+    }
+  }
+
+  /**
+   * Tests that a vector that the graph cannot hold is absent. Thus the row is not indexed, and one
+   * row cannot make each segment build of its region fail. The test uses a DOUBLE element that
+   * narrows to an infinite float, a vector of another dimension, and a stored value that cannot be
+   * decoded. Only a writer that bypasses the client can store such values. The test also checks
+   * that the server finds the same cells for the vector expression as the client.
+   */
+  @Test
+  public void testHnswVectorThatCannotBeIndexedIsAbsent() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      String tableName = "T_" + generateUniqueName();
+      String indexName = "I_" + generateUniqueName();
+      pconn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, V VECTOR(DOUBLE, 2))");
+      pconn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V) WITH (algorithm = 'HNSW', metric = 'L2')");
+      PTable dataTable = pconn.getTable(tableName);
+      PTable index = pconn.getTable(indexName);
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(index), pconn);
+      IndexMaintainer server = IndexMaintainer.deserialize(ptr.copyBytes(), true).get(0);
+      PColumn v = dataTable.getColumnForColumnName("V");
+      ColumnReference ref =
+        new ColumnReference(v.getFamilyName().getBytes(), v.getColumnQualifierBytes());
+      for (IndexMaintainer maintainer : new IndexMaintainer[] {
+        IndexMaintainer.create(dataTable, index, pconn), server }) {
+        assertTrue(maintainer.getAllColumnsForDataTable().contains(ref));
+        assertArrayEquals(new float[] { 1.5f, -2f },
+          hnswVector(maintainer, ref, new double[] { 1.5, -2 }), 0f);
+        assertNull(hnswVector(maintainer, ref, new double[] { 1e39, 0 }));
+        assertNull(hnswVector(maintainer, ref, new double[] { 1, 2, 3 }));
+      }
+
+      // A stored document that cannot be decoded. Only a writer that bypasses the client can
+      // store it. A lenient evaluation gives null. A write evaluates its new vector strictly, so
+      // the write fails
+      String bsonTable = "T_" + generateUniqueName();
+      String bsonIndex = "I_" + generateUniqueName();
+      pconn.createStatement()
+        .execute("CREATE TABLE " + bsonTable + " (ID VARCHAR PRIMARY KEY, DOC BSON)");
+      pconn.createStatement().execute("CREATE VECTOR INDEX " + bsonIndex + " ON " + bsonTable
+        + " (BSON_VECTOR_VALUE(DOC, 'v', 2)) WITH (algorithm = 'HNSW', metric = 'L2')");
+      PTable bsonData = pconn.getTable(bsonTable);
+      IndexMaintainer bson = IndexMaintainer.create(bsonData, pconn.getTable(bsonIndex), pconn);
+      PColumn doc = bsonData.getColumnForColumnName("DOC");
+      Put corrupt = new Put(Bytes.toBytes("row")).addColumn(doc.getFamilyName().getBytes(),
+        doc.getColumnQualifierBytes(), new byte[] { 1, 2, 3 });
+      assertNull(bson.getVectorAsFloats(new IndexUtil.SimpleValueGetter(corrupt),
+        HConstants.LATEST_TIMESTAMP, false));
+      try {
+        bson.getVectorAsFloats(new IndexUtil.SimpleValueGetter(corrupt),
+          HConstants.LATEST_TIMESTAMP, true);
+        fail("expected a strict evaluation to fail");
+      } catch (RuntimeException expected) {
+      }
+    }
+  }
+
+  private static float[] hnswVector(IndexMaintainer maintainer, ColumnReference ref,
+    double[] vector) {
+    byte[] value = new byte[vector.length * Bytes.SIZEOF_DOUBLE];
+    PVectorDouble.writeElements(vector, value, 0);
+    Put put = new Put(Bytes.toBytes("row")).addColumn(ref.getFamily(), ref.getQualifier(), value);
+    return maintainer.getVectorAsFloats(new IndexUtil.SimpleValueGetter(put),
+      HConstants.LATEST_TIMESTAMP, false);
   }
 
   /**
