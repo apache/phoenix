@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,8 +50,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -60,7 +59,6 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -302,15 +300,10 @@ public class MutableIndexFailureIT extends BaseTest {
       addRowToTable(conn, fullTableName);
 
       query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 2-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(
-        SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).toString(),
-        explainPlanAttributes.getTableName());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+      assertPlan(conn, query).iteratorType("PARALLEL 2-WAY").scanType("FULL SCAN")
+        .table(
+          SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).toString())
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -352,15 +345,10 @@ public class MutableIndexFailureIT extends BaseTest {
         updateTableAgain(conn, false);
         // Verify previous writes succeeded to data table
         query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
-        plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-          .getExplainPlan();
-        explainPlanAttributes = plan.getPlanStepsAsAttributes();
-        assertEquals("PARALLEL 2-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-        assertEquals(
-          SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).toString(),
-          explainPlanAttributes.getTableName());
-        assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+        assertPlan(conn, query).iteratorType("PARALLEL 2-WAY").scanType("FULL SCAN")
+          .table(
+            SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).toString())
+          .clientSortAlgo("CLIENT MERGE SORT");
 
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -457,17 +445,14 @@ public class MutableIndexFailureIT extends BaseTest {
     boolean wasFailWrite = FailingRegionObserver.FAIL_WRITE;
     boolean wasToggleFailWriteForRetry = FailingRegionObserver.TOGGLE_FAIL_WRITE_FOR_RETRY;
     try {
-      Callable callable = new Callable() {
-
+      Callable<Boolean> callable = new Callable<Boolean>() {
         @Override
         public Boolean call() {
           Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
           props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, String.valueOf(isNamespaceMapped));
           try (Connection conn = driver.connect(url, props)) {
             // In case of disable index on failure policy, INDEX will be in PENDING_DISABLE on first
-            // retry
-            // but will
-            // become active if retry is successfull
+            // retry but will become active if retry is successfull
             PreparedStatement stmt =
               conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
             stmt.setString(1, "b");
@@ -510,18 +495,15 @@ public class MutableIndexFailureIT extends BaseTest {
     String query = "SELECT /*+ INDEX(" + fullTableName + " "
       + SchemaUtil.getTableNameFromFullName(fullIndexName) + ")  */ k,v1 FROM " + fullTableName;
     ResultSet rs = conn.createStatement().executeQuery(query);
-    String expectedPlan =
-      " OVER "
-        + (localIndex
-          ? fullIndexName + "("
-            + Bytes.toString(SchemaUtil
-              .getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
-            + ")"
-          : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped)
-            .getNameAsString());
-    String explainPlan =
-      QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
-    assertTrue(explainPlan, explainPlan.contains(expectedPlan));
+    String expectedTable = localIndex
+      ? fullIndexName + "("
+        + Bytes.toString(
+          SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
+        + ")"
+      : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped)
+        .getNameAsString();
+    assertPlan(conn, query).scanType(localIndex ? "RANGE SCAN" : "FULL SCAN")
+      .tableContains(expectedTable);
     if (transactional) { // failed commit does not get retried
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));

@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
@@ -42,7 +43,6 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -50,16 +50,12 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class LogicalTableNameIT extends LogicalTableNameBaseIT {
-  private static final Logger LOGGER = LoggerFactory.getLogger(LogicalTableNameIT.class);
-
   protected boolean createChildAfterRename;
   private boolean immutable;
   private Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -213,8 +209,6 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
     String schemaName = "S_" + generateUniqueName();
     String tableName = "TBL_" + generateUniqueName();
     String indexName = "IDX_" + generateUniqueName();
-    String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-    String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
     try (Connection conn = getConnection(props)) {
       try (Connection conn2 = getConnection(props)) {
         test_IndexTableChange(conn, conn2, schemaName, tableName, indexName,
@@ -411,7 +405,6 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         String upsert =
           "UPSERT INTO " + fullLevel2ViewName + " (PK1, V1, VIEW_COL1, CHV2) VALUES (?,?,?,?)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
-        ArrayList<String> row = new ArrayList<>();
         upsertStmt.setString(1, "PK10");
         upsertStmt.setString(2, "V10");
         upsertStmt.setString(3, "VIEW_COL1_10");
@@ -426,8 +419,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
 
         String indexSelect =
           "SELECT chv2, V1, VIEW_COL1 FROM " + fullLevel2ViewName + " WHERE chv2='CHV210'";
-        rs = conn2.createStatement().executeQuery("EXPLAIN " + indexSelect);
-        assertEquals(true, QueryUtil.getExplainPlan(rs).contains(VIEW_INDEX_TABLE_PREFIX));
+        assertPlan(conn2, indexSelect).tableContains(VIEW_INDEX_TABLE_PREFIX);
         rs = conn2.createStatement().executeQuery(indexSelect);
         assertEquals(true, rs.next());
         assertEquals(false, rs.next());
@@ -476,8 +468,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
     }
     Object[] arr = HashJoinGlobalIndexIT.data().toArray();
     String[] indexDDL = ((String[][]) arr[0])[0];
-    String[] plans = ((String[][]) arr[0])[1];
-    HashJoinGlobalIndexIT hjgit = new HashJoinGlobalIndexIT(indexDDL, plans);
+    HashJoinGlobalIndexIT hjgit = new HashJoinGlobalIndexIT(indexDDL);
     hjgit.createSchema();
     hjgit.testInnerJoin(false);
   }

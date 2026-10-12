@@ -17,14 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.HashMap;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
@@ -49,35 +46,23 @@ public abstract class WhereOptimizerForArrayAnyITBase extends BaseTest {
 
   protected void assertPointLookupsAreGenerated(QueryPlan queryPlan, int noOfPointLookups)
     throws SQLException {
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
     String expectedScanType =
-      "POINT LOOKUP ON " + noOfPointLookups + " KEY" + (noOfPointLookups > 1 ? "S " : " ");
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
+      "POINT LOOKUP ON " + noOfPointLookups + " KEY" + (noOfPointLookups > 1 ? "S" : "");
+    assertPlan(queryPlan.getExplainPlan().getPlanStepsAsAttributes()).scanType(expectedScanType);
   }
 
   protected void assertSkipScanIsGenerated(PreparedStatement stmt, int skipListSize)
     throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
     String expectedScanType =
-      "SKIP SCAN ON " + skipListSize + " KEY" + (skipListSize > 1 ? "S " : " ");
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
+      "SKIP SCAN ON " + skipListSize + " KEY" + (skipListSize > 1 ? "S" : "");
+    assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType(expectedScanType);
   }
 
   protected void assertRangeScanIsGenerated(PreparedStatement stmt) throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    String expectedScanType = "RANGE SCAN ";
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
+    assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN");
   }
 
   protected void assertDegenerateScanIsGenerated(PreparedStatement stmt) throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    assertNull(planAttributes.getExplainScanType());
+    assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType(null);
   }
 }

@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -198,11 +196,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return Iterators.filter(indexes, new Predicate<PTable>() {
       @Override
       public boolean apply(PTable index) {
-        return sendIndexMaintainer(index) && ((index.getIndexType() == IndexType.GLOBAL
+        return sendIndexMaintainer(index) && ((IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme()
-            || connection.getQueryServices().getConfiguration().getBoolean(
-              SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
-              DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED)))
+            || IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection)))
           || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
       }
     });

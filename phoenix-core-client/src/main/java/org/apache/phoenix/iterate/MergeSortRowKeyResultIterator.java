@@ -59,6 +59,7 @@ public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {
     resultIterators.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
     planSteps.add("CLIENT MERGE SORT");
+    explainPlanAttributesBuilder.addClientStep("CLIENT MERGE SORT");
   }
 
   @Override

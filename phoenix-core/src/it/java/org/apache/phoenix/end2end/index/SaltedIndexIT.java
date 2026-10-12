@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -31,11 +32,11 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -158,15 +159,19 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertEquals("y", rs.getString(2));
     assertFalse(rs.next());
 
-    String expectedPlan;
-    rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    expectedPlan = indexSaltBuckets == null
-      ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [~'y']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY"
-      : ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',~'y'] - ["
-        + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
-        + ",~'y']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT");
-    assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+    if (indexSaltBuckets == null) {
+      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+        .table(indexTableFullName).keyRanges("[~'y']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+    } else {
+      assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
+        .table(indexTableFullName)
+        .keyRanges("[X'00',~'y'] - ["
+          + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
+          + ",~'y']")
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+    }
 
     // Will use index, so rows returned in DESC order.
     // This is not a bug, though, because we can
@@ -180,14 +185,19 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertEquals("a", rs.getString(1));
     assertEquals("x", rs.getString(2));
     assertFalse(rs.next());
-    rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    expectedPlan = indexSaltBuckets == null
-      ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [*] - [~'x']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY"
-      : ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',*] - ["
-        + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
-        + ",~'x']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT");
-    assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+    if (indexSaltBuckets == null) {
+      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+        .table(indexTableFullName).keyRanges("[*] - [~'x']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+    } else {
+      assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
+        .table(indexTableFullName)
+        .keyRanges("[X'00',*] - ["
+          + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
+          + ",~'x']")
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+    }
 
     // Use data table, since point lookup trumps order by
     query = "SELECT k,v FROM " + dataTableFullName + " WHERE k = 'a' ORDER BY v";
@@ -196,14 +206,9 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertEquals("a", rs.getString(1));
     assertEquals("x", rs.getString(2));
     assertFalse(rs.next());
-    rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    expectedPlan = tableSaltBuckets == null
-      ? "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + dataTableFullName + "\n"
-        + "    SERVER SORTED BY [V]\n" + "CLIENT MERGE SORT"
-      : "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + dataTableFullName + "\n"
-        + "    SERVER SORTED BY [V]\n" + "CLIENT MERGE SORT";
-    String explainPlan2 = QueryUtil.getExplainPlan(rs);
-    assertEquals(expectedPlan, explainPlan2);
+    assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("POINT LOOKUP ON 1 KEY")
+      .table(dataTableFullName).serverSortedBy("[V]").clientSortAlgo("CLIENT MERGE SORT")
+      .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
     // Will use data table now, since there's a LIMIT clause and
     // we're able to optimize out the ORDER BY, unless the data
@@ -217,26 +222,29 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertEquals("b", rs.getString(1));
     assertEquals("y", rs.getString(2));
     assertFalse(rs.next());
-    rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    expectedPlan = tableSaltBuckets == null
-      ? "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableFullName + "\n"
-        + "    SERVER FILTER BY V >= 'x'\n" + "    SERVER 2 ROW LIMIT\n" + "CLIENT 2 ROW LIMIT"
-      : "CLIENT PARALLEL 3-WAY FULL SCAN OVER " + dataTableFullName + "\n"
-        + "    SERVER FILTER BY V >= 'x'\n" + "    SERVER 2 ROW LIMIT\n" + "CLIENT MERGE SORT\n"
-        + "CLIENT 2 ROW LIMIT";
-    String explainPlan = QueryUtil.getExplainPlan(rs);
-    assertEquals(expectedPlan, explainPlan);
+    if (tableSaltBuckets == null) {
+      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+        .table(dataTableFullName).serverWhereFilter("SERVER FILTER BY V >= 'x'").serverRowLimit(2L)
+        .clientRowLimit(2).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
+    } else {
+      assertPlan(conn, query).iteratorType("PARALLEL 3-WAY").scanType("FULL SCAN")
+        .table(dataTableFullName).serverWhereFilter("SERVER FILTER BY V >= 'x'").serverRowLimit(2L)
+        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(2)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+    }
 
     // PHOENIX-6604
     query = "SELECT * FROM " + dataTableFullName + " ORDER BY v DESC LIMIT 1";
-    rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    expectedPlan = indexSaltBuckets == null
-      ? "CLIENT SERIAL 1-WAY FULL SCAN OVER " + indexTableFullName + "\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER 1 ROW LIMIT\n"
-        + "CLIENT 1 ROW LIMIT"
-      : "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + indexTableFullName + "\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER 1 ROW LIMIT\n"
-        + "CLIENT MERGE SORT\n" + "CLIENT 1 ROW LIMIT";
-    assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+    if (indexSaltBuckets == null) {
+      assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN")
+        .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
+        .clientRowLimit(1).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
+    } else {
+      assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("FULL SCAN")
+        .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
+        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(1)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
+    }
   }
 }

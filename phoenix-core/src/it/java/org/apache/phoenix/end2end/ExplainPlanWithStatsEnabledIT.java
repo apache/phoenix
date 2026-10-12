@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FO
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -34,7 +35,10 @@ import java.util.List;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -410,6 +414,63 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
       estimateInfoTs = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN);
     }
     return new Estimate(estimatedRows, estimatedBytes, estimateInfoTs);
+  }
+
+  @Test
+  public void testTopOfPlanEstimatesMatchStats() throws Exception {
+    String sql = "SELECT * FROM " + tableB + " WHERE k >= ?";
+    List<Object> binds = Lists.newArrayList();
+    binds.add(99);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixPreparedStatement stmt =
+        conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+      stmt.setInt(1, 99);
+      QueryPlan plan = stmt.optimizeQuery();
+      Long planRows = plan.getEstimatedRowsToScan();
+      Long planBytes = plan.getEstimatedBytesToScan();
+      Long planTs = plan.getEstimateInfoTimestamp();
+      assertEquals((Long) 10L, planRows);
+      assertEquals((Long) 634L, planBytes);
+      assertTrue(planTs > 0);
+
+      // First-row EXPLAIN cells must equal the stats-driven values.
+      Estimate info = getByteRowEstimates(conn, sql, binds);
+      assertEquals(planRows, info.estimatedRows);
+      assertEquals(planBytes, info.estimatedBytes);
+      assertEquals(planTs, info.estimateInfoTs);
+
+      // Top-of-plan attributes must equal the stats-driven values.
+      ExplainPlanAttributes attrs = plan.getExplainPlan().getPlanStepsAsAttributes();
+      assertEquals(planRows, attrs.getEstimatedRows());
+      assertEquals(planBytes, attrs.getEstimatedSizeInBytes());
+      assertEquals(planTs, attrs.getEstimateInfoTs());
+    }
+  }
+
+  @Test
+  public void testEstimateCellsOnlyOnFirstRow() throws Exception {
+    // A query whose plan emits a SERVER FILTER BY step in addition to the scan line produces a
+    // multi row EXPLAIN result set with stats populated estimates at the top-of-plan.
+    String sql = "SELECT * FROM " + tableB + " WHERE k >= 99 AND c1.a > c2.b";
+    try (Connection conn = DriverManager.getConnection(getUrl());
+      PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + sql);
+      ResultSet rs = stmt.executeQuery()) {
+      assertTrue("expected at least one EXPLAIN row", rs.next());
+      assertNotNull(rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN));
+      assertNotNull(rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN));
+      assertNotNull(rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN));
+      int extraRows = 0;
+      while (rs.next()) {
+        extraRows++;
+        rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+        assertTrue("EST_ROWS_READ must be NULL on row " + (extraRows + 1), rs.wasNull());
+        rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN);
+        assertTrue("EST_BYTES_READ must be NULL on row " + (extraRows + 1), rs.wasNull());
+        rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN);
+        assertTrue("EST_INFO_TS must be NULL on row " + (extraRows + 1), rs.wasNull());
+      }
+      assertTrue("expected multi-step plan", extraRows >= 1);
+    }
   }
 
   @Test

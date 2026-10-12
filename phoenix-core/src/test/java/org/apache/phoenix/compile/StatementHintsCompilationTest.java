@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -24,7 +25,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -34,9 +34,9 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -99,26 +99,29 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     conn.createStatement().execute(
       "create table eh (organization_id char(15) not null,parent_id char(15) not null, created_date date not null, entity_history_id char(15) not null constraint pk primary key (organization_id, parent_id, created_date, entity_history_id))");
-    ResultSet rs = conn.createStatement().executeQuery(
-      "explain select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from eh where ORGANIZATION_ID='111111111111111' and SUBSTR(PARENT_ID, 1, 3) = 'foo' and CREATED_DATE >= TO_DATE ('2012-11-01 00:00:00') and CREATED_DATE < TO_DATE ('2012-11-30 00:00:00') order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID limit 100");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER EH ['111111111111111','foo            ','2012-11-01 00:00:00.000'] - ['111111111111111','fop            ','2012-11-30 00:00:00.000']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND (CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')\n"
-        + "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n"
-        + "CLIENT MERGE SORT\nCLIENT LIMIT 100",
-      QueryUtil.getExplainPlan(rs));
+    String query =
+      "select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from eh where ORGANIZATION_ID='111111111111111' and SUBSTR(PARENT_ID, 1, 3) = 'foo' and CREATED_DATE >= TO_DATE ('2012-11-01 00:00:00') and CREATED_DATE < TO_DATE ('2012-11-30 00:00:00') order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID limit 100";
+    assertPlan(conn, query).scanType("RANGE SCAN").table("EH")
+      .keyRanges("['111111111111111','foo            ','2012-11-01 00:00:00.000']"
+        + " - ['111111111111111','fop            ','2012-11-30 00:00:00.000']")
+      .serverFirstKeyOnlyProjection(true)
+      .serverWhereFilter("SERVER FILTER BY (CREATED_DATE >= DATE"
+        + " '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')")
+      .serverSortedBy("[ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]")
+      .serverRowLimit(100L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(100)
+      .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
   }
 
   @Test
   public void testSerialHint() throws Exception {
     // test AggregatePlan
     String query = "SELECT /*+ SERIAL */ COUNT(*) FROM atable";
-    assertTrue("Expected a SERIAL query",
-      compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
+    assertPlan(compileStatement(query).getExplainPlan().getPlanStepsAsAttributes())
+      .iteratorType("SERIAL");
 
     // test ScanPlan
     query = "SELECT /*+ SERIAL */ * FROM atable limit 10";
-    assertTrue("Expected a SERIAL query", compileStatement(query, Collections.emptyList(), 10)
-      .getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
+    assertPlan(compileStatement(query, Collections.emptyList(), 10).getExplainPlan()
+      .getPlanStepsAsAttributes()).iteratorType("SERIAL");
   }
 }

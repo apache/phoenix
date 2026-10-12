@@ -21,12 +21,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_JOB_TYPE;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType.UPDATE_STATS;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -54,12 +54,9 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
@@ -71,7 +68,6 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -258,17 +254,9 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     conn.createStatement()
       .execute("CREATE TABLE " + fullTableName + " ( k CHAR(1) PRIMARY KEY )" + tableDDLOptions);
     collectStatistics(conn, fullTableName);
-    ExplainPlan plan = conn.prepareStatement("SELECT * FROM " + fullTableName)
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(1, (int) planAttributes.getSplitsChunk());
-    assertEquals(0, (long) planAttributes.getEstimatedRows());
-    assertEquals(20, (long) planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
-    assertEquals("SERVER FILTER BY " + (columnEncoded ? "FIRST KEY ONLY" : "EMPTY COLUMN ONLY"),
-      planAttributes.getServerWhereFilter());
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).scanEstimatedRows(0L)
+      .scanEstimatedBytes(20L).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+      .table(physicalTableName).serverProjectionFilter(columnEncoded);
     conn.close();
   }
 
@@ -286,45 +274,24 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     // if we are using the ONE_CELL_PER_COLUMN_FAMILY storage scheme, we will have the single kv
     // even though there are no values for col family v2
 
-    ExplainPlan plan = conn.prepareStatement("SELECT v2 FROM " + fullTableName + " WHERE v2='foo'")
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(columnEncoded && !mutable ? 4 : 3, (int) planAttributes.getSplitsChunk());
-    assertEquals(columnEncoded && !mutable ? 1 : 0, (long) planAttributes.getEstimatedRows());
-    assertEquals(columnEncoded && !mutable ? 38 : 20,
-      (long) planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 3-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
-    assertEquals("SERVER FILTER BY B.V2 = 'foo'", planAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+    assertPlan(conn, "SELECT v2 FROM " + fullTableName + " WHERE v2='foo'")
+      .splitsChunk(columnEncoded && !mutable ? 4 : 3)
+      .scanEstimatedRows(columnEncoded && !mutable ? 1L : 0L)
+      .scanEstimatedBytes(columnEncoded && !mutable ? 38L : 20L).iteratorType("PARALLEL 3-WAY")
+      .scanType("FULL SCAN").table(physicalTableName)
+      .serverWhereFilter("SERVER FILTER BY B.V2 = 'foo'").clientSortAlgo("CLIENT MERGE SORT");
 
     long estimatedSizeInBytes = columnEncoded ? 28
       : TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? 38
       : 34;
-    plan = conn.prepareStatement("SELECT * FROM " + fullTableName)
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(4, (int) planAttributes.getSplitsChunk());
-    assertEquals(1, (long) planAttributes.getEstimatedRows());
-    assertEquals(estimatedSizeInBytes, (long) planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 3-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
-    assertNull(planAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(4).scanEstimatedRows(1L)
+      .scanEstimatedBytes(estimatedSizeInBytes).iteratorType("PARALLEL 3-WAY").scanType("FULL SCAN")
+      .table(physicalTableName).serverWhereFilter(null).clientSortAlgo("CLIENT MERGE SORT");
 
-    plan = conn.prepareStatement("SELECT * FROM " + fullTableName + " WHERE k = 'a'")
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(1, (int) planAttributes.getSplitsChunk());
-    assertEquals(1, (long) planAttributes.getEstimatedRows());
-    assertEquals(columnEncoded ? 204 : 202, (long) planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("POINT LOOKUP ON 1 KEY ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
-    assertNull(planAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+    assertPlan(conn, "SELECT * FROM " + fullTableName + " WHERE k = 'a'").splitsChunk(1)
+      .scanEstimatedRows(1L).scanEstimatedBytes(columnEncoded ? 204L : 202L)
+      .iteratorType("PARALLEL 1-WAY").scanType("POINT LOOKUP ON 1 KEY").table(physicalTableName)
+      .serverWhereFilter(null).clientSortAlgo("CLIENT MERGE SORT");
 
     conn.close();
   }
@@ -333,7 +300,6 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
   public void testUpdateStats() throws Exception {
     Connection conn;
     PreparedStatement stmt;
-    ResultSet rs;
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     conn = getConnection();
     conn.createStatement().execute("CREATE TABLE " + fullTableName
@@ -343,9 +309,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     Array array;
     conn = upsertValues(props, fullTableName);
     collectStatistics(conn, fullTableName);
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT k FROM " + fullTableName);
-    rs.next();
-    long rows1 = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+    Long rows1 =
+      assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getScanEstimatedRows();
     stmt = upsertStmt(conn, fullTableName);
     stmt.setString(1, "z");
     s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -357,9 +322,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     stmt.execute();
     conn.commit();
     collectStatistics(conn, fullTableName);
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT k FROM " + fullTableName);
-    rs.next();
-    long rows2 = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+    Long rows2 =
+      assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getScanEstimatedRows();
     assertNotEquals(rows1, rows2);
     conn.close();
   }
@@ -611,15 +575,9 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
       : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? 25044
       : 12420;
 
-    ExplainPlan plan = conn.prepareStatement("SELECT * FROM " + fullTableName)
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(26, (int) planAttributes.getSplitsChunk());
-    assertEquals(25, (long) planAttributes.getEstimatedRows());
-    assertEquals(sizeInBytes, (long) planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(26).scanEstimatedRows(25L)
+      .scanEstimatedBytes(sizeInBytes).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+      .table(physicalTableName);
 
     ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
     List<HRegionLocation> regions =
@@ -680,15 +638,9 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     assertEquals(0, rs.getLong(1));
     assertFalse(rs.next());
 
-    plan = conn.prepareStatement("SELECT * FROM " + fullTableName)
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    planAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(1, (int) planAttributes.getSplitsChunk());
-    assertNull(planAttributes.getEstimatedRows());
-    assertNull(planAttributes.getEstimatedSizeInBytes());
-    assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
-    assertEquals(physicalTableName, planAttributes.getTableName());
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).scanEstimatedRows(null)
+      .scanEstimatedBytes(null).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+      .table(physicalTableName);
   }
 
   @Test

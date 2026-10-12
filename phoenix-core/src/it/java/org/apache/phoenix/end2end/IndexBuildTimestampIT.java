@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -41,8 +42,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -136,11 +137,13 @@ public class IndexBuildTimestampIT extends BaseTest {
 
   public static void assertExplainPlan(Connection conn, boolean localIndex, String selectSql,
     String dataTableFullName, String indexTableFullName) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-
-    IndexToolIT.assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName,
-      indexTableFullName);
+    // Verify the query is served by a RANGE SCAN over the index table. For a local index the
+    // scanned name carries the data table in parentheses, e.g. IDX(DATA).
+    String expectedTable = localIndex
+      ? SchemaUtil.normalizeIdentifier(indexTableFullName) + "("
+        + SchemaUtil.normalizeIdentifier(dataTableFullName) + ")"
+      : SchemaUtil.normalizeIdentifier(indexTableFullName);
+    assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(expectedTable);
   }
 
   private class MyClock extends EnvironmentEdge {

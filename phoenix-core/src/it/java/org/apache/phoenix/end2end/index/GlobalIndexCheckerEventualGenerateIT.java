@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_RETRY_PAUSE_MS;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
 
 import java.util.Collection;
@@ -47,7 +46,6 @@ public class GlobalIndexCheckerEventualGenerateIT extends GlobalIndexCheckerIT {
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(10);
     props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
-    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(2000));
     props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(5));
     props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.FALSE.toString());
     props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(-1));
@@ -72,6 +70,11 @@ public class GlobalIndexCheckerEventualGenerateIT extends GlobalIndexCheckerIT {
   @Override
   protected void waitForEventualConsistency() throws Exception {
     Thread.sleep(18000);
+  }
+
+  @Override
+  protected boolean isEventualConsistency() {
+    return true;
   }
 
   @Parameterized.Parameters(name = "async={0},encoded={1}")

@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.junit.Assert.assertArrayEquals;
@@ -83,6 +84,7 @@ import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -105,7 +107,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -1348,13 +1349,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
   }
 
-  private void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue)
-    throws SQLException {
-    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-    assertEquals(expectedValue,
-      pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
-  }
-
   @Test
   public void testInvalidNegativeArrayIndex() throws Exception {
     String query = "SELECT a_double_array[-20] FROM table_with_array";
@@ -1597,7 +1591,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     conn.createStatement().execute(
       "CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
-    ResultSet rs;
     String[] queries = { "SELECT DISTINCT v FROM T LIMIT 3",
       "SELECT v FROM T GROUP BY v,k1 LIMIT 3", "SELECT count(*) FROM T GROUP BY k1 LIMIT 3",
       "SELECT max(v) FROM T GROUP BY k1,k2 LIMIT 3", "SELECT k1,k2 FROM T GROUP BY k1,k2 LIMIT 3",
@@ -1605,12 +1598,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                                                                      // of GROUP BY key not
                                                                      // important
     };
-    String query;
-    for (int i = 0; i < queries.length; i++) {
-      query = queries[i];
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertTrue("Expected to find GROUP BY limit optimization in: " + query,
-        QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
+    for (String query : queries) {
+      assertPlan(conn, query).serverGroupByLimit(3);
     }
   }
 
@@ -1619,7 +1608,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     conn.createStatement().execute(
       "CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
-    ResultSet rs;
     String[] queries = {
       // "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
       // "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
@@ -1627,13 +1615,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       "SELECT count(1) FROM T GROUP BY v,k1 LIMIT 3",
       "SELECT max(v) FROM T GROUP BY k1,k2 HAVING count(k1) > 1 LIMIT 3",
       "SELECT count(v) FROM T GROUP BY to_date(k2),k1 LIMIT 3", };
-    String query;
-    for (int i = 0; i < queries.length; i++) {
-      query = queries[i];
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertFalse("Did not expected to find GROUP BY limit optimization in: " + query,
-        explainPlan.contains(" LIMIT 3 GROUPS"));
+    for (String query : queries) {
+      assertPlan(conn, query).serverGroupByLimit(null);
     }
   }
 
@@ -2219,8 +2202,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY)");
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT arr[1] from t");
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, "SELECT arr[1] from t").serverParsedProjections("ARRAY",
+        "ARRAY_ELEM(ARR, 1)");
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2232,8 +2215,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY)");
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT arr, arr[1] from t");
-      assertFalse(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, "SELECT arr, arr[1] from t").serverParsedProjectionsNone();
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2246,9 +2228,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     try {
       conn.createStatement()
         .execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY, arr2 VARCHAR ARRAY)");
-      ResultSet rs =
-        conn.createStatement().executeQuery("EXPLAIN SELECT arr, arr[1], arr2[1] from t");
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, "SELECT arr, arr[1], arr2[1] from t").serverParsedProjections("ARRAY",
+        "ARRAY_ELEM(ARR2, 1)");
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2261,9 +2242,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     try {
       conn.createStatement()
         .execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
-      ResultSet rs = conn.createStatement().executeQuery(
-        "EXPLAIN SELECT arr1, arr1[1], ARRAY_APPEND(ARRAY_APPEND(arr1, arr2[2]), arr2[1]), p from t");
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn,
+        "SELECT arr1, arr1[1], ARRAY_APPEND(ARRAY_APPEND(arr1, arr2[2]), arr2[1]), p from t")
+          .serverParsedProjectionCount("ARRAY", 2);
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2321,9 +2302,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     try {
       conn.createStatement()
         .execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
-      ResultSet rs = conn.createStatement().executeQuery(
-        "EXPLAIN SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from t");
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn,
+        "SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from t")
+          .serverParsedProjectionCount("ARRAY", 2);
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2335,8 +2316,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(arr INTEGER ARRAY PRIMARY KEY)");
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT arr[1] from t");
-      assertFalse(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, "SELECT arr[1] from t").serverParsedProjectionsNone();
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2569,27 +2549,22 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       conn.createStatement()
         .execute("CREATE TABLE t3(j INTEGER PRIMARY KEY," + " col3 VARCHAR, col4 VARCHAR)");
       conn.createStatement().execute("CREATE INDEX idx ON t1 (col1 || col2)");
-      String query = "SELECT a.k from t1 a where a.col1 || a.col2 = 'foobar'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY", explainPlan);
-      query = "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    PARALLEL INNER-JOIN TABLE 0\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")", explainPlan);
-      query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    PARALLEL INNER-JOIN TABLE 0\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")", explainPlan);
+      assertPlan(conn, "SELECT a.k from t1 a where a.col1 || a.col2 = 'foobar'")
+        .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
+        .serverFirstKeyOnlyProjection(true);
+      assertPlan(conn, "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'")
+        .scanType("FULL SCAN").table("T3").serverFirstKeyOnlyProjection(true)
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")").subPlanCount(1)
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
+        .serverFirstKeyOnlyProjection(true).end();
+      assertPlan(conn,
+        "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'")
+          .scanType("FULL SCAN").table("T2").serverFirstKeyOnlyProjection(true)
+          .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")").subPlanCount(1)
+          .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+          .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
+          .serverFirstKeyOnlyProjection(true).end();
     } finally {
       conn.close();
     }
@@ -6301,10 +6276,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       + "JOIN " + peopleTable + " ds ON ds.PERSON_ID = l.LOCALID";
 
     for (String q : new String[] { query1, query2 }) {
-      ResultSet rs = conn.createStatement().executeQuery("explain " + q);
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertFalse("Tables should not require sort over their PKs:\n" + plan,
-        plan.contains("SERVER SORTED BY"));
+      assertPlan(conn, q).serverSortedBy(null).rhs().serverSortedBy(null);
     }
   }
 
@@ -7179,12 +7151,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
       String query = "select id, ts from " + tableName
         + " where ts >= TIMESTAMP '2023-02-23 13:30:00'  and ts < TIMESTAMP '2023-02-23 13:40:00'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName
-          + " [~1,677,159,600,000] - [~1,677,159,000,000]\n    SERVER FILTER BY FIRST KEY ONLY",
-        explainPlan);
+      assertPlan(conn, query).scanType("RANGE SCAN").table(indexName)
+        .keyRanges("[~1,677,159,600,000] - [~1,677,159,000,000]").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
   }
 
@@ -7196,27 +7165,23 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
       stmt.execute("create table " + tableName + " (k varchar primary key desc)");
 
-      // Explain doesn't display open/closed ranges
-      String explainExpected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName
-        + " [~'aaa'] - [~'a']\n    SERVER FILTER BY FIRST KEY ONLY";
-
       String openQry = "select * from " + tableName + " where k > 'a' and k<'aaa'";
       Scan openScan =
         getOptimizedQueryPlan(openQry, Collections.emptyList()).getContext().getScan();
       assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
       assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + openQry);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(explainExpected, explainPlan);
+      assertPlan(conn, openQry).scanType("RANGE SCAN").table(tableName)
+        .keyRanges("[~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       String closedQry = "select * from " + tableName + " where k >= 'a' and k <= 'aaa'";
       Scan closedScan =
         getOptimizedQueryPlan(closedQry, Collections.emptyList()).getContext().getScan();
       assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
       assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
-      rs = stmt.executeQuery("EXPLAIN " + closedQry);
-      explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(explainExpected, explainPlan);
+      assertPlan(conn, closedQry).scanType("RANGE SCAN").table(tableName)
+        .keyRanges("[~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
   }
 
@@ -7232,14 +7197,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       stmt.execute("create index ii on dd (k4, k1, k2, k3)");
       String query = "select /*+ index(dd ii) */ k1, k2, k3, k4, v1, v2, v3, v4 from dd"
         + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      // We are more interested in the query compiling than the exact result
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER II [1]\n"
-        + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND \"K2\" = 1\n"
-        + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n" + "CLIENT MERGE SORT\n"
-        + "CLIENT LIMIT 1", explainPlan);
+      assertPlan(conn, query).scanType("RANGE SCAN").table("II").keyRanges("[1]")
+        .serverMergeColumns("[0.V1, 0.V2, 0.V3, 0.V4]").serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY \"K2\" = 1").serverSortedBy("[\"K1\", \"V1\"]")
+        .serverRowLimit(1L).clientRowLimit(1).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
     }
   }
 
@@ -7255,16 +7217,16 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       String query = "SELECT /*+ INDEX(D I), NO_INDEX_SERVER_MERGE */ * " + "FROM D "
         + "WHERE K2 = 'XXX' AND " + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
         + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' " + "ORDER BY V2 asc";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER D\n"
-        + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
-        + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n" + "    SERVER SORTED BY [D.V2]\n"
-        + "CLIENT MERGE SORT\n" + "    SKIP-SCAN-JOIN TABLE 0\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['XXX']\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
-        + " IN (($2.$4, $2.$5, $2.$6, $2.$7))", explainPlan);
+      assertPlan(conn, query).scanType("FULL SCAN").table("D")
+        .serverWhereFilter("SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+          + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')")
+        .serverSortedBy("[D.V2]").clientSortAlgo("CLIENT MERGE SORT")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
+          + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("RANGE SCAN").table("I").keyRanges("['XXX']").serverFirstKeyOnlyProjection(true)
+        .end();
     }
   }
 
@@ -7284,17 +7246,17 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         "SELECT /*+ INDEX(TAB_PHOENIX_6986 IDX_PHOENIX_6986) */ * " + "FROM TAB_PHOENIX_6986 "
           + "WHERE K2 = 'XXX' AND " + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
           + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' " + "ORDER BY V2 asc";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER TAB_PHOENIX_6986\n"
-        + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
-        + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
-        + "    SERVER SORTED BY [TAB_PHOENIX_6986.V2]\n" + "CLIENT MERGE SORT\n"
-        + "    SKIP-SCAN-JOIN TABLE 0\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_PHOENIX_6986 ['XXX']\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    DYNAMIC SERVER FILTER BY (\"TAB_PHOENIX_6986.K1\", \"TAB_PHOENIX_6986.K2\", \"TAB_PHOENIX_6986.K3\", \"TAB_PHOENIX_6986.K4\")"
-        + " IN (($2.$4, $2.$5, $2.$6, $2.$7))", explainPlan);
+      assertPlan(conn, query).scanType("FULL SCAN").table("TAB_PHOENIX_6986")
+        .serverWhereFilter("SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+          + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')")
+        .serverSortedBy("[TAB_PHOENIX_6986.V2]").clientSortAlgo("CLIENT MERGE SORT")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY (\"TAB_PHOENIX_6986.K1\","
+          + " \"TAB_PHOENIX_6986.K2\", \"TAB_PHOENIX_6986.K3\", \"TAB_PHOENIX_6986.K4\")"
+          + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("RANGE SCAN").table("IDX_PHOENIX_6986").keyRanges("['XXX']")
+        .serverFirstKeyOnlyProjection(true).end();
     }
   }
 
@@ -7306,10 +7268,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         "create table d (k integer primary key, v1 integer, v2 integer, v3 integer, v4 integer)");
       stmt.execute("create index i on d(v2) include (v3)");
       String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [1]\n"
-        + "    SERVER MERGE [0.V1, 0.V4]\n" + "    SERVER FILTER BY \"V3\" = 1", explainPlan);
+      assertPlan(conn, query).scanType("RANGE SCAN").table("I").keyRanges("[1]")
+        .serverMergeColumns("[0.V1, 0.V4]").serverWhereFilter("SERVER FILTER BY \"V3\" = 1")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
     }
   }
 

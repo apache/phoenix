@@ -600,6 +600,9 @@ public class ProjectionCompiler {
             serverAttributeToKVExpressionMap.get(entry.getKey()));
         }
       }
+      // Stash the per-type expression buckets on the context so EXPLAIN can render the per-type
+      // SERVER ARRAY|JSON|BSON PROJECTION clauses (and their per-expression detail lines).
+      context.setServerParsedProjections(serverAttributeToFuncExpressionMap);
       KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
       for (Expression expression : serverParsedKVRefs) {
         builder.addField(expression);

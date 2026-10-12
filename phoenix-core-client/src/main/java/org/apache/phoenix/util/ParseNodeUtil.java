@@ -23,6 +23,7 @@ import java.util.Set;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
@@ -159,16 +160,20 @@ public class ParseNodeUtil {
   /**
    * Optimize rewriting {@link SelectStatement} by {@link SubselectRewriter} and
    * {@link SubqueryRewriter} before {@link QueryCompiler#compile}.
+   * <p>
+   * The supplied {@link StatementContext} is the top level context that carries top-of-plan rewrite
+   * breadcrumb.
    */
-  public static RewriteResult rewrite(SelectStatement selectStatement,
-    PhoenixConnection phoenixConnection) throws SQLException {
+  public static RewriteResult rewrite(SelectStatement selectStatement, StatementContext context)
+    throws SQLException {
+    PhoenixConnection phoenixConnection = context.getConnection();
     SelectStatement selectStatementToUse =
-      SubselectRewriter.flatten(selectStatement, phoenixConnection);
+      SubselectRewriter.flatten(selectStatement, phoenixConnection, context);
     ColumnResolver columnResolver =
       FromCompiler.getResolverForQuery(selectStatementToUse, phoenixConnection);
     selectStatementToUse = StatementNormalizer.normalize(selectStatementToUse, columnResolver);
     SelectStatement transformedSubquery =
-      SubqueryRewriter.transform(selectStatementToUse, columnResolver, phoenixConnection);
+      SubqueryRewriter.transform(selectStatementToUse, columnResolver, phoenixConnection, context);
     if (transformedSubquery != selectStatementToUse) {
       columnResolver = FromCompiler.getResolverForQuery(transformedSubquery, phoenixConnection);
       transformedSubquery = StatementNormalizer.normalize(transformedSubquery, columnResolver);

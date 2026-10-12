@@ -254,9 +254,31 @@ public class WhereCompiler {
         scan.withStopRow(whereCompiler.getScanEndKey());
       }
     }
+    // Tag the residual predicate(s) that become the server-side filter with their "WHERE" origin
+    // so EXPLAIN can attribute each SERVER FILTER BY line.
+    tagWhereOrigins(context, expression);
+
     setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
 
     return expression;
+  }
+
+  /**
+   * Tag the top-level conjuncts of the residual WHERE expression with their origin for VERBOSE
+   * predicate source attribution. No-op when the context has diagnostic recording disabled so
+   * normal queries skip the child iteration and per-conjunct tag calls entirely.
+   */
+  private static void tagWhereOrigins(StatementContext context, Expression expression) {
+    if (expression == null || !context.isCollectDiagnostics()) {
+      return;
+    }
+    if (expression instanceof AndExpression) {
+      for (Expression child : expression.getChildren()) {
+        context.tagPredicate(child, "WHERE");
+      }
+    } else {
+      context.tagPredicate(expression, "WHERE");
+    }
   }
 
   public static class WhereExpressionCompiler extends ExpressionCompiler {

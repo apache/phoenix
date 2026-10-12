@@ -24,6 +24,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestin
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -145,6 +146,44 @@ public class HighAvailabilityTestingUtilityIT {
         doTestBasicOperationsWithConnection(conn, tableName, null);
       }
     });
+  }
+
+  @Test(timeout = 300000)
+  public void testServerSideIndexMetadataLookupUsesLocalCluster() throws Exception {
+    try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
+      createIndexedTableAndUpsert(conn, tableName + "_T1", tableName + "_I1");
+    }
+    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+      try (Connection conn = CLUSTERS.getCluster2Connection(haGroup)) {
+        createIndexedTableAndUpsert(conn, tableName + "_T2", tableName + "_I2");
+      }
+    });
+    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+      try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
+        createIndexedTableAndUpsert(conn, tableName + "_T3", tableName + "_I3");
+      }
+    });
+  }
+
+  private static void createIndexedTableAndUpsert(Connection conn, String table, String index)
+    throws Exception {
+    final int numRows = 5;
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute(String.format(
+        "CREATE TABLE %s (PK VARCHAR PRIMARY KEY, V1 VARCHAR) UPDATE_CACHE_FREQUENCY=60000",
+        table));
+      stmt.execute(String.format("CREATE INDEX %s ON %s (V1)", index, table));
+      for (int i = 0; i < numRows; i++) {
+        stmt.execute(String.format("UPSERT INTO %s VALUES ('k%d', 'v%d')", table, i, i));
+      }
+      conn.commit();
+      for (String name : new String[] { table, index }) {
+        try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + name)) {
+          assertTrue(rs.next());
+          assertEquals(numRows, rs.getInt(1));
+        }
+      }
+    }
   }
 
   /**

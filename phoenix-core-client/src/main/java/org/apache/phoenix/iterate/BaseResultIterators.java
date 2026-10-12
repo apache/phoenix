@@ -86,6 +86,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -638,6 +639,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
   public List<KeyRange> getSplits() {
     if (splits == null) return Collections.emptyList();
     else return splits;
+  }
+
+  @Override
+  protected int getSplitCount() {
+    return splits == null ? 0 : splits.size();
+  }
+
+  @Override
+  protected OptimizerDecision getOptimizerDecision() {
+    return plan.getOptimizerDecision();
+  }
+
+  @Override
+  protected org.apache.phoenix.compile.RowProjector getProjector() {
+    return plan.getProjector();
   }
 
   @Override
@@ -1839,8 +1855,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         buf.append(estimatedRows).append(" ROWS ");
         buf.append(estimatedSize).append(" BYTES ");
         if (explainPlanAttributesBuilder != null) {
-          explainPlanAttributesBuilder.setEstimatedRows(estimatedRows);
-          explainPlanAttributesBuilder.setEstimatedSizeInBytes(estimatedSize);
+          explainPlanAttributesBuilder.setScanEstimatedRows(estimatedRows);
+          explainPlanAttributesBuilder.setScanEstimatedSizeInBytes(estimatedSize);
         }
       }
     }

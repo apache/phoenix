@@ -52,11 +52,13 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -110,6 +112,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
   protected Long estimateInfoTimestamp;
   private boolean getEstimatesCalled;
   protected boolean isApplicable = true;
+  private OptimizerDecision optimizerDecision;
 
   protected BaseQueryPlan(StatementContext context, FilterableStatement statement, TableRef table,
     RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset,
@@ -539,10 +542,21 @@ public abstract class BaseQueryPlan implements QueryPlan {
     return planSteps;
   }
 
-  private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(ResultIterator iterator) {
+  private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(ResultIterator iterator)
+    throws SQLException {
     List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
     ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder();
     iterator.explain(planSteps, builder);
+    OptimizerDecision decision = getOptimizerDecision();
+    if (decision != null) {
+      builder.setIndexRule(decision.getRule());
+      builder.setFunctionalMatch(decision.getFunctionalMatch());
+      builder.setIndexRejected(decision.getRejectedIndexes());
+    }
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(builder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
+    }
     return Pair.of(planSteps, builder.build());
   }
 
@@ -583,6 +597,16 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
   public void setApplicable(boolean isApplicable) {
     this.isApplicable = isApplicable;
+  }
+
+  @Override
+  public OptimizerDecision getOptimizerDecision() {
+    return optimizerDecision;
+  }
+
+  @Override
+  public void setOptimizerDecision(OptimizerDecision decision) {
+    this.optimizerDecision = decision;
   }
 
   private void getEstimates() throws SQLException {
