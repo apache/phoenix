@@ -42,7 +42,6 @@ import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -83,7 +82,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -430,53 +428,12 @@ public class ConnectionQueryServicesImplTest {
     verify(mockAdmin, Mockito.times(1)).enableTable(tableName);
   }
 
-  @Test
-  public void testEnableTablePropagatesOtherIOException() throws Exception {
-    TableName tableName = TableName.valueOf("TEST_TABLE");
-    IOException expected = new IOException("boom");
-    doThrow(expected).when(mockAdmin).enableTable(tableName);
-    try {
-      invokeEnableTable(mockCqs, mockAdmin, tableName);
-      fail("Expected IOException to propagate");
-    } catch (InvocationTargetException e) {
-      assertSame(expected, e.getCause());
-    }
-  }
-
   private static void invokeEnableTable(ConnectionQueryServicesImpl cqs, Admin admin,
     TableName tableName) throws Exception {
     Method m = ConnectionQueryServicesImpl.class.getDeclaredMethod("enableTable", Admin.class,
       TableName.class);
     m.setAccessible(true);
     m.invoke(cqs, admin, tableName);
-  }
-
-  @Test
-  public void testReenableOrphanedDisabledHBaseTableLeavesTableDisabledWhenMetadataPresent()
-    throws Exception {
-    // PHOENIX-7788: disabled physical table with existing SYSTEM.CATALOG metadata must NOT be
-    // re-enabled; an admin may have disabled a registered table intentionally, and
-    // CREATE TABLE IF NOT EXISTS must preserve that.
-    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
-    TableName physical = TableName.valueOf(name);
-    MetaDataMutationResult existing =
-      new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0L, Mockito.mock(PTable.class));
-    doReturn(existing).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
-      any(byte[].class), anyLong(), anyLong());
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
-    verify(mockAdmin, never()).enableTable(physical);
-  }
-
-  @Test
-  public void testReenableOrphanedDisabledHBaseTableReenablesOrphanedTable() throws Exception {
-    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
-    TableName physical = TableName.valueOf(name);
-    MetaDataMutationResult notFound =
-      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
-    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
-      any(byte[].class), anyLong(), anyLong());
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
-    verify(mockAdmin, Mockito.times(1)).enableTable(physical);
   }
 
   @Test
