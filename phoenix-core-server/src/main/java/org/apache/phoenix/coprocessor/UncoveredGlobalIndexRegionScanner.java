@@ -28,15 +28,18 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
@@ -76,6 +79,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected final HTableFactory hTableFactory;
   private final boolean isScanMetricsEnabled;
   private List<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
+  private final long maxRowCount;
+  private long returnedRowCount;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -89,8 +94,24 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
     final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
     final long queryLimit, boolean isDistinct) throws IOException {
-    super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
-      viewConstants, ptr, pageSizeMs, queryLimit, isDistinct);
+    // Candidates can be rejected when joined with the data table. Enforce the pushed limit
+    // after verification, before a lower scanner can count those candidates toward the limit.
+    this(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
+      viewConstants, ptr, pageSizeMs, queryLimit, isDistinct,
+      indexMaintainer.isUncovered() && !indexMaintainer.isCDCIndex()
+        ? ScanUtil.removePageFilter(scan)
+        : null);
+  }
+
+  private UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
+    final Scan scan, final RegionCoprocessorEnvironment env, final Scan dataTableScan,
+    final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
+    final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
+    final long queryLimit, boolean isDistinct, PageFilter pageFilter) throws IOException {
+    super(reopenScannerWithoutPageFilter(innerScanner, scan, pageFilter), region, scan, env,
+      dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs, queryLimit,
+      isDistinct);
+    maxRowCount = pageFilter == null ? Long.MAX_VALUE : pageFilter.getPageSize();
     final Configuration config = env.getConfiguration();
     hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
     rowCountPerTask =
@@ -111,6 +132,31 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     if (isScanMetricsEnabled) {
       dataTableScanMetrics = new ArrayList<>();
     }
+  }
+
+  private static RegionScanner reopenScannerWithoutPageFilter(RegionScanner scanner, Scan scan,
+    PageFilter pageFilter) throws IOException {
+    if (pageFilter == null) {
+      return scanner;
+    }
+    scanner.close();
+    return ((DelegateRegionScanner) scanner).getNewRegionScanner(scan);
+  }
+
+  @Override
+  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    if (returnedRowCount >= maxRowCount) {
+      result.clear();
+      return false;
+    }
+    boolean hasMore = super.next(result, scannerContext);
+    if (!result.isEmpty() && !ScanUtil.isDummy(result)) {
+      returnedRowCount++;
+      if (returnedRowCount >= maxRowCount) {
+        return false;
+      }
+    }
+    return hasMore;
   }
 
   @Override
