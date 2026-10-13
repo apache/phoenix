@@ -199,6 +199,46 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testPointLookupWithOffset() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      createTestTable(getUrl(), ddl);
+      initTableValues(conn);
+      updateStatistics(conn);
+      // Point lookup (full primary key pinned) combined with OFFSET. Prior to
+      // PHOENIX-8010 this threw a server-side NullPointerException from
+      // ByteUtil.concat(null, ...) in NonAggregateRegionScannerFactory.getOffsetScanner,
+      // because the point-lookup fast path never sets the SCAN_ACTUAL_START_ROW scan
+      // attribute, leaving it null on the first (and only) scan RPC.
+      // The single matching row must be returned for OFFSET 0.
+      String pointLookupOffsetZero = "SELECT t_id, k1, k2 FROM " + tableName
+        + " WHERE t_id = 'c' AND k1 = 2 AND k2 = 3 LIMIT 5 OFFSET 0";
+      try (ResultSet rs = conn.createStatement().executeQuery(pointLookupOffsetZero)) {
+        assertTrue(rs.next());
+        assertEquals("c", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertEquals(3, rs.getInt(3));
+        assertFalse(rs.next());
+      }
+      // A non-zero OFFSET skips the only matching row, yielding an empty result set
+      // (and must still not crash).
+      String pointLookupOffsetOne = "SELECT t_id FROM " + tableName
+        + " WHERE t_id = 'c' AND k1 = 2 AND k2 = 3 LIMIT 5 OFFSET 1";
+      try (ResultSet rs = conn.createStatement().executeQuery(pointLookupOffsetOne)) {
+        assertFalse(rs.next());
+      }
+      // The reverse-scan variant exercises the same crash site.
+      String pointLookupReversed = "SELECT t_id FROM " + tableName
+        + " WHERE t_id = 'c' AND k1 = 2 AND k2 = 3 ORDER BY t_id DESC LIMIT 5 OFFSET 0";
+      try (ResultSet rs = conn.createStatement().executeQuery(pointLookupReversed)) {
+        assertTrue(rs.next());
+        assertEquals("c", rs.getString(1));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
   public void testMetaDataWithOffset() throws SQLException {
     Connection conn;
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
