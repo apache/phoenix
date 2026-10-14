@@ -24,21 +24,32 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -50,7 +61,9 @@ import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -896,6 +909,123 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
+    }
+  }
+
+  @Test
+  public void testUncoveredIndexLimitSkipsStaleRows() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(false, 0);
+  }
+
+  @Test
+  public void testUncoveredIndexLimitWithTTLMasking() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(true, 0);
+  }
+
+  @Test
+  public void testUncoveredIndexLimitWithOffset() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(false, 2);
+  }
+
+  private void assertUncoveredIndexLimit(boolean finiteTTL, int offset) throws Exception {
+    Map<Configuration, String> originalThresholds = new LinkedHashMap<>();
+    Configuration clusterConfig = getUtility().getConfiguration();
+    originalThresholds.put(clusterConfig,
+      clusterConfig.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    getUtility().getHBaseCluster().getRegionServerThreads().forEach(thread -> {
+      Configuration config = thread.getRegionServer().getConfiguration();
+      originalThresholds.putIfAbsent(config,
+        config.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    });
+    EnvironmentEdge originalClock = EnvironmentEdgeManager.getDelegate();
+    ManualEnvironmentEdge clock = new ManualEnvironmentEdge();
+    try {
+      // Keep stale entries young so LIMIT correctness cannot depend on read-repair deletion.
+      originalThresholds.keySet().forEach(config -> config
+        .setLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 60_000));
+      try (Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = conn.createStatement()) {
+        String dataTable = generateUniqueName();
+        String indexTable = generateUniqueName();
+        stmt.execute("CREATE TABLE " + dataTable
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, UPDATED_TIME TIMESTAMP, VAL VARCHAR)"
+          + (finiteTTL ? " TTL=3600, IS_STRICT_TTL=true" : "")
+          + (salted ? (finiteTTL ? ", " : " ") + "SALT_BUCKETS=4" : ""));
+        stmt.execute("CREATE UNCOVERED INDEX " + indexTable + " ON " + dataTable + " (UPDATED_TIME)"
+          + (salted ? " SALT_BUCKETS=4" : ""));
+        long insertTime = EnvironmentEdgeManager.currentTimeMillis() + 1;
+        long timestampBase = 1_700_000_000_000L;
+        int rows = 20;
+        int limit = 3;
+        clock.setValue(insertTime);
+        EnvironmentEdgeManager.injectEdge(clock);
+        upsertLimitRows(conn, dataTable, rows, timestampBase, false);
+        List<byte[]> staleKeys = new ArrayList<>();
+        try (Table index = getUtility().getConnection().getTable(TableName.valueOf(indexTable))) {
+          // No Phoenix attributes: inspect the physical fixture without verification or repair.
+          try (ResultScanner scanner = index.getScanner(new Scan())) {
+            for (Result row : scanner) {
+              staleKeys.add(row.getRow());
+              assertEquals(insertTime, row.rawCells()[0].getTimestamp());
+            }
+          }
+          assertEquals(rows, staleKeys.size());
+          clock.incrementValue(1000);
+          upsertLimitRows(conn, dataTable, rows, timestampBase, true);
+          for (byte[] key : staleKeys) {
+            assertFalse("The fixture must retain its stale index entries",
+              index.get(new Get(key)).isEmpty());
+          }
+          String sql = "SELECT /*+ INDEX(" + dataTable + " " + indexTable
+            + ") */ ID, VAL, UPDATED_TIME FROM " + dataTable + " ORDER BY UPDATED_TIME ASC LIMIT "
+            + limit + (offset == 0 ? "" : " OFFSET " + offset);
+          assertPlan(conn, sql).table(indexTable).scanType("FULL SCAN");
+          try (ResultSet rs = stmt.executeQuery(sql)) {
+            for (int i = offset; i < offset + limit; i++) {
+              assertTrue("LIMIT must return valid rows after the stale prefix", rs.next());
+              assertEquals("id-" + i, rs.getString(1));
+              assertEquals("value-" + i, rs.getString(2));
+              assertEquals(new Timestamp(timestampBase + i * 1000L), rs.getTimestamp(3));
+            }
+            assertFalse(rs.next());
+          }
+          for (byte[] key : staleKeys) {
+            Result stale = index.get(new Get(key));
+            assertFalse("LIMIT must work while young stale entries remain", stale.isEmpty());
+            assertEquals(insertTime, stale.rawCells()[0].getTimestamp());
+          }
+        }
+      }
+    } finally {
+      EnvironmentEdgeManager.injectEdge(originalClock);
+      originalThresholds.forEach((config, value) -> {
+        if (value == null) {
+          config.unset(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB);
+        } else {
+          config.set(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, value);
+        }
+      });
+    }
+  }
+
+  private void upsertLimitRows(Connection conn, String dataTable, int rows, long timestampBase,
+    boolean nonNullTimestamp) throws SQLException {
+    try (PreparedStatement stmt = conn
+      .prepareStatement("UPSERT INTO " + dataTable + " (ID, UPDATED_TIME, VAL) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < rows; i++) {
+        stmt.setString(1, "id-" + i);
+        if (nonNullTimestamp) {
+          stmt.setTimestamp(2, new Timestamp(timestampBase + i * 1000L));
+        } else {
+          stmt.setNull(2, Types.TIMESTAMP);
+        }
+        stmt.setString(3, "value-" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
     }
   }
 
