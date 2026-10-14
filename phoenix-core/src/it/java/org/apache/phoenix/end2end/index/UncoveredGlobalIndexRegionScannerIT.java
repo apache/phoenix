@@ -964,7 +964,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             for (Result stale : fixture.staleRows) {
               assertTrue("Old stale index entry survived read repair",
                 index.get(new Get(stale.getRow())).isEmpty());
-              assertStaleEntryDeleteTimestamp(index, stale);
+              assertStaleEntryDeleteTimestamp(index, stale, fixture.dataTimestamp);
             }
           }
           assertEquals("Current index entries must survive cleanup", ROW_COUNT,
@@ -1011,12 +1011,12 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     clock.incrementValue(updateDelayMs);
     // Supply the indexed column explicitly to take the write-optimized uncovered-index path.
     upsertRows(conn, dataTable, true);
-    Fixture fixture = new Fixture(dataTable, indexTable, staleRows);
+    Fixture fixture = new Fixture(dataTable, indexTable, staleRows, clock.currentTime());
     assertEquals("Both stale and current index entries must physically exist", ROW_COUNT * 2,
       readPhysicalRows(indexTable).size());
     assertStaleEntriesPresent(fixture);
     for (Result data : readPhysicalRows(dataTable)) {
-      assertEquals("Base rows must have the recent update timestamp", clock.currentTime(),
+      assertEquals("Base rows must have the recent update timestamp", fixture.dataTimestamp,
         data.rawCells()[0].getTimestamp());
     }
     return fixture;
@@ -1040,9 +1040,10 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
   }
 
-  private void assertStaleEntryDeleteTimestamp(Table index, Result stale) throws Exception {
-    // Current index entries have different keys. Inspect the tombstone to verify that cleanup
-    // cannot delete newer versions of this same key by using the recent data-row timestamp.
+  private void assertStaleEntryDeleteTimestamp(Table index, Result stale, long dataTimestamp)
+    throws Exception {
+    // The stale entry is aged by its own timestamp but must be deleted at the data row timestamp,
+    // when the row stopped mapping to this key, so IndexTool sees consistent row histories.
     Scan scan = new Scan().withStartRow(stale.getRow()).withStopRow(stale.getRow(), true);
     scan.setRaw(true);
     scan.readAllVersions();
@@ -1052,8 +1053,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         for (Cell cell : result.rawCells()) {
           if (CellUtil.isDeleteFamily(cell)) {
             foundDelete = true;
-            assertEquals("Stale-entry deletion must use the index timestamp",
-              stale.rawCells()[0].getTimestamp(), cell.getTimestamp());
+            assertEquals("Stale-entry deletion must use the data row timestamp", dataTimestamp,
+              cell.getTimestamp());
           }
         }
       }
@@ -1102,11 +1103,13 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     final String dataTable;
     final String indexTable;
     final List<Result> staleRows;
+    final long dataTimestamp;
 
-    Fixture(String dataTable, String indexTable, List<Result> staleRows) {
+    Fixture(String dataTable, String indexTable, List<Result> staleRows, long dataTimestamp) {
       this.dataTable = dataTable;
       this.indexTable = indexTable;
       this.staleRows = staleRows;
+      this.dataTimestamp = dataTimestamp;
     }
 
     String indexQuery(String predicate) {
