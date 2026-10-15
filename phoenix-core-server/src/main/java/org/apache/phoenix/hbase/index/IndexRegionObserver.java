@@ -697,6 +697,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     this.dataTableName = dataTableName;
   }
 
+  @VisibleForTesting
+  IndexRegionObserver(String dataTableName, boolean replicateTable) {
+    this(dataTableName);
+    this.replicateTable = replicateTable;
+  }
+
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return Optional.of(this);
@@ -971,15 +977,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Resolve the replication writer for this batch, or empty when none should be used. Returns empty
-   * unless this is a CLIENT_HA write on a replication-eligible cluster ({@code replicateTable} =
-   * feature on AND table eligible) — which covers the feature-off rollout window and non-eligible
-   * tables. For such a write it then answers the role/policy question: the writer when this cluster
-   * is active for the group, empty for a non-active PARALLEL cluster (legitimate double-write, skip
-   * re-ship), and throws for a non-active non-PARALLEL (split-brain) live write.
+   * Resolve the replication writer for this batch, or empty when none should be used. Only a
+   * non-PARALLEL CLIENT_HA write on a replication-eligible cluster ({@code replicateTable}) gets a
+   * writer: PARALLEL writes never ride the replication log, since the client writes both clusters
+   * itself. A non-PARALLEL write to a non-active cluster is a split-brain write and throws.
    * @return the HA group writer, or empty if none should be used
    */
-  private Optional<ReplicationLogGroup> getReplicationLogGroup(RegionCoprocessorEnvironment env,
+  @VisibleForTesting
+  Optional<ReplicationLogGroup> getReplicationLogGroup(RegionCoprocessorEnvironment env,
     HAGroupStoreManager haGroupStoreManager, BatchOrigin origin, Optional<String> haGroupName)
     throws IOException {
     if (!replicateTable || origin != BatchOrigin.CLIENT_HA) {
@@ -987,23 +992,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     // origin == CLIENT_HA guarantees the HA group name is present.
     String haGroup = haGroupName.get();
+    // PARALLEL: the client double-writes to both clusters, so commit locally and skip the
+    // replication log on either role — the peer gets its copy from the client's other leg.
+    if (isParallelPolicy(haGroupStoreManager, haGroup)) {
+      return Optional.empty();
+    }
     Optional<ReplicationLogGroup> logGroup = ReplicationLogGroup.get(env.getConfiguration(),
       env.getServerName(), haGroup, haGroupStoreManager, abortable);
     if (logGroup.isPresent()) {
       return logGroup;
     }
-    // get() returned empty: this cluster is not active for the HA group. Its meaning depends on
-    // the HA policy of the write that just arrived:
-    // - PARALLEL: the client deliberately double-writes to both clusters, so a live write on
-    // the standby is expected. Commit locally and skip re-ship (a non-active cluster has no
-    // writer) — the peer gets its copy from the client's other leg. Same as the replay path
-    // in getHAGroupFromWALKey.
-    // - FAILOVER: only the active cluster takes writes, so a live write here is a stray/stale
-    // sync-path write to a demoted cluster. Reject it rather than committing locally
-    // unreplicated (split brain).
-    if (isParallelPolicy(haGroupStoreManager, haGroup)) {
-      return Optional.empty();
-    }
+    // get() returned empty: this cluster is not active for the HA group. Under FAILOVER only the
+    // active cluster takes writes, so this is a stray/stale sync-path write to a demoted cluster.
+    // Reject it rather than committing locally unreplicated (split brain).
     throw new IOException(
       String.format("HAGroup %s cannot accept a HA write on %s: this cluster is not active",
         haGroup, dataTableName));
@@ -1063,22 +1064,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   /**
    * True when the HA group uses the PARALLEL policy, under which the client double-writes to both
-   * clusters. On a non-active cluster this distinguishes a legitimate PARALLEL standby write (which
-   * should commit locally and skip re-ship) from a stray FAILOVER write (split brain, to reject). A
-   * missing record is treated as not-PARALLEL so the caller keeps the conservative split-brain
-   * guard.
+   * clusters. A missing or unreadable record is treated as not-PARALLEL so the caller keeps the
+   * conservative writer resolution and split-brain guard, which surface any store error themselves.
    */
-  private boolean isParallelPolicy(HAGroupStoreManager haGroupStoreManager, String haGroupName)
-    throws IOException {
-    Optional<HAGroupStoreRecord> record =
-      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+  private boolean isParallelPolicy(HAGroupStoreManager haGroupStoreManager, String haGroupName) {
+    Optional<HAGroupStoreRecord> record;
+    try {
+      record = haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+    } catch (IOException e) {
+      LOG.debug("Unable to read HA group record for {}; treating policy as not PARALLEL",
+        haGroupName, e);
+      return false;
+    }
     return record.isPresent()
       && HighAvailabilityPolicy.PARALLEL.name().equalsIgnoreCase(record.get().getPolicy());
   }
 
   /**
    * Get the HA group associated with the WAL key. A batch of mutations is recorded in a single WAL
-   * edit.
+   * edit. The key carries the HA group only for batches that resolved a writer, so PARALLEL edits
+   * are never re-shipped here.
    * @return HA group if present or empty if missing
    */
   private Optional<ReplicationLogGroup> getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
