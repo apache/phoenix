@@ -767,7 +767,15 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
       assertEquals(testTable, rs.getString(TABLE_NAME));
       assertFalse(rs.next());
 
+      // The SelfHealingTask scheduler is quiesced by default in mini-cluster ITs, so drive it
+      // manually to pick up the CREATED INDEX_REBUILD task and launch the rebuild job.
+      TestUtil.runSelfHealingTaskOnce();
+
       TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
+
+      // Once the index is ACTIVE the rebuild job has completed, drive the task again so it observes
+      // the finished job and transitions from STARTED to COMPLETED.
+      TestUtil.runSelfHealingTaskOnce();
 
       // Check task status
       String query = "SELECT * " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + " WHERE "
