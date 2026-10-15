@@ -81,6 +81,13 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_BUILDING_GENERATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
@@ -219,6 +226,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
@@ -423,6 +431,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
   private static final Cell INDEX_CONSISTENCY_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_CONSISTENCY_BYTES);
+  private static final Cell VECTOR_INDEX_ALGORITHM_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_INDEX_ALGORITHM_BYTES);
+  private static final Cell VECTOR_DISTANCE_METRIC_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_DISTANCE_METRIC_BYTES);
+  private static final Cell VECTOR_DIMENSION_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_DIMENSION_BYTES);
+  private static final Cell VECTOR_IVF_LISTS_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_IVF_LISTS_BYTES);
+  private static final Cell VECTOR_IVF_SAMPLE_SIZE_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_IVF_SAMPLE_SIZE_BYTES);
+  private static final Cell VECTOR_CENTROID_GENERATION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_CENTROID_GENERATION_BYTES);
+  private static final Cell VECTOR_BUILDING_GENERATION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_BUILDING_GENERATION_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -441,7 +463,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     AUTO_PARTITION_SEQ_KV, APPEND_ONLY_SCHEMA_KV, STORAGE_SCHEME_KV, ENCODING_SCHEME_KV,
     USE_STATS_FOR_PARALLELIZATION_KV, LAST_DDL_TIMESTAMP_KV, CHANGE_DETECTION_ENABLED_KV,
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
-    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV);
+    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV,
+    VECTOR_INDEX_ALGORITHM_KV, VECTOR_DISTANCE_METRIC_KV, VECTOR_DIMENSION_KV, VECTOR_IVF_LISTS_KV,
+    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV, VECTOR_BUILDING_GENERATION_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -504,6 +528,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
   private static final int IS_STRICT_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(IS_STRICT_TTL_KV);
   private static final int INDEX_CONSISTENCY_INDEX = TABLE_KV_COLUMNS.indexOf(INDEX_CONSISTENCY_KV);
+  private static final int VECTOR_INDEX_ALGORITHM_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_INDEX_ALGORITHM_KV);
+  private static final int VECTOR_DISTANCE_METRIC_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_DISTANCE_METRIC_KV);
+  private static final int VECTOR_DIMENSION_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_DIMENSION_KV);
+  private static final int VECTOR_IVF_LISTS_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_IVF_LISTS_KV);
+  private static final int VECTOR_IVF_SAMPLE_SIZE_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_IVF_SAMPLE_SIZE_KV);
+  private static final int VECTOR_CENTROID_GENERATION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_CENTROID_GENERATION_KV);
+  private static final int VECTOR_BUILDING_GENERATION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_BUILDING_GENERATION_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1603,6 +1639,81 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       : oldTable != null ? oldTable.getIndexConsistency()
       : null);
 
+    Cell vectorIndexAlgorithmKv = tableKeyValues[VECTOR_INDEX_ALGORITHM_INDEX];
+    String vectorIndexAlgorithm = null;
+    if (vectorIndexAlgorithmKv != null) {
+      vectorIndexAlgorithm =
+        (String) PVarchar.INSTANCE.toObject(vectorIndexAlgorithmKv.getValueArray(),
+          vectorIndexAlgorithmKv.getValueOffset(), vectorIndexAlgorithmKv.getValueLength());
+    }
+    builder.setVectorIndexAlgorithm(vectorIndexAlgorithm != null ? vectorIndexAlgorithm
+      : oldTable != null ? oldTable.getVectorIndexAlgorithm()
+      : null);
+
+    Cell vectorDistanceMetricKv = tableKeyValues[VECTOR_DISTANCE_METRIC_INDEX];
+    String vectorDistanceMetric = null;
+    if (vectorDistanceMetricKv != null) {
+      vectorDistanceMetric =
+        (String) PVarchar.INSTANCE.toObject(vectorDistanceMetricKv.getValueArray(),
+          vectorDistanceMetricKv.getValueOffset(), vectorDistanceMetricKv.getValueLength());
+    }
+    builder.setVectorDistanceMetric(vectorDistanceMetric != null ? vectorDistanceMetric
+      : oldTable != null ? oldTable.getVectorDistanceMetric()
+      : null);
+
+    Cell vectorDimensionKv = tableKeyValues[VECTOR_DIMENSION_INDEX];
+    Integer vectorDimension = null;
+    if (vectorDimensionKv != null) {
+      vectorDimension = (Integer) PInteger.INSTANCE.toObject(vectorDimensionKv.getValueArray(),
+        vectorDimensionKv.getValueOffset(), vectorDimensionKv.getValueLength());
+    }
+    builder.setVectorDimension(vectorDimension != null ? vectorDimension
+      : oldTable != null ? oldTable.getVectorDimension()
+      : null);
+
+    Cell vectorIvfListsKv = tableKeyValues[VECTOR_IVF_LISTS_INDEX];
+    Integer vectorIvfLists = null;
+    if (vectorIvfListsKv != null) {
+      vectorIvfLists = (Integer) PInteger.INSTANCE.toObject(vectorIvfListsKv.getValueArray(),
+        vectorIvfListsKv.getValueOffset(), vectorIvfListsKv.getValueLength());
+    }
+    builder.setVectorIvfLists(vectorIvfLists != null ? vectorIvfLists
+      : oldTable != null ? oldTable.getVectorIvfLists()
+      : null);
+
+    Cell vectorIvfSampleSizeKv = tableKeyValues[VECTOR_IVF_SAMPLE_SIZE_INDEX];
+    Integer vectorIvfSampleSize = null;
+    if (vectorIvfSampleSizeKv != null) {
+      vectorIvfSampleSize =
+        (Integer) PInteger.INSTANCE.toObject(vectorIvfSampleSizeKv.getValueArray(),
+          vectorIvfSampleSizeKv.getValueOffset(), vectorIvfSampleSizeKv.getValueLength());
+    }
+    builder.setVectorIvfSampleSize(vectorIvfSampleSize != null ? vectorIvfSampleSize
+      : oldTable != null ? oldTable.getVectorIvfSampleSize()
+      : null);
+
+    Cell vectorCentroidGenerationKv = tableKeyValues[VECTOR_CENTROID_GENERATION_INDEX];
+    Long vectorCentroidGeneration = null;
+    if (vectorCentroidGenerationKv != null) {
+      vectorCentroidGeneration =
+        (Long) PLong.INSTANCE.toObject(vectorCentroidGenerationKv.getValueArray(),
+          vectorCentroidGenerationKv.getValueOffset(), vectorCentroidGenerationKv.getValueLength());
+    }
+    builder.setVectorCentroidGeneration(vectorCentroidGeneration != null ? vectorCentroidGeneration
+      : oldTable != null ? oldTable.getVectorCentroidGeneration()
+      : null);
+
+    Cell vectorBuildingGenerationKv = tableKeyValues[VECTOR_BUILDING_GENERATION_INDEX];
+    Long vectorBuildingGeneration = null;
+    if (vectorBuildingGenerationKv != null) {
+      vectorBuildingGeneration =
+        (Long) PLong.INSTANCE.toObject(vectorBuildingGenerationKv.getValueArray(),
+          vectorBuildingGenerationKv.getValueOffset(), vectorBuildingGenerationKv.getValueLength());
+    }
+    builder.setVectorBuildingGeneration(vectorBuildingGeneration != null ? vectorBuildingGeneration
+      : oldTable != null ? oldTable.getVectorBuildingGeneration()
+      : null);
+
     // Check the cell tag to see whether the view has modified this property
     final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null)
       ? HConstants.EMPTY_BYTE_ARRAY
@@ -2459,6 +2570,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
       PTableType tableType = MetaDataUtil.getTableType(tableMetadata,
         GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
+      validateVectorIndexMetadata(tableMetadata, tableType, indexType);
 
       // Load table to see if it already exists
       byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
@@ -2959,6 +3071,57 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       metricsSource.incrementCreateViewCount();
     } else if (tableType == PTableType.INDEX) {
       metricsSource.incrementCreateIndexCount();
+    }
+  }
+
+  /**
+   * Checks the vector index metadata before the server writes it to SYSTEM.CATALOG.
+   * <p>
+   * If the table is not a VECTOR_GLOBAL index and has no vector algorithm, the check does nothing.
+   * Only a VECTOR_GLOBAL index can have vector metadata. The algorithm must be IVF, and the
+   * distance metric must be a known {@link DistanceMetric}. The IVF list count must be more than
+   * zero, and the sample size must be equal to or more than the list count. A failed check throws a
+   * SQLException with the applicable vector error code.
+   */
+  private static void validateVectorIndexMetadata(List<Mutation> tableMetadata,
+    PTableType tableType, IndexType indexType) throws SQLException {
+    Put header = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    KeyValueBuilder kvBuilder = GenericKeyValueBuilder.INSTANCE;
+    String algorithm = header != null
+      && MetaDataUtil.getMutationValue(header, VECTOR_INDEX_ALGORITHM_BYTES, kvBuilder, ptr)
+        ? (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
+        : null;
+    if (indexType != IndexType.VECTOR_GLOBAL && algorithm == null) {
+      return;
+    }
+    if (tableType != PTableType.INDEX || indexType != IndexType.VECTOR_GLOBAL) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector index metadata is only valid on a VECTOR_GLOBAL index").build()
+        .buildException();
+    }
+    if (!"IVF".equalsIgnoreCase(algorithm)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
+        .setMessage(String.valueOf(algorithm)).build().buildException();
+    }
+    String metric =
+      MetaDataUtil.getMutationValue(header, VECTOR_DISTANCE_METRIC_BYTES, kvBuilder, ptr)
+        ? (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
+        : null;
+    if (metric == null || DistanceMetric.fromString(metric) == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_DISTANCE_METRIC)
+        .setMessage(String.valueOf(metric)).build().buildException();
+    }
+    Integer lists = MetaDataUtil.getMutationValue(header, VECTOR_IVF_LISTS_BYTES, kvBuilder, ptr)
+      ? (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
+      : null;
+    Integer sampleSize =
+      MetaDataUtil.getMutationValue(header, VECTOR_IVF_SAMPLE_SIZE_BYTES, kvBuilder, ptr)
+        ? (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength())
+        : null;
+    if (lists == null || lists <= 0 || sampleSize == null || sampleSize < lists) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
     }
   }
 
@@ -4461,7 +4624,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       int disableTimeStampKVIndex = -1;
       int indexStateKVIndex = 0;
       int index = 0;
+      // Find if this mutation records an active or building vector centroid generation
+      boolean setsVectorGeneration = false;
       for (Cell cell : newKVs) {
+        if (
+          Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+            cell.getQualifierLength(), VECTOR_CENTROID_GENERATION_BYTES, 0,
+            VECTOR_CENTROID_GENERATION_BYTES.length) == 0
+            || Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+              cell.getQualifierLength(), VECTOR_BUILDING_GENERATION_BYTES, 0,
+              VECTOR_BUILDING_GENERATION_BYTES.length) == 0
+        ) {
+          setsVectorGeneration = true;
+        }
         if (
           Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
             cell.getQualifierLength(), INDEX_STATE_BYTES, 0, INDEX_STATE_BYTES.length) == 0
@@ -4530,6 +4705,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
         PIndexState currentState = PIndexState
           .fromSerializedValue(currentStateKV.getValueArray()[currentStateKV.getValueOffset()]);
+        if (setsVectorGeneration && newState != currentState) {
+          // A generation record must not change the index state, so keep the current state
+          newState = currentState;
+          newKVs.set(indexStateKVIndex, PhoenixKeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+            INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+        }
         // Timestamp of INDEX_STATE gets updated with each call
         long actualTimestamp = currentStateKV.getTimestamp();
         long curTimeStampVal = 0;
@@ -4681,7 +4862,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
 
         PTable returnTable = null;
-        if (currentState != newState || disableTimeStampKVIndex != -1) {
+        if (currentState != newState || disableTimeStampKVIndex != -1 || setsVectorGeneration) {
           // make a copy of tableMetadata so we can add to it
           tableMetadata = new ArrayList<Mutation>(tableMetadata);
           // Always include the empty column value at latest timestamp so
@@ -4727,6 +4908,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           if (
             setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
               || currentState.isDisabled() || newState == PIndexState.BUILDING
+              || setsVectorGeneration
           ) {
             returnTable = doGetTable(tenantId, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
               rowLock, request.getClientVersion());

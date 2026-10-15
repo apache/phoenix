@@ -2509,6 +2509,14 @@
           @{jacocoArgLine}</argLine>
       </properties>
     </profile>
+    <!-- The Java 21 profile adds the Panama Vector API incubator module to the test JVM. -->
+    <profile>
+      <id>java21</id>
+      <properties>
+        <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow
+          --add-modules jdk.incubator.vector</phoenix-surefire.jdk21.flags>
+      </properties>
+    </profile>
     <profile>
       <id>build-with-jdk21</id>
       <activation>

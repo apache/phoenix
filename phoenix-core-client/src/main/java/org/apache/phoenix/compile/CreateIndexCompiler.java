@@ -41,6 +41,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
@@ -51,6 +52,8 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -249,6 +252,9 @@ public class CreateIndexCompiler {
       new StatementContext(statement, resolver, scan, new SequenceManager(statement));
     verifyIndexWhere(create.getWhere(), context, create.getTable().getName());
     ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+    if (create.getIndexType() == IndexType.VECTOR_GLOBAL) {
+      verifyVectorIndex(create, context);
+    }
     List<ParseNode> splitNodes = create.getSplitNodes();
     if (create.getIndexType() == IndexType.LOCAL) {
       if (!splitNodes.isEmpty()) {
@@ -290,6 +296,81 @@ public class CreateIndexCompiler {
       }
 
     };
+  }
+
+  /**
+   * Validates a vector index definition. The data table must not be a view or a transactional
+   * table. The index must have one ascending vector expression with a dimension known at compile
+   * time. The metric must be supported. The algorithm must be IVF, with {@code lists > 0} and
+   * {@code sample_size >= lists}. The index consistency must not be eventual.
+   */
+  private void verifyVectorIndex(CreateIndexStatement create, StatementContext context)
+    throws SQLException {
+    PTable dataTable = context.getResolver().getTables().get(0).getTable();
+    if (dataTable.getType() == PTableType.VIEW) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector indexes are not supported on views").build().buildException();
+    }
+    if (dataTable.isTransactional()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_TRANSACTIONAL_TABLE)
+        .setSchemaName(dataTable.getSchemaName().getString())
+        .setTableName(dataTable.getTableName().getString()).build().buildException();
+    }
+
+    List<Pair<ParseNode, SortOrder>> pairs =
+      create.getIndexConstraint().getParseNodeAndSortOrderList();
+    if (pairs.size() != 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("A vector index must index exactly one vector expression. Found: "
+          + pairs.size() + " expressions")
+        .build().buildException();
+    }
+    ParseNode node = pairs.get(0).getFirst();
+    if (pairs.get(0).getSecond() == SortOrder.DESC) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("The vector expression of a vector index cannot be declared DESC").build()
+        .buildException();
+    }
+    Expression vectorExpr = StatementNormalizer.normalize(node, context.getResolver())
+      .accept(new ExpressionCompiler(context));
+    if (!vectorExpr.getDataType().isVectorType()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_NON_VECTOR_TYPE)
+        .setMessage(
+          "Expression '" + node + "' has type " + vectorExpr.getDataType().getSqlTypeName())
+        .build().buildException();
+    }
+    Integer dimension = vectorExpr.getMaxLength();
+    if (dimension == null || dimension <= 0) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("The vector expression dimension must be known at compile time").build()
+        .buildException();
+    }
+
+    String metric = create.getVectorMetric();
+    if (metric == null || DistanceMetric.fromString(metric) == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_DISTANCE_METRIC)
+        .setMessage(String.valueOf(metric)).build().buildException();
+    }
+    String algorithm = create.getVectorAlgorithm();
+    if (!"IVF".equalsIgnoreCase(algorithm == null ? null : algorithm.trim())) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
+        .setMessage(String.valueOf(algorithm)).build().buildException();
+    }
+    Integer lists = create.getVectorLists();
+    Integer sampleSize = create.getVectorSampleSize();
+    if (lists == null || sampleSize == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("IVF requires lists and sample_size").build().buildException();
+    }
+    if (lists <= 0 || sampleSize < lists) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("lists=" + lists + ", sample_size=" + sampleSize).build().buildException();
+    }
+    if (create.getIndexConsistency() != null && create.getIndexConsistency().isAsynchronous()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector indexes do not support CONSISTENCY=" + create.getIndexConsistency())
+        .build().buildException();
+    }
   }
 
   /**

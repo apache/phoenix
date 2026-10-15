@@ -224,6 +224,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -509,6 +510,7 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=create_vector_index_node
     |   s=create_cdc_node
     |   s=cursor_open_node
     |   s=cursor_close_node
@@ -660,6 +662,22 @@ create_index_node returns [CreateIndexStatement ret]
                     l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED_GLOBAL) :
                     IndexType.LOCAL, async != null, getBindCount(), new HashMap<String,
                     UDFParseNode>(udfParseNodes), where);
+        }
+    ;
+
+// Parse CREATE VECTOR INDEX. VECTOR is not a reserved word. The rule matches it as a NAME token,
+// so other statements can use VECTOR as an identifier.
+create_vector_index_node returns [CreateIndexStatement ret]
+    :   CREATE vec=NAME {"VECTOR".equalsIgnoreCase($vec.text)}? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+        (LPAREN ik=ik_constraint RPAREN)
+        (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        ( (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties) (async=ASYNC)?)
+        | (async=ASYNC (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties))?)
+        )?
+        {
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, null, p, ex!=null,
+                    IndexType.VECTOR_GLOBAL, async != null, getBindCount(), new HashMap<String,
+                    UDFParseNode>(udfParseNodes), null);
         }
     ;
 
@@ -885,16 +903,35 @@ indexes returns [List<NamedNode> ret]
     :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
+// A column type with an optional length and scale. A leading component type is valid only in
+// VECTOR(<component type>, <dimension>) with FLOAT or DOUBLE. Any other use causes a parse error.
+column_type returns [String name, Integer maxLength, Integer scale]
+    :   dt=identifier (LPAREN (ct=identifier COMMA)? l=NUMBER (COMMA s=NUMBER)? RPAREN)?
+        {
+            $name = dt;
+            $maxLength = l == null ? null : Integer.parseInt( l.getText() );
+            $scale = s == null ? null : Integer.parseInt( s.getText() );
+            if (ct != null) {
+                PDataType vectorType = "VECTOR".equalsIgnoreCase(dt) && s == null
+                    ? PDataTypeFactory.getInstance().typeForVector(ct) : null;
+                if (vectorType == null) {
+                    throw new ParseException("Unsupported type: " + dt + "(" + ct + ", ...)");
+                }
+                $name = vectorType.getSqlTypeName();
+            }
+        }
+    ;
+
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+    :   c=column_name t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
-            dt,
+            $t.name,
             ar != null || lsq != null,
             a == null ? null :  Integer.parseInt( a.getText() ),
             nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+            $t.maxLength,
+            $t.scale,
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
             df == null ? null : df.toString(),
@@ -908,20 +945,20 @@ dyn_column_defs returns [List<ColumnDef> ret]
 ;
 
 dyn_column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
-        {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+    :   c=column_name t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
+        {$ret = factory.columnDef(c, $t.name, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
+            $t.maxLength,
+            $t.scale,
             false, 
             SortOrder.getDefault(),
             false); }
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
-    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
-        {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+    :   c=column_name (t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
+        {$ret = factory.columnDef(c, $t.name, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
+            $t.maxLength,
+            $t.scale,
             false, 
             SortOrder.getDefault(),
             false); }
@@ -1087,11 +1124,11 @@ order_by returns [List<OrderByNode> ret]
 
 //parse the individual field for an order by clause
 parseOrderByField returns [OrderByNode ret]
-@init{boolean isAscending = true; boolean nullsLast = false;}
+@init{boolean isAscending = true; Boolean nullsLast = null;}
     :   (expr = expression)
         (ASC {isAscending = true;} | DESC {isAscending = false;})?
         (NULLS (FIRST {nullsLast = false;} | LAST {nullsLast = true;}))?
-        { $ret = factory.orderBy(expr, nullsLast, isAscending); }
+        { $ret = nullsLast == null ? factory.orderBy(expr, isAscending) : factory.orderBy(expr, nullsLast, isAscending); }
     ;
 
 parseFrom returns [TableNode ret]
@@ -1176,7 +1213,20 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }
+    :   i=distance_expression { $ret = i; }
+    ;
+
+distance_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=add_expression {lhs = i;}
+        (op=(DIST_L2 | DIST_COSINE | DIST_INNER) rhs=add_expression {
+            l = Arrays.asList(lhs, rhs);
+            lhs = op.getType() == DIST_L2 ? factory.l2Distance(l)
+                : op.getType() == DIST_COSINE ? factory.cosineDistance(l)
+                : factory.innerProductDistance(l);
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 add_expression returns [ParseNode ret]
@@ -1494,9 +1544,20 @@ EQ
     :   '='
     ;
 
+// Separate the infix distance operators (<=>, <->, <#>) from the less-than operator
 LT
     :   '<'
+        (   ('=' '>') => '=' '>'  { $type = DIST_COSINE; }
+        |   ('-' '>') => '-' '>'  { $type = DIST_L2; }
+        |   ('#' '>') => '#' '>'  { $type = DIST_INNER; }
+        |                         { $type = LT; }
+        )
     ;
+
+// Token types for the infix distance operators. Only the LT rule above emits these types.
+fragment DIST_L2 : '<->' ;
+fragment DIST_COSINE : '<=>' ;
+fragment DIST_INNER : '<#>' ;
 
 GT
     :   '>'

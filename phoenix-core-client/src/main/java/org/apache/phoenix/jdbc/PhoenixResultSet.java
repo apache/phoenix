@@ -263,8 +263,10 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     // Get the value using the expected type instead of trying to coerce to VARCHAR.
     // We can't coerce using our formatter because we don't have enough context in PDataType.
     ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex - 1);
-    Array value =
-      (Array) projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
+    PDataType type = projector.getExpression().getDataType();
+    Array value = (Array) (type != null && type.isVectorType()
+      ? projector.getValue(currentRow, type, ptr, java.sql.Array.class)
+      : projector.getValue(currentRow, type, ptr));
     wasNull = (value == null);
     return value;
   }
@@ -707,6 +709,9 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     // This provides a simple way of getting a reasonable string representation
     // for types like DATE and TIME
     Format formatter = statement.getFormatter(type);
+    if (type != null && type.isVectorType()) {
+      return type.toStringLiteral(value, formatter);
+    }
     return formatter == null ? value.toString() : formatter.format(value);
   }
 
