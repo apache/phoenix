@@ -312,9 +312,12 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
       }
       return true;
     }
-    if (indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)) {
-      region
-        .delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));
+    // This is not a valid index row. Age it by its own timestamp, but delete it at the data row
+    // timestamp (when the row stopped mapping to this index key) or later, so that the index row
+    // history stays consistent with the data row history.
+    if (indexMaintainer.isAgedEnough(indexTimestamp, ageThreshold)) {
+      long deleteTimestamp = Math.max(IndexUtil.getMaxTimestamp(put), indexTimestamp);
+      region.delete(indexMaintainer.createDelete(indexRowKey, deleteTimestamp, false));
     }
     return false;
   }
