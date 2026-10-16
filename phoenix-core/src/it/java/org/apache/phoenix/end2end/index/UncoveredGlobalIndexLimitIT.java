@@ -50,6 +50,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -67,6 +68,8 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
   private static final int TTL_SECONDS = 3600;
   private static final int ROW_COUNT = 20;
   private static final int LIMIT = 5;
+  // Force multiple index batches before and after the first valid row.
+  private static final long INDEX_PAGE_SIZE_IN_ROWS = 3;
   private static final long UPDATED_TIME_BASE = 1_700_000_000_000L;
   private final ManualEnvironmentEdge clock = new ManualEnvironmentEdge();
 
@@ -77,8 +80,7 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
       Long.toString(AGE_THRESHOLD_MS));
     props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(true));
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-    // Force multiple index batches before and after the first valid row.
-    props.put(QueryServices.INDEX_PAGE_SIZE_IN_ROWS, Long.toString(3));
+    props.put(QueryServices.INDEX_PAGE_SIZE_IN_ROWS, Long.toString(INDEX_PAGE_SIZE_IN_ROWS));
     // BaseTest defaults to a dummy result after every row; exercise a complete server batch here.
     props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(60_000));
     props.put("hbase.coprocessor.region.classes", LimitTestObserver.class.getName());
@@ -100,6 +102,7 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
     LimitTestObserver.indexTable = null;
     LimitTestObserver.dataTable = null;
     LimitTestObserver.limitedTable = null;
+    LimitTestObserver.lookupTable = null;
     EnvironmentEdgeManager.reset();
     assertFalse("refCount leaked", isAnyStoreRefCountLeaked());
   }
@@ -188,13 +191,43 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
   public void testLimitAcrossDummyPages() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       Fixture fixture = createFixture(conn, false, 1000);
-      LimitTestObserver.scanCount.set(0);
+      LimitTestObserver.dummyResults.set(0);
       LimitTestObserver.indexTable = fixture.indexTable;
       LimitTestObserver.dataTable = fixture.dataTable;
       assertRows(conn, fixture.indexQuery("") + " LIMIT " + LIMIT, LIMIT);
-      assertTrue("The query must exercise zero-budget paging scans",
-        LimitTestObserver.scanCount.get() > 0);
+      assertTrue("The query must return actual PagingFilter dummy results",
+        LimitTestObserver.dummyResults.get() > 0);
       assertStaleEntriesPresent(fixture);
+    }
+  }
+
+  @Test
+  public void testSmallLimitCapsDataLookupsAtDefaultBatchSize() throws Exception {
+    // Use the production default rather than the small batches used by the other regressions.
+    getUtility().getHBaseCluster().getRegionServerThreads()
+      .forEach(thread -> thread.getRegionServer().getConfiguration().setLong(
+        QueryServices.INDEX_PAGE_SIZE_IN_ROWS,
+        QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS));
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      for (int staleRowCount : new int[] { 0, 3 }) {
+        try {
+          Fixture fixture = createFixture(conn, false, 1000, staleRowCount);
+          LimitTestObserver.lookupRows.set(0);
+          LimitTestObserver.lookupTable = fixture.dataTable;
+          String query = fixture.indexQuery("") + " LIMIT 1";
+          assertPlan(conn, query).table(fixture.indexTable).serverRowLimit(1L);
+          assertRows(conn, query, 1);
+          assertEquals("LIMIT 1 must fetch only the stale prefix and the first valid candidate",
+            staleRowCount + 1, LimitTestObserver.lookupRows.get());
+          assertStaleEntriesPresent(fixture);
+        } finally {
+          EnvironmentEdgeManager.reset();
+        }
+      }
+    } finally {
+      getUtility().getHBaseCluster().getRegionServerThreads()
+        .forEach(thread -> thread.getRegionServer().getConfiguration()
+          .setLong(QueryServices.INDEX_PAGE_SIZE_IN_ROWS, INDEX_PAGE_SIZE_IN_ROWS));
     }
   }
 
@@ -323,9 +356,11 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
   public static class LimitTestObserver extends SimpleRegionObserver {
     private static volatile String indexTable;
     private static volatile String dataTable;
-    private static final AtomicInteger scanCount = new AtomicInteger();
+    private static final AtomicInteger dummyResults = new AtomicInteger();
     private static volatile String limitedTable;
     private static final AtomicInteger returnedRows = new AtomicInteger();
+    private static volatile String lookupTable;
+    private static final AtomicInteger lookupRows = new AtomicInteger();
 
     @Override
     public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> context, Scan scan) {
@@ -337,7 +372,6 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
           scan
             .setFilter(new PagingFilter(((PagingFilter) scan.getFilter()).getDelegateFilter(), 0));
         }
-        scanCount.incrementAndGet();
       }
     }
 
@@ -346,6 +380,16 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
       InternalScanner scanner, List<Result> results, int limit, boolean hasMore) {
       String table =
         context.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString();
+      for (Result result : results) {
+        if (table.equals(indexTable) || table.equals(dataTable)) {
+          if (ScanUtil.isDummy(result)) {
+            dummyResults.incrementAndGet();
+          }
+        }
+        if (table.equals(lookupTable) && !result.isEmpty() && !ScanUtil.isDummy(result)) {
+          lookupRows.incrementAndGet();
+        }
+      }
       if (table.equals(limitedTable)) {
         for (Result result : results) {
           if (!result.isEmpty() && !ScanUtil.isDummy(result)) {
