@@ -53,10 +53,12 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -947,7 +949,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         Fixture fixture = createFixture(conn, clock, oldEntries ? AGE_THRESHOLD_MS * 2 : 1000);
         // No LIMIT: isolate cleanup from premature scan termination in PHOENIX-8015.
         String query = fixture.indexQuery("");
-        assertPlan(conn, query).table(fixture.indexTable).scanType("FULL SCAN");
+        ExplainPlanAttributes plan =
+          conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan().getPlanStepsAsAttributes();
+        assertEquals(fixture.indexTable, plan.getTableName());
+        assertEquals("FULL SCAN ", plan.getExplainScanType());
         assertRows(conn, query, ROW_COUNT);
         if (oldEntries) {
           try (Table index =
