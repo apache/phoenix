@@ -20,6 +20,7 @@ package org.apache.phoenix.replication;
 import static java.lang.Thread.sleep;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -55,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -886,6 +888,108 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     } catch (IOException ex) {
       assertTrue(ex.getMessage().contains("Simulated failure to update HAGroupStore state"));
     }
+  }
+
+  private void waitForHandlerMode(ReplicationLogGroup.ReplicationMode expected)
+    throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 5000;
+    while (
+      logGroup.eventHandler.getCurrentModeImpl().getMode() != expected
+        && System.currentTimeMillis() < deadline
+    ) {
+      sleep(20);
+    }
+    assertEquals(expected, logGroup.eventHandler.getCurrentModeImpl().getMode());
+  }
+
+  /**
+   * An idle group applies a mode switch from checkAndSetModeAndNotify on its own: the mode-check
+   * marker wakes the consumer, and no sync() is issued.
+   */
+  @Test
+  public void testModeSwitchNotifyAppliesWhenIdle() throws Exception {
+    assertEquals(SYNC, logGroup.eventHandler.getCurrentModeImpl().getMode());
+    assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
+    waitForHandlerMode(SYNC_AND_FORWARD);
+    verify(logGroup, never()).sync();
+  }
+
+  private void waitForRingBufferDrained() throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 5000;
+    while (
+      logGroup.getRingBufferRemainingCapacity() < TEST_RINGBUFFER_SIZE
+        && System.currentTimeMillis() < deadline
+    ) {
+      sleep(20);
+    }
+    assertEquals(TEST_RINGBUFFER_SIZE, logGroup.getRingBufferRemainingCapacity());
+  }
+
+  /**
+   * A mode-check marker that finds unsynced appends in the current batch must not switch the mode:
+   * the switch waits for the next sync, so the outstanding appends are synced in the old mode.
+   */
+  @Test
+  public void testModeSwitchNotifyDefersWhileAppendsUnsynced() throws Exception {
+    logGroup.append("TBLMODEDEFER", 1L, LogFileTestUtil.newPut("row", 1, 1));
+    waitForRingBufferDrained();
+
+    assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
+    waitForRingBufferDrained();
+    assertEquals("The marker must not switch with unsynced appends outstanding", SYNC,
+      logGroup.eventHandler.getCurrentModeImpl().getMode());
+
+    logGroup.sync();
+    waitForHandlerMode(SYNC_AND_FORWARD);
+  }
+
+  /**
+   * While the consumer is busy with an outstanding sync, checkAndSetModeAndNotify returns at once.
+   */
+  @Test
+  public void testModeSwitchNotifyDoesNotBlockOnBusyConsumer() throws Exception {
+    // Headroom so a slow CI run cannot time out the held sync, and no scheduled rotation can swap
+    // the spied writer mid-test.
+    conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, 30_000L);
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 3600);
+    recreateLogGroup();
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    LogFileWriter writer = logGroup.getActiveLog().getWriter();
+    CountDownLatch release = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      release.await();
+      return invocation.callRealMethod();
+    }).when(writer).sync();
+
+    logGroup.append("TBLMODEBUSY", 1L, put);
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Future<?> syncResult = executor.submit(() -> {
+        logGroup.sync();
+        return null;
+      });
+      verify(writer, timeout(5000)).sync();
+
+      long start = System.nanoTime();
+      assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
+      assertTrue("checkAndSetModeAndNotify must not block on a busy consumer",
+        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 500);
+
+      release.countDown();
+      syncResult.get(5, TimeUnit.SECONDS);
+      waitForHandlerMode(SYNC_AND_FORWARD);
+    } finally {
+      release.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  /** On a fatal group, checkAndSetModeAndNotify returns normally and never aborts. */
+  @Test
+  public void testModeSwitchNotifyOnFatalGroupDoesNotAbort() throws Exception {
+    logGroup.eventHandler.setFatalException(new IOException("Simulated fatal"));
+    assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
+    verify(logGroup, never()).abort(anyString(), any());
   }
 
   /**
