@@ -28,15 +28,19 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
@@ -76,6 +80,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected final HTableFactory hTableFactory;
   private final boolean isScanMetricsEnabled;
   private List<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
+  private final long maxRowCount;
+  private long returnedRowCount;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -89,28 +95,105 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
     final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
     final long queryLimit, boolean isDistinct) throws IOException {
-    super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
-      viewConstants, ptr, pageSizeMs, queryLimit, isDistinct);
-    final Configuration config = env.getConfiguration();
-    hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
-    rowCountPerTask =
-      config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
-    byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
-    dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-    regionEndKeys =
-      hTableFactory.getConnection().getRegionLocator(dataHTable.getName()).getEndKeys();
-    if (indexMaintainer.isUncovered()) {
-      // Empty column should also be added to the data columns to join for uncovered
-      // global indexes. This is required to verify the index row against the data table row and
-      // repair it
+    // Index rows can be rejected when joined with the data table. Take the PageFilter limit
+    // here so only verified rows count toward it. Otherwise HBase's PageFilter, or
+    // TTLRegionScanner which takes over the PageFilter lazily on its first next(), would
+    // count rows that are later rejected. This must happen before TTLRegionScanner.init().
+    this(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
+      viewConstants, ptr, pageSizeMs, queryLimit, isDistinct,
+      !indexMaintainer.isCDCIndex() ? ScanUtil.removePageFilter(scan) : null);
+  }
+
+  private UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
+    final Scan scan, final RegionCoprocessorEnvironment env, final Scan dataTableScan,
+    final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
+    final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
+    final long queryLimit, boolean isDistinct, PageFilter pageFilter) throws IOException {
+    // Keep a stable delegate for the superclass, and reopen only inside the guarded body.
+    // If superclass initialization fails, the caller still owns the original scanner.
+    super(pageFilter == null ? innerScanner : new DelegateRegionScanner(innerScanner), region, scan,
+      env, dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
+      pageFilter == null ? queryLimit : pageFilter.getPageSize(), isDistinct);
+    maxRowCount = pageFilter == null ? Long.MAX_VALUE : pageFilter.getPageSize();
+    RegionScanner reopened = null;
+    HTableFactory tableFactory = null;
+    Table table = null;
+    try {
+      if (pageFilter != null) {
+        reopened = reopenScannerWithoutPageFilter(innerScanner, scan, pageFilter);
+        ((DelegateRegionScanner) this.innerScanner).delegate = reopened;
+      }
+      final Configuration config = env.getConfiguration();
+      tableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
+      rowCountPerTask =
+        config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
+      byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
+      table = tableFactory.getTable(new ImmutableBytesPtr(dataTableName));
+      regionEndKeys = tableFactory.getConnection().getRegionLocator(table.getName()).getEndKeys();
+      // Include the empty column to verify the index row against its data row and repair it.
       ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
         indexMaintainer.getEmptyKeyValueQualifierForDataTable());
+      isScanMetricsEnabled =
+        scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
+      if (isScanMetricsEnabled) {
+        dataTableScanMetrics = new ArrayList<>();
+      }
+      hTableFactory = tableFactory;
+      dataHTable = table;
+    } catch (IOException | RuntimeException | Error failure) {
+      // Until construction succeeds, the caller cannot see or close the replacement scanner.
+      // The caller still owns the original scanner, so close only what was opened here.
+      if (reopened != null) {
+        closeOnFailure(reopened, failure);
+      }
+      if (table != null) {
+        closeOnFailure(table, failure);
+      }
+      if (tableFactory != null) {
+        closeOnFailure(tableFactory::shutdown, failure);
+      }
+      throw failure;
     }
-    isScanMetricsEnabled =
-      scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
-    if (isScanMetricsEnabled) {
-      dataTableScanMetrics = new ArrayList<>();
+  }
+
+  private static void closeOnFailure(AutoCloseable resource, Throwable failure) {
+    try {
+      resource.close();
+    } catch (Throwable cleanupFailure) {
+      if (cleanupFailure != failure) {
+        failure.addSuppressed(cleanupFailure);
+      }
     }
+  }
+
+  private static RegionScanner reopenScannerWithoutPageFilter(RegionScanner scanner, Scan scan,
+    PageFilter pageFilter) throws IOException {
+    if (pageFilter == null) {
+      return scanner;
+    }
+    try {
+      DelegateRegionScanner delegate = (DelegateRegionScanner) scanner;
+      scanner.close();
+      return delegate.getNewRegionScanner(scan);
+    } catch (ClassCastException e) {
+      throw new DoNotRetryIOException(e);
+    }
+  }
+
+  @Override
+  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    if (returnedRowCount >= maxRowCount) {
+      result.clear();
+      return false;
+    }
+    boolean hasMore = super.next(result, scannerContext);
+    if (!result.isEmpty() && !ScanUtil.isDummy(result)) {
+      returnedRowCount++;
+      if (returnedRowCount >= maxRowCount) {
+        return false;
+      }
+    }
+    return hasMore;
   }
 
   @Override
