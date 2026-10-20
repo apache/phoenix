@@ -36,7 +36,6 @@ public class PhoenixMapReduceUtilTest {
     assertTrue("Should contain phoenix-shaded-guava", tmpjars.contains("phoenix-shaded-guava"));
     assertTrue("Should contain joda-time", tmpjars.contains("joda-time"));
     assertTrue("Should contain antlr-runtime", tmpjars.contains("antlr-runtime"));
-    assertTrue("Should contain htrace-core", tmpjars.contains("htrace-core"));
     assertTrue("Should contain hbase-metrics-api", tmpjars.contains("hbase-metrics-api"));
     assertTrue("Should contain hbase-metrics", tmpjars.contains("hbase-metrics"));
     assertTrue("Should contain disruptor", tmpjars.contains("disruptor"));

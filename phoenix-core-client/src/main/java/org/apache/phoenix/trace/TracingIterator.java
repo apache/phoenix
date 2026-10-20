@@ -17,39 +17,53 @@
  */
 package org.apache.phoenix.trace;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import java.sql.SQLException;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * A simple iterator that closes the trace scope when the iterator is closed.
+ * A result iterator that manages an OpenTelemetry span lifecycle. The span is ended when the
+ * iterator is closed. Events are added to the span as results are iterated.
+ * <p>
+ * The span is deliberately not made current.
+ * <p>
+ * makeCurrent() swaps this thread's Context and returns a Scope that has to restore it on the same
+ * thread, but an iterator is closed by whichever thread finishes with it.
+ * <p>
+ * Nothing is therefore parented to this span. Making it a parent again means attaching a Context
+ * around each next() call on the calling thread.
  */
 public class TracingIterator extends DelegateResultIterator {
 
-  private TraceScope scope;
+  private final Span span;
   private boolean started;
 
   /**
-   * @param scope    a scope with a non-null span
-   * @param iterator delegate
+   * @param span     the OpenTelemetry span to manage
+   * @param iterator delegate iterator
    */
-  public TracingIterator(TraceScope scope, ResultIterator iterator) {
+  public TracingIterator(Span span, ResultIterator iterator) {
     super(iterator);
-    this.scope = scope;
+    this.span = span;
   }
 
   @Override
   public void close() throws SQLException {
-    scope.close();
-    super.close();
+    try {
+      super.close();
+      span.setStatus(StatusCode.OK);
+    } finally {
+      span.end();
+    }
   }
 
   @Override
   public Tuple next() throws SQLException {
     if (!started) {
-      scope.getSpan().addTimelineAnnotation("First request completed");
+      span.addEvent("First request completed");
       started = true;
     }
     return super.next();
@@ -57,6 +71,6 @@ public class TracingIterator extends DelegateResultIterator {
 
   @Override
   public String toString() {
-    return "TracingIterator [scope=" + scope + ", started=" + started + "]";
+    return "TracingIterator [span=" + span + ", started=" + started + "]";
   }
 }
