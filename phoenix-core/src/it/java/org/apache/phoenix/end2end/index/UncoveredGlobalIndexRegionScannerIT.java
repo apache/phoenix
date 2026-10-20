@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -982,7 +983,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           String sql = "SELECT /*+ INDEX(" + dataTable + " " + indexTable
             + ") */ ID, VAL, UPDATED_TIME FROM " + dataTable + " ORDER BY UPDATED_TIME ASC LIMIT "
             + limit + (offset == 0 ? "" : " OFFSET " + offset);
-          assertPlan(conn, sql).table(indexTable).scanType("FULL SCAN");
+          ExplainPlanAttributes plan =
+            conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+              .getExplainPlan().getPlanStepsAsAttributes();
+          assertEquals(indexTable, plan.getTableName());
+          assertEquals("FULL SCAN", plan.getExplainScanType().trim());
           try (ResultSet rs = stmt.executeQuery(sql)) {
             for (int i = offset; i < offset + limit; i++) {
               assertTrue("LIMIT must return valid rows after the stale prefix", rs.next());

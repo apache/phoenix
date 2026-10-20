@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS;
-import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,6 +26,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -46,8 +46,11 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -121,8 +124,10 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       Fixture fixture = createFixture(conn, finiteTTL, 1000);
       String query = fixture.indexQuery("") + " LIMIT " + LIMIT;
-      assertPlan(conn, query).table(fixture.indexTable).scanType("FULL SCAN")
-        .serverRowLimit((long) LIMIT);
+      ExplainPlanAttributes plan = getPlanAttributes(conn, query);
+      assertEquals(fixture.indexTable, plan.getTableName());
+      assertEquals("FULL SCAN", plan.getExplainScanType().trim());
+      assertEquals(Long.valueOf(LIMIT), plan.getServerRowLimit());
       assertRows(conn, query, LIMIT);
       assertStaleEntriesPresent(fixture);
     }
@@ -135,17 +140,19 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
       Fixture fixture = createFixture(conn, false, 1000);
       String baseQuery = "SELECT /*+ NO_INDEX */ ID, PAYLOAD, UPDATED_TIME FROM "
         + fixture.dataTable + " ORDER BY UPDATED_TIME ASC LIMIT " + LIMIT;
-      assertPlan(conn, baseQuery).table(fixture.dataTable);
+      assertEquals(fixture.dataTable, getPlanAttributes(conn, baseQuery).getTableName());
       assertRows(conn, baseQuery, LIMIT);
 
       String boundedQuery =
         fixture.indexQuery(" WHERE UPDATED_TIME > TO_TIMESTAMP('2000-01-01')") + " LIMIT " + LIMIT;
-      assertPlan(conn, boundedQuery).table(fixture.indexTable).scanType("RANGE SCAN");
+      ExplainPlanAttributes boundedPlan = getPlanAttributes(conn, boundedQuery);
+      assertEquals(fixture.indexTable, boundedPlan.getTableName());
+      assertEquals("RANGE SCAN", boundedPlan.getExplainScanType().trim());
       assertRows(conn, boundedQuery, LIMIT);
 
       // PAYLOAD comes from the base row, so this exercises INDEX_FILTER / INDEX_LIMIT.
       String filteredQuery = fixture.indexQuery(" WHERE PAYLOAD IS NOT NULL") + " LIMIT " + LIMIT;
-      assertPlan(conn, filteredQuery).table(fixture.indexTable);
+      assertEquals(fixture.indexTable, getPlanAttributes(conn, filteredQuery).getTableName());
       assertRows(conn, filteredQuery, LIMIT);
 
       assertRows(conn, fixture.indexQuery(""), ROW_COUNT);
@@ -215,7 +222,9 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
           LimitTestObserver.lookupRows.set(0);
           LimitTestObserver.lookupTable = fixture.dataTable;
           String query = fixture.indexQuery("") + " LIMIT 1";
-          assertPlan(conn, query).table(fixture.indexTable).serverRowLimit(1L);
+          ExplainPlanAttributes plan = getPlanAttributes(conn, query);
+          assertEquals(fixture.indexTable, plan.getTableName());
+          assertEquals(Long.valueOf(1L), plan.getServerRowLimit());
           assertRows(conn, query, 1);
           assertEquals("LIMIT 1 must fetch only the stale prefix and the first valid candidate",
             staleRowCount + 1, LimitTestObserver.lookupRows.get());
@@ -331,6 +340,15 @@ public class UncoveredGlobalIndexLimitIT extends BaseTest {
         assertEquals("Stale entry timestamp must not advance with the data row",
           stale.rawCells()[0].getTimestamp(), current.rawCells()[0].getTimestamp());
       }
+    }
+  }
+
+  private static ExplainPlanAttributes getPlanAttributes(Connection conn, String query)
+    throws SQLException {
+    try (PreparedStatement stmt = conn.prepareStatement(query)) {
+      ExplainPlan plan =
+        stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+      return plan.getPlanStepsAsAttributes();
     }
   }
 
