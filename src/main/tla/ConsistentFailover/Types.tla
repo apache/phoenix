@@ -227,7 +227,9 @@ ReplayStateSet == {"NOT_INITIALIZED", "SYNC", "DEGRADED", "SYNCED_RECOVERY"}
 AllowedTransitions ==
     {
       \* ANIS can stay in ANIS (heartbeat), return to AIS (recovery),
-      \* begin failover (ANISTS), or detect offline peer (ANISWOP).
+      \* or detect offline peer (ANISWOP). ANIS -> ANISTS (legacy
+      \* failover) mirrors HAGroupStoreRecord.java but is not
+      \* produced by AdminStartFailover, which requires AIS.
       <<"ANIS", "ANIS">>,
       <<"ANIS", "AIS">>,
       <<"ANIS", "ANISTS">>,
@@ -256,8 +258,8 @@ AllowedTransitions ==
       <<"STA", "AIS">>,
       \* DS can recover to S, begin failover (STA), or go offline
       \* (OFFLINE) via admin --force.
-      \* DS -> STA supports the ANIS failover path where the
-      \* standby is in DEGRADED_STANDBY when failover proceeds.
+      \* DS -> STA covers a standby that has not yet observed the
+      \* active's ANIS -> AIS recovery when the peer enters ATS.
       \* Source:; OFFLINE entry via PhoenixHAAdminTool
       \*         update --force (bypasses isTransitionAllowed)
       <<"DS", "S">>,

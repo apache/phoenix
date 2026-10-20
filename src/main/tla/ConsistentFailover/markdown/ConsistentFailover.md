@@ -470,7 +470,7 @@ DegradationRecovery ==
         ~> clusterState[c] \in NotANISClusterStates
 ```
 
-ANIS with available peer HDFS eventually progresses out of ANIS. The recovery chain is: S&F -> S&FWD (`WriterStoreFwdToSyncFwd`) -> SYNC (`WriterSyncFwdToSync`, sets `outDirEmpty`) -> anti-flap timer expires (`Tick`) -> ANIS -> AIS (`ANISToAIS`). The cluster may also leave ANIS via failover (ANIS -> ANISTS), which satisfies the consequent.
+ANIS with available peer HDFS eventually progresses out of ANIS. The recovery chain is: S&F -> S&FWD (`WriterStoreFwdToSyncFwd`) -> SYNC (`WriterSyncFwdToSync`, sets `outDirEmpty`) -> anti-flap timer expires (`Tick`) -> ANIS -> AIS (`ANISToAIS`). Failover is not initiated from ANIS (`AdminStartFailover` requires AIS), so recovery to AIS is the only admin-independent exit.
 
 ### AbortCompletion
 

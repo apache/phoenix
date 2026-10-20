@@ -38,6 +38,7 @@ import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_VALIDATION_ERROR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -799,6 +800,71 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
 
     LOG.info(
       "✓ Timeout test completed successfully: both clusters stuck in transition states as expected");
+  }
+
+  /**
+   * Test that initiate-failover is rejected with a validation error while the active cluster is in
+   * ACTIVE_NOT_IN_SYNC (store-and-forward), and that neither cluster's state is changed.
+   */
+  @Test(timeout = 180000)
+  public void testInitiateFailoverRejectedFromActiveNotInSync() throws Exception {
+    String anisHaGroupName = "testInitiateFailoverFromAnis_" + System.currentTimeMillis();
+
+    String zkUrl1 = CLUSTERS.getZkUrl1();
+    String zkUrl2 = CLUSTERS.getZkUrl2();
+
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(anisHaGroupName, zkUrl1, zkUrl2,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(anisHaGroupName, zkUrl1, zkUrl2,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+
+    HAGroupStoreManager cluster1HAManager =
+      new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration());
+    HAGroupStoreManager cluster2HAManager =
+      new HAGroupStoreManager(CLUSTERS.getHBaseCluster2().getConfiguration());
+    cluster1HAManager.getHAGroupStoreRecord(anisHaGroupName);
+    cluster2HAManager.getHAGroupStoreRecord(anisHaGroupName);
+    waitForHAGroupState(cluster1HAManager, anisHaGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster1");
+    waitForHAGroupState(cluster2HAManager, anisHaGroupName, HAGroupStoreRecord.HAGroupState.STANDBY,
+      "Cluster2");
+
+    // Move the active cluster to store-and-forward. No writer runs here, so it stays there.
+    assertEquals(0L, cluster1HAManager.setHAGroupStatusToStoreAndForward(anisHaGroupName));
+    waitForHAGroupState(cluster1HAManager, anisHaGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, "Cluster1");
+    waitForHAGroupState(cluster2HAManager, anisHaGroupName,
+      HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, "Cluster2");
+
+    // The rejection guidance is written to stderr.
+    PrintStream capture = new PrintStream(STDOUT_CAPTURE);
+    System.setOut(capture);
+    System.setErr(capture);
+
+    PhoenixHAAdminTool cluster1AdminTool = new PhoenixHAAdminTool();
+    cluster1AdminTool.setConf(CLUSTERS.getHBaseCluster1().getConfiguration());
+    int ret = ToolRunner.run(cluster1AdminTool,
+      new String[] { "initiate-failover", "-g", anisHaGroupName, "-t", "15" });
+
+    assertEquals("initiate-failover from ACTIVE_NOT_IN_SYNC should be rejected",
+      RET_VALIDATION_ERROR, ret);
+    String output = STDOUT_CAPTURE.toString();
+    assertTrue("Output should say ACTIVE_IN_SYNC is required",
+      output.contains("Cluster must be in ACTIVE_IN_SYNC state"));
+    assertTrue("Output should explain the store-and-forward rejection",
+      output.contains("store-and-forward"));
+    assertFalse("Output should not report a failover being initiated",
+      output.contains("Failover initiated"));
+
+    // Neither cluster moved.
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+      cluster1HAManager.getHAGroupStoreRecord(anisHaGroupName).get().getHAGroupState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
+      cluster2HAManager.getHAGroupStoreRecord(anisHaGroupName).get().getHAGroupState());
   }
 
   /**

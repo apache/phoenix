@@ -24,7 +24,7 @@ Literate programming versions of all specification files are available in the [`
 | Literate Version | Source | Description |
 |-----------------|--------|-------------|
 | [`HAGroupStore.md`](markdown/HAGroupStore.md) | [`HAGroupStore.tla`](HAGroupStore.tla) | Peer-reactive transitions, auto-completion, S&F heartbeat, ANIS recovery, ANISTS drain, retry exhaustion |
-| [`Admin.md`](markdown/Admin.md) | [`Admin.tla`](Admin.tla) | Operator-initiated failover (AIS->ATS, ANIS->ANISTS) and abort (STA->AbTS) |
+| [`Admin.md`](markdown/Admin.md) | [`Admin.tla`](Admin.tla) | Operator-initiated failover (AIS->ATS only) and abort (STA->AbTS) |
 | [`Writer.md`](markdown/Writer.md) | [`Writer.tla`](Writer.tla) | Per-RS writer mode state machine: startup, degradation (CAS success/failure), recovery, drain |
 | [`Reader.md`](markdown/Reader.md) | [`Reader.tla`](Reader.tla) | Standby replay state machine: advance, rewind, in-progress directory, failover trigger |
 
@@ -108,7 +108,7 @@ Each cluster's lifecycle: `ACTIVE_IN_SYNC`, `ACTIVE_NOT_IN_SYNC`, `ACTIVE_IN_SYN
 `NOT_INITIALIZED`, `SYNC` (fully in sync), `DEGRADED` (active peer in `ANIS`; `lastRoundInSync` frozen), `SYNCED_RECOVERY` (active returned to `AIS`; replay rewinds to `lastRoundInSync`).
 
 **Combined Product State.**
-The (ActiveClusterState, StandbyClusterState) pair progresses through a well-defined sequence during failover. AIS path: `(AIS,S)` -> `(ATS,S)` -> `(ATS,STA)` -> `(ATS,AIS)` -> `(S,AIS)`. ANIS path: `(ANIS,DS)` -> `(ANISTS,DS)` -> `(ATS,DS)` -> `(ATS,STA)` -> `(ATS,AIS)` -> `(S,AIS)`.
+The (ActiveClusterState, StandbyClusterState) pair progresses through a well-defined sequence during failover. `(AIS,S)` -> `(ATS,S)` -> `(ATS,STA)` -> `(ATS,AIS)` -> `(S,AIS)`. Failover is not initiated from `ANIS`; the active must first return to `AIS`.
 
 **Anti-Flapping Timer.**
 A countdown timer (Lamport CHARME 2005) gates the `ANIS` -> `AIS` transition: the OUT directory must remain empty and all RS must be in SYNC for a configurable number of ticks before the cluster may return to `ACTIVE_IN_SYNC`.
@@ -124,9 +124,9 @@ The final failover step is two independent ZK writes. The new active writes `ACT
 
 ### Failover Sequence
 
-1. **Initiation.** Admin transitions the active cluster from `AIS` to `ATS` (AIS failover path) or from `ANIS` to `ANISTS` (ANIS failover path). The `ACTIVE_TO_STANDBY` role blocks all mutations. On the ANIS path, the forwarder must drain the OUT directory and the anti-flapping gate must open before `ANISTS` advances to `ATS`.
+1. **Initiation.** Admin transitions the active cluster from `AIS` to `ATS`. The `ACTIVE_TO_STANDBY` role blocks all mutations. Failover is rejected from `ANIS` (store-and-forward) because the peer may not yet hold the OUT backlog.
 
-2. **Standby detection.** The standby's `FailoverManagementListener` detects the peer's ATS via a ZK watcher and reactively transitions the standby from `S` (or `DS` on the ANIS path) to `STA`. This sets `failoverPending = true`.
+2. **Standby detection.** The standby's `FailoverManagementListener` detects the peer's ATS via a ZK watcher and reactively transitions the standby from `S` (or `DS`, if it has not yet observed the active's return to `AIS`) to `STA`. This sets `failoverPending = true`.
 
 3. **Log replay.** The standby replays all outstanding replication logs. The failover trigger requires: `failoverPending`, in-progress directory empty, and no new files in the time window (`lastRoundProcessed >= lastRoundInSync`).
 
@@ -172,7 +172,7 @@ Liveness properties guarantee progress. Transient states eventually resolve to s
 | Property | Clauses | Description |
 |----------|---------|-------------|
 | `FailoverCompletion` | 15 | Standby-side and abort transient states (`STA`, `AbTAIS`, `AbTANIS`, `AbTS`) eventually resolve to a stable state (`AIS`, `ANIS`, `S`). ATS/ANISTS excluded: resolution depends on peer state and ZK connectivity at the right moment, with no fairness on admin actions or ZK disconnect. |
-| `DegradationRecovery` | 25 | ANIS with available peer HDFS eventually progresses out of ANIS via the writer recovery chain: `S&F` -> `S&FWD` -> `SYNC`, anti-flap timer expires, `ANIS` -> `AIS`. May also leave ANIS via failover (`ANIS` -> `ANISTS`). |
+| `DegradationRecovery` | 25 | ANIS with available peer HDFS eventually progresses out of ANIS via the writer recovery chain: `S&F` -> `S&FWD` -> `SYNC`, anti-flap timer expires, `ANIS` -> `AIS`. |
 | `AbortCompletion` | 5 | Every abort state (`AbTS`, `AbTAIS`, `AbTANIS`) eventually auto-completes to a stable state (`AIS`, `ANIS`, `S`). Deterministic under WF on `AutoComplete`. |
 
 ## Module Architecture
@@ -204,7 +204,7 @@ All sub-modules extend `SpecState.tla` and `Types.tla` for shared variables and 
 | `Types.tla` | Pure definitions: 14 HA group states, allowed transitions, cluster roles, writer modes, replay states, liveness state sets, writer/replay transition tables, anti-flapping timer helpers. No variables. |
 | `ConsistentFailover.tla` | Root orchestrator. Defines Init/Next/SafetySpec/Spec, instances sub-modules, defines all invariants and action constraints. |
 | `HAGroupStore.tla` | 11 action schemas. Peer-reactive transitions (`PeerReactToATS`, `PeerReactToANIS`, `PeerReactToAbTS`, `PeerReactToAIS`), local auto-completion (`AutoComplete`), STORE_AND_FORWARD heartbeat (`ANISHeartbeat`), ANIS recovery (`ANISToAIS`), ANISTS drain completion (`ANISTSToATS`), retry exhaustion (`ReactiveTransitionFail`), peer OFFLINE detection (`PeerReactToOFFLINE`, `PeerRecoverFromOFFLINE`). ATS->S transitions include writer lifecycle reset (live writers reset to INIT, OUT directory cleared; DEAD writers preserved for RSRestart). S-entry actions atomically set `replayState = SYNCED_RECOVERY` (recoveryListener fold); DS-entry sets `replayState = DEGRADED` (degradedListener fold). All peer-reactive actions guarded on `zkPeerConnected` and `zkPeerSessionAlive`; OFFLINE lifecycle peer-reactive actions additionally guarded on `UseOfflinePeerDetection`. Auto-completion, heartbeat, recovery, and drain completion guarded on `zkLocalConnected`. |
-| `Admin.tla` | `AdminStartFailover` (AIS->ATS or ANIS->ANISTS with peer-state guard), `AdminAbortFailover` (STA->AbTS, clears failoverPending), `AdminGoOffline` (S/DS->OFFLINE, gated on `UseOfflinePeerDetection`), and `AdminForceRecover` (OFFLINE->S, gated on `UseOfflinePeerDetection`). |
+| `Admin.tla` | `AdminStartFailover` (AIS->ATS with peer-state guard; rejected from ANIS), `AdminAbortFailover` (STA->AbTS, clears failoverPending), `AdminGoOffline` (S/DS->OFFLINE, gated on `UseOfflinePeerDetection`), and `AdminForceRecover` (OFFLINE->S, gated on `UseOfflinePeerDetection`). |
 | `Writer.tla` | Per-RS writer mode transitions: startup (`WriterInit`, `WriterInitToStoreFwd`, `WriterInitToStoreFwdFail`), degradation (`WriterToStoreFwd`, `WriterToStoreFwdFail`, `WriterSyncFwdToStoreFwd`, `WriterSyncFwdToStoreFwdFail`), recovery (`WriterSyncToSyncFwd`, `WriterStoreFwdToSyncFwd`), drain complete (`WriterSyncFwdToSync`). ZK-writing actions guarded on `zkLocalConnected`. |
 | `Reader.tla` | Replay advance (SYNC and DEGRADED), rewind, in-progress directory dynamics, failover trigger (`TriggerFailover` guarded on `zkLocalConnected`). Listener effects (degradedListener, recoveryListener) are folded into HAGroupStore S/DS-entry actions. |
 | `HDFS.tla` | `HDFSDown` and `HDFSUp` -- environment actions for NameNode crash/recovery. |
@@ -341,19 +341,24 @@ java -XX:+UseParallelGC \
 | Metric | Value |
 |--------|-------|
 | Configuration | 2 clusters, 2 RS per cluster, WaitTimeForSync=2 |
-| Workers | 16 |
-| States generated | 1,107,584,929 |
-| Distinct states | 70,543,872 |
-| Depth | 54 |
-| Duration | 10 min 14 sec |
-| Date | 2026-05-22 |
+| Workers | 12 |
+| States generated | 741,025,585 |
+| Distinct states | 46,422,720 |
+| Depth | 55 |
+| Duration | 8 min 42 sec |
+| Date | 2026-10-20 |
 | Result | Success |
 
 All 6 state invariants and 9 action constraints verified.  No violations.
+`AdminStartFailover` requires AIS, so ANISTS is unreachable and the legacy
+ANIS -> ANISTS -> ATS path kept in the implementation is not exercised;
+`ANISTStoATSPrecondition` holds vacuously.
 
 ### Liveness (Per-Property Simulation)
 
 All runs: 2 clusters, 2 RS per cluster, WaitTimeForSync=2, 16 workers, depth 10000, 1 hr.
+These runs predate restricting `AdminStartFailover` to AIS. They remain valid
+because that change only removes behaviors and admin actions carry no fairness.
 
 | Property | Config | States Checked | Traces | Seed | Date | Result |
 |----------|--------|----------------|--------|------|------|--------|

@@ -695,8 +695,12 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     }, HA_STATE_POLL_INTERVAL_MS, HA_STATE_TRANSITION_TIMEOUT_MS);
   }
 
+  /**
+   * Failover from ACTIVE_NOT_IN_SYNC is rejected without changing either cluster's state; once the
+   * forwarder drains the backlog and the group returns to ACTIVE_IN_SYNC, failover succeeds.
+   */
   @Test(timeout = 240000)
-  public void testE2EFailoverFromActiveNotInSyncWithAutomaticStateTransitions() throws Exception {
+  public void testE2EFailoverRejectedFromActiveNotInSyncUntilBackInSync() throws Exception {
     String haGroupName = testName.getMethodName();
     Configuration cluster1Conf = CLUSTERS.getHBaseCluster1().getConfiguration();
     Configuration cluster2Conf = CLUSTERS.getHBaseCluster2().getConfiguration();
@@ -742,6 +746,23 @@ public class HAGroupStoreManagerIT extends HABaseIT {
         HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
       waitForHAGroupState(cluster2HAManager, haGroupName,
         HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+
+      try {
+        cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName);
+        fail("Failover from ACTIVE_NOT_IN_SYNC should be rejected");
+      } catch (InvalidClusterRoleTransitionException e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("store-and-forward"));
+      }
+      // Rejection lands well inside the anti-flap window, so the group cannot have resynced yet.
+      assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+        cluster1HAManager.getHAGroupStoreRecord(haGroupName).get().getHAGroupState());
+      assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
+        cluster2HAManager.getHAGroupStoreRecord(haGroupName).get().getHAGroupState());
+
+      // The forwarder finds no backlog and promotes the group back to ACTIVE_IN_SYNC.
+      waitForHAGroupState(cluster1HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      waitForHAGroupState(cluster2HAManager, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
 
       assertEquals(0L, cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName));
       waitForHAGroupState(cluster1HAManager, haGroupName,
