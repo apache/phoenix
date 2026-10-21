@@ -86,8 +86,6 @@ public class CDCStreamIT extends CDCBaseIT {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
     props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60 * 60)); // An hour
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     taskRegionEnvironment =
