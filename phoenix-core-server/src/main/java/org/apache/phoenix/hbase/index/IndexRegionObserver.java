@@ -68,6 +68,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -624,6 +625,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private boolean stopped;
   private boolean disabled;
+  // Whether postOpen counted this region; postClose decrements only then.
+  private boolean countedOpen;
   private long slowIndexPrepareThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
@@ -817,6 +820,28 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (this.indexCDCConsumer != null) {
       this.indexCDCConsumer.stop();
     }
+  }
+
+  @Override
+  public void postOpen(ObserverContext<RegionCoprocessorEnvironment> c) {
+    if (this.disabled) {
+      return;
+    }
+    // Count open regions so the server's replication log groups close only after its last region
+    // has drained (see ReplicationLogGroup.regionClosed).
+    ReplicationLogGroup.regionOpened(c.getEnvironment().getServerName());
+    this.countedOpen = true;
+  }
+
+  @Override
+  public void postClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested) {
+    // A failed open runs postClose, possibly without postOpen; only undo what postOpen counted.
+    if (!this.countedOpen) {
+      return;
+    }
+    this.countedOpen = false;
+    ReplicationLogGroup.regionClosed(c.getEnvironment().getServerName(),
+      this.abortable instanceof Server ? (Server) this.abortable : null);
   }
 
   /**
