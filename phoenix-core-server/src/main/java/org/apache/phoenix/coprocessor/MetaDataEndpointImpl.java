@@ -154,6 +154,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
@@ -1847,56 +1848,54 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private TTLExpression getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp,
     boolean checkForMappedView) throws IOException, SQLException {
     Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-    Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
-      SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-    ResultScanner scanner = sysCat.getScanner(scan);
-    Result result = scanner.next();
-
     byte[] tableKey = null;
-    do {
+    try (ResultScanner scanner = getSysCatScanner(viewKey, scan)) {
+      Result result = scanner.next();
+      do {
 
-      if (result == null) {
-        return TTL_EXPRESSION_NOT_DEFINED;
-      }
-
-      // return TTL_NOT_DEFINED for Index on a Mapped View.
-      if (checkForMappedView && checkIfViewIsMappedView(result)) {
-        return TTL_EXPRESSION_NOT_DEFINED;
-      }
-
-      byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-      byte[][] rowKeyMetaData = new byte[5][];
-      getVarChars(result.getRow(), 5, rowKeyMetaData);
-      // Check if TTL is defined at the current given level
-      if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-        String ttlStr = (String) PVarchar.INSTANCE
-          .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-        return TTLExpressionFactory.create(ttlStr);
-      } else if (linkTypeBytes != null) {
-        String parentSchema = SchemaUtil
-          .getSchemaNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-        byte[] parentViewSchemaName =
-          parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
-        byte[] parentViewName = SchemaUtil
-          .getTableNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-          .getBytes(StandardCharsets.UTF_8);
-        // Get TTL from up the hierarchy, Checking for Parent view link and getting TTL from it.
-        if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
-          byte[] parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
-          byte[] parentViewKey =
-            SchemaUtil.getTableKey(parentViewTenantId, parentViewSchemaName, parentViewName);
-          return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
+        if (result == null) {
+          return TTL_EXPRESSION_NOT_DEFINED;
         }
 
-        // Store tableKey to use if we don't find TTL at current level and from
-        // parent views above the hierarchy
-        if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PHYSICAL_TABLE) {
-          tableKey = SchemaUtil.getTableKey(null, parentViewSchemaName, parentViewName);
+        // return TTL_NOT_DEFINED for Index on a Mapped View.
+        if (checkForMappedView && checkIfViewIsMappedView(result)) {
+          return TTL_EXPRESSION_NOT_DEFINED;
         }
-      }
 
-      result = scanner.next();
-    } while (result != null);
+        byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+        byte[][] rowKeyMetaData = new byte[5][];
+        getVarChars(result.getRow(), 5, rowKeyMetaData);
+        // Check if TTL is defined at the current given level
+        if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+          String ttlStr = (String) PVarchar.INSTANCE
+            .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
+          return TTLExpressionFactory.create(ttlStr);
+        } else if (linkTypeBytes != null) {
+          String parentSchema = SchemaUtil
+            .getSchemaNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+          byte[] parentViewSchemaName =
+            parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+          byte[] parentViewName = SchemaUtil
+            .getTableNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+            .getBytes(StandardCharsets.UTF_8);
+          // Get TTL from up the hierarchy, Checking for Parent view link and getting TTL from it.
+          if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
+            byte[] parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
+            byte[] parentViewKey =
+              SchemaUtil.getTableKey(parentViewTenantId, parentViewSchemaName, parentViewName);
+            return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
+          }
+
+          // Store tableKey to use if we don't find TTL at current level and from
+          // parent views above the hierarchy
+          if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PHYSICAL_TABLE) {
+            tableKey = SchemaUtil.getTableKey(null, parentViewSchemaName, parentViewName);
+          }
+        }
+
+        result = scanner.next();
+      } while (result != null);
+    }
 
     // Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the
     // views.
@@ -1925,37 +1924,92 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private TTLExpression getTTLForParentTable(byte[] tableKey, long clientTimeStamp,
     String indexName, IndexType indexType) throws IOException {
     Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-    Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
-      SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-    ResultScanner scanner = sysCat.getScanner(scan);
-    Result result = scanner.next();
-    do {
-      if (result == null) {
-        return TTL_EXPRESSION_NOT_DEFINED;
-      }
-      if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-        String ttlStr = (String) PVarchar.INSTANCE
-          .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-        TTLExpression ttl = TTLExpressionFactory.create(ttlStr);
-        if (UNCOVERED_GLOBAL.equals(indexType)) {
-          if (CDCUtil.isCDCIndex(indexName)) {
-            if (!ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
-              return TTL_EXPRESSION_FOREVER;
-            }
-          } else if (ttl instanceof ConditionalTTLExpression) {
-            byte[] isStrictTTLBytes = result.getValue(TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
-            boolean isStrictTTL = isStrictTTLBytes != null
-              && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLBytes));
-            if (!isStrictTTL) {
-              return TTL_EXPRESSION_NOT_DEFINED;
+    try (ResultScanner scanner = getSysCatScanner(tableKey, scan)) {
+      Result result = scanner.next();
+      do {
+        if (result == null) {
+          return TTL_EXPRESSION_NOT_DEFINED;
+        }
+        if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+          String ttlStr = (String) PVarchar.INSTANCE
+            .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
+          TTLExpression ttl = TTLExpressionFactory.create(ttlStr);
+          if (UNCOVERED_GLOBAL.equals(indexType)) {
+            if (CDCUtil.isCDCIndex(indexName)) {
+              if (!ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
+                return TTL_EXPRESSION_FOREVER;
+              }
+            } else if (ttl instanceof ConditionalTTLExpression) {
+              byte[] isStrictTTLBytes = result.getValue(TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
+              boolean isStrictTTL = isStrictTTLBytes != null
+                && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLBytes));
+              if (!isStrictTTL) {
+                return TTL_EXPRESSION_NOT_DEFINED;
+              }
             }
           }
+          return ttl;
         }
-        return ttl;
-      }
-      result = scanner.next();
-    } while (result != null);
+        result = scanner.next();
+      } while (result != null);
+    }
     return TTL_EXPRESSION_NOT_DEFINED;
+  }
+
+  /**
+   * Opens a scanner over SYSTEM.CATALOG rows for the given table key. Reads the local region when
+   * it hosts the key, so that no client RPC is issued to a region whose operation the caller may
+   * hold (a closing region would otherwise stall in client retries). Otherwise falls back to a
+   * client scan with bounded retries and timeouts.
+   */
+  private ResultScanner getSysCatScanner(byte[] key, Scan scan) throws IOException {
+    Region region = env.getRegion();
+    if (region.getRegionInfo().containsRow(key)) {
+      return new RegionResultScanner(region.getScanner(scan));
+    }
+    try (Table sysCat = ServerUtil.ConnectionFactory
+      .getConnection(ServerUtil.ConnectionType.METADATA_LOOKUP_CONNECTION, env).getTable(
+        SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
+      return sysCat.getScanner(scan);
+    }
+  }
+
+  /** Adapts a {@link RegionScanner} to a {@link ResultScanner}, one row per {@link Result}. */
+  private static class RegionResultScanner implements ResultScanner {
+    private final RegionScanner scanner;
+    private boolean hasMore = true;
+
+    RegionResultScanner(RegionScanner scanner) {
+      this.scanner = scanner;
+    }
+
+    @Override
+    public Result next() throws IOException {
+      List<Cell> cells = new ArrayList<>();
+      while (hasMore && cells.isEmpty()) {
+        hasMore = scanner.next(cells);
+      }
+      return cells.isEmpty() ? null : Result.create(cells);
+    }
+
+    @Override
+    public void close() {
+      try {
+        scanner.close();
+      } catch (IOException e) {
+        LOGGER.warn("Failed to close SYSTEM.CATALOG region scanner", e);
+      }
+    }
+
+    @Override
+    public boolean renewLease() {
+      return false;
+    }
+
+    @Override
+    public ScanMetrics getScanMetrics() {
+      return null;
+    }
   }
 
   private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {

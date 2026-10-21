@@ -54,6 +54,13 @@ import org.slf4j.LoggerFactory;
 public class ServerUtil {
   private static final Logger LOGGER = LoggerFactory.getLogger(ServerUtil.class);
   private static final String FORMAT_FOR_TIMESTAMP = ",serverTimestamp=%d,";
+  // HBase client keys not available as constants in all supported HBase versions
+  private static final String HBASE_CLIENT_META_READ_RPC_TIMEOUT_KEY =
+    "hbase.client.meta.read.rpc.timeout";
+  private static final String HBASE_CLIENT_META_SCANNER_TIMEOUT =
+    "hbase.client.meta.scanner.timeout.period";
+  private static final String HBASE_CLIENT_PAUSE_FOR_SERVER_OVERLOADED =
+    "hbase.client.pause.server.overloaded";
 
   public static boolean hasCoprocessor(RegionCoprocessorEnvironment env,
     String CoprocessorClassName) {
@@ -167,6 +174,7 @@ public class ServerUtil {
     INDEX_WRITER_CONNECTION,
     INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS,
     INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS_NO_RETRIES,
+    METADATA_LOOKUP_CONNECTION,
     DEFAULT_SERVER_CONNECTION;
   }
 
@@ -203,6 +211,8 @@ public class ServerUtil {
           return getIndexWriterConfigurationWithCustomThreads(conf);
         case INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS_NO_RETRIES:
           return getNoRetriesIndexWriterConfigurationWithCustomThreads(conf);
+        case METADATA_LOOKUP_CONNECTION:
+          return getMetadataConfig(conf);
         default:
           return conf;
       }
@@ -238,6 +248,56 @@ public class ServerUtil {
       conf.getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
         QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
     return compactionConfig;
+  }
+
+  public static Configuration getMetadataConfig(Configuration conf) {
+    Configuration metadataConfig = PropertiesUtil.cloneConfig(conf);
+    // fail fast, as the caller holds a SYSTEM.CATALOG region operation that blocks its close
+    int timeoutMs = conf.getInt(QueryServices.METADATA_SERVER_LOOKUP_TIMEOUT_MS,
+      QueryServicesOptions.DEFAULT_METADATA_SERVER_LOOKUP_TIMEOUT_MS);
+    if (timeoutMs <= 0) {
+      // HBase treats a non-positive timeout as no timeout
+      LOGGER.warn("Ignoring non-positive {}={}, using {}",
+        QueryServices.METADATA_SERVER_LOOKUP_TIMEOUT_MS, timeoutMs,
+        QueryServicesOptions.DEFAULT_METADATA_SERVER_LOOKUP_TIMEOUT_MS);
+      timeoutMs = QueryServicesOptions.DEFAULT_METADATA_SERVER_LOOKUP_TIMEOUT_MS;
+    }
+    metadataConfig.setInt(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, timeoutMs);
+    metadataConfig.setInt(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT, timeoutMs);
+    metadataConfig.setInt(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, timeoutMs);
+    // region location lookups use the meta timeouts, which default to much longer ones
+    metadataConfig.setInt(HConstants.HBASE_CLIENT_META_OPERATION_TIMEOUT, timeoutMs);
+    metadataConfig.setInt(HBASE_CLIENT_META_READ_RPC_TIMEOUT_KEY, timeoutMs);
+    metadataConfig.setInt(HBASE_CLIENT_META_SCANNER_TIMEOUT, timeoutMs);
+    // region location lookups retry without checking the timeout, so bound the retries too,
+    // using the larger pause that is applied when the server is overloaded
+    long pauseMs =
+      conf.getLong(HConstants.HBASE_CLIENT_PAUSE, HConstants.DEFAULT_HBASE_CLIENT_PAUSE);
+    long overloadedPauseMs = conf.getLong(HBASE_CLIENT_PAUSE_FOR_SERVER_OVERLOADED,
+      conf.getLong(HConstants.HBASE_CLIENT_PAUSE_FOR_CQTBE, pauseMs));
+    int retries = getRetriesWithinTimeout(timeoutMs, Math.max(pauseMs, overloadedPauseMs));
+    metadataConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, retries);
+    LOGGER.info("SYSTEM.CATALOG lookup connection timeout={} ms, retries={}", timeoutMs, retries);
+    return metadataConfig;
+  }
+
+  /**
+   * Returns the largest number of retries whose total nominal client backoff (see
+   * {@link HConstants#RETRY_BACKOFF}, excluding jitter and RPC time) fits within the given timeout.
+   */
+  static int getRetriesWithinTimeout(long timeoutMs, long pauseMs) {
+    long pause = Math.max(1, pauseMs);
+    int retries = 0;
+    long totalBackoff = 0;
+    while (true) {
+      long backoff =
+        pause * HConstants.RETRY_BACKOFF[Math.min(retries, HConstants.RETRY_BACKOFF.length - 1)];
+      if (totalBackoff + backoff > timeoutMs) {
+        return retries;
+      }
+      totalBackoff += backoff;
+      retries++;
+    }
   }
 
   public static Configuration getIndexWriterConnection(Configuration conf) {
