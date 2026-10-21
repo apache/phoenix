@@ -31,8 +31,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -1013,5 +1020,74 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
         conn.close();
       }
     }
+  }
+
+  /**
+   * A hash join whose build side has more distinct join keys than the WHERE optimizer's key-space
+   * bound (65,536) still bounds the probe-side scan to [min, max] of the keys rather than scanning
+   * the whole table, and returns exactly the matching rows.
+   */
+  @Test
+  public void testJoinKeyRangeWithLargeBuildSideIsBounded() throws Exception {
+    String probe = generateUniqueName();
+    String build = generateUniqueName();
+    int minKey = 100_000;
+    int nKeys = 70_000;
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + probe + " (id INTEGER NOT NULL PRIMARY KEY, v VARCHAR)");
+      conn.createStatement()
+        .execute("CREATE TABLE " + build + " (id INTEGER NOT NULL PRIMARY KEY, j INTEGER)");
+      conn.setAutoCommit(false);
+      PreparedStatement upsert = conn.prepareStatement("UPSERT INTO " + build + " VALUES (?, ?)");
+      for (int i = 0; i < nKeys; i++) {
+        upsert.setInt(1, i);
+        upsert.setInt(2, minKey + i);
+        upsert.execute();
+        if (i % 10_000 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      // Probe rows on both sides of the key span and inside it.
+      Set<Integer> expected = new TreeSet<>();
+      upsert = conn.prepareStatement("UPSERT INTO " + probe + " VALUES (?, ?)");
+      for (int id = 0; id < 3 * minKey; id += 97) {
+        upsert.setInt(1, id);
+        upsert.setString(2, "v" + id);
+        upsert.execute();
+        if (id >= minKey && id < minKey + nKeys) {
+          expected.add(id);
+        }
+      }
+      conn.commit();
+
+      String query = "SELECT p.id FROM " + probe + " p JOIN " + build + " b ON p.id = b.j";
+      HashJoinPlan plan = (HashJoinPlan) conn.prepareStatement(query)
+        .unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      Set<Integer> actual = new TreeSet<>();
+      try (ResultSet rs =
+        new PhoenixResultSet(plan.iterator(), plan.getProjector(), plan.getContext())) {
+        while (rs.next()) {
+          actual.add(rs.getInt(1));
+        }
+      }
+      assertEquals(expected, actual);
+
+      // The build side's keys were pushed into the probe scan at runtime.
+      // Checked by coverage, since the bound has several equivalent encodings.
+      KeyRange scanRange = plan.getDelegate().getContext().getScanRanges().getScanRange();
+      for (int key : new int[] { minKey, minKey + nKeys - 1 }) {
+        assertTrue(key + " outside probe scan " + scanRange, admits(scanRange, key));
+      }
+      for (int key : new int[] { minKey - 1, minKey + nKeys }) {
+        assertFalse(key + " inside probe scan " + scanRange, admits(scanRange, key));
+      }
+    }
+  }
+
+  private static boolean admits(KeyRange range, int key) {
+    return range.intersect(KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(key)))
+        != KeyRange.EMPTY_RANGE;
   }
 }

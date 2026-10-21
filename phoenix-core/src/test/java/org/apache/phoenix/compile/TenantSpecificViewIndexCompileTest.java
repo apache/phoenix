@@ -92,7 +92,17 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Predicate without valid partial PK
     sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k1, k2, k3";
-    assertRangeScanWithFilter(conn, sql, "['tenant123456789']",
+    // V2 strictly better: V1 narrows only to the tenant prefix [tenant], evaluating
+    // `K2 < 'abcde1234567890'` as a server filter against every row in the tenant.
+    // V2 compound-emits the trailing K2 bound past the unconstrained K1 → scan
+    // range ['tenant',*,*] - ['tenant',*,'abcde1234567890']. HBase rejects rows
+    // with K2 ≥ 'abcde1234567890' pre-filter; the residual filter still appears
+    // for correctness on the in-bounds rows but is harmless. Strictly fewer rows
+    // shipped from regionserver.
+    assertRangeScanWithFilter(conn, sql,
+      isV2Optimizer()
+        ? "['tenant123456789',*,*] - ['tenant123456789',*,'abcde1234567890']"
+        : "['tenant123456789']",
       "SERVER FILTER BY K2 < 'abcde1234567890'");
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
@@ -137,8 +147,20 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + datePredicate + "') ORDER BY k2, k3";
-    assertRangeScanWithFilter(conn, sql, "['tenant123456789','xyz']",
-      "SERVER FILTER BY K3 < DATE '" + datePredicate + "'");
+    // V2 strictly better: V1 narrows to the tenant·k1 prefix and evaluates K3 < ...
+    // as a server filter on every row. V2 emits a SKIP SCAN that promotes K3 < date
+    // into the scan range itself, walking all k2 values for `tenant·xyz` up to the
+    // date bound. HBase rejects rows past the date pre-filter and the residual
+    // K3 filter is dropped entirely. Strictly fewer rows shipped.
+    if (isV2Optimizer()) {
+      assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("SKIP SCAN ON 1 KEY").table("T")
+        .keyRanges(
+          "['tenant123456789','xyz',*,*] - ['tenant123456789','xyz',*,'" + datePredicate + "']")
+        .serverWhereFilter(null).indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
+    } else {
+      assertRangeScanWithFilter(conn, sql, "['tenant123456789','xyz']",
+        "SERVER FILTER BY K3 < DATE '" + datePredicate + "'");
+    }
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
 
@@ -204,8 +226,14 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     // clause.
     // The index i1 is rejected because it does not cover v1, leaving the data table as the only
     // surviving candidate.
+    // V2 strictly better: V1 narrows only to the tenant prefix ['me'] and evaluates
+    // both V2 > 'a' and the view-constant K2 = 'a' as server filters. V2 compound-
+    // emits the view's K2='a' constant into the scan range itself (with K1 wildcard
+    // for the unconstrained middle dim) → ['me',*,'a']. HBase rejects rows with
+    // K2 ≠ 'a' pre-filter; residual filter still appears for the V2 column predicate
+    // (and harmlessly the K2 check). Strictly fewer rows shipped.
     assertPlan(conn, "SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2").iteratorType("PARALLEL 1-WAY")
-      .scanType("RANGE SCAN").table("T").keyRanges("['me']")
+      .scanType("RANGE SCAN").table("T").keyRanges(isV2Optimizer() ? "['me',*,'a']" : "['me']")
       .serverWhereFilter("SERVER FILTER BY (V2 > 'a' AND K2 = 'a')")
       .indexRule(OptimizerReasons.RULE_ONLY_CANDIDATE).indexRejectedCount(1);
 
