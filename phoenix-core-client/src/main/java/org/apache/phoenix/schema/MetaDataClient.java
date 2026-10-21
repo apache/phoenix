@@ -1212,6 +1212,14 @@ public class MetaDataClient {
               SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX).build()
                 .buildException();
           }
+          // PHOENIX-6868: Disallow setting inheritable table descriptor properties on indexes
+          if (tableType == PTableType.INDEX && !isCDCIndex
+              && MetaDataUtil.isInheritableTableDescriptorProperty(
+                  connection.getQueryServices().getConfiguration(), prop.getFirst())) {
+            throw new SQLExceptionInfo.Builder(
+              SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                .setMessage("Property: " + prop.getFirst()).build().buildException();
+          }
           tableProps.put(prop.getFirst(), prop.getSecond());
         } else { // HColumnDescriptor property
           commonFamilyProps.put(prop.getFirst(), prop.getSecond());
