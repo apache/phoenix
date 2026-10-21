@@ -21,14 +21,12 @@ import java.io.IOException;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterBase;
+import org.apache.phoenix.compat.hbase.CompatDelegateFilter;
 
-public class DelegateFilter extends FilterBase {
-
-  protected Filter delegate = null;
+public class DelegateFilter extends CompatDelegateFilter {
 
   public DelegateFilter(Filter delegate) {
-    this.delegate = delegate;
+    super(delegate);
   }
 
   @Override
