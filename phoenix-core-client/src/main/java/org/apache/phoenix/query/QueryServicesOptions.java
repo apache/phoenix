@@ -281,6 +281,10 @@ public class QueryServicesOptions {
   public static final int DEFAULT_METADATA_WRITE_RETRIES_NUMBER = 20;
   public static final int DEFAULT_METADATA_WRITE_RETRY_PAUSE = 100;
 
+  // Kept short because these reads run while holding a SYSTEM.CATALOG region operation, at the
+  // cost of failing the lookup sooner against a slow region server
+  public static final int DEFAULT_METADATA_SERVER_LOOKUP_TIMEOUT_MS = 10000;
+
   public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
   /**
    * Configuration key to overwrite the tablename that should be used as the target table

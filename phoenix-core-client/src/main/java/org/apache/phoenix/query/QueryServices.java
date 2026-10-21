@@ -228,6 +228,11 @@ public interface QueryServices extends SQLCloseable {
   public static final String METADATA_WRITE_RETRIES_NUMBER = "phoenix.metadata.rpc.retries.number";
   public static final String METADATA_WRITE_RETRY_PAUSE = "phoenix.metadata.rpc.pause";
 
+  // Timeout (also bounding retries) for server side client scans of SYSTEM.CATALOG issued while
+  // building a PTable
+  public static final String METADATA_SERVER_LOOKUP_TIMEOUT_MS =
+    "phoenix.metadata.server.lookup.timeout.ms";
+
   // Config parameters for for configuring tracing
   public static final String TRACING_FREQ_ATTRIB = "phoenix.trace.frequency";
   public static final String TRACING_PAGE_SIZE_ATTRIB = "phoenix.trace.read.pagesize";
