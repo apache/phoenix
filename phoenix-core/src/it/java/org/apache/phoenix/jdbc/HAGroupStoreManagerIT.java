@@ -735,9 +735,6 @@ public class HAGroupStoreManagerIT extends HABaseIT {
       waitForEffectiveHAGroupState(cluster2HAManager, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY);
 
-      HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
-      replicationLogGroup = ReplicationLogGroup
-        .get(cluster1Conf, regionServer.getServerName(), haGroupName, cluster1HAManager).get();
       replicationLogReplay = ReplicationLogReplay.get(cluster2Conf, haGroupName);
       replicationLogReplay.startReplay();
 
@@ -753,13 +750,17 @@ public class HAGroupStoreManagerIT extends HABaseIT {
       } catch (InvalidClusterRoleTransitionException e) {
         assertTrue(e.getMessage(), e.getMessage().contains("store-and-forward"));
       }
-      // Rejection lands well inside the anti-flap window, so the group cannot have resynced yet.
+      // No forwarder exists yet, so nothing can move the group back to ACTIVE_IN_SYNC here.
       assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
         cluster1HAManager.getHAGroupStoreRecord(haGroupName).get().getHAGroupState());
       assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
         cluster2HAManager.getHAGroupStoreRecord(haGroupName).get().getHAGroupState());
 
-      // The forwarder finds no backlog and promotes the group back to ACTIVE_IN_SYNC.
+      // Start the forwarder only now; it finds no backlog and promotes the group back to
+      // ACTIVE_IN_SYNC.
+      HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
+      replicationLogGroup = ReplicationLogGroup
+        .get(cluster1Conf, regionServer.getServerName(), haGroupName, cluster1HAManager).get();
       waitForHAGroupState(cluster1HAManager, haGroupName,
         HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
       waitForHAGroupState(cluster2HAManager, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
