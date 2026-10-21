@@ -261,6 +261,11 @@ public class IndexScrutinyTool extends Configured implements Tool {
       PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
       final PTable pdataTable = phoenixConnection.getTable(qDataTable);
       final PTable pindexTable = phoenixConnection.getTable(qIndexTable);
+      if (pindexTable.isVectorIndex()) {
+        throw new IllegalArgumentException(String
+          .format("%s is a vector index, which IndexScrutinyTool does not support; verify it with "
+            + "bin/indexfsck.py verify", qIndexTable));
+      }
 
       // Randomize execution order, unless explicitly set
       configuration.setBooleanIfUnset(

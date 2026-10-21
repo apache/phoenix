@@ -84,6 +84,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.ServerScanUtil;
@@ -116,6 +117,7 @@ import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.index.vector.ScorecardAccumulator;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -355,6 +357,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
     // The current and next states of the data rows corresponding to the pending mutations
     private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
+    // Vector index scorecard deltas of this batch. They go to the accumulator after a success.
+    private Map<ScorecardAccumulator.Key, long[]> scorecardDeltas;
     // The previous concurrent batch contexts
     private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
     // The latches of the threads waiting for this batch to complete
@@ -549,6 +553,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
 
       this.builder = new IndexBuildManager(env);
+      VectorCentroidCache.setServerConfiguration(env.getConfiguration());
+      ScorecardAccumulator.getInstance(env.getConfiguration());
       // Clone the config since it is shared
       DelegateRegionCoprocessorEnvironment indexWriterEnv =
         new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
@@ -1386,15 +1392,36 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     Put currentDataRowState, Put nextDataRowState, long ts, byte[] encodedRegionName,
     byte[] emptyColumnValue, List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables,
     ListMultimap<HTableInterfaceReference, Mutation> indexUpdates) throws IOException {
+    generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
+      encodedRegionName, emptyColumnValue, indexTables, indexUpdates, null);
+  }
+
+  /**
+   * Generates the index mutations for a data row. If {@code scorecardDeltas} is not null, this
+   * method adds to that map the deltas of each mutable vector index that is not in a migration.
+   */
+  private static void generateIndexMutationsForRow(ImmutableBytesPtr rowKeyPtr,
+    Put currentDataRowState, Put nextDataRowState, long ts, byte[] encodedRegionName,
+    byte[] emptyColumnValue, List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables,
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates,
+    Map<ScorecardAccumulator.Key, long[]> scorecardDeltas) throws IOException {
     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
       IndexMaintainer indexMaintainer = pair.getFirst();
       HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
+      // Evaluate the indexed vector of each row state one time, because a BSON vector costs a
+      // document decode. The new state is strict, so a malformed vector makes the write fail. The
+      // current state is lenient, so a malformed stored vector does not block a delete or a
+      // correction.
+      ImmutableBytesWritable nextVector = indexMaintainer.getIndexedVector(nextDataRowState, true);
+      ImmutableBytesWritable currentVector =
+        indexMaintainer.getIndexedVector(currentDataRowState, false);
       if (
-        nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
+        nextDataRowState != null
+          && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState, nextVector)
       ) {
         ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName, nextVector);
         if (indexPut == null) {
           // No covered column. Just prepare an index row with the empty column
           byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
@@ -1416,24 +1443,34 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             indexUpdates.put(hTableInterfaceReference, deleteColumn);
           }
         }
-        // Delete the current index row if the new index key is different from the
-        // current one and the index is not a CDC index
-        if (currentDataRowState != null) {
+        // Delete the current index row if the new index row key is different and the index is
+        // not CDC. If the indexed vector does not change, its centroid and index row key also do
+        // not change. Only a migration must then delete the row of the outgoing generation.
+        boolean vectorUnchanged = indexMaintainer.isVectorUnchanged(currentVector, nextVector);
+        if (currentDataRowState != null && !(vectorUnchanged && !indexMaintainer.isMigrating())) {
           ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-          byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
-            rowKeyPtr, null, null, ts, encodedRegionName);
+          // Null if the current row has no index row, for example if its vector is null
+          byte[] indexRowKeyForCurrentDataRow = vectorUnchanged
+            ? indexPut.getRow()
+            : indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr, ts, encodedRegionName,
+              currentVector);
           if (
-            !indexMaintainer.isCDCIndex()
+            indexRowKeyForCurrentDataRow != null && !indexMaintainer.isCDCIndex()
               && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
           ) {
             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
               IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
             indexUpdates.put(hTableInterfaceReference, del);
           }
+          if (indexMaintainer.isMigrating()) {
+            deleteOutgoingIndexRow(indexMaintainer, currentDataRowVG, currentVector, rowKeyPtr, ts,
+              encodedRegionName, indexPut.getRow(), indexRowKeyForCurrentDataRow,
+              hTableInterfaceReference, indexUpdates);
+          }
         }
       } else if (
         currentDataRowState != null
-          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)
+          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState, currentVector)
       ) {
         if (indexMaintainer.isCDCIndex()) {
           // CDC Index needs two a delete marker for referencing the data table
@@ -1445,10 +1482,43 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
             indexMaintainer, ts, rowKeyPtr, encodedRegionName));
         } else {
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+          Mutation del = indexMaintainer.buildRowDeleteMutation(indexMaintainer
+            .buildRowKey(currentDataRowVG, rowKeyPtr, ts, encodedRegionName, currentVector),
+            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+          indexUpdates.put(hTableInterfaceReference, del);
+          if (indexMaintainer.isMigrating()) {
+            deleteOutgoingIndexRow(indexMaintainer, currentDataRowVG, currentVector, rowKeyPtr, ts,
+              encodedRegionName, null, del.getRow(), hTableInterfaceReference, indexUpdates);
+          }
         }
       }
+      if (
+        scorecardDeltas != null && indexMaintainer.isVectorIndex() && !indexMaintainer.isMigrating()
+      ) {
+        ScorecardAccumulator.collect(indexMaintainer, currentDataRowState, currentVector,
+          indexUpdates.get(hTableInterfaceReference), scorecardDeltas);
+      }
+    }
+  }
+
+  /**
+   * During a migration, deletes the index row of the data row under the outgoing generation. If the
+   * write or the delete of this update already uses that row key, this method does nothing.
+   */
+  private static void deleteOutgoingIndexRow(IndexMaintainer indexMaintainer,
+    ValueGetter currentDataRowVG, ImmutableBytesWritable currentVector, ImmutableBytesPtr rowKeyPtr,
+    long ts, byte[] encodedRegionName, byte[] writtenRowKey, byte[] deletedRowKey,
+    HTableInterfaceReference hTableInterfaceReference,
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates) {
+    byte[] outgoingRowKey = indexMaintainer.buildOutgoingRowKey(currentDataRowVG, rowKeyPtr, ts,
+      encodedRegionName, currentVector);
+    if (
+      outgoingRowKey != null && !Bytes.equals(outgoingRowKey, writtenRowKey)
+        && !Bytes.equals(outgoingRowKey, deletedRowKey)
+    ) {
+      indexUpdates.put(hTableInterfaceReference, indexMaintainer
+        .buildRowDeleteMutation(outgoingRowKey, IndexMaintainer.DeleteType.ALL_VERSIONS, ts));
     }
   }
 
@@ -1473,6 +1543,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       HTableInterfaceReference hTableInterfaceReference =
         new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
       indexTables.add(new Pair<>(indexMaintainer, hTableInterfaceReference));
+      // Scorecards track only mutable vector indexes that are not in a migration.
+      if (
+        indexMaintainer.isVectorIndex() && !indexMaintainer.isMigrating() && !context.immutableRows
+          && context.scorecardDeltas == null
+      ) {
+        context.scorecardDeltas = new HashMap<>();
+      }
     }
     for (Map.Entry<ImmutableBytesPtr, Pair<Put, Put>> entry : context.dataRowStates.entrySet()) {
       ImmutableBytesPtr rowKeyPtr = entry.getKey();
@@ -1484,7 +1561,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
       generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
-        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates,
+        context.scorecardDeltas);
       for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
         context.indexUpdates.put(idxUpdate.getKey(),
           new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
@@ -1987,6 +2065,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       ServerIndexUtil.setDeleteAttributes(miniBatchOp);
     }
 
+    // Load the centroids of each vector index before the row locks. A cache miss reads
+    // SYSTEM.VECTOR_CENTROID, and the batch must not hold row locks during that read.
+    for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+      try {
+        indexMaintainer.loadCentroids(null);
+      } catch (SQLException e) {
+        throw ClientUtil.createIOException("Unable to load vector index centroids", e);
+      }
+    }
+
     // Exclusively lock all rows to do consistent writes over multiple tables
     // (i.e., the data and its index tables)
     populateRowsToLock(miniBatchOp, context);
@@ -2221,6 +2309,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       if (success) { // The pre-index and data table updates are successful, and now, do post index
                      // updates
+        if (context.scorecardDeltas != null) {
+          ScorecardAccumulator.getInstance(c.getEnvironment().getConfiguration())
+            .accumulate(context.scorecardDeltas);
+        }
         doPost(c, context);
       }
     } finally {

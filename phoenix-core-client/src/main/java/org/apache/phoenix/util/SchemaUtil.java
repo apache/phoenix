@@ -905,7 +905,13 @@ public class SchemaUtil {
   public static int getFixedByteSize(PDatum e) {
     assert (e.getDataType().isFixedWidth());
     Integer maxLength = e.getMaxLength();
-    return maxLength == null ? e.getDataType().getByteSize() : maxLength;
+    if (maxLength == null) {
+      return e.getDataType().getByteSize();
+    }
+    // For a vector, the max length is the dimension, not the size in bytes.
+    return e.getDataType().isVectorType()
+      ? e.getDataType().estimateByteSizeFromLength(maxLength)
+      : maxLength;
   }
 
   public static short getMaxKeySeq(PTable table) {

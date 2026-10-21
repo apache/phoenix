@@ -125,7 +125,17 @@ public class HintNode {
     /**
      * Override the default CDC include scopes.
      */
-    CDC_INCLUDE,;
+    CDC_INCLUDE,
+
+    /**
+     * Sets the number of centroids that a vector index scan probes in each model generation.
+     */
+    VECTOR_PROBE_COUNT,
+
+    /**
+     * Overrides the maximum number of probe batches that an adaptive vector index search can scan.
+     */
+    MAX_PROBE_LIMIT;
   };
 
   private final Map<Hint, String> hints;

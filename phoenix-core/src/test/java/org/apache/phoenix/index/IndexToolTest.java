@@ -336,4 +336,28 @@ public class IndexToolTest extends BaseTest {
     assertEquals(IndexScrutinyTool.SourceTable.INDEX_TABLE_SOURCE, it.getSourceTable());
   }
 
+  @Test
+  public void testDeleteOrphansOptionValid() throws Exception {
+    String[] args =
+      new String[] { "-dt", dataTable, "-it", indexTable, "-v", "AFTER", "-fi", "-do" };
+    CommandLine cmdLine = it.parseOptions(args);
+    it.populateIndexToolAttributes(cmdLine);
+    Assert.assertTrue(it.isDeleteOrphans());
+    assertEquals(IndexScrutinyTool.SourceTable.INDEX_TABLE_SOURCE, it.getSourceTable());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testDeleteOrphansWithoutFromIndexFails() throws Exception {
+    String[] args = new String[] { "-dt", dataTable, "-it", indexTable, "-v", "AFTER", "-do" };
+    CommandLine cmdLine = it.parseOptions(args);
+    it.populateIndexToolAttributes(cmdLine);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testDeleteOrphansWithoutVerifyAfterFails() throws Exception {
+    String[] args =
+      new String[] { "-dt", dataTable, "-it", indexTable, "-v", "ONLY", "-fi", "-do" };
+    CommandLine cmdLine = it.parseOptions(args);
+    it.populateIndexToolAttributes(cmdLine);
+  }
 }
