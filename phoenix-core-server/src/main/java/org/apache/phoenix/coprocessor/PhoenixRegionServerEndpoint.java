@@ -108,21 +108,26 @@ public class PhoenixRegionServerEndpoint extends
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
-    // Stop replication log replay
-    ReplicationLogReplayService.getInstance(conf).stop();
-    // Close all ReplicationLogGroup instances belonging to this server
-    if (serverName != null) {
-      ReplicationLogGroup.closeAll(serverName);
-    }
-    RegionServerCoprocessor.super.stop(env);
-    if (uncoveredIndexThreadPool != null) {
-      uncoveredIndexThreadPool
-        .stop("PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
-    }
-    ServerUtil.ConnectionFactory.shutdown();
-    // Stop prewarming executor
-    if (prewarmExecutor != null) {
-      prewarmExecutor.shutdownNow();
+    try {
+      // Stop replication log replay
+      ReplicationLogReplayService.getInstance(conf).stop();
+      RegionServerCoprocessor.super.stop(env);
+      if (uncoveredIndexThreadPool != null) {
+        uncoveredIndexThreadPool.stop(
+          "PhoenixRegionServerEndpoint is stopping. Shutting down uncovered index threadpool.");
+      }
+      ServerUtil.ConnectionFactory.shutdown();
+      // Stop prewarming executor
+      if (prewarmExecutor != null) {
+        prewarmExecutor.shutdownNow();
+      }
+    } finally {
+      // On a graceful stop this runs in preStop, before HBase closes the regions, so close the
+      // groups only if no IndexRegionObserver region is open; otherwise the last region close
+      // does it.
+      if (serverName != null) {
+        ReplicationLogGroup.closeAllIfNoOpenRegions(serverName);
+      }
     }
   }
 

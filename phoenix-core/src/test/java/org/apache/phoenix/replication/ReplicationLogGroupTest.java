@@ -67,6 +67,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.ClusterType;
@@ -990,6 +991,140 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.eventHandler.setFatalException(new IOException("Simulated fatal"));
     assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
     verify(logGroup, never()).abort(anyString(), any());
+  }
+
+  /** Registers an initialized group for a distinct server so closeAll can reach it. */
+  private ReplicationLogGroup registerGroupForServer(ServerName sn, String group) throws Exception {
+    ReplicationLogGroup g =
+      new TestableLogGroup(conf, sn, group, haGroupStoreManager, useAlignedRotation());
+    g.init();
+    ReplicationLogGroup.cacheForTesting(g);
+    return g;
+  }
+
+  private static Server server(boolean stopped, boolean stopping, boolean aborted) {
+    Server server = mock(Server.class);
+    doReturn(stopped).when(server).isStopped();
+    doReturn(stopping).when(server).isStopping();
+    doReturn(aborted).when(server).isAborted();
+    return server;
+  }
+
+  private static ServerName uniqueServer(int port) {
+    return ServerName.valueOf("rc-test", port, System.nanoTime());
+  }
+
+  @Test
+  public void testGroupsCloseOnLastRegionCloseWhileStopping() throws Exception {
+    ServerName sn = uniqueServer(61001);
+    ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc1");
+    try {
+      Server stopping = server(true, false, false);
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionClosed(sn, stopping);
+      assertFalse("Groups must stay open while a region is still open", g.isClosed());
+      ReplicationLogGroup.regionClosed(sn, stopping);
+      assertTrue("Groups must close when the last region closes while stopping", g.isClosed());
+    } finally {
+      g.close();
+    }
+  }
+
+  @Test
+  public void testGroupsStayOpenWhenLastRegionClosesWhileRunning() throws Exception {
+    ServerName sn = uniqueServer(61002);
+    ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc2");
+    try {
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionClosed(sn, server(false, false, false));
+      assertFalse("Regions moving away while running must not close the groups", g.isClosed());
+    } finally {
+      g.close();
+    }
+  }
+
+  @Test
+  public void testGroupsCloseOnLastRegionCloseWhileAbortingOrClusterStopping() throws Exception {
+    for (Server s : new Server[] { server(false, false, true), server(false, true, false) }) {
+      ServerName sn = uniqueServer(61003);
+      ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc3");
+      try {
+        ReplicationLogGroup.regionOpened(sn);
+        ReplicationLogGroup.regionClosed(sn, s);
+        assertTrue(g.isClosed());
+      } finally {
+        g.close();
+      }
+    }
+  }
+
+  @Test
+  public void testRegionCloseWithoutOpenDoesNotGoNegative() throws Exception {
+    ServerName sn = uniqueServer(61004);
+    ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc4");
+    try {
+      Server stopping = server(true, false, false);
+      ReplicationLogGroup.regionClosed(sn, stopping);
+      assertFalse("A close with no open region must not close the groups", g.isClosed());
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionClosed(sn, stopping);
+      assertFalse("The stray close must not have consumed a real region's count", g.isClosed());
+      ReplicationLogGroup.regionClosed(sn, stopping);
+      assertTrue(g.isClosed());
+    } finally {
+      g.close();
+    }
+  }
+
+  @Test
+  public void testRegionCountsAreSeparatePerServer() throws Exception {
+    ServerName sn1 = uniqueServer(61005);
+    ServerName sn2 = uniqueServer(61006);
+    ReplicationLogGroup g1 = registerGroupForServer(sn1, haGroupName + "-rc5a");
+    ReplicationLogGroup g2 = registerGroupForServer(sn2, haGroupName + "-rc5b");
+    try {
+      ReplicationLogGroup.regionOpened(sn1);
+      ReplicationLogGroup.regionOpened(sn2);
+      ReplicationLogGroup.regionClosed(sn1, server(true, false, false));
+      assertTrue(g1.isClosed());
+      assertFalse("Another server's groups must stay open", g2.isClosed());
+    } finally {
+      g1.close();
+      g2.close();
+    }
+  }
+
+  @Test
+  public void testStopClosesGroupsWhenNoRegionIsOpen() throws Exception {
+    ServerName sn = uniqueServer(61007);
+    ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc6");
+    try {
+      // Regions moved away while running (e.g. unloaded before a graceful stop).
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.regionClosed(sn, server(false, false, false));
+      assertFalse(g.isClosed());
+      ReplicationLogGroup.closeAllIfNoOpenRegions(sn);
+      assertTrue("Stop must close the groups when no region is left to do it", g.isClosed());
+    } finally {
+      g.close();
+    }
+  }
+
+  @Test
+  public void testStopDefersCloseWhileARegionIsOpen() throws Exception {
+    ServerName sn = uniqueServer(61008);
+    ReplicationLogGroup g = registerGroupForServer(sn, haGroupName + "-rc7");
+    try {
+      ReplicationLogGroup.regionOpened(sn);
+      ReplicationLogGroup.closeAllIfNoOpenRegions(sn);
+      assertFalse("Stop must not close the groups while a region can still write", g.isClosed());
+      ReplicationLogGroup.regionClosed(sn, server(true, false, false));
+      assertTrue(g.isClosed());
+    } finally {
+      g.close();
+    }
   }
 
   /**
