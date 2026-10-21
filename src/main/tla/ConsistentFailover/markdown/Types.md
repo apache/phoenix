@@ -103,7 +103,7 @@ Each TLA+ abbreviation maps to a Java enum constant in `HAGroupStoreRecord.HAGro
 | `"AIS"` | `ACTIVE_IN_SYNC` | Active cluster, fully in sync with standby |
 | `"ANIS"` | `ACTIVE_NOT_IN_SYNC` | Active cluster, at least one RS writing locally (HDFS degraded) |
 | `"ATS"` | `ACTIVE_IN_SYNC_TO_STANDBY` | Transitioning from active to standby (mutations blocked) |
-| `"ANISTS"` | `ACTIVE_NOT_IN_SYNC_TO_STANDBY` | ANIS failover path: draining OUT before advancing to ATS |
+| `"ANISTS"` | `ACTIVE_NOT_IN_SYNC_TO_STANDBY` | Legacy ANIS failover path (not produced by `AdminStartFailover`): draining OUT before advancing to ATS |
 | `"AbTAIS"` | `ABORT_TO_ACTIVE_IN_SYNC` | Aborting failover, returning to AIS |
 | `"AbTANIS"` | `ABORT_TO_ACTIVE_NOT_IN_SYNC` | Aborting failover, returning to ANIS |
 | `"AWOP"` | `ACTIVE_WITH_OFFLINE_PEER` | Active with offline peer. Reachable when `UseOfflinePeerDetection = TRUE` |
@@ -236,7 +236,9 @@ AllowedTransitions ==
 
 **ANIS self-transition** (`<<"ANIS", "ANIS">>`): This entry supports the periodic heartbeat in `StoreAndForwardModeImpl` that refreshes the ZK znode's `mtime` without changing the state value. In the TLA+ model, this maps to the `ANISHeartbeat` action in [HAGroupStore.md](HAGroupStore.md), which resets the anti-flapping countdown timer to `StartAntiFlapWait`. Source: `HAGroupStoreRecord.java`.
 
-**DS -> STA** (`<<"DS", "STA">>`): This entry supports the ANIS failover path where the standby is in `DEGRADED_STANDBY` when failover proceeds. The admin initiates failover on the active (ANIS -> ANISTS), the forwarder drains OUT (ANISTS -> ATS), and the standby detects ATS and transitions DS -> STA.
+**DS -> STA** (`<<"DS", "STA">>`): This entry covers a standby still in `DEGRADED_STANDBY` when it observes the peer's ATS (e.g. it has not yet observed the active's ANIS -> AIS recovery). Failover itself is only initiated from AIS.
+
+**ANIS -> ANISTS** (`<<"ANIS", "ANISTS">>`): Mirrors `HAGroupStoreRecord.java`, but no action produces it: `AdminStartFailover` requires AIS, so ANISTS and its outgoing transitions are unreachable in the model.
 
 **AbTAIS -> ANIS** (`<<"AbTAIS", "ANIS">>`): This entry is needed so that HDFS failure during the abort window can route the cluster to ANIS. Without it, S&F writers that degrade during AbTAIS would have no path to a consistent state -- the cluster would be stuck in AbTAIS with degraded writers and no way for `AutoComplete` to route to ANIS.
 
@@ -254,7 +256,7 @@ stateDiagram-v2
 
     ANIS --> AIS : Recovery
     ANIS --> ANIS : Heartbeat
-    ANIS --> ANISTS : Admin failover
+    ANIS --> ANISTS : (unreachable; failover requires AIS)
     ANIS --> ANISWOP : Peer offline
 
     ATS --> S : Peer AIS/ANIS detected

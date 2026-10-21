@@ -53,6 +53,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -589,12 +590,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * <ol>
    * <li>Parse CLI args: haGroupName (required), timeout (optional, default 120s)</li>
    * <li>Read current HAGroupStoreRecord from ZooKeeper to validate state</li>
-   * <li>Validate current state allows failover (must be ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC):
+   * <li>Validate current state allows failover (must be ACTIVE_IN_SYNC):
    * <ul>
    * <li>ACTIVE_IN_SYNC → ACTIVE_IN_SYNC_TO_STANDBY → STANDBY</li>
-   * <li>ACTIVE_NOT_IN_SYNC → ACTIVE_NOT_IN_SYNC_TO_STANDBY → ACTIVE_IN_SYNC_TO_STANDBY →
-   * STANDBY</li>
-   * <li>Other states: return RET_VALIDATION_ERROR</li>
+   * <li>ACTIVE_NOT_IN_SYNC (store-and-forward) and other states: return RET_VALIDATION_ERROR</li>
    * </ul>
    * </li>
    * <li>Execute failover via manager.initiateFailoverOnActiveCluster():
@@ -659,20 +658,17 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         System.out.println("  Current State: " + currentState);
         System.out.println("  Cluster Role:  " + currentRecord.getClusterRole());
 
-        // Determine target state based on current state
-        HAGroupState targetState;
-        HAGroupState finalExpectedState;
-        if (currentState == HAGroupState.ACTIVE_IN_SYNC) {
-          targetState = HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
-          finalExpectedState = HAGroupState.STANDBY;
-        } else if (currentState == HAGroupState.ACTIVE_NOT_IN_SYNC) {
-          targetState = HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY;
-          finalExpectedState = HAGroupState.STANDBY;
-        } else {
+        // Failover is only allowed from ACTIVE_IN_SYNC
+        if (currentState != HAGroupState.ACTIVE_IN_SYNC) {
           System.err.println("\n✗ Cannot initiate failover from current state: " + currentState);
-          System.err.println("  Cluster must be in ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC state.");
+          System.err.println("  Cluster must be in ACTIVE_IN_SYNC state.");
+          if (currentState == HAGroupState.ACTIVE_NOT_IN_SYNC) {
+            printStoreAndForwardFailoverGuidance(haGroupName);
+          }
           return RET_VALIDATION_ERROR;
         }
+        HAGroupState targetState = HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
+        HAGroupState finalExpectedState = HAGroupState.STANDBY;
 
         System.out.println("\n[Step 2] Determining target state...");
         System.out.println("  Intermediate State: " + targetState);
@@ -681,7 +677,17 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         // Perform failover initiation
         System.out.println("\n[Step 3] Initiating failover on active cluster...");
         HAGroupStoreManager manager = new HAGroupStoreManager(getConf());
-        manager.initiateFailoverOnActiveCluster(haGroupName);
+        try {
+          manager.initiateFailoverOnActiveCluster(haGroupName);
+        } catch (InvalidClusterRoleTransitionException e) {
+          // The state changed after the check above (e.g. AIS -> ANIS); report as validation.
+          System.err.println("\n✗ Cannot initiate failover: " + e.getMessage());
+          HAGroupStoreRecord latest = admin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
+          if (latest != null && latest.getHAGroupState() == HAGroupState.ACTIVE_NOT_IN_SYNC) {
+            printStoreAndForwardFailoverGuidance(haGroupName);
+          }
+          return RET_VALIDATION_ERROR;
+        }
 
         System.out.println("  ✓ Failover initiated");
 
@@ -1245,6 +1251,20 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       + " resort):");
     System.err.println("         abort-failover -g " + haGroupName);
     System.err.println("         update -g " + haGroupName + " -s <ACTIVE_IN_SYNC|STANDBY> -av -F");
+  }
+
+  /**
+   * Print operator guidance shown when failover is attempted from ACTIVE_NOT_IN_SYNC. The peer may
+   * not yet have the store-and-forward backlog, so failing over now could lose those writes.
+   */
+  private void printStoreAndForwardFailoverGuidance(String haGroupName) {
+    System.err.println(
+      "\n  The cluster is in store-and-forward mode; the peer may not have all writes yet.");
+    System.err.println("    1. Check the peer is reachable and healthy (run on each cluster):");
+    System.err.println("         get-cluster-role-record -g " + haGroupName);
+    System.err.println("    2. Wait for the backlog to drain; the group returns to ACTIVE_IN_SYNC"
+      + " automatically.");
+    System.err.println("    3. Retry: initiate-failover -g " + haGroupName);
   }
 
   /**
@@ -1902,16 +1922,14 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println("Usage: phoenix-consistentha-admin-tool initiate-failover [options]");
     System.out.println();
     System.out.println("Description:");
-    System.out
-      .println("  Initiates failover on the active cluster by transitioning to the appropriate");
-    System.out
-      .println("  TO_STANDBY state. The cluster must be in ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC");
-    System.out.println("  state to initiate failover.");
+    System.out.println("  Initiates failover on the active cluster by transitioning to");
+    System.out.println(
+      "  ACTIVE_IN_SYNC_TO_STANDBY. The cluster must be in ACTIVE_IN_SYNC state; failover");
+    System.out.println(
+      "  from ACTIVE_NOT_IN_SYNC (store-and-forward) is rejected until the backlog drains.");
     System.out.println();
     System.out.println("  State Transitions:");
     System.out.println("  - ACTIVE_IN_SYNC      -> ACTIVE_IN_SYNC_TO_STANDBY -> STANDBY");
-    System.out.println("  - ACTIVE_NOT_IN_SYNC  -> ACTIVE_NOT_IN_SYNC_TO_STANDBY -> "
-      + "ACTIVE_IN_SYNC_TO_STANDBY -> STANDBY");
     System.out.println();
     System.out.println("Options:");
     System.out.println("  -g, --ha-group <name>     HA group name (REQUIRED)");

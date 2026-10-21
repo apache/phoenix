@@ -115,9 +115,8 @@ ResetToStandbyEntry(c) ==
  *
  * When the standby detects its peer has entered ATS, it begins the
  * failover process by transitioning to STA (STANDBY_TO_ACTIVE).
- * This fires from either S or DS -- the DS case supports the ANIS
- * failover path where the standby is in DEGRADED_STANDBY when
- * failover proceeds.
+ * This fires from either S or DS -- the DS case covers a standby
+ * that has not yet observed the active's return from ANIS to AIS.
  *
  * ZK watcher dependency: Delivered via peerPathChildrenCache.
  * Guarded on zkPeerConnected[c] and zkPeerSessionAlive[c].
@@ -240,13 +239,14 @@ PeerReactToAbTS(c) ==
  * ANISToAIS. This models the ACTIVE_IN_SYNC ZK event firing
  * ReplicationLogDiscoveryForwarder.init(), which snaps SYNC_AND_FWD
  * writers atomically with the cluster-state change. SYNC_AND_FWD
- * writers can be carried into AbTAIS via the ANIS -> ANISTS -> ATS
- * -> AbTAIS path (writer state preserved across ANISTSToATS,
- * PeerReactToAbTS); without the snap, AbTAIS -> AIS would expose
+ * writers could only reach AbTAIS via the legacy ANIS -> ANISTS ->
+ * ATS -> AbTAIS path (writer state preserved across ANISTSToATS,
+ * PeerReactToAbTS), which AdminStartFailover no longer produces;
+ * the snap is kept so AbTAIS -> AIS can never expose
  * (AIS, SYNC_AND_FWD) and violate AISImpliesInSync. STORE_AND_FWD
- * writers are unreachable in AbTAIS post-Option-B because
- * ANISTSToATS requires outDirEmpty, which is only TRUE when no
- * STORE_AND_FWD writer remains.
+ * writers are unreachable in AbTAIS because ANISTSToATS requires
+ * outDirEmpty, which is only TRUE when no STORE_AND_FWD writer
+ * remains.
  *
  * Source: createLocalStateTransitions() in HAGroupStoreManager.java
  *   AbTS    -> S    -- atomically sets replayState =
@@ -306,10 +306,10 @@ AutoComplete(c) ==
  * directory is cleared (outDirEmpty = TRUE). DEAD writers are
  * preserved: a crashed RS (JVM dead) cannot process the state
  * change notification; the process supervisor restart (RSRestart)
- * handles DEAD -> INIT independently. This is critical for the
- * ANIS failover path where SYNC_AND_FWD or STORE_AND_FWD writers
- * may persist through ANISTS -> ATS (ANISTSToATS does not snap
- * writer modes).
+ * handles DEAD -> INIT independently. On the legacy ANIS failover
+ * path (not produced by AdminStartFailover), SYNC_AND_FWD writers
+ * could persist through ANISTS -> ATS (ANISTSToATS does not snap
+ * writer modes); the reset covers that case too.
  *
  * ZK watcher dependency: Delivered via peerPathChildrenCache.
  * Guarded on zkPeerConnected[c] and zkPeerSessionAlive[c].
@@ -419,12 +419,16 @@ ANISToAIS(c) ==
 (*
  * Drain completion: ANISTS -> ATS.
  *
+ * ANISTS is not produced by AdminStartFailover (failover requires
+ * AIS), so this action is never enabled in the current model. It is kept
+ * to mirror setHAGroupStatusToSync()'s ANISTS -> ATS mapping.
+ *
  * When the forwarder has drained the OUT directory and the anti-
  * flapping gate has opened, the cluster advances from ANISTS
  * (ACTIVE_NOT_IN_SYNC_TO_STANDBY) to ATS
  * (ACTIVE_IN_SYNC_TO_STANDBY), joining the normal AIS failover
  * path. The standby reacts to ATS (not ANISTS), so this
- * transition is the bridge that lets the ANIS failover path
+ * transition is the bridge that lets the legacy ANIS failover path
  * converge with the AIS failover path.
  *
  * Writer modes are NOT snapped here. In the implementation,

@@ -138,7 +138,7 @@ WriterInitToStoreFwd(c, rs) ==
 
 ### WriterSyncToSyncFwd -- Forwarder Started While In Sync: SYNC -> SYNC_AND_FWD
 
-On an ACTIVE_NOT_IN_SYNC event, region servers currently in SYNC learn that the cluster has entered ANIS and transition to SYNC_AND_FWD. This event fires once when the cluster enters ANIS. ANISTS does not produce a new ACTIVE_NOT_IN_SYNC event. A SYNC writer that has not yet received the event when ANIS -> ANISTS fires will remain in SYNC (harmlessly: SYNC writers write directly to standby HDFS, not to the OUT directory).
+On an ACTIVE_NOT_IN_SYNC event, region servers currently in SYNC learn that the cluster has entered ANIS and transition to SYNC_AND_FWD. This event fires once when the cluster enters ANIS. ANISTS does not produce a new ACTIVE_NOT_IN_SYNC event. On the legacy ANIS -> ANISTS path (not produced by `AdminStartFailover`), a SYNC writer that has not yet received the event remains in SYNC (harmlessly: SYNC writers write directly to standby HDFS, not to the OUT directory).
 
 No ZK write -- mode transition driven by forwarder event.
 

@@ -145,9 +145,9 @@ WriterInitToStoreFwd(c, rs) ==
  * learn that the cluster has entered ANIS and transition to
  * SYNC_AND_FWD. This event fires once when the cluster enters ANIS.
  * ANISTS does not produce a new ACTIVE_NOT_IN_SYNC event -- it is a
- * different ZK state change (ACTIVE_NOT_IN_SYNC_TO_STANDBY). A SYNC
- * writer that has not yet received the event when ANIS -> ANISTS fires
- * will remain in SYNC.
+ * different ZK state change (ACTIVE_NOT_IN_SYNC_TO_STANDBY). On the
+ * legacy ANIS -> ANISTS path (not produced by AdminStartFailover), a
+ * SYNC writer that has not yet received the event remains in SYNC.
  * No ZK write -- mode transition driven by forwarder event.
  *
  * Source: ReplicationLogDiscoveryForwarder.init()

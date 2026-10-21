@@ -54,7 +54,7 @@
  *                           |   .setHAGroupStatusToSync()
  *                           |   ANISTS -> ATS (drain completion)
  *   AdminStartFailover      | initiateFailoverOnActiveCluster()
- *                           |   AIS -> ATS or ANIS -> ANISTS
+ *                           |   AIS -> ATS (rejected from ANIS)
  *   AdminAbortFailover      | setHAGroupStatusToAbortToStandby()
  *   AdminGoOffline          | PhoenixHAAdminTool update --state OFFLINE
  *                           |   (gated on UseOfflinePeerDetection)
@@ -268,7 +268,7 @@ Next ==
         \* [ZK watcher] Peer-reactive: active detects peer left OFFLINE.
         \* (gated on UseOfflinePeerDetection)
         \/ haGroupStore!PeerRecoverFromOFFLINE(c)
-        \* [Direct ZK write] Admin initiates failover: AIS->ATS or ANIS->ANISTS.
+        \* [Direct ZK write] Admin initiates failover: AIS->ATS only.
         \/ admin!AdminStartFailover(c)
         \* [Direct ZK write] Admin aborts failover: STA->AbTS.
         \/ admin!AdminAbortFailover(c)
@@ -565,9 +565,9 @@ FailoverCompletion ==
  *     -> anti-flap timer expires (Tick)
  *     -> ANIS -> AIS (ANISToAIS)
  *
- * The cluster may also leave ANIS via failover (ANIS -> ANISTS),
- * which satisfies the consequent. Under SF on HDFSUp, HDFS
- * cannot be permanently down.
+ * Failover is not initiated from ANIS (AdminStartFailover requires
+ * AIS), so recovery to AIS is the only admin-independent exit.
+ * Under SF on HDFSUp, HDFS cannot be permanently down.
  *
  * Predicated on ZLA (encoded in Fairness).
  *)
@@ -743,7 +743,7 @@ WriterTransitionValid ==
  * The implementation checks clusterState = AIS, not per-RS modes.
  *
  * Source: initiateFailoverOnActiveCluster() (validates
- *         current state is AIS or ANIS); the precondition holds
+ *         current state is AIS); the precondition holds
  *         because AIS is only reachable when OUT dir is empty and
  *         all writers have returned to SYNC. RS crash does not
  *         change clusterState.
@@ -773,7 +773,8 @@ AntiFlapGate ==
 
 (*
  * ANISTS-to-ATS precondition: the ANISTS -> ATS transition
- * (forwarder drain completion during ANIS failover) can only
+ * (forwarder drain completion; legacy path, never enabled because
+ * AdminStartFailover no longer produces ANISTS) can only
  * proceed when the OUT directory is empty and the anti-flapping
  * gate is open. Cross-checks the ANISTSToATS action's guards,
  * analogous to how AIStoATSPrecondition cross-checks
@@ -907,13 +908,11 @@ AISImpliesInSync ==
  * degradation actions (WriterToStoreFwd, WriterInitToStoreFwd,
  * WriterSyncFwdToStoreFwd, etc.).
  *
- * ANISTS: preserves degraded writers from ANIS via
- * AdminStartFailover (writer state unchanged).
+ * ANISTS: would preserve degraded writers from ANIS; no action
+ * produces ANISTS since AdminStartFailover requires AIS.
  *
- * ATS: the ANIS failover path enters ATS via ANISTSToATS, which
- * requires outDirEmpty (no STORE_AND_FORWARD writers remain) but
- * does NOT snap SYNC_AND_FWD writers. So ATS may carry
- * SYNC_AND_FWD writers into the abort-resolution path.
+ * ATS: kept in the allowed set because ANISTSToATS (never enabled
+ * while ANISTS is unreachable) does NOT snap SYNC_AND_FWD writers.
  *
  * AbTAIS: preserves SYNC_AND_FWD writers from ATS via
  * PeerReactToAbTS. AutoComplete's AbTAIS -> AIS clause

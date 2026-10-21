@@ -384,9 +384,9 @@ public class HAGroupStoreManager {
   }
 
   /**
-   * Initiates failover on the active cluster by transitioning to the appropriate TO_STANDBY state.
-   * Checks current state and transitions to: - ACTIVE_IN_SYNC_TO_STANDBY if currently
-   * ACTIVE_IN_SYNC - ACTIVE_NOT_IN_SYNC_TO_STANDBY if currently ACTIVE_NOT_IN_SYNC
+   * Initiates failover on the active cluster by transitioning ACTIVE_IN_SYNC to
+   * ACTIVE_IN_SYNC_TO_STANDBY. Failover is rejected from ACTIVE_NOT_IN_SYNC (store-and-forward)
+   * because the peer may not have the backlog yet; wait for the group to return to ACTIVE_IN_SYNC.
    * @param haGroupName name of the HA group
    * @return the wait time in milliseconds for state transition, if 0 then the state transition is
    *         successful.
@@ -413,19 +413,19 @@ public class HAGroupStoreManager {
     }
 
     HAGroupStoreRecord.HAGroupState currentState = currentRecord.getHAGroupState();
-    HAGroupStoreRecord.HAGroupState targetState;
-
-    // Determine target state based on current state
-    if (currentState == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC) {
-      targetState = HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
-    } else if (currentState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
-      targetState = HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY;
-    } else {
+    if (currentState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
       throw new InvalidClusterRoleTransitionException("Cannot initiate failover from state: "
-        + currentState + ". Cluster must be in ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC state.");
+        + currentState + " for HA group: " + haGroupName + ". Cluster must be in ACTIVE_IN_SYNC "
+        + "state; wait for the store-and-forward backlog to drain to the peer and retry.");
+    } else if (currentState != HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC) {
+      throw new InvalidClusterRoleTransitionException(
+        "Cannot initiate failover from state: " + currentState + " for HA group: " + haGroupName
+          + ". Cluster must be in ACTIVE_IN_SYNC state.");
     }
 
-    return haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
+    // An AIS -> ANIS race before the write is rejected by transition validation in the client.
+    return haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
   }
 
   /**

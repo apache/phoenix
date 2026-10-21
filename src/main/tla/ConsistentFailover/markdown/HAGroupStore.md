@@ -115,7 +115,7 @@ EXTENDS SpecState, Types
 
 ## PeerReactToATS -- Standby Detects Peer ATS
 
-When the standby detects its peer has entered ATS (ACTIVE_IN_SYNC_TO_STANDBY), it begins the failover process by transitioning to STA (STANDBY_TO_ACTIVE). This fires from either S or DS -- the DS case supports the ANIS failover path where the standby is in DEGRADED_STANDBY when failover proceeds.
+When the standby detects its peer has entered ATS (ACTIVE_IN_SYNC_TO_STANDBY), it begins the failover process by transitioning to STA (STANDBY_TO_ACTIVE). This fires from either S or DS -- the DS case covers a standby that has not yet observed the active's return from ANIS to AIS.
 
 **ZK watcher dependency:** Delivered via `peerPathChildrenCache`. Guarded on `zkPeerConnected[c]` and `zkPeerSessionAlive[c]`. If the peer ZK session expires or the notification is lost, the standby never learns of the failover. The active cluster remains in ATS with mutations blocked indefinitely. There is no polling fallback.
 
@@ -203,7 +203,7 @@ These transitions fire automatically once the cluster enters the corresponding a
 
 **AbTAIS -> AIS:** Unconditional cluster-state change -- always completes to AIS, matching `createLocalStateTransitions()` in `HAGroupStoreManager`. The implementation relies on a temporal invariant: in mutation-blocked or transient roles (ATS, ANISTS, AbTAIS, AbTANIS) no client write reaches a writer, so writers cannot degrade in those states. That invariant is encoded statically in this spec by the tightened cluster-state guards on the writer-degradation actions in `Writer.tla` (`WriterToStoreFwd`, `WriterInitToStoreFwd`, and their CAS-failure variants), which only fire in mutation-serving active states `{AIS, ANIS, AWOP, ANISWOP}`. If a write later arrives once the cluster is back in AIS and the peer HDFS is down, the existing AIS -> ANIS coupling at first failed write handles the degradation.
 
-The action atomically snaps any remaining `SYNC_AND_FWD` writers to `SYNC`, mirroring `ANISToAIS`. This models the ACTIVE_IN_SYNC ZK event firing `ReplicationLogDiscoveryForwarder.init()`, which transitions `SYNC_AND_FWD` writers atomically with the cluster-state change. `SYNC_AND_FWD` writers can be carried into AbTAIS via the ANIS -> ANISTS -> ATS -> AbTAIS path (writer state preserved across `ANISTSToATS` and `PeerReactToAbTS`); without the snap, AbTAIS -> AIS would expose `(AIS, SYNC_AND_FWD)` and violate `AISImpliesInSync`. `STORE_AND_FWD` writers are unreachable in AbTAIS post-Option-B because `ANISTSToATS` requires `outDirEmpty`, which is only TRUE when no `STORE_AND_FWD` writer remains. Source: `createLocalStateTransitions()` (cluster-state change); `ReplicationLogDiscoveryForwarder.init()` ACTIVE_IN_SYNC handler (writer-mode snap).
+The action atomically snaps any remaining `SYNC_AND_FWD` writers to `SYNC`, mirroring `ANISToAIS`. This models the ACTIVE_IN_SYNC ZK event firing `ReplicationLogDiscoveryForwarder.init()`, which transitions `SYNC_AND_FWD` writers atomically with the cluster-state change. `SYNC_AND_FWD` writers could only reach AbTAIS via the legacy ANIS -> ANISTS -> ATS -> AbTAIS path (writer state preserved across `ANISTSToATS` and `PeerReactToAbTS`), which `AdminStartFailover` no longer produces; the snap is kept so AbTAIS -> AIS can never expose `(AIS, SYNC_AND_FWD)` and violate `AISImpliesInSync`. `STORE_AND_FWD` writers are unreachable in AbTAIS because `ANISTSToATS` requires `outDirEmpty`, which is only TRUE when no `STORE_AND_FWD` writer remains. Source: `createLocalStateTransitions()` (cluster-state change); `ReplicationLogDiscoveryForwarder.init()` ACTIVE_IN_SYNC handler (writer-mode snap).
 
 **AbTANIS -> ANIS:** Returns to ANIS. Resets the anti-flapping timer to `StartAntiFlapWait`, keeping the gate closed so the cluster must wait before attempting ANIS -> AIS recovery. Source: `createLocalStateTransitions()`.
 
@@ -243,7 +243,7 @@ Reactive transitions triggered by the peer entering AIS (ACTIVE_IN_SYNC):
 1. **Local ATS -> S:** Old active completes failover to standby when the peer (the new active) enters AIS. Atomically sets `replayState = SYNCED_RECOVERY` (recoveryListener fold). This is the critical transition that resolves the non-atomic failover window.
 2. **Local DS -> S:** Standby recovers from degraded when peer returns to AIS. Atomically sets `replayState = SYNCED_RECOVERY` (recoveryListener fold).
 
-**Writer lifecycle reset (ATS -> S):** Same as `PeerReactToANIS` ATS -> S. Live writer modes reset to INIT, OUT directory cleared. DEAD writers preserved for `RSRestart`. This is critical for the ANIS failover path where SYNC_AND_FWD or STORE_AND_FWD writers may persist through ANISTS -> ATS (`ANISTSToATS` does not snap writer modes).
+**Writer lifecycle reset (ATS -> S):** Same as `PeerReactToANIS` ATS -> S. Live writer modes reset to INIT, OUT directory cleared. DEAD writers preserved for `RSRestart`. On the legacy ANIS failover path (not produced by `AdminStartFailover`), SYNC_AND_FWD writers could persist through ANISTS -> ATS (`ANISTSToATS` does not snap writer modes); the reset covers that case too.
 
 **ZK watcher dependency:** This is the critical transition that resolves the non-atomic failover window. If lost: old active stays in ATS with mutations blocked indefinitely (the (ATS, AIS) state persists). Safety holds (ATS maps to ACTIVE_TO_STANDBY, `isMutationBlocked() = true`) but liveness requires eventual watcher delivery. Curator `PathChildrenCache` re-queries on reconnect, providing eventual delivery if the ZK session survives.
 
@@ -327,7 +327,9 @@ ANISToAIS(c) ==
 
 ## ANISTSToATS -- Drain Completion
 
-When the forwarder has drained the OUT directory and the anti-flapping gate has opened, the cluster advances from ANISTS to ATS, joining the normal AIS failover path. The standby reacts to ATS (not ANISTS), so this transition is the bridge that lets the ANIS failover path converge with the AIS failover path.
+ANISTS is not produced by `AdminStartFailover` (failover requires AIS), so this action is never enabled in the current model; it is kept to mirror `setHAGroupStatusToSync()`'s ANISTS -> ATS mapping.
+
+When the forwarder has drained the OUT directory and the anti-flapping gate has opened, the cluster advances from ANISTS to ATS, joining the normal AIS failover path. The standby reacts to ATS (not ANISTS), so this transition is the bridge that lets the legacy ANIS failover path converge with the AIS failover path.
 
 **Writer modes are NOT snapped here.** In the implementation, `setHAGroupStatusToSync()` only writes the cluster-level ZK znode (ANISTS -> ATS); it does not modify per-RS writer modes. SYNC_AND_FWD writers may persist into ATS. They are cleaned up when the cluster transitions ATS -> S (replication subsystem restart on standby entry -- see `PeerReactToAIS`, `PeerReactToANIS`).
 

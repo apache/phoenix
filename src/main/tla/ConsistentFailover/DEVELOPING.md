@@ -216,7 +216,7 @@ code you are changing:
 | `createLocalStateTransitions()` | `HAGroupStore.tla` | `AutoComplete` (AbTS->S, AbTAIS->AIS, AbTANIS->ANIS) |
 | `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` | `HAGroupStore.tla` | `ANISHeartbeat` |
 | `HAGroupStoreManager.setHAGroupStatusToSync()` | `HAGroupStore.tla` | `ANISToAIS`, `ANISTSToATS` |
-| `initiateFailoverOnActiveCluster()` | `Admin.tla` | `AdminStartFailover` (AIS->ATS or ANIS->ANISTS) |
+| `initiateFailoverOnActiveCluster()` | `Admin.tla` | `AdminStartFailover` (AIS->ATS; rejected from ANIS) |
 | `setHAGroupStatusToAbortToStandby()` | `Admin.tla` | `AdminAbortFailover` (STA->AbTS) |
 | `SyncModeImpl.onFailure()` | `Writer.tla` | `WriterToStoreFwd`, `WriterToStoreFwdFail` |
 | `SyncAndForwardModeImpl.onFailure()` | `Writer.tla` | `WriterSyncFwdToStoreFwd`, `WriterSyncFwdToStoreFwdFail` |
