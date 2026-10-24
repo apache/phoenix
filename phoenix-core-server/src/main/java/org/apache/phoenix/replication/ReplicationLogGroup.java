@@ -20,6 +20,7 @@ package org.apache.phoenix.replication;
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_DATA;
+import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_MODE_CHECK;
 import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SWAP;
 import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SYNC;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.INIT;
@@ -418,6 +419,7 @@ public class ReplicationLogGroup {
     public static final byte EVENT_TYPE_DATA = 0;
     public static final byte EVENT_TYPE_SYNC = 1;
     public static final byte EVENT_TYPE_SWAP = 2;
+    public static final byte EVENT_TYPE_MODE_CHECK = 3;
 
     public void setValues(int type, Record record, CompletableFuture<Void> syncFuture) {
       this.type = type;
@@ -434,6 +436,8 @@ public class ReplicationLogGroup {
           return "SYNC";
         case EVENT_TYPE_SWAP:
           return "SWAP";
+        case EVENT_TYPE_MODE_CHECK:
+          return "MODE_CHECK";
         default:
           return "UNKNOWN(" + type + ")";
       }
@@ -799,18 +803,15 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Conditionally switch replication mode and, if it changed, notify the event handler with a sync
-   * so the disruptor picks up the new mode.
+   * Conditionally switch replication mode and, if it changed, wake the event handler so it applies
+   * the new mode even when idle. Never blocks, aborts or throws: it runs on the ZK cache-event
+   * thread (state listeners) and the forwarder thread.
    */
   protected boolean checkAndSetModeAndNotify(ReplicationMode expectedMode,
     ReplicationMode newMode) {
     boolean switched = checkAndSetMode(expectedMode, newMode);
     if (switched) {
-      try {
-        sync();
-      } catch (IOException e) {
-        LOG.info("Failed to notify event handler for {}", this, e);
-      }
+      publishModeCheckEvent();
     }
     return switched;
   }
@@ -1041,6 +1042,30 @@ public class ReplicationLogGroup {
       }
     } catch (InsufficientCapacityException e) {
       LOG.debug("HAGroup {} ring buffer full, skipping swap event publish", this);
+    }
+  }
+
+  /**
+   * Publish a non-blocking mode-check marker so an idle consumer applies a mode switch promptly.
+   * Uses {@code tryNext()} like {@link #publishSwapEvent()}: when the ring buffer is full, the
+   * consumer is busy and the switch applies at the next sync point. Skipped once closed:
+   * {@code checkModeSwitch} ignores the switch then anyway.
+   */
+  protected void publishModeCheckEvent() {
+    if (isClosed()) {
+      LOG.info("HAGroup {} closed, skipping mode check event publish", this);
+      return;
+    }
+    try {
+      long sequence = ringBuffer.tryNext();
+      try {
+        LogEvent event = ringBuffer.get(sequence);
+        event.setValues(EVENT_TYPE_MODE_CHECK, null, null);
+      } finally {
+        ringBuffer.publish(sequence);
+      }
+    } catch (InsufficientCapacityException e) {
+      LOG.info("HAGroup {} ring buffer full, skipping mode check event publish", this);
     }
   }
 
@@ -1347,6 +1372,12 @@ public class ReplicationLogGroup {
     return eventHandler.getCurrentModeImpl().getReplicationLog();
   }
 
+  /** Returns the ring buffer's free slots; equals its size once every published event is done. */
+  @VisibleForTesting
+  long getRingBufferRemainingCapacity() {
+    return ringBuffer.remainingCapacity();
+  }
+
   protected void setHAGroupStatusToStoreAndForward() throws Exception {
     try {
       haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
@@ -1510,6 +1541,18 @@ public class ReplicationLogGroup {
       // Doing the mode check on sync points makes the implementation more robust
       // since we can guarantee that all unsynced appends have been flushed to the
       // replication log before we switch the replication mode
+      checkModeSwitch(sequence);
+    }
+
+    /**
+     * Applies a mode switched on the replication group by another thread, if any. Callers must
+     * guarantee that no unsynced appends are outstanding. Once closed, switches made by other
+     * threads are ignored, so the drain stays in the current mode unless a write fails.
+     */
+    private void checkModeSwitch(long sequence) throws IOException {
+      if (isClosed()) {
+        return;
+      }
       ReplicationMode newMode = getMode();
       if (newMode != currentModeImpl.getMode()) {
         // some other thread switched the mode on the replication group
@@ -1596,8 +1639,8 @@ public class ReplicationLogGroup {
     }
 
     /**
-     * Processes a single event from the Disruptor ring buffer. This method handles both data and
-     * sync events.
+     * Processes a single event from the Disruptor ring buffer: data and sync events, and the SWAP
+     * and MODE_CHECK wake-up markers.
      * <p>
      * For data events, it:
      * <ol>
@@ -1648,6 +1691,13 @@ public class ReplicationLogGroup {
             // Wake-up marker from LogRotationTask. Drain the staged writer so the old writer is
             // closed before the reader's round buffer expires. No append/sync to perform.
             currentModeImpl.getReplicationLog().checkAndReplaceWriter(true);
+            break;
+          case EVENT_TYPE_MODE_CHECK:
+            // Wake-up marker from checkAndSetModeAndNotify. Switch now only if nothing is
+            // outstanding; otherwise the switch applies at the next sync point.
+            if (pendingSyncs.isEmpty() && currentModeImpl.log.getCurrentBatch().isEmpty()) {
+              checkModeSwitch(sequence);
+            }
             break;
           default:
             throw new UnsupportedOperationException("Unknown event type: " + event.type);
