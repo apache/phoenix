@@ -1951,7 +1951,8 @@ public class MetaDataClient {
     return state;
   }
 
-  public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
+  public MutationState createCDC(CreateCDCStatement statement, byte[][] splits)
+    throws SQLException {
     ColumnResolver resolver =
       FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
     TableRef tableRef = resolver.getTables().get(0);
@@ -1994,6 +1995,14 @@ public class MetaDataClient {
       indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
     }
     createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
+    if (splits.length > 0) {
+      // Pass split points as hex literals so the index gets exactly the compiled bytes.
+      List<String> splitPoints = new ArrayList<>(splits.length);
+      for (byte[] split : splits) {
+        splitPoints.add(PVarbinary.INSTANCE.toStringLiteral(split));
+      }
+      createIndexSql = createIndexSql + " SPLIT ON (" + String.join(", ", splitPoints) + ")";
+    }
     try (Connection internalConnection =
       QueryUtil.getConnection(props, connection.getQueryServices().getConfiguration())) {
       PhoenixStatement pstmt = new PhoenixStatement((PhoenixConnection) internalConnection);
