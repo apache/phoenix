@@ -18,11 +18,16 @@
 package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -40,6 +45,7 @@ import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.mockito.Mockito;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -514,6 +520,35 @@ public class ScanUtilTest {
 
       assertArrayEquals(expectedStartKey, startKey);
       assertArrayEquals(expectedEndKey, endKey);
+    }
+
+    @Test
+    public void testRowSizeScansDoNotEnableIndexReadRepair() {
+      StatementContext context = Mockito.mock(StatementContext.class);
+      Scan regularScan = new Scan();
+      ScanUtil.setIndexReadRepairAttribute(regularScan, context);
+      assertNotNull(
+        regularScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
+
+      Mockito.when(context.hasRowSizeFunction()).thenReturn(true);
+      Scan rowSizeScan = new Scan();
+      ScanUtil.setIndexReadRepairAttribute(rowSizeScan, context);
+      assertNull(
+        rowSizeScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
+
+      Mockito.when(context.hasRowSizeFunction()).thenReturn(false);
+      Mockito.when(context.hasRawRowSizeFunction()).thenReturn(true);
+      Scan rawRowSizeScan = new Scan();
+      ScanUtil.setIndexReadRepairAttribute(rawRowSizeScan, context);
+      assertNull(
+        rawRowSizeScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
+
+      Scan indexRebuildScan = new Scan();
+      indexRebuildScan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES,
+        Bytes.toBytes(true));
+      ScanUtil.setIndexReadRepairAttribute(indexRebuildScan, context);
+      assertNull(
+        indexRebuildScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
     }
   }
 
