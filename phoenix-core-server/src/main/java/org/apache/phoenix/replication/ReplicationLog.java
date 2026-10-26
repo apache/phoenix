@@ -139,8 +139,16 @@ public class ReplicationLog {
 
   /** Initialize the writer. */
   public void init() throws IOException {
+    // Start rotation first so the first tick is aligned to the round in which init began, even if
+    // creating the writer crosses a round boundary.
     startRotationExecutor();
-    currentWriter = createNewWriter();
+    try {
+      currentWriter = createNewWriter();
+    } catch (IOException | RuntimeException e) {
+      // Nothing owns a log whose init failed: stop rotation and close any writer a tick staged.
+      close(false);
+      throw e;
+    }
     generation = currentWriter.getGeneration();
   }
 

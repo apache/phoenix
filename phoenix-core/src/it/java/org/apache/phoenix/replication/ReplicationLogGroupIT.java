@@ -1687,9 +1687,10 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     assertTrue("Writer must be closed after demotion to STANDBY", logGroup.isClosed());
 
     // The role gate must now refuse to re-create a writer on the demoted (STANDBY) cluster: get()
-    // returns empty rather than caching a writer for a non-active role.
-    assertFalse("get() should return empty on a STANDBY cluster",
-      ReplicationLogGroup.get(conf1, sn, haGroupName).isPresent());
+    // returns NOT_ACTIVE rather than caching a writer for a non-active role.
+    assertEquals("get() should return NOT_ACTIVE on a STANDBY cluster",
+      ReplicationLogGroup.Status.NOT_ACTIVE,
+      ReplicationLogGroup.get(conf1, sn, haGroupName).getStatus());
   }
 
   /**

@@ -759,8 +759,8 @@ public class HAGroupStoreManagerIT extends HABaseIT {
       // Start the forwarder only now; it finds no backlog and promotes the group back to
       // ACTIVE_IN_SYNC.
       HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
-      replicationLogGroup = ReplicationLogGroup
-        .get(cluster1Conf, regionServer.getServerName(), haGroupName, cluster1HAManager).get();
+      replicationLogGroup = ReplicationLogGroup.get(cluster1Conf, regionServer.getServerName(),
+        haGroupName, cluster1HAManager);
       waitForHAGroupState(cluster1HAManager, haGroupName,
         HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
       waitForHAGroupState(cluster2HAManager, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);

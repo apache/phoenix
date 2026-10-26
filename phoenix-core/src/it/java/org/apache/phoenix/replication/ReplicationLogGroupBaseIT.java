@@ -140,8 +140,12 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
 
   private ReplicationLogGroup getReplicationLogGroup() throws IOException {
     HRegionServer rs = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
-    return ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName)
-      .orElseThrow(() -> new IOException("No active ReplicationLogGroup for " + haGroupName));
+    // A PARALLEL group returns its no-op SKIP group: there is no writer to create.
+    ReplicationLogGroup group = ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName);
+    if (group.getStatus() == ReplicationLogGroup.Status.NOT_ACTIVE) {
+      throw new IOException("No active ReplicationLogGroup for " + haGroupName);
+    }
+    return group;
   }
 
   protected Map<String, List<Mutation>> groupLogsByTable() throws Exception {
