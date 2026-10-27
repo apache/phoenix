@@ -218,6 +218,31 @@ public class HAGroupStoreManager {
     return false;
   }
 
+  /**
+   * Returns whether the {@link HAGroupStoreClient} backing {@code haGroupName} has a live
+   * ZooKeeper connection. See {@link HAGroupStoreClient#isHealthy()} for the full state
+   * transitions (including the brief post-reconnect window where the flag returns
+   * {@code true} before Curator has resynchronized the local cache).
+   * <p>
+   * Consumers that subscribe via {@link #subscribeToTargetState} and cache the resulting
+   * {@link HAGroupStateListener} events in memory should consult this before trusting the
+   * cached snapshot: a {@code false} return means the client stopped receiving events and
+   * the cached view may be stale until Curator reconnects. This gives listener-based
+   * consumers a first-class alternative to matching on the {@code "HAGroupStoreClient is
+   * not healthy"} {@link IOException} thrown by the state-reading methods.
+   *
+   * @param haGroupName name of the HA group
+   * @return {@code true} if the underlying ZK connection is live; {@code false} if it has
+   *         been lost or suspended
+   * @throws IOException when the {@link HAGroupStoreClient} for {@code haGroupName} cannot
+   *         be resolved or set up
+   */
+  public boolean isHealthy(String haGroupName) throws IOException {
+    HAGroupStoreClient haGroupStoreClient =
+      getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
+    return haGroupStoreClient.isHealthy();
+  }
+
   public boolean isHAGroupOnClientStale(String haGroupName) throws IOException {
     if (checkStaleCRRForEveryMutation) {
       HAGroupStoreClient haGroupStoreClient =
