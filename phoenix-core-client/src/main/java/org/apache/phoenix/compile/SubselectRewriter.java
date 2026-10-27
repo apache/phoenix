@@ -187,8 +187,8 @@ public class SubselectRewriter extends ParseNodeRewriter {
       rewrittenOrderByNodes = new ArrayList<OrderByNode>(orderByNodes.size());
       for (OrderByNode orderByNode : orderByNodes) {
         ParseNode parseNode = orderByNode.getNode();
-        rewrittenOrderByNodes.add(NODE_FACTORY.orderBy(parseNode.accept(subselectRewriter),
-          orderByNode.isNullsLast(), orderByNode.isAscending()));
+        rewrittenOrderByNodes
+          .add(NODE_FACTORY.orderBy(parseNode.accept(subselectRewriter), orderByNode));
       }
     }
 
@@ -394,8 +394,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
     for (OrderByNode outerOrderByNode : outerOrderByNodes) {
       ParseNode outerOrderByParseNode = outerOrderByNode.getNode();
       OrderByNode rewrittenOuterOrderByNode =
-        NODE_FACTORY.orderBy(outerOrderByParseNode.accept(this), outerOrderByNode.isNullsLast(),
-          outerOrderByNode.isAscending());
+        NODE_FACTORY.orderBy(outerOrderByParseNode.accept(this), outerOrderByNode);
       assert innerOrderByNodeIter.hasNext();
       OrderByNode innerOrderByNode = innerOrderByNodeIter.next();
       if (!innerOrderByNode.equals(rewrittenOuterOrderByNode)) {
@@ -497,8 +496,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
       orderByRewrite = Lists.newArrayListWithExpectedSize(orderBy.size());
       for (OrderByNode orderByNode : orderBy) {
         ParseNode node = orderByNode.getNode();
-        orderByRewrite.add(NODE_FACTORY.orderBy(node.accept(this), orderByNode.isNullsLast(),
-          orderByNode.isAscending()));
+        orderByRewrite.add(NODE_FACTORY.orderBy(node.accept(this), orderByNode));
       }
     }
 

@@ -71,6 +71,8 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
@@ -209,6 +211,7 @@ public class IndexTool extends Configured implements Tool {
   private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
   private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
   private SourceTable sourceTable = SourceTable.DATA_TABLE_SOURCE;
+  private boolean isDeleteOrphans = false;
   // The qualified normalized table names (no double quotes, case same as HBase table)
   private String qDataTable; // normalized with schema
   private String qIndexTable; // normalized with schema
@@ -220,11 +223,16 @@ public class IndexTool extends Configured implements Tool {
   private PTable pDataTable;
   private String tenantId = null;
   private Job job;
+  private CentroidManager.RebuildClaim vectorIndexClaim;
   private Long startTime, endTime, lastVerifyTime;
   private IndexType indexType;
   private String basePath;
   byte[][] splitKeysBeforeJob = null;
   Configuration configuration;
+
+  public boolean isDeleteOrphans() {
+    return isDeleteOrphans;
+  }
 
   private static final Option SCHEMA_NAME_OPTION =
     new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -296,6 +304,9 @@ public class IndexTool extends Configured implements Tool {
         + "Only supported for global indexes. If this option is used with -v AFTER, these "
         + "extra rows will be identified but not repaired.");
 
+  private static final Option DELETE_ORPHANS_OPTION = new Option("do", "delete-orphans", false,
+    "Delete verified orphan index rows found during index-to-data verification (-fi -v AFTER).");
+
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
   public static final String FEATURE_NOT_APPLICABLE =
@@ -331,6 +342,7 @@ public class IndexTool extends Configured implements Tool {
     options.addOption(RETRY_VERIFY_OPTION);
     options.addOption(DISABLE_LOGGING_OPTION);
     options.addOption(USE_INDEX_TABLE_AS_SOURCE_OPTION);
+    options.addOption(DELETE_ORPHANS_OPTION);
     return options;
   }
 
@@ -756,6 +768,7 @@ public class IndexTool extends Configured implements Tool {
       PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
       PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
       PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
+      PhoenixConfigurationUtil.setIndexToolDeleteOrphans(configuration, isDeleteOrphans);
       if (startTime != null) {
         PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
       }
@@ -846,6 +859,10 @@ public class IndexTool extends Configured implements Tool {
       createIndexToolTables(conn);
       if (dataTable != null && indexTable != null) {
         setupIndexAndDataTable(conn);
+        if (pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null) {
+          LOGGER.info("Vector index {} has no trained centroids, leaving it unbuilt", qIndexTable);
+          return 0;
+        }
         checkIfFeatureApplicable(startTime, endTime, lastVerifyTime, pDataTable, isLocalIndexBuild);
         if (shouldDeleteBeforeRebuild) {
           deleteBeforeRebuild(conn);
@@ -865,6 +882,17 @@ public class IndexTool extends Configured implements Tool {
       LOGGER.error("An exception occurred while performing the indexing job: "
         + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
       return -1;
+    } finally {
+      if (vectorIndexClaim != null) {
+        try {
+          vectorIndexClaim.close();
+        } catch (SQLException e) {
+          // The close stops the renewal first. Thus the claim expires within its lease.
+          LOGGER.warn("Could not release the rebuild claim of vector index {}",
+            pIndexTable.getName(), e);
+        }
+        vectorIndexClaim = null;
+      }
     }
   }
 
@@ -911,6 +939,7 @@ public class IndexTool extends Configured implements Tool {
     boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
     boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
     boolean useIndexTableAsSource = cmdLine.hasOption(USE_INDEX_TABLE_AS_SOURCE_OPTION.getOpt());
+    boolean deleteOrphans = cmdLine.hasOption(DELETE_ORPHANS_OPTION.getOpt());
 
     if (useTenantId) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -936,6 +965,14 @@ public class IndexTool extends Configured implements Tool {
 
     if (useIndexTableAsSource) {
       sourceTable = SourceTable.INDEX_TABLE_SOURCE;
+    }
+
+    if (deleteOrphans) {
+      if (!useIndexTableAsSource || indexVerifyType != IndexVerifyType.AFTER) {
+        throw new IllegalArgumentException(
+          "Delete orphans option (-do) is only valid together with -fi and -v AFTER");
+      }
+      isDeleteOrphans = true;
     }
 
     schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
@@ -1002,6 +1039,24 @@ public class IndexTool extends Configured implements Tool {
           .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
     indexType = pIndexTable.getIndexType();
+    if (
+      pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null
+        && sourceTable == SourceTable.DATA_TABLE_SOURCE && indexVerifyType != IndexVerifyType.ONLY
+    ) {
+      // Train the first centroid generation of an ASYNC vector index before the build. The run
+      // holds the rebuild claim of the index until run() returns. A foreground run thus holds the
+      // claim through the build. A background run releases it after the job submit, so the claim
+      // covers only the training. A run that only verifies builds no index rows and must not train.
+      PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+      vectorIndexClaim = CentroidManager.claim(pconn, pIndexTable.getName().getString(),
+        UUID.randomUUID().toString());
+      if (vectorIndexClaim == null) {
+        throw new IllegalStateException(String.format("Vector index %s is being trained or rebuilt"
+          + " by another process holding its rebuild claim", pIndexTable.getName()));
+      }
+      VectorIndexTrainer.trainFirstGeneration(pconn, pDataTable, pIndexTable);
+      pIndexTable = pconn.getTableNoCache(pIndexTable.getName().getString());
+    }
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
     if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
       qIndexTable =

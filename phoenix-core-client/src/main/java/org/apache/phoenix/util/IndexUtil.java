@@ -174,7 +174,7 @@ public class IndexUtil {
   // row key was already done, so here we just need to convert from one built-in type to
   // another.
   public static PDataType getIndexColumnDataType(boolean isNullable, PDataType dataType) {
-    if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
+    if (dataType == null || !isNullable || !dataType.isFixedWidth() || dataType.isVectorType()) {
       return dataType;
     }
     // for fixed length numeric types and boolean
@@ -347,6 +347,7 @@ public class IndexUtil {
     try {
       final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
       IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+      maintainer.loadCentroids(connection);
       List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
       for (final Mutation dataMutation : dataMutations) {
         long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
@@ -403,8 +404,12 @@ public class IndexUtil {
             regionStartKey = tableRegionLocation.getRegion().getStartKey();
             regionEndkey = tableRegionLocation.getRegion().getEndKey();
           }
-          indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts,
-            regionStartKey, regionEndkey, false));
+          Put indexPut = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts,
+            regionStartKey, regionEndkey, false);
+          // The mutation is null if the row has no index row, for example if its vector is null
+          if (indexPut != null) {
+            indexMutations.add(indexPut);
+          }
         }
       }
       return indexMutations;
@@ -848,18 +853,21 @@ public class IndexUtil {
   }
 
   public static boolean isCoveredGlobalIndex(final PTable table) {
-    return table.getIndexType() == PTable.IndexType.GLOBAL;
+    return table.getIndexType() == PTable.IndexType.GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean isGlobalIndex(final PTable table) {
     return table.getIndexType() == PTable.IndexType.GLOBAL
-      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL;
+      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean shouldIndexBeUsedForUncoveredQuery(final TableRef tableRef) {
     PTable table = tableRef.getTable();
     return table.getType() == PTableType.INDEX && (table.getIndexType() == PTable.IndexType.LOCAL
-      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL || tableRef.isHinted());
+      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL || tableRef.isHinted());
   }
 
   public static long getMaxTimestamp(Mutation m) {

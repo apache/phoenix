@@ -59,6 +59,8 @@ public class CoerceExpressionTest {
     map.put(Date.class, new Date(0));
     map.put(Boolean.class, Boolean.TRUE);
     map.put(byte[].class, new byte[] { -128, 0, 0, 1 });
+    map.put(float[].class, new float[] { 1.00f, 2.00f });
+    map.put(double[].class, new double[] { 1.00d, 2.00d });
   }
 
   @Test

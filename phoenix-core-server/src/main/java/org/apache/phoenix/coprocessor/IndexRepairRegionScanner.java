@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.INDEX_REBUILD_DELETE_ORPHANS;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.EXTRA_ROW;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -36,6 +38,7 @@ import java.util.TreeSet;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -88,13 +91,36 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScanner.class);
 
+  private static final String ERROR_MESSAGE_ORPHAN_VERIFIED_INDEX_ROW_DELETED =
+    "Orphan verified index row deleted";
+
   private CompiledTTLExpression dataTableTTLExpr;
   private boolean isTTLStrict;
+  private boolean isDeleteOrphans;
 
   public IndexRepairRegionScanner(final RegionScanner innerScanner, final Region region,
     final Scan scan, final RegionCoprocessorEnvironment env,
     final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
     super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
+    if (indexMaintainer.isMigrating()) {
+      // During a migration, a repair writes each rebuilt row under the building generation and
+      // deletes the index row of the same data row under the outgoing generation. The rebuilt
+      // row can be in a different index region, and this scanner cannot write there. Thus a
+      // repair from the index can delete rows that did not migrate yet. Close the scanner and do
+      // not log a verification result, because the scanner verified nothing.
+      try {
+        if (verificationResultRepository != null) {
+          verificationResultRepository.close();
+          verificationResultRepository = null;
+        }
+        close();
+      } catch (IOException e) {
+        LOGGER.warn("Failed to close the repair scanner of {}",
+          indexMaintainer.getLogicalIndexName(), e);
+      }
+      throw new DoNotRetryIOException("Vector index " + indexMaintainer.getLogicalIndexName()
+        + " is migrating to a new centroid generation and cannot be repaired from the index");
+    }
 
     byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
@@ -110,6 +136,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
       PTable dataTable = conn.getTableNoCache(tenant, tableName);
       dataTableTTLExpr = dataTable.getCompiledTTLExpression(conn);
       isTTLStrict = ScanUtil.isStrictTTL(scan);
+      isDeleteOrphans = scan.getAttribute(INDEX_REBUILD_DELETE_ORPHANS) != null;
     } catch (SQLException e) {
       LOGGER.error("Unable to get PTable for the data table {}:{}", tenant, tableName, e);
       throw new IOException(e);
@@ -197,36 +224,17 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
     Map<byte[], List<Mutation>> actualIndexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
     Scan indexScan = prepareIndexScan(expectedIndexMutationMap);
     try (RegionScanner regionScanner = region.getScanner(indexScan)) {
+      // Use a local flag. Concurrent verification tasks call this method, so the shared scanner
+      // state must not change.
+      boolean more;
       do {
         ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
         List<Cell> row = new ArrayList<Cell>();
-        hasMore = regionScanner.nextRaw(row);
+        more = regionScanner.nextRaw(row);
         if (!row.isEmpty()) {
           populateIndexMutationFromIndexRow(row, actualIndexMutationMap);
         }
-      } while (hasMore);
-    } catch (Throwable t) {
-      ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-    }
-    return actualIndexMutationMap;
-  }
-
-  private Map<byte[], List<Mutation>> populateActualIndexMutationMap() throws IOException {
-    Map<byte[], List<Mutation>> actualIndexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-    Scan indexScan = new Scan();
-    indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
-    indexScan.setRaw(true);
-    indexScan.readAllVersions();
-    indexScan.setCacheBlocks(false);
-    try (RegionScanner regionScanner = region.getScanner(indexScan)) {
-      do {
-        ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-        List<Cell> row = new ArrayList<Cell>();
-        hasMore = regionScanner.nextRaw(row);
-        if (!row.isEmpty()) {
-          populateIndexMutationFromIndexRow(row, actualIndexMutationMap);
-        }
-      } while (hasMore);
+      } while (more);
     } catch (Throwable t) {
       ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
     }
@@ -239,6 +247,8 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
     List<Mutation> indexRowsToBeDeleted = new ArrayList<>();
     Map<byte[], List<Mutation>> expectedIndexMutationMap =
       populateExpectedIndexMutationMap(dataRowKeys);
+    // Remove the expected index rows outside this region, because this scanner cannot write them
+    expectedIndexMutationMap.keySet().removeIf(key -> !region.getRegionInfo().containsRow(key));
     if (verifyType == IndexTool.IndexVerifyType.NONE) {
       repairIndexRows(expectedIndexMutationMap, indexRowsToBeDeleted, verificationResult);
       return;
@@ -258,7 +268,15 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
     }
     if (verifyType == IndexTool.IndexVerifyType.AFTER) {
       repairIndexRows(expectedIndexMutationMap, Collections.EMPTY_LIST, verificationResult);
-      actualIndexMutationMap = populateActualIndexMutationMap();
+      // Scan again only the rows of this verification task: the rows read and the rows expected
+      Map<byte[], List<Mutation>> taskRows = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+      taskRows.putAll(actualIndexMutationMap);
+      taskRows.putAll(expectedIndexMutationMap);
+      actualIndexMutationMap = populateActualIndexMutationMap(taskRows);
+      if (isDeleteOrphans) {
+        deleteOrphanVerifiedIndexRows(actualIndexMutationMap, expectedIndexMutationMap,
+          verificationResult);
+      }
       verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET,
         indexRowsToBeDeleted, verificationResult.getAfter(), false);
       return;
@@ -275,6 +293,82 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
           Collections.EMPTY_LIST, verificationResult.getAfter(), false);
       }
     }
+  }
+
+  /**
+   * Deletes the verified orphan index rows that verification found, and removes them from the map
+   * of actual index rows.
+   * <p>
+   * The delete removes each cell version at its exact timestamp and does not use a row delete
+   * marker. A row delete marker can hide the index rows that a later build writes. The method skips
+   * unverified rows, because read repair handles concurrent mutations that are not committed. The
+   * method logs each delete to the IndexTool output table and counts it in the BEFORE phase result.
+   * <p>
+   * A write in flight at the scan boundary can commit its data row after this task read the data
+   * rows. That write can then mark its index row verified before this task reads the index rows
+   * again. Thus the method reads the data rows of the orphan candidates again. It keeps a candidate
+   * that a data row now expects, and verifies the candidate against that expectation.
+   */
+  private void deleteOrphanVerifiedIndexRows(Map<byte[], List<Mutation>> actualIndexMutationMap,
+    Map<byte[], List<Mutation>> expectedIndexMutationMap,
+    IndexToolVerificationResult verificationResult) throws IOException {
+    Map<byte[], List<Mutation>> candidates = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+    for (Map.Entry<byte[], List<Mutation>> entry : actualIndexMutationMap.entrySet()) {
+      List<Mutation> mutationList = entry.getValue();
+      if (expectedIndexMutationMap.containsKey(entry.getKey()) || mutationList.isEmpty()) {
+        continue;
+      }
+      // The list is in descending timestamp order, so the first mutation is the latest
+      Mutation latest = mutationList.get(0);
+      if (latest instanceof Put && isVerified((Put) latest)) {
+        candidates.put(entry.getKey(), mutationList);
+      }
+    }
+    if (candidates.isEmpty()) {
+      return;
+    }
+    Map<byte[], List<Mutation>> expectedNow =
+      populateExpectedIndexMutationMap(getDataRowKeys(candidates));
+    List<Mutation> deletes = new ArrayList<>();
+    for (Map.Entry<byte[], List<Mutation>> candidate : candidates.entrySet()) {
+      byte[] indexRowKey = candidate.getKey();
+      List<Mutation> mutationList = candidate.getValue();
+      if (expectedNow.containsKey(indexRowKey)) {
+        expectedIndexMutationMap.put(indexRowKey, expectedNow.get(indexRowKey));
+        continue;
+      }
+      Mutation latest = mutationList.get(0);
+      Delete delete = new Delete(indexRowKey);
+      for (Mutation mutation : mutationList) {
+        if (mutation instanceof Put) {
+          for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+              delete.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell),
+                cell.getTimestamp());
+            }
+          }
+        }
+      }
+      deletes.add(delete);
+      actualIndexMutationMap.remove(indexRowKey);
+      byte[] dataRowKey =
+        indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
+      logToIndexToolOutputTable(dataRowKey, indexRowKey, 0, getTimestamp(latest),
+        ERROR_MESSAGE_ORPHAN_VERIFIED_INDEX_ROW_DELETED, true, EXTRA_ROW);
+    }
+    if (deletes.isEmpty()) {
+      return;
+    }
+    for (int i = 0; i < deletes.size(); i += maxBatchSize) {
+      try {
+        commitBatch(deletes.subList(i, Math.min(deletes.size(), i + maxBatchSize)));
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException(e);
+      }
+    }
+    IndexToolVerificationResult.PhaseResult before = verificationResult.getBefore();
+    before.setExtraVerifiedIndexRowCount(before.getExtraVerifiedIndexRowCount() + deletes.size());
   }
 
   private void addRepairAndOrVerifyTask(TaskBatch<Boolean> tasks, final Set<byte[]> dataRowKeys,
