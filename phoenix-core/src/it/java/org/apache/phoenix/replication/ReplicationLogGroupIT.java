@@ -36,26 +36,39 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceFactory;
@@ -65,6 +78,8 @@ import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.replication.reader.ReplicationLogProcessor;
+import org.apache.phoenix.replication.tool.LogFileAnalyzer;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1003,6 +1018,10 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     }
     // Kill the RS
     cluster.killRegionServer(rs2.getRegionServer().getServerName());
+    // A kill skips the region close, so no postClose closes the killed RS's groups. In a real kill
+    // the process is gone; here the group lives on in the test JVM with an open writer, so close
+    // it.
+    ReplicationLogGroup.closeAll(sn2);
     Threads.sleep(20000); // just to be sure that the kill has fully started.
     // Regions will be re-opened and the WAL will be replayed
     util.waitUntilAllRegionsAssigned(table);
@@ -1024,6 +1043,218 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     // ignoreSyncReplicationForTesting must leave intact (it suppresses only the synchronous ship).
     replayAndVerifyAcrossClusters(Arrays.asList(createTableDdl, createIndexDdl), tableName,
       indexName);
+  }
+
+  /**
+   * Holds one write after its WAL commit (in postBatchMutate, before Phoenix replicates it in
+   * postBatchMutateIndispensably) until the test releases it.
+   */
+  public static class HoldAfterWalCommitObserver implements RegionCoprocessor, RegionObserver {
+    static volatile byte[] holdRow;
+    static volatile CountDownLatch held = new CountDownLatch(1);
+    static volatile CountDownLatch release = new CountDownLatch(1);
+
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+
+    @Override
+    public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+      byte[] row = holdRow;
+      if (row == null) {
+        return;
+      }
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+        if (Bytes.equals(row, miniBatchOp.getOperation(i).getRow())) {
+          LOG.info("Holding write after WAL commit on {} region {}",
+            c.getEnvironment().getServerName(),
+            c.getEnvironment().getRegionInfo().getEncodedName());
+          held.countDown();
+          try {
+            release.await(120, TimeUnit.SECONDS);
+            LOG.info("Released held write on {}", c.getEnvironment().getServerName());
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * A graceful RegionServer stop with a write already committed to the WAL but not yet replicated.
+   * The write must still be shipped: if the log groups were closed in preStop (before the regions),
+   * it would fail replication with "Closed" and never be shipped. Closing rs2's groups after its
+   * last region closes also writes their log trailers, so the log check passes without closing them
+   * by hand.
+   */
+  @Test
+  public void testGracefulRegionServerStopClosesLogGroups() throws Exception {
+    HBaseTestingUtility util = CLUSTERS.getHBaseCluster1();
+    MiniHBaseCluster cluster = util.getHBaseCluster();
+    final String tableName = "T_" + generateUniqueName();
+    TableName table = TableName.valueOf(tableName);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(String.format("create table if not exists %s (id1 integer "
+        + "not null, val1 varchar constraint pk primary key (id1))", tableName));
+      conn.commit();
+    }
+    try (Admin admin = util.getConnection().getAdmin()) {
+      admin.modifyTable(TableDescriptorBuilder.newBuilder(admin.getDescriptor(table))
+        .setCoprocessor(HoldAfterWalCommitObserver.class.getName()).build());
+    }
+    JVMClusterUtil.RegionServerThread rs2 = cluster.startRegionServer();
+    ServerName sn2 = rs2.getRegionServer().getServerName();
+    moveRegionToServer(table, sn2);
+
+    final int heldId = 1000;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?)");
+      for (int i = 0; i < 10; ++i) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "v");
+        stmt.executeUpdate();
+        conn.commit();
+      }
+    }
+    assertTrue("rs2 should have a replication log group before the stop",
+      ReplicationLogGroup.INSTANCES.values().stream().anyMatch(g -> g.getServerName().equals(sn2)));
+
+    HoldAfterWalCommitObserver.held = new CountDownLatch(1);
+    HoldAfterWalCommitObserver.release = new CountDownLatch(1);
+    HoldAfterWalCommitObserver.holdRow = PInteger.INSTANCE.toBytes(heldId);
+    Thread writer = new Thread(() -> {
+      try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+        .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+        conn.createStatement()
+          .execute("upsert into " + tableName + " VALUES(" + heldId + ", 'held')");
+        conn.commit();
+      } catch (Exception e) {
+        LOG.info("Held upsert failed: {}", e.toString());
+      }
+    }, "held-writer");
+    writer.start();
+    try {
+      assertTrue("The write should be held after its WAL commit",
+        HoldAfterWalCommitObserver.held.await(60, TimeUnit.SECONDS));
+      // stop() runs the RS coprocessors' stop in preStop, then marks the server stopped; the held
+      // write keeps its region open, so the region close waits for it.
+      cluster.stopRegionServer(sn2);
+      GenericTestUtils.waitFor(() -> rs2.getRegionServer().isStopped(), 100, 60000);
+    } finally {
+      HoldAfterWalCommitObserver.holdRow = null;
+      HoldAfterWalCommitObserver.release.countDown();
+    }
+    writer.join(120000);
+    rs2.join(120000);
+    assertFalse("rs2 should have stopped", rs2.isAlive());
+    assertFalse("rs2's replication log groups should be closed on a graceful stop",
+      ReplicationLogGroup.INSTANCES.values().stream().anyMatch(g -> g.getServerName().equals(sn2)));
+    util.waitUntilAllRegionsAssigned(table);
+
+    // Every row committed on cluster-a, acknowledged or not, must be in the shipped logs.
+    Set<String> committed = new HashSet<>();
+    try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcUrl1(haGroup));
+      ResultSet rs = conn.createStatement().executeQuery("select id1 from " + tableName)) {
+      while (rs.next()) {
+        committed.add(Bytes.toStringBinary(PInteger.INSTANCE.toBytes(rs.getInt(1))));
+      }
+    }
+    assertTrue("The held write was committed on cluster-a",
+      committed.contains(Bytes.toStringBinary(PInteger.INSTANCE.toBytes(heldId))));
+    logGroup.close();
+    List<Mutation> shippedMutations = groupLogsByTable().get(tableName);
+    Set<String> shipped = new HashSet<>();
+    if (shippedMutations != null) {
+      for (Mutation m : shippedMutations) {
+        shipped.add(Bytes.toStringBinary(m.getRow()));
+      }
+    }
+    Set<String> missing = new HashSet<>(committed);
+    missing.removeAll(shipped);
+    assertTrue("Rows committed on the active but never shipped: " + missing, missing.isEmpty());
+
+    // rs2 committed the held write, so rs2's own log must carry it. A client retry through the
+    // reopened region would also ship the row, but from another server's log, hiding a lost first
+    // attempt.
+    Path root = logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();
+    FileSystem fs = root.getFileSystem(conf2);
+    LogFileAnalyzer analyzer = new LogFileAnalyzer();
+    analyzer.setConf(conf2);
+    Set<String> shippedByRs2 = new HashSet<>();
+    RemoteIterator<LocatedFileStatus> files = fs.listFiles(root, true);
+    while (files.hasNext()) {
+      Path file = files.next().getPath();
+      if (!file.getName().contains(sn2.getServerName())) {
+        continue;
+      }
+      List<Mutation> mutations = analyzer.groupLogsByTable(file.toString()).get(tableName);
+      if (mutations != null) {
+        for (Mutation m : mutations) {
+          shippedByRs2.add(Bytes.toStringBinary(m.getRow()));
+        }
+      }
+    }
+    assertTrue("rs2 committed the held write but its log does not carry it",
+      shippedByRs2.contains(Bytes.toStringBinary(PInteger.INSTANCE.toBytes(heldId))));
+  }
+
+  /**
+   * A stop after the server's regions were moved away, as a graceful_stop.sh-style unload does. No
+   * IndexRegionObserver region close happens during the stop, so the stop itself must close the
+   * server's groups.
+   */
+  @Test
+  public void testRegionServerStopAfterUnloadClosesLogGroups() throws Exception {
+    HBaseTestingUtility util = CLUSTERS.getHBaseCluster1();
+    MiniHBaseCluster cluster = util.getHBaseCluster();
+    final String tableName = "T_" + generateUniqueName();
+    TableName table = TableName.valueOf(tableName);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(String.format("create table if not exists %s (id1 integer "
+        + "not null, val1 varchar constraint pk primary key (id1))", tableName));
+      conn.commit();
+    }
+    ServerName sn1 = cluster.getRegionServer(0).getServerName();
+    // Keep the balancer from moving another IndexRegionObserver region (e.g. SYSTEM.CATALOG) onto
+    // rs2, which would make its stop close the groups through regionClosed instead.
+    boolean balancerWasOn = util.getAdmin().balancerSwitch(false, true);
+    try {
+      JVMClusterUtil.RegionServerThread rs2 = cluster.startRegionServer();
+      ServerName sn2 = rs2.getRegionServer().getServerName();
+      moveRegionToServer(table, sn2);
+      try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+        .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+        conn.createStatement().execute("upsert into " + tableName + " VALUES(1, 'v')");
+        conn.commit();
+      }
+      assertTrue("rs2 should have a replication log group before the unload",
+        ReplicationLogGroup.INSTANCES.values().stream()
+          .anyMatch(g -> g.getServerName().equals(sn2)));
+
+      moveRegionToServer(table, sn1);
+      assertTrue("rs2 must host no IndexRegionObserver region before the stop",
+        rs2.getRegionServer().getRegions().stream().noneMatch(
+          r -> r.getCoprocessorHost().findCoprocessor(IndexRegionObserver.class) != null));
+      assertTrue("Regions moving away while running must leave rs2's groups open",
+        ReplicationLogGroup.INSTANCES.values().stream()
+          .anyMatch(g -> g.getServerName().equals(sn2)));
+
+      cluster.stopRegionServer(sn2);
+      rs2.join(120000);
+      assertFalse("rs2 should have stopped", rs2.isAlive());
+      assertFalse("rs2's replication log groups should be closed by the stop",
+        ReplicationLogGroup.INSTANCES.values().stream()
+          .anyMatch(g -> g.getServerName().equals(sn2)));
+    } finally {
+      util.getAdmin().balancerSwitch(balancerWasOn, true);
+    }
   }
 
   /**

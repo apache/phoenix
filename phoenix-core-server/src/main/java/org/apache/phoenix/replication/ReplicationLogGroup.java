@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +66,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -240,6 +242,9 @@ public class ReplicationLogGroup {
   /** Cache of ReplicationLogGroup instances by server name + HA Group name */
   protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
     new ConcurrentHashMap<>();
+
+  /** Open IndexRegionObserver regions per server, keyed by serverIdentity (see regionClosed). */
+  private static final Map<String, Integer> OPEN_REGIONS = new HashMap<>();
 
   /**
    * What a write to this group should do with the replication log.
@@ -1216,10 +1221,57 @@ public class ReplicationLogGroup {
     LOG.info("HAGroup {} closed", this);
   }
 
+  /** Records that an IndexRegionObserver region opened on the given server. */
+  public static void regionOpened(ServerName serverName) {
+    synchronized (OPEN_REGIONS) {
+      OPEN_REGIONS.merge(serverIdentity(serverName), 1, Integer::sum);
+    }
+  }
+
   /**
-   * Close all ReplicationLogGroup instances belonging to the given server. Called during
-   * RegionServer shutdown.
+   * Records that an IndexRegionObserver region closed on the given server, and closes the server's
+   * groups when that was its last such region and the server is stopped, stopping or aborted. A
+   * graceful stop sets isStopped before the regions close; cluster shutdown sets isStopping. HBase
+   * calls postClose after the close write lock is taken, so every batch on the region, including
+   * its replication sync, has finished. Reaching zero in normal operation (regions moved away)
+   * leaves the groups open; {@link #closeAllIfNoOpenRegions} closes them on stop.
    */
+  public static void regionClosed(ServerName serverName, Server server) {
+    String identity = serverIdentity(serverName);
+    synchronized (OPEN_REGIONS) {
+      Integer count = OPEN_REGIONS.get(identity);
+      if (count == null) {
+        return;
+      }
+      if (count > 1) {
+        OPEN_REGIONS.put(identity, count - 1);
+        return;
+      }
+      OPEN_REGIONS.remove(identity);
+      if (server != null && (server.isStopped() || server.isStopping() || server.isAborted())) {
+        closeAll(serverName);
+      }
+    }
+  }
+
+  /**
+   * Closes the server's groups now if none of its IndexRegionObserver regions is open, for example
+   * after the regions were moved away before a graceful stop. Otherwise the close is left to the
+   * last region's {@link #regionClosed}.
+   */
+  public static void closeAllIfNoOpenRegions(ServerName serverName) {
+    synchronized (OPEN_REGIONS) {
+      Integer count = OPEN_REGIONS.get(serverIdentity(serverName));
+      if (count == null) {
+        closeAll(serverName);
+      } else {
+        LOG.info("Deferring ReplicationLogGroup close for {} until its {} open regions close",
+          serverName, count);
+      }
+    }
+  }
+
+  /** Closes all ReplicationLogGroup instances belonging to the given server. */
   public static void closeAll(ServerName serverName) {
     LOG.info("Closing all ReplicationLogGroup instances for server {}, total count={}", serverName,
       INSTANCES.size());
