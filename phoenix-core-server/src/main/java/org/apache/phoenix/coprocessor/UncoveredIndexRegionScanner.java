@@ -191,6 +191,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
 
   protected abstract void scanDataTableRows(long startTime) throws IOException;
 
+  /**
+   * Returns true if the data table scan includes the empty column of the data table, so that it
+   * returns every data row that exists, also one that has none of the other data columns to join.
+   */
+  protected boolean scansDataEmptyColumn() {
+    return false;
+  }
+
   protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
     return prepareDataTableScan(dataRowKeys, false);
   }
@@ -390,6 +398,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             if (indexMaintainer.isAgedEnough(ts, ageThreshold)) {
               region.delete(indexMaintainer.createDelete(indexRowKey, ts, false));
             }
+            result.clear();
+          } else if (scansDataEmptyColumn()) {
+            // The data row does not exist, as the data table scan returns every data row that
+            // exists. It was deleted, for example after the index row was read. Skip the index
+            // row, as a query of the data table would
             result.clear();
           } else {
             // The data row satisfying the scan does not exist. This could be because

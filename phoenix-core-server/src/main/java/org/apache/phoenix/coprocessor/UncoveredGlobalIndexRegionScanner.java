@@ -99,18 +99,22 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
     regionEndKeys =
       hTableFactory.getConnection().getRegionLocator(dataHTable.getName()).getEndKeys();
-    if (indexMaintainer.isUncovered()) {
-      // Empty column should also be added to the data columns to join for uncovered
-      // global indexes. This is required to verify the index row against the data table row and
-      // repair it
-      ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
-        indexMaintainer.getEmptyKeyValueQualifierForDataTable());
-    }
+    // Empty column should also be added to the data columns to join. Then the data table scan
+    // returns every data row that exists, also one that has none of the other data columns to join,
+    // and a missing data row means that the row does not exist. For uncovered global indexes this
+    // is also required to verify the index row against the data table row and repair it
+    ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
+      indexMaintainer.getEmptyKeyValueQualifierForDataTable());
     isScanMetricsEnabled =
       scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
     if (isScanMetricsEnabled) {
       dataTableScanMetrics = new ArrayList<>();
     }
+  }
+
+  @Override
+  protected boolean scansDataEmptyColumn() {
+    return true;
   }
 
   @Override
