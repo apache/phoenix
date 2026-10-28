@@ -32,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1006,6 +1007,143 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
       assertEquals(4, actualIds.size());
       assertFalse("Deleted row must be skipped without exception", actualIds.contains(deletedId));
       assertEquals(top5.subList(1, 5), actualIds);
+    }
+  }
+
+  /**
+   * A filter on a column that the index does not cover merges the data row of each candidate on the
+   * server. A candidate whose merged column is NULL must be filtered as NULL. A candidate whose
+   * data row is gone, as after a delete that the query races with, must be skipped as the data
+   * table plan and the deferred projection skip it.
+   */
+  @Test
+  public void testUncoveredFilterWithNullMergedColumnAndMissingDataRows() throws Exception {
+    String t = "T_VEC_MERGE_NULL_" + generateUniqueName();
+    String idx = "IDX_VEC_MERGE_NULL_" + generateUniqueName();
+    float[] q = new float[] { 5f, 5f, 5f, 5f };
+    Float[] boxedQ = new Float[] { q[0], q[1], q[2], q[3] };
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + t
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), C VARCHAR, D VARCHAR)");
+      Random rng = new Random(7);
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      Map<String, String> ds = new HashMap<>();
+      try (
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + t + " VALUES (?, ?, ?, ?)")) {
+        for (int n = 0; n < 40; n++) {
+          String id = String.format("r%02d", n);
+          Float[] v = new Float[4];
+          for (int k = 0; k < 4; k++) {
+            v[k] = rng.nextFloat() * 10;
+          }
+          rows.put(id, new float[] { v[0], v[1], v[2], v[3] });
+          ds.put(id, n % 5 == 4 ? null : "d" + (n % 2));
+          ps.setString(1, id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", v));
+          ps.setString(3, "c" + (n % 2));
+          ps.setString(4, ds.get(id));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      conn.createStatement().execute("CREATE VECTOR INDEX " + idx + " ON " + t + " (V) INCLUDE (C)"
+        + " WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 40)");
+
+      // Delete the nearest row with D = 'd0', the nearest with a NULL D, and the nearest with
+      // D = 'd1', which is in C = 'c1'. A direct HBase delete bypasses index maintenance, so
+      // their index rows stay
+      Set<String> deleted = new HashSet<>();
+      String[] wanted = { "d0", null, "d1" };
+      for (String w : wanted) {
+        for (String id : VectorIndexTestUtil.bruteForceTopK(rows, q, "L2", rows.size())) {
+          if (w == null ? ds.get(id) == null : w.equals(ds.get(id))) {
+            deleted.add(id);
+            break;
+          }
+        }
+      }
+      assertEquals(3, deleted.size());
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      try (Table hTable =
+        pconn.getQueryServices().getTable(pconn.getTableNoCache(t).getPhysicalName().getBytes())) {
+        for (String id : deleted) {
+          hTable.delete(new Delete(Bytes.toBytes(id)));
+        }
+      }
+
+      for (String filter : new String[] { "D = 'd0'", "D IS NULL", "D = 'd0' OR C = 'c1'" }) {
+        String query = "SELECT /*+ VECTOR_PROBE_COUNT(2) */ ID FROM " + t + " WHERE " + filter
+          + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+        assertTrue(query, VectorIndexTestUtil.isFilterTimeLookup(plan(conn, query, boxedQ)));
+        List<String> actual = ids(conn, query, boxedQ);
+        assertEquals(query, ids(conn, query.replace("VECTOR_PROBE_COUNT(2)", "NO_INDEX"), boxedQ),
+          actual);
+        assertEquals(query, 5, actual.size());
+      }
+    }
+  }
+
+  /**
+   * The same over a covered global index, with and without a top-N on the server: a NULL merged
+   * column is filtered as NULL, and an index row whose data row is gone is skipped.
+   */
+  @Test
+  public void testServerMergeOverCoveredGlobalIndexWithNullMergedColumnAndMissingDataRows()
+    throws Exception {
+    String t = "T_MERGE_NULL_" + generateUniqueName();
+    String idx = "IDX_MERGE_NULL_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + t
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, A VARCHAR, B VARCHAR, C VARCHAR)");
+      conn.createStatement().execute("CREATE INDEX " + idx + " ON " + t + " (A) INCLUDE (B)");
+      try (
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + t + " VALUES (?, ?, ?, ?)")) {
+        for (int i = 0; i < 20; i++) {
+          ps.setString(1, String.format("r%02d", i));
+          ps.setString(2, "a" + (i % 3));
+          ps.setString(3, String.format("b%02d", 20 - i));
+          ps.setString(4, i % 5 == 4 ? null : "c" + (i % 2));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      // Delete the rows with the smallest B for C = 'c0' (r18), for a NULL C (r19), and for
+      // B = 'b03', which is in C = 'c1' (r17). A direct HBase delete bypasses index maintenance
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      try (Table hTable =
+        pconn.getQueryServices().getTable(pconn.getTableNoCache(t).getPhysicalName().getBytes())) {
+        for (String id : new String[] { "r17", "r18", "r19" }) {
+          hTable.delete(new Delete(Bytes.toBytes(id)));
+        }
+      }
+      for (String filter : new String[] { "C = 'c0'", "C IS NULL", "C = 'c0' OR B = 'b03'" }) {
+        for (String order : new String[] { "", " ORDER BY B LIMIT 3" }) {
+          String query =
+            "SELECT /*+ INDEX(" + t + " " + idx + ") */ ID FROM " + t + " WHERE " + filter + order;
+          String plan =
+            QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
+          assertTrue(plan, plan.contains(idx) && plan.contains("SERVER MERGE"));
+          List<String> actual = new ArrayList<>();
+          List<String> exact = new ArrayList<>();
+          try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+            while (rs.next()) {
+              actual.add(rs.getString(1));
+            }
+          }
+          try (ResultSet rs = conn.createStatement()
+            .executeQuery(query.replace("INDEX(" + t + " " + idx + ")", "NO_INDEX"))) {
+            while (rs.next()) {
+              exact.add(rs.getString(1));
+            }
+          }
+          if (order.isEmpty()) {
+            // The index plan returns its rows in the order of the index, by A
+            Collections.sort(actual);
+          }
+          assertEquals(query, exact, actual);
+          assertFalse(query, actual.isEmpty());
+        }
+      }
     }
   }
 
