@@ -770,6 +770,58 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * A filter on a column that the index does not cover merges the data row of each candidate on the
+   * server. The server sorts the merged rows for the top-k, and the client must still find the
+   * columns that the index covers in them: the vector, an included column, the distance over the
+   * vector, and the merged column.
+   */
+  @Test
+  public void testUncoveredFilterProjectsCoveredColumns() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      float[] q = new float[] { 50.2f, 0.1f, -0.1f, 0.05f };
+      Float[] boxedQ = new Float[] { q[0], q[1], q[2], q[3] };
+      // The filter drops the first half of the nearest cluster, so it changes the top-k
+      Map<String, float[]> passing = new HashMap<>();
+      for (Map.Entry<String, float[]> e : fixL2Covered.rows.entrySet()) {
+        if (fixL2Covered.descriptions.get(e.getKey()).compareTo("desc_k1_r09") > 0) {
+          passing.put(e.getKey(), e.getValue());
+        }
+      }
+      List<String> expected = VectorIndexTestUtil.bruteForceTopK(passing, q, "L2", 5);
+      assertFalse(
+        expected.equals(VectorIndexTestUtil.bruteForceTopK(fixL2Covered.rows, q, "L2", 5)));
+
+      String select = "SELECT /*+ VECTOR_PROBE_COUNT(4) */ ID, CATEGORY, V, L2_DISTANCE(V, ?),"
+        + " DESCRIPTION FROM " + fixL2Covered.tableName + " WHERE DESCRIPTION > 'desc_k1_r09'";
+      for (String query : new String[] { select + " ORDER BY 4 LIMIT 5",
+        select + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5" }) {
+        try (PhoenixPreparedStatement ps =
+          conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+          for (int i = 1; i <= ps.getParameterMetaData().getParameterCount(); i++) {
+            ps.setArray(i, conn.createArrayOf("FLOAT", boxedQ));
+          }
+          assertTrue(query, VectorIndexTestUtil.isFilterTimeLookup(ps.optimizeQuery()));
+          List<String> actual = new ArrayList<>();
+          try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+              String id = rs.getString(1);
+              actual.add(id);
+              float[] v = fixL2Covered.rows.get(id);
+              assertEquals(query + " " + id, fixL2Covered.categories.get(id), rs.getString(2));
+              assertArrayEquals(query + " " + id, v, (float[]) rs.getObject(3), 0f);
+              assertNotNull(query + " " + id, rs.getObject(4));
+              assertEquals(query + " " + id, VectorIndexTestUtil.dist("L2", q, v), rs.getDouble(4),
+                1e-4);
+              assertEquals(query + " " + id, fixL2Covered.descriptions.get(id), rs.getString(5));
+            }
+          }
+          assertEquals(query, expected, actual);
+        }
+      }
+    }
+  }
+
   @Test
   public void testDeferredProjectionWithCoveredFilter() throws Exception {
     // A covered filter with an uncovered projection must use a deferred lookup, not a server merge
