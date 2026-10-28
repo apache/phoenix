@@ -474,6 +474,10 @@ public final class HnswIndexManager implements VectorIndexManager {
   private long fullSwapOverflow;
   // The time at which the region entered its current overflow, for the overflow time metric
   private long overflowStart;
+  // The time of the base that the region searches and that covers its range exactly, or
+  // Long.MIN_VALUE. The open sets it from the segments that it opens. A full rebuild sets it after
+  // its cutover and its metrics, so that a build that waits for it finds the rebuild complete
+  private long installedBase = Long.MIN_VALUE;
   private volatile boolean closed;
 
   /**
@@ -736,6 +740,8 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     this.state = new State(sources, new MutableGraph(vectorIndex, similarity), null, null, 0, 0,
       HnswSegment.covered(startKey, endKey, readable), false, false);
+    HnswSegment.Descriptor exact = exactBase(readable, startKey, endKey);
+    this.installedBase = exact != null ? exact.time : Long.MIN_VALUE;
     // From here, a failure closes the manager, and the close removes this contribution
     publish(null, state);
     metrics.update(HnswMetric.SEGMENTS_LEFT_OUT, unreadable.size());
@@ -1414,13 +1420,16 @@ public final class HnswIndexManager implements VectorIndexManager {
   /**
    * Returns a scanner that answers a build scan with one cell at the start key of the region. The
    * cell holds the time at which the region accepted the request. A purge scan gets the same answer
-   * with the number of deleted cells, and an overflow scan with 1 or 0.
+   * with the number of deleted cells, an overflow scan with 1 or 0, and a base time scan with the
+   * time of the base that the region searches.
    */
   public static RegionScanner acceptedScanner(RegionScanner scanner, long accepted) {
     return new DelegateRegionScanner(scanner) {
+      // A client refuses a cell with a negative timestamp, and a base time answer can be
+      // Long.MIN_VALUE. The value holds the answer
       private Cell cell =
         new KeyValue(scanner.getRegionInfo().getStartKey(), HConstants.EMPTY_BYTE_ARRAY,
-          HConstants.EMPTY_BYTE_ARRAY, accepted, Bytes.toBytes(accepted));
+          HConstants.EMPTY_BYTE_ARRAY, Math.max(0, accepted), Bytes.toBytes(accepted));
 
       @Override
       public boolean next(List<Cell> result) {
@@ -1710,7 +1719,8 @@ public final class HnswIndexManager implements VectorIndexManager {
     return true;
   }
 
-  // Scans the region, and writes and installs a new base segment. The scan starts after the swap,
+  // Scans the region, and writes and installs a new base segment. Then it reports the base to
+  // builds, and retires the segments that the base supersedes. The scan starts after the swap,
   // and each graph change follows the commit of its row. As a result, the scan holds every change
   // that the graphs held at the swap. The manager does not hold its monitor during the write,
   // because the write waits for region row locks
@@ -1758,9 +1768,15 @@ public final class HnswIndexManager implements VectorIndexManager {
     }
     metrics.update(HnswMetric.REBUILDS, 1);
     metrics.update(HnswMetric.REBUILD_TIME, EnvironmentEdgeManager.currentTimeMillis() - started);
-    retireSupersededSegments();
     LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
       region.getRegionInfo().getEncodedName(), keys.length);
+    // Report the base only now. V# shows it since the write, but the region searches it only
+    // after the cutover. A build that ends when each region reports its base then finds each
+    // region covered and its rebuild counted
+    synchronized (this) {
+      installedBase = written.time;
+    }
+    retireSupersededSegments();
   }
 
   // Writes the changes in the graph of the flush as a delta segment on the given base. Then it
@@ -2251,6 +2267,17 @@ public final class HnswIndexManager implements VectorIndexManager {
    */
   public boolean covered() {
     return state.covered;
+  }
+
+  /**
+   * Returns the time of the base segment that the region searches and that covers its range
+   * exactly, or Long.MIN_VALUE if the region searches no such base or does not cover its range. A
+   * full rebuild writes its base to V#, waits for the flush of V#, and then cuts over to the base.
+   * This method returns the time of the new base only after the cutover and after the metrics count
+   * the rebuild. A build waits for this time, because a listing of V# shows the base earlier.
+   */
+  public synchronized long installedBase() {
+    return closed || !state.covered ? Long.MIN_VALUE : installedBase;
   }
 
   /**

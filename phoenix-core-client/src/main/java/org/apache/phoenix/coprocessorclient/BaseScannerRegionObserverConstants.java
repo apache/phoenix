@@ -213,6 +213,15 @@ public class BaseScannerRegionObserverConstants {
    * otherwise.
    */
   public static final String HNSW_OVERFLOW = "_HnswOverflow";
+  /**
+   * Scan attribute that asks for the time of the base segment that the scanned region searches for
+   * an HNSW index. The value is the name of the HNSW index. The request opens the index manager of
+   * the region if it is not open. The scan returns one cell whose value is the 8-byte time of the
+   * base that covers the range of the region exactly, or Long.MIN_VALUE if the region searches no
+   * such base. A region reports the base of a full rebuild only after it cuts over to the base. It
+   * writes the base to V# before that, so a listing of V# can show a base that it does not search.
+   */
+  public static final String HNSW_BASE_TIME = "_HnswBaseTime";
   /** Scan attribute that names the HNSW index of a nearest neighbor search. */
   public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
   /** Scan attribute that holds the candidate count, the target row count and the query vector. */

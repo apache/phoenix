@@ -309,9 +309,9 @@ public class HnswIndexFsckProvider extends GlobalIndexFsckProvider {
   /**
    * Waits until each rebuilt region retires the segments that its new base supersedes and deletes
    * the malformed cells of the index. A region writes its new base, cuts over to it, and then
-   * deletes the malformed cells and retires the old segments. The build ends when the region writes
-   * the new base, so the build does not wait for the retirement. A region without an earlier base
-   * has no segment to retire, so the method also waits for the malformed cells. After
+   * deletes the malformed cells and retires the old segments. The build ends when the region cuts
+   * over to the new base, so the build does not wait for the retirement. A region without an
+   * earlier base has no segment to retire, so the method also waits for the malformed cells. After
    * {@link #RETIREMENT_WAIT_MS}, the method returns, and the checks report the cells that remain.
    */
   static void awaitRetirement(HnswIndexReader reader, Set<String> regions) throws Exception {
