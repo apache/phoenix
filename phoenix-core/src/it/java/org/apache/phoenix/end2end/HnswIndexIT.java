@@ -130,15 +130,20 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
    * Injects faults into the segment writes, the V# flushes and the purges of a table. While hold is
    * set, a segment write waits for it. While failWrites is set, a segment write fails. While
    * dropFlushes is set, a flush of V# writes no cell. The V# memstore is then lost, as in a crash
-   * of the region server before the flush. While failPurges is set, a purge request fails.
+   * of the region server before the flush. While failPurges is set, a purge request fails. While
+   * flushDelayMs is set, a flush of V# waits that long before it writes the cells. The cells then
+   * stay in the memstore, where a listing of V# finds them.
    */
   public static class SegmentFaults implements RegionCoprocessor, RegionObserver {
     static volatile CountDownLatch hold;
     static volatile boolean failWrites;
     static volatile boolean dropFlushes;
     static volatile boolean failPurges;
+    static volatile long flushDelayMs;
     // The number of dropped flushes
     static final AtomicInteger DROPPED = new AtomicInteger();
+    // The number of delayed flushes
+    static final AtomicInteger DELAYED = new AtomicInteger();
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -177,7 +182,19 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
     @Override
     public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
       InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
-      if (!dropFlushes || !Bytes.equals(FAMILY, store.getColumnFamilyDescriptor().getName())) {
+      if (!Bytes.equals(FAMILY, store.getColumnFamilyDescriptor().getName())) {
+        return scanner;
+      }
+      long delay = flushDelayMs;
+      if (delay > 0) {
+        DELAYED.incrementAndGet();
+        try {
+          Thread.sleep(delay);
+        } catch (InterruptedException e) {
+          throw new InterruptedIOException();
+        }
+      }
+      if (!dropFlushes) {
         return scanner;
       }
       DROPPED.incrementAndGet();
@@ -260,10 +277,10 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Builds the index with IndexTool. IndexTool ends when the stores of the regions hold the new
-   * segments. A region writes its segment and waits for the flush of V#. Then it cuts over to the
-   * segment and retires the older segments. Thus the test waits for the retirement and for the
-   * coverage of each region.
+   * Builds the index with IndexTool. A region writes its segment and waits for the flush of V#.
+   * Then it cuts over to the segment and retires the older segments. IndexTool ends when each
+   * region has cut over to its new segment, so the test waits for the retirement. It also checks
+   * the coverage of each region.
    */
   static void buildIndex(String table, String index) throws Exception {
     IndexTool tool = new IndexTool();
@@ -628,6 +645,49 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       }
       double recall = recall(table, index, rows);
       assertTrue("recall " + recall, recall >= 0.9);
+    }
+  }
+
+  /**
+   * IndexTool ends only after each region cuts over to its new base. A region writes its base to
+   * V#, waits for the flush of V#, and then cuts over to the base. Here each flush of V# waits for
+   * five seconds, so V# holds the base of a region well before the region searches it. As soon as
+   * IndexTool returns, each region is covered, and the metrics count the rebuild of each region.
+   */
+  @Test
+  public void testIndexToolWaitsForCutover() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + table
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, " + DIM + ")) SPLIT ON ('m')");
+      Random random = new Random(13);
+      for (int i = 0; i < 40; i++) {
+        upsert(conn, table, (i % 2 == 0 ? "a" : "z") + i, vector(random));
+      }
+      conn.createStatement().execute("CREATE VECTOR INDEX " + index + " ON " + table
+        + " (V) WITH (algorithm='HNSW', metric='COSINE') ASYNC");
+      installFaults(table);
+      int delayed = SegmentFaults.DELAYED.get();
+      SegmentFaults.flushDelayMs = 5000;
+      try {
+        IndexTool tool = new IndexTool();
+        tool.setConf(new Configuration(getUtility().getConfiguration()));
+        assertEquals(0, tool.run(IndexToolIT.getArgValues(false, null, table, index, null,
+          IndexTool.IndexVerifyType.NONE, IndexTool.IndexDisableLoggingType.NONE)));
+        List<HRegion> regions = regions(table);
+        assertEquals(2, regions.size());
+        for (HRegion region : regions) {
+          assertTrue(region + " is not covered", manager(region, index).covered());
+        }
+        assertEquals(0, value(HnswMetric.REGIONS_UNCOVERED, index));
+        assertEquals(2, value(HnswMetric.REBUILDS, index));
+      } finally {
+        SegmentFaults.flushDelayMs = 0;
+      }
+      // The base write of each region waited for a delayed flush
+      assertTrue(SegmentFaults.DELAYED.get() - delayed >= 2);
+      assertEquals(PIndexState.ACTIVE, PhoenixRuntime.getTableNoCache(conn, index).getIndexState());
     }
   }
 

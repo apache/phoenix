@@ -2143,6 +2143,74 @@ public class HnswIndexManagerFlushTest {
     cells.clear();
     assertFalse(accepted.next(cells));
     assertTrue(cells.isEmpty());
+    // A base time scan can answer Long.MIN_VALUE, which is not a valid cell timestamp
+    HnswIndexManager.acceptedScanner(scanner, Long.MIN_VALUE).nextRaw(cells);
+    assertEquals(Long.MIN_VALUE, Bytes.toLong(CellUtil.cloneValue(cells.get(0))));
+    assertTrue(cells.get(0).getTimestamp() >= 0);
+  }
+
+  /**
+   * A region reports the time of the base that it searches. A region of a BUILDING index without
+   * segments reports none. A full rebuild reports its base only after its cutover and after the
+   * metrics count it. A delta keeps the base. A closed manager reports none, and a manager that
+   * opens again reports the base that it opens. A region that leaves out its lost base reports none
+   * until its rebuild cuts over.
+   */
+  @Test
+  public void testInstalledBaseFollowsCutover() throws Exception {
+    Harness h = new Harness("installed");
+    h.load(30, new Random(81));
+    HnswIndexManager manager = h.open(false);
+    assertEquals(Long.MIN_VALUE, manager.installedBase());
+    long accepted = manager.rebuild(Long.MAX_VALUE);
+    await("the reported base", () -> manager.installedBase() > accepted);
+    assertTrue(manager.covered());
+    assertEquals(1, value(HnswMetric.REBUILDS, h.index));
+    HnswSegment.Descriptor base = h.awaitBase(manager, accepted + 1);
+    assertEquals(base.time, manager.installedBase());
+
+    h.upsert(manager, "x0", point(1, 1));
+    request("a delta flush", manager::flush, () -> {
+      try {
+        return h.segments().get(0).isDelta();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    assertEquals(base.time, manager.installedBase());
+    manager.close();
+    assertEquals(Long.MIN_VALUE, manager.installedBase());
+    HnswIndexManager reopened = h.open(false);
+    assertTrue(reopened.covered());
+    assertEquals(base.time, reopened.installedBase());
+
+    // The rebuild after the loss waits, so the test sees the uncovered region
+    CountDownLatch release = new CountDownLatch(1);
+    putHook = put -> {
+      if (h.isRow(put)) {
+        try {
+          release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    try {
+      CELLS.remove(base, HnswSegment.PAYLOAD_TAG);
+      HnswOffheapAllocator.get(h.env.getConfiguration()).evictAll();
+      try {
+        h.nearest(reopened, h.rows.get(h.key("r005")));
+        fail("a search of a segment without its payload must fail");
+      } catch (IOException e) {
+        assertTrue(e.toString(), e.getCause() instanceof HnswSegment.NotFoundException);
+      }
+      assertFalse(reopened.covered());
+      assertEquals(Long.MIN_VALUE, reopened.installedBase());
+    } finally {
+      release.countDown();
+    }
+    await("the base of the repair", () -> reopened.installedBase() > base.time);
+    assertTrue(reopened.covered());
   }
 
   /** A split multiplier of 0 or less turns the split requests off. */
