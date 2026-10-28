@@ -57,6 +57,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
+import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
 import org.apache.phoenix.hbase.index.vector.HnswIndexManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -80,7 +81,9 @@ import org.mockito.stubbing.Answer;
  * Tests when {@link IndexTool#buildHnswRegions} counts a region as built, and when the build fails.
  * The bar is the oldest base segment time that completes a region, and
  * {@link IndexTool#buildHnswIndex} sets it. Mocked tables simulate the region servers: a build scan
- * of a region writes a base segment to the {@code V#} family of the data table.
+ * of a region writes a base segment to the {@code V#} family of the data table. A base time scan of
+ * a region returns the newest base of the region in V#, unless a test simulates a region that has
+ * not cut over to its base yet.
  */
 public class IndexToolHnswBuildTest {
   private static final byte[] FAMILY = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
@@ -93,13 +96,16 @@ public class IndexToolHnswBuildTest {
   private final List<String> triggered = Collections.synchronizedList(new ArrayList<>());
   // The attribute values of the build scans
   private final List<byte[]> requests = Collections.synchronizedList(new ArrayList<>());
+  // The start rows of the base time scans
+  private final List<String> probes = Collections.synchronizedList(new ArrayList<>());
   // The time at which the simulated servers accept a build request. A rebuild for the request
   // starts later, and writes a base segment one tick newer
   private final AtomicLong serverTime = new AtomicLong(5_000);
   // When false, the simulated rebuilds do not finish
   private volatile boolean serversBuild = true;
-  // The answers of the data table to a build scan and to a scan of V#
+  // The answers of the data table to a build scan, to a base time scan and to a scan of V#
   private volatile Answer<ResultScanner> build;
+  private volatile Answer<ResultScanner> probe;
   private volatile Answer<ResultScanner> list;
   private byte[] definition;
   private ConnectionQueryServices services;
@@ -135,12 +141,22 @@ public class IndexToolHnswBuildTest {
       }
       return scanner(Collections.singletonList(accepted(serverTime.get())));
     };
+    // A simulated region cuts over to its base when it writes the base
+    probe = invocation -> {
+      Scan scan = invocation.getArgument(0);
+      probes.add(Bytes.toStringBinary(scan.getStartRow()));
+      return scanner(
+        Collections.singletonList(accepted(newestBase(scan.getStartRow(), scan.getStopRow()))));
+    };
     list = invocation -> scanner(new ArrayList<>(segments));
     Table data = mock(Table.class);
     when(data.getScanner(any(Scan.class))).thenAnswer(invocation -> {
       Scan scan = invocation.getArgument(0);
-      return scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD) != null
-        ? build.answer(invocation)
+      if (scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD) != null) {
+        return build.answer(invocation);
+      }
+      return scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BASE_TIME) != null
+        ? probe.answer(invocation)
         : list.answer(invocation);
     });
     services = mock(ConnectionQueryServices.class);
@@ -163,10 +179,25 @@ public class IndexToolHnswBuildTest {
     return scanner;
   }
 
+  // Returns the time of the newest base of the index definition in V# that covers the range
+  // exactly, or Long.MIN_VALUE
+  private long newestBase(byte[] start, byte[] end) throws IOException {
+    Table v = mock(Table.class);
+    when(v.getScanner(any(Scan.class))).thenAnswer(i -> scanner(new ArrayList<>(segments)));
+    long newest = Long.MIN_VALUE;
+    for (HnswSegment.Descriptor d : new HnswSegmentStore.TableStore(v).list(INDEX)) {
+      if (!d.isDelta() && d.covers(start, end) && Bytes.equals(d.definition, definition)) {
+        newest = Math.max(newest, d.time);
+      }
+    }
+    return newest;
+  }
+
   // The one cell that a build scan returns: the time at which the region accepted the request
   private static Result accepted(long time) {
-    return Result.create(Collections.singletonList(new KeyValue(HConstants.EMPTY_START_ROW,
-      HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, time, Bytes.toBytes(time))));
+    return Result.create(Collections
+      .singletonList(new KeyValue(HConstants.EMPTY_START_ROW, HConstants.EMPTY_BYTE_ARRAY,
+        HConstants.EMPTY_BYTE_ARRAY, Math.max(0, time), Bytes.toBytes(time))));
   }
 
   // Returns the cells of a base segment of the index with the given definition, as a listing scan
@@ -443,6 +474,64 @@ public class IndexToolHnswBuildTest {
     assertEquals(11, IndexTool.rebuiltSince(before, lower));
     assertEquals(21, IndexTool.rebuiltSince(before, upper));
     assertEquals(Long.MIN_VALUE, IndexTool.rebuiltSince(Collections.emptyList(), upper));
+  }
+
+  /**
+   * A region writes its base to V# before it cuts over to the base. The build waits until the
+   * region reports the base, which it does at the third base time scan here. The build does not
+   * trigger the region again.
+   */
+  @Test(timeout = 30_000)
+  public void testBaseCountsAfterCutover() throws Exception {
+    region("", "");
+    AtomicInteger asked = new AtomicInteger();
+    probe = invocation -> {
+      probes.add(Bytes.toStringBinary(((Scan) invocation.getArgument(0)).getStartRow()));
+      long base = asked.incrementAndGet() < 3
+        ? Long.MIN_VALUE
+        : newestBase(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+      return scanner(Collections.singletonList(accepted(base)));
+    };
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
+    assertEquals(Arrays.asList("", "", ""), probes);
+    assertEquals(Collections.singletonList(""), triggered);
+  }
+
+  /**
+   * A region that reports no base is not built, also when the bar has no lower bound, as for the
+   * repair of a region without an earlier base. The base in V# then gets a request, and the build
+   * waits for the base of that request.
+   */
+  @Test(timeout = 30_000)
+  public void testRegionWithoutInstalledBaseIsNotBuilt() throws Exception {
+    region("", "");
+    segments.add(segment(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW, 1_000));
+    AtomicInteger asked = new AtomicInteger();
+    probe = invocation -> {
+      long base = asked.incrementAndGet() == 1
+        ? Long.MIN_VALUE
+        : newestBase(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+      return scanner(Collections.singletonList(accepted(base)));
+    };
+    IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> Long.MIN_VALUE);
+    assertEquals(Collections.singletonList(""), triggered);
+    assertEquals(2, asked.get());
+  }
+
+  /** A failed base time scan fails the build, as a failed build scan does. */
+  @Test(timeout = 30_000)
+  public void testFailedBaseTimeScanFailsBuild() throws Exception {
+    region("", "");
+    probe = invocation -> {
+      throw new IOException("Injected base time failure");
+    };
+    try {
+      IndexTool.buildHnswRegions(conn, dataTable, indexTable, r -> true, r -> 1_000);
+      fail();
+    } catch (IOException expected) {
+      assertEquals("Injected base time failure", expected.getMessage());
+    }
+    assertEquals(Collections.singletonList(""), triggered);
   }
 
   /** A region that the selection leaves out gets no request, and the build does not wait for it. */

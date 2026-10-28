@@ -828,7 +828,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * earlier request runs or is complete. For an HNSW purge scan, deletes the segment cells of a
    * dropped HNSW index from the region. The scan returns one cell that holds the number of deleted
    * cells. For an HNSW overflow scan, the scan returns one cell that holds 1 if the region is in
-   * overflow for the index, and 0 otherwise.
+   * overflow for the index, and 0 otherwise. For an HNSW base time scan, the scan returns one cell
+   * that holds the time of the base segment that the region searches, as
+   * {@link HnswIndexManager#installedBase()} returns it.
    */
   @Override
   public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
@@ -836,8 +838,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     byte[] request = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BUILD);
     byte[] purge = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_PURGE);
     byte[] overflow = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_OVERFLOW);
+    byte[] baseTime = scan.getAttribute(BaseScannerRegionObserverConstants.HNSW_BASE_TIME);
     if (
-      (request == null && purge == null && overflow == null)
+      (request == null && purge == null && overflow == null && baseTime == null)
         || !RegionReplicaUtil.isDefaultReplica(c.getEnvironment().getRegionInfo())
     ) {
       return s;
@@ -845,6 +848,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     try {
       if (purge != null) {
         return HnswIndexManager.acceptedScanner(s, purgeVectorIndex(Bytes.toString(purge)));
+      }
+      if (baseTime != null) {
+        return HnswIndexManager.acceptedScanner(s,
+          ((HnswIndexManager) getVectorIndexManager(Bytes.toString(baseTime))).installedBase());
       }
       if (overflow != null) {
         // Only an open manager can be in overflow, so the request opens no manager

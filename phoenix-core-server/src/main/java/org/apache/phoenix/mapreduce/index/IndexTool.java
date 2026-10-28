@@ -32,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1115,7 +1116,7 @@ public class IndexTool extends Configured implements Tool {
 
   /**
    * Builds an HNSW index. Each data region builds a base segment on its server. The index becomes
-   * ACTIVE when each region has a fresh base segment.
+   * ACTIVE when each region searches a fresh base segment.
    */
   static void buildHnswIndex(PhoenixConnection conn, PTable dataTable, PTable indexTable)
     throws Exception {
@@ -1140,10 +1141,13 @@ public class IndexTool extends Configured implements Tool {
    * at least {@code since} for the region, or when a request of this call built it. A region
    * without an anchor row holds no rows, so it is built. The build scan of a region returns the
    * server time at which the region accepted the request. Only a base whose build started later
-   * counts, because a rebuild that already runs at the request can miss rows. A region that is not
-   * built gets its request again every 30 polls, with the time of its last accepted request. Thus a
-   * rebuild that serves that request is not followed by another. The method fails only when no
-   * region becomes built for {@link #HNSW_BUILD_STALL_MS}.
+   * counts, because a rebuild that already runs at the request can miss rows. A region writes its
+   * base to V# before it cuts over to the base. Thus a region with such a base in V# is built only
+   * when it also reports that it searches a base of at least that time. A region reports its new
+   * base after the cutover and after its metrics count the rebuild. A region that is not built gets
+   * its request again every 30 polls, with the time of its last accepted request. Thus a rebuild
+   * that serves that request is not followed by another. The method fails when a request fails, and
+   * when no region becomes built for {@link #HNSW_BUILD_STALL_MS}.
    */
   public static void buildHnswRegions(PhoenixConnection conn, PTable dataTable, PTable indexTable,
     Predicate<RegionInfo> regions, ToLongFunction<RegionInfo> since) throws Exception {
@@ -1156,6 +1160,8 @@ public class IndexTool extends Configured implements Tool {
     ConnectionQueryServices services = conn.getQueryServices();
     // The server time at which each region accepted its last request, by encoded region name
     Map<String, Long> accepted = new HashMap<>();
+    // The time of the base that each region reported it searches, by encoded region name
+    Map<String, Long> installed = new HashMap<>();
     try (Table data = services.getTable(dataPhysical)) {
       HnswSegmentStore segmentStore = new HnswSegmentStore.TableStore(data);
       for (int round = 0;; round++) {
@@ -1169,13 +1175,31 @@ public class IndexTool extends Configured implements Tool {
           Long requested = accepted.get(region.getEncodedName());
           long bar = requested != null ? requested + 1 : since.applyAsLong(region);
           boolean built = HnswSegment.anchor(region.getStartKey(), region.getEndKey()) == null;
+          boolean written = false;
           for (HnswSegment.Descriptor d : segments) {
             // Only a base segment shows a rebuild. A delta can cover the same key range, but it
             // holds only the changes of a flush
-            built |=
+            written |=
               !d.isDelta() && d.time >= bar && d.covers(region.getStartKey(), region.getEndKey())
                 && Bytes.equals(d.definition, definition);
           }
+          Long base = installed.get(region.getEncodedName());
+          if (!built && written && (base == null || base < bar)) {
+            // The region writes its base before it cuts over to the base. Ask the region for the
+            // base that it searches. Long.MIN_VALUE means that it searches none
+            HnswRegionRequests.send(data, Collections.singletonList(region),
+              BaseScannerRegionObserverConstants.HNSW_BASE_TIME, r -> Bytes.toBytes(indexName),
+              (r, value, failure) -> {
+                if (failure != null) {
+                  throw failure;
+                }
+                if (value != null && Bytes.toLong(value) != Long.MIN_VALUE) {
+                  installed.put(r.getEncodedName(), Bytes.toLong(value));
+                }
+              });
+            base = installed.get(region.getEncodedName());
+          }
+          built |= written && base != null && base >= bar;
           if (!built) {
             missing.add(region);
           }
