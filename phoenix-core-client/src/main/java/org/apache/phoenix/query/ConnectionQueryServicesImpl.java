@@ -1928,13 +1928,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         tableExist && tableType == PTableType.TABLE
           && admin.isTableDisabled(TableName.valueOf(physicalTableName))
       ) {
-        byte[] viewIndexMarker = existingDesc == null ? null
+        byte[] viewIndexMarker = existingDesc == null
+          ? null
           : existingDesc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES);
         // Classify by the descriptor marker, falling back to the _IDX_ name prefix for older
         // view-index tables that predate the marker.
+        boolean hasViewIndexMarker = viewIndexMarker != null
+          && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(viewIndexMarker));
         boolean isViewIndexTable =
-          (viewIndexMarker != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(viewIndexMarker)))
-            || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName));
+          hasViewIndexMarker || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName));
         reenableOrphanedDisabledHBaseTable(physicalTableName, isViewIndexTable, admin);
       }
 
@@ -2494,9 +2496,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     // For a view-index physical table, resolve to the base table name; otherwise the physical
     // name is itself the metadata key.
     String physicalName = Bytes.toString(physicalTableNameBytes);
-    String metadataName = isViewIndexTable
-      ? MetaDataUtil.getViewIndexUserTableName(physicalName)
-      : physicalName;
+    String metadataName =
+      isViewIndexTable ? MetaDataUtil.getViewIndexUserTableName(physicalName) : physicalName;
     byte[] schemaBytes = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(metadataName));
     byte[] tableBytes = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(metadataName));
     // No-cache read straight from the server; a stale/absent client-cache entry must not drive
