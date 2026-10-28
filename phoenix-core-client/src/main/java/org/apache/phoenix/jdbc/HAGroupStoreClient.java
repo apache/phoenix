@@ -370,6 +370,40 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
+   * Returns whether the underlying ZooKeeper connection for this client is currently live.
+   * When {@code false}, the Curator connection has been lost/suspended and any call that
+   * reads shared state ({@link #getHAGroupStoreRecord()}, {@link #subscribeToTargetState},
+   * etc.) will throw an {@link IOException}.
+   * <p>
+   * Consumers that subscribe an {@link HAGroupStateListener} and cache the resulting events
+   * in memory (i.e. treat the listener view as the source of truth) should consult this
+   * before trusting their cached snapshot &mdash; a {@code false} return means the client
+   * has stopped receiving events and the cached view may be arbitrarily stale.
+   * <p>
+   * Flag transitions:
+   * <ul>
+   *   <li>Set to {@code true} on successful initial construction, after the local
+   *       {@code PathChildrenCache} has been started and warmed.</li>
+   *   <li>Set to {@code false} by the Curator connection-state listener on
+   *       {@code CONNECTION_LOST} / {@code CONNECTION_SUSPENDED}.</li>
+   *   <li>Set back to {@code true} on {@code CONNECTION_RECONNECTED}. This tracks the
+   *       Curator reconnect event, <em>not</em> cache resynchronization &mdash; Curator
+   *       resyncs the {@code PathChildrenCache} asynchronously after reconnect, so a brief
+   *       window exists where {@code isHealthy()} returns {@code true} but the cache has
+   *       not yet observed post-outage state changes. Consumers requiring absolute
+   *       freshness after a reconnect should re-read via {@link #getHAGroupStoreRecord()}
+   *       rather than trust a listener-cached snapshot.</li>
+   * </ul>
+   * The field is {@code volatile}; cross-thread reads are safe.
+   *
+   * @return {@code true} if the ZK connection is live; {@code false} if the connection has
+   *         been lost or suspended
+   */
+  public boolean isHealthy() {
+    return isHealthy;
+  }
+
+  /**
    * Get HAGroupStoreRecord from local quorum.
    * @return HAGroupStoreRecord for the specified HA group name, or null if not found
    * @throws IOException if the client is not healthy
