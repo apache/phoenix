@@ -136,8 +136,6 @@ import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
-import org.apache.phoenix.jdbc.HAGroupStoreRecord;
-import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -505,7 +503,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // derived from it. Defaults to CLIENT_NON_HA (benign: no HA handling).
     private BatchOrigin origin = BatchOrigin.CLIENT_NON_HA;
     // HAGroup associated with the batch
-    private Optional<ReplicationLogGroup> logGroup = Optional.empty();
+    private ReplicationLogGroup logGroup = ReplicationLogGroup.NONE;
     // Per-(row, ts) groups folded from this replicated batch, computed once and shared by the
     // global-index path (prepareReplicatedIndexMutations) and the local-index path. Null until
     // first built; only populated on the standby replay path (isReplay).
@@ -695,6 +693,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   @VisibleForTesting
   IndexRegionObserver(String dataTableName) {
     this.dataTableName = dataTableName;
+  }
+
+  @VisibleForTesting
+  IndexRegionObserver(String dataTableName, boolean replicateTable) {
+    this(dataTableName);
+    this.replicateTable = replicateTable;
   }
 
   @Override
@@ -957,9 +961,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
       }
 
-      // Resolve the replication writer for this batch (empty if none should be used). This also
-      // enforces the split-brain guard for non-PARALLEL live writes to a non-active cluster.
-      Optional<ReplicationLogGroup> logGroup =
+      // Resolve the replication log group for this batch. This also enforces the split-brain
+      // guard for non-PARALLEL live writes to a non-active cluster.
+      ReplicationLogGroup logGroup =
         getReplicationLogGroup(c.getEnvironment(), haGroupStoreManager, origin, haGroupName);
       preBatchMutateWithExceptions(c, miniBatchOp, logGroup, origin);
       return;
@@ -971,39 +975,32 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Resolve the replication writer for this batch, or empty when none should be used. Returns empty
+   * Resolve the replication log group for this batch. Returns {@link ReplicationLogGroup#NONE}
    * unless this is a CLIENT_HA write on a replication-eligible cluster ({@code replicateTable} =
    * feature on AND table eligible) — which covers the feature-off rollout window and non-eligible
-   * tables. For such a write it then answers the role/policy question: the writer when this cluster
-   * is active for the group, empty for a non-active PARALLEL cluster (legitimate double-write, skip
-   * re-ship), and throws for a non-active non-PARALLEL (split-brain) live write.
-   * @return the HA group writer, or empty if none should be used
+   * tables. For such a write the group answers the role/policy question: a writer
+   * ({@code REPLICATING}) when this cluster is active for a non-PARALLEL group, a no-op group
+   * ({@code SKIP}) for a PARALLEL group on either role (the client writes both clusters itself),
+   * and a non-active non-PARALLEL (split-brain) live write throws.
+   * @return the HA group's replication log group, never null
    */
-  private Optional<ReplicationLogGroup> getReplicationLogGroup(RegionCoprocessorEnvironment env,
+  @VisibleForTesting
+  ReplicationLogGroup getReplicationLogGroup(RegionCoprocessorEnvironment env,
     HAGroupStoreManager haGroupStoreManager, BatchOrigin origin, Optional<String> haGroupName)
     throws IOException {
     if (!replicateTable || origin != BatchOrigin.CLIENT_HA) {
-      return Optional.empty();
+      return ReplicationLogGroup.NONE;
     }
     // origin == CLIENT_HA guarantees the HA group name is present.
     String haGroup = haGroupName.get();
-    Optional<ReplicationLogGroup> logGroup = ReplicationLogGroup.get(env.getConfiguration(),
+    ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
       env.getServerName(), haGroup, haGroupStoreManager, abortable);
-    if (logGroup.isPresent()) {
+    if (logGroup.getStatus() != ReplicationLogGroup.Status.NOT_ACTIVE) {
       return logGroup;
     }
-    // get() returned empty: this cluster is not active for the HA group. Its meaning depends on
-    // the HA policy of the write that just arrived:
-    // - PARALLEL: the client deliberately double-writes to both clusters, so a live write on
-    // the standby is expected. Commit locally and skip re-ship (a non-active cluster has no
-    // writer) — the peer gets its copy from the client's other leg. Same as the replay path
-    // in getHAGroupFromWALKey.
-    // - FAILOVER: only the active cluster takes writes, so a live write here is a stray/stale
-    // sync-path write to a demoted cluster. Reject it rather than committing locally
-    // unreplicated (split brain).
-    if (isParallelPolicy(haGroupStoreManager, haGroup)) {
-      return Optional.empty();
-    }
+    // This cluster is not active for a non-PARALLEL HA group. Under FAILOVER only the active
+    // cluster takes writes, so this is a stray/stale sync-path write to a demoted cluster. Reject
+    // it rather than committing locally unreplicated (split brain).
     throw new IOException(
       String.format("HAGroup %s cannot accept a HA write on %s: this cluster is not active",
         haGroup, dataTableName));
@@ -1062,40 +1059,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * True when the HA group uses the PARALLEL policy, under which the client double-writes to both
-   * clusters. On a non-active cluster this distinguishes a legitimate PARALLEL standby write (which
-   * should commit locally and skip re-ship) from a stray FAILOVER write (split brain, to reject). A
-   * missing record is treated as not-PARALLEL so the caller keeps the conservative split-brain
-   * guard.
-   */
-  private boolean isParallelPolicy(HAGroupStoreManager haGroupStoreManager, String haGroupName)
-    throws IOException {
-    Optional<HAGroupStoreRecord> record =
-      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
-    return record.isPresent()
-      && HighAvailabilityPolicy.PARALLEL.name().equalsIgnoreCase(record.get().getPolicy());
-  }
-
-  /**
    * Get the HA group associated with the WAL key. A batch of mutations is recorded in a single WAL
    * edit.
-   * @return HA group if present or empty if missing
+   * @return the HA group's replication log group, or {@link ReplicationLogGroup#NONE} if the key
+   *         carries no HA group
    */
-  private Optional<ReplicationLogGroup> getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
+  private ReplicationLogGroup getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
     Map<String, byte[]> walKeyAttrs) throws IOException {
     byte[] haGroupName = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
-      // get() returns empty when this cluster is not active. On the replay path this means a
-      // demoted
-      // cluster is replaying its own formerly-ACTIVE edits after a crash: the peer is ACTIVE now,
-      // so
-      // this cluster must not start a replication writer or re-ship. Returning empty lets the
-      // caller
-      // skip the re-ship; HBase still replays the edits into the local region.
+      // get() returns a NOT_ACTIVE group when this cluster is not active. On the replay path this
+      // means a demoted cluster is replaying its own formerly-ACTIVE edits after a crash: the peer
+      // is ACTIVE now, so this cluster must not start a replication writer or re-ship. A PARALLEL
+      // group (including edits stamped before PARALLEL skipped the log) returns SKIP. Either way
+      // the caller skips the re-ship; HBase still replays the edits into the local region.
       return ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(),
         Bytes.toString(haGroupName), abortable);
     }
-    return Optional.empty();
+    return ReplicationLogGroup.NONE;
   }
 
   @Override
@@ -1110,14 +1091,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
     Map<String, byte[]> walKeyAttrs = getAttributeValuesFromWALKey(logKey);
-    Optional<ReplicationLogGroup> logGroup =
-      getHAGroupFromWALKey(ctx.getEnvironment(), walKeyAttrs);
-    if (!logGroup.isPresent()) {
+    ReplicationLogGroup logGroup = getHAGroupFromWALKey(ctx.getEnvironment(), walKeyAttrs);
+    if (!logGroup.isReplicated()) {
       return;
     }
     long start = EnvironmentEdgeManager.currentTimeMillis();
     try {
-      replicateEditOnWALRestore(logGroup.get(), logKey, walKeyAttrs, logEdit);
+      replicateEditOnWALRestore(logGroup, logKey, walKeyAttrs, logEdit);
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
       metricSource.updatePreWALRestoreTime(dataTableName, duration);
@@ -1825,23 +1805,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * True when this batch must be replicated from this cluster: a resolved HA log group is present,
-   * which (per its sole resolution site) already means a CLIENT_HA write on a replication-eligible
-   * cluster that is active for the group. Gates the active-side pre-image capture — the pre-image
-   * exists only so the standby can regenerate its index, so capturing it on a non-replicated batch
-   * would be wasted work (and an unnecessary region scan on the local path) — and the WAL-key
-   * replication stamp. It intentionally does NOT gate on {@code ignoreSyncReplicationForTesting}:
-   * that flag suppresses only the synchronous ship (checked explicitly at the ship site) to
-   * simulate an RS crash after the WAL write but before the ship, leaving pre-image capture, the
-   * WAL stamp, and the replay path intact so crash-recovery re-ship is faithfully exercised.
+   * True when this batch must be replicated from this cluster: the resolved HA log group is
+   * replicating, which (per its sole resolution site) already means a CLIENT_HA write on a
+   * replication-eligible cluster that is active for a non-PARALLEL group. Gates the active-side
+   * pre-image capture — the pre-image exists only so the standby can regenerate its index, so
+   * capturing it on a non-replicated batch would be wasted work (and an unnecessary region scan on
+   * the local path) — and the WAL-key replication stamp. It intentionally does NOT gate on
+   * {@code ignoreSyncReplicationForTesting}: that flag suppresses only the synchronous ship
+   * (checked explicitly at the ship site) to simulate an RS crash after the WAL write but before
+   * the ship, leaving pre-image capture, the WAL stamp, and the replay path intact so
+   * crash-recovery re-ship is faithfully exercised.
    */
   private boolean isReplicatedBatch(BatchMutateContext context) {
-    // The log group is resolved (in preBatchMutate) only for a CLIENT_HA write on a
-    // replication-eligible cluster that is active for the group, and that resolution site is its
-    // sole assignment — so its presence alone is the full predicate for "ship this batch". The
-    // "present implies CLIENT_HA" half of that is asserted at context setup in
+    // A replicating log group is resolved (in preBatchMutate) only for a CLIENT_HA write on a
+    // replication-eligible cluster that is active for a non-PARALLEL group, and that resolution
+    // site is its sole assignment — so isReplicated() alone is the full predicate for "ship this
+    // batch". The "replicated implies CLIENT_HA" half of that is asserted at context setup in
     // preBatchMutateWithExceptions.
-    return context.logGroup.isPresent();
+    return context.logGroup.isReplicated();
   }
 
   /**
@@ -2723,19 +2704,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, Optional<ReplicationLogGroup> logGroup,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, ReplicationLogGroup logGroup,
     BatchOrigin origin) throws Throwable {
     PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
     BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
     context.origin = origin;
     context.logGroup = logGroup;
-    // A resolved log group is produced (in preBatchMutate) only for a CLIENT_HA write on a
-    // replication-eligible cluster active for the group, so its presence must imply CLIENT_HA. This
-    // is the invariant isReplicatedBatch() relies on to key "ship this batch" off log-group
-    // presence
-    // alone; assert it here so a future resolution change can't silently break the ship predicate.
-    Preconditions.checkState(!logGroup.isPresent() || origin == BatchOrigin.CLIENT_HA,
-      "log group present but batch origin is %s, not CLIENT_HA", origin);
+    // A replicating log group is produced (in preBatchMutate) only for a CLIENT_HA write on a
+    // replication-eligible cluster active for the group, so it must imply CLIENT_HA. This is the
+    // invariant isReplicatedBatch() relies on to key "ship this batch" off isReplicated() alone;
+    // assert it here so a future resolution change can't silently break the ship predicate.
+    Preconditions.checkState(!logGroup.isReplicated() || origin == BatchOrigin.CLIENT_HA,
+      "log group replicating but batch origin is %s, not CLIENT_HA", origin);
     setBatchMutateContext(c, context);
     identifyIndexMaintainerTypes(indexMetaData, context);
     identifyMutationTypes(miniBatchOp, context);
@@ -3006,8 +2986,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * keys (it is in {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}), so it needs no separate
    * stamp. Gated on {@link #isReplicatedBatch} — the same predicate that gates pre-image capture —
    * so the WAL carries this stamp exactly when it carries the pre-images the re-ship needs. On a
-   * standby replay the log group is absent, so the standby's WAL never carries replication metadata
-   * it could never re-ship.
+   * standby replay the log group is NONE (not replicated), so the standby's WAL never carries
+   * replication metadata it could never re-ship.
    */
   private void appendReplicationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
@@ -3095,7 +3075,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // ignoreSyncReplicationForTesting suppresses only this synchronous ship, simulating an RS
         // crash after the WAL write but before the ship; the WAL-restore path re-ships on replay.
         if (isReplicatedBatch(context) && !ignoreSyncReplicationForTesting) {
-          replicateMutations(context.logGroup.get(), miniBatchOp, context);
+          replicateMutations(context.logGroup, miniBatchOp, context);
         }
         FutureUtils.get(postIndexFuture);
       }

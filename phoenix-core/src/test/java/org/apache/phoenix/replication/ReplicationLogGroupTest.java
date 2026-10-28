@@ -1468,9 +1468,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Get instances for the first HA group
     ReplicationLogGroup g1_1 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
     ReplicationLogGroup g1_2 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
 
     // Verify same instance is returned for same haGroupId
     assertNotNull("ReplicationLogGroup should not be null", g1_1);
@@ -1480,16 +1480,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Get instance for a different HA group
     ReplicationLogGroup g2_1 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager);
     assertNotNull("ReplicationLogGroup should not be null", g2_1);
     assertTrue("Different instance should be returned for different haGroupId", g2_1 != g1_1);
     assertEquals("HA Group name should match", haGroupId2, g2_1.getHAGroupName());
 
     // Verify multiple calls still return cached instances
     ReplicationLogGroup g1_3 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
     ReplicationLogGroup g2_2 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager);
     assertTrue("Cached instance should be returned", g1_3 == g1_1);
     assertTrue("Cached instance should be returned", g2_2 == g2_1);
 
@@ -1516,9 +1516,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       ServerName.valueOf("10.244.1.25", serverName.getPort(), serverName.getStartcode());
 
     ReplicationLogGroup viaFqdn =
-      ReplicationLogGroup.get(conf, asFqdn, haGroupId, haGroupStoreManager).get();
-    ReplicationLogGroup viaIp =
-      ReplicationLogGroup.get(conf, asIp, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, asFqdn, haGroupId, haGroupStoreManager);
+    ReplicationLogGroup viaIp = ReplicationLogGroup.get(conf, asIp, haGroupId, haGroupStoreManager);
 
     assertSame("Two host spellings of the same (port, startcode) must share one instance", viaFqdn,
       viaIp);
@@ -1528,7 +1527,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     ServerName otherServer =
       ServerName.valueOf(asIp.getHostname(), serverName.getPort() + 1, serverName.getStartcode());
     ReplicationLogGroup viaOther =
-      ReplicationLogGroup.get(conf, otherServer, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, otherServer, haGroupId, haGroupStoreManager);
     assertNotEquals("A distinct port must yield a distinct instance", viaFqdn, viaOther);
 
     viaFqdn.close();
@@ -1545,13 +1544,13 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Get initial instance
     ReplicationLogGroup g1_1 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
     assertNotNull("ReplicationLogGroup should not be null", g1_1);
     assertFalse("Group should not be closed initially", g1_1.isClosed());
 
     // Verify cached instance is returned
     ReplicationLogGroup g1_2 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
     assertTrue("Same instance should be returned before close", g1_2 == g1_1);
 
     // Close the group
@@ -1560,7 +1559,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Get instance after close - should be a new instance
     ReplicationLogGroup g1_3 =
-      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
     assertNotNull("ReplicationLogGroup should not be null after close", g1_3);
     assertFalse("New group should not be closed", g1_3.isClosed());
     assertTrue("New instance should be created after close", g1_1 != g1_3);
@@ -1613,7 +1612,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
       // A get() in this window must return the SAME (closing) instance, not a fresh one.
       ReplicationLogGroup duringClose =
-        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
       assertSame("A get() during close()'s teardown must not resurrect a second instance", group,
         duringClose);
 
@@ -1624,7 +1623,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       // After close() fully completes, the entry is gone, so a later get() creates a fresh
       // instance.
       ReplicationLogGroup afterClose =
-        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
       assertNotSame("A get() after close() completes must create a new instance", group,
         afterClose);
       afterClose.close();
@@ -1670,7 +1669,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Despite the thrown teardown, the cache entry must be gone: a fresh get() creates a NEW,
     // usable instance rather than returning the stranded closed one.
     ReplicationLogGroup afterClose =
-      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
     assertNotSame("A stranded closed instance must not be returned after a throwing close()", group,
       afterClose);
     assertFalse("Re-created instance must be usable, not closed", afterClose.isClosed());
@@ -1710,7 +1709,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Cache entry removed: a fresh get() creates a NEW instance.
     ReplicationLogGroup afterClose =
-      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
     assertNotSame("close() must remove the cache entry even when unsubscribe throws", group,
       afterClose);
     afterClose.close();
@@ -3058,31 +3057,142 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     return result;
   }
 
+  private HAGroupStoreManager mockManagerFor(String group, HAGroupState state,
+    HighAvailabilityPolicy policy) throws IOException {
+    HAGroupStoreManager manager = Mockito.mock(HAGroupStoreManager.class);
+    stubEffectiveRecord(manager, group, state, policy);
+    return manager;
+  }
+
+  private void stubEffectiveRecord(HAGroupStoreManager manager, String group, HAGroupState state,
+    HighAvailabilityPolicy policy) throws IOException {
+    HAGroupStoreRecord record = new HAGroupStoreRecord(null, group, state, 0, policy.toString(),
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", localUri.toString(), peerUri.toString(), 0L);
+    doReturn(Optional.of(record)).when(manager).getEffectiveHAGroupStoreRecord(anyString());
+  }
+
   /**
    * A replication log group is a writer and must exist only where the local cluster is active.
-   * get() must return empty (and not cache) on a non-active role (here STANDBY), before any writer
-   * resource is constructed — no group instance, no forwarder, no demotion subscription.
+   * get() must return NOT_ACTIVE (and not cache) on a non-active role (here STANDBY), before any
+   * writer resource is constructed — no forwarder, no demotion subscription. Once the role flips to
+   * active the next get() re-reads the store and builds the writer.
    */
   @Test
-  public void testGetReturnsEmptyOnStandby() throws Exception {
+  public void testGetReturnsNotActiveOnStandbyUntilPromoted() throws Exception {
     // Use a fresh HA group + its own mock manager so the never() verifications observe only this
     // get() attempt, independent of the active logGroup created by setUpBase().
     final String standbyGroup = haGroupName + "-standby";
-    HAGroupStoreManager standbyManager = Mockito.mock(HAGroupStoreManager.class);
-    HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(null, standbyGroup,
-      HAGroupState.STANDBY, 0, HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl",
-      "clusterUrl", "peerClusterUrl", localUri.toString(), peerUri.toString(), 0L);
-    doReturn(Optional.of(standbyRecord)).when(standbyManager)
-      .getEffectiveHAGroupStoreRecord(anyString());
+    HAGroupStoreManager standbyManager =
+      mockManagerFor(standbyGroup, HAGroupState.STANDBY, HighAvailabilityPolicy.FAILOVER);
 
-    Optional<ReplicationLogGroup> group =
-      ReplicationLogGroup.get(conf, serverName, standbyGroup, standbyManager);
-    assertFalse("get() must return empty on a non-active (STANDBY) role", group.isPresent());
-
+    for (int i = 0; i < 3; i++) {
+      ReplicationLogGroup group =
+        ReplicationLogGroup.get(conf, serverName, standbyGroup, standbyManager);
+      assertEquals(ReplicationLogGroup.Status.NOT_ACTIVE, group.getStatus());
+      assertFalse(group.isReplicated());
+    }
+    // Not cached: every call re-read the store.
+    verify(standbyManager, times(3)).getEffectiveHAGroupStoreRecord(standbyGroup);
     // No writer resources should have been created: the role gate runs before construction, so no
     // group exists to subscribe any state listener.
     verify(standbyManager, never()).subscribeToTargetState(eq(standbyGroup),
       any(HAGroupState.class), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+
+    // Promotion: the next get() builds the writer.
+    stubEffectiveRecord(standbyManager, standbyGroup, HAGroupState.ACTIVE_IN_SYNC,
+      HighAvailabilityPolicy.FAILOVER);
+    ReplicationLogGroup promoted =
+      ReplicationLogGroup.get(conf, serverName, standbyGroup, standbyManager);
+    try {
+      assertEquals(ReplicationLogGroup.Status.REPLICATING, promoted.getStatus());
+      assertEquals(standbyGroup, promoted.getHAGroupName());
+      verify(standbyManager, atLeastOnce()).subscribeToTargetState(eq(standbyGroup),
+        any(HAGroupState.class), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    } finally {
+      promoted.close();
+    }
+  }
+
+  /**
+   * A PARALLEL group never uses the replication log, so get() returns a cached no-op SKIP group on
+   * either role: one store read across many calls, and no writer resources (no state
+   * subscriptions).
+   */
+  @Test
+  public void testParallelGetReturnsCachedSkipGroup() throws Exception {
+    for (HAGroupState state : new HAGroupState[] { HAGroupState.ACTIVE_IN_SYNC,
+      HAGroupState.STANDBY }) {
+      final String parallelGroup = haGroupName + "-parallel-" + state;
+      HAGroupStoreManager manager =
+        mockManagerFor(parallelGroup, state, HighAvailabilityPolicy.PARALLEL);
+
+      ReplicationLogGroup first = ReplicationLogGroup.get(conf, serverName, parallelGroup, manager);
+      try {
+        assertEquals(state.toString(), ReplicationLogGroup.Status.SKIP, first.getStatus());
+        assertFalse(first.isReplicated());
+        assertEquals(parallelGroup, first.getHAGroupName());
+        for (int i = 0; i < 5; i++) {
+          assertSame(first, ReplicationLogGroup.get(conf, serverName, parallelGroup, manager));
+        }
+        verify(manager, times(1)).getEffectiveHAGroupStoreRecord(parallelGroup);
+        verify(manager, never()).subscribeToTargetState(anyString(), any(HAGroupState.class),
+          any(ClusterType.class), any(HAGroupStateListener.class));
+        try {
+          first.sync();
+          fail("a no-op group must not accept a sync");
+        } catch (IllegalStateException expected) {
+        }
+      } finally {
+        first.close();
+      }
+    }
+  }
+
+  /** close() and closeAll() on a PARALLEL no-op group evict it, so the next get() re-reads. */
+  @Test
+  public void testParallelSkipGroupCloseAndCloseAll() throws Exception {
+    final String parallelGroup = haGroupName + "-parallel";
+    HAGroupStoreManager manager =
+      mockManagerFor(parallelGroup, HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.PARALLEL);
+
+    ReplicationLogGroup first = ReplicationLogGroup.get(conf, serverName, parallelGroup, manager);
+    first.close();
+    assertTrue(first.isClosed());
+    ReplicationLogGroup second = ReplicationLogGroup.get(conf, serverName, parallelGroup, manager);
+    assertNotSame("close() must evict the no-op group", first, second);
+
+    ReplicationLogGroup.closeAll(serverName);
+    assertTrue(second.isClosed());
+    ReplicationLogGroup third = ReplicationLogGroup.get(conf, serverName, parallelGroup, manager);
+    try {
+      assertNotSame("closeAll() must evict the no-op group", second, third);
+      verify(manager, times(3)).getEffectiveHAGroupStoreRecord(parallelGroup);
+    } finally {
+      third.close();
+    }
+  }
+
+  /** The shared NONE group is not tied to any HA group and survives close(). */
+  @Test
+  public void testSharedNoneGroupIgnoresClose() {
+    ReplicationLogGroup.NONE.close();
+    assertFalse(ReplicationLogGroup.NONE.isClosed());
+    assertEquals(ReplicationLogGroup.Status.SKIP, ReplicationLogGroup.NONE.getStatus());
+  }
+
+  /** A ReplicationLog whose first writer cannot be created must not leave rotation running. */
+  @Test
+  public void testFailedLogInitStopsRotationExecutor() throws Exception {
+    ReplicationLog log = logGroup.createReplicationLog(logGroup.getLocalShardManager());
+    doThrow(new IOException("Simulated writer creation failure")).when(log).createNewWriter();
+    try {
+      log.init();
+      fail("init() must fail when the first writer cannot be created");
+    } catch (IOException expected) {
+    }
+    assertTrue("A failed init must close the log", log.isClosed());
+    assertTrue("Rotation executor must be stopped after a failed init",
+      log.rotationExecutor == null || log.rotationExecutor.isTerminated());
   }
 
   /**

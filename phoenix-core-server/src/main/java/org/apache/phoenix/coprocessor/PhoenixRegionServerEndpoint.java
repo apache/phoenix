@@ -325,10 +325,8 @@ public class PhoenixRegionServerEndpoint extends
                     + " Will be lazily initialized on first mutation.", haGroup, e);
                 }
               } else {
-                LOGGER.info(
-                  "Skipping eager ReplicationLogGroup init for HA group: {} on server {};"
-                    + " the writer will be created lazily if this cluster becomes active.",
-                  haGroup, serverName);
+                LOGGER.info("Skipping eager ReplicationLogGroup init for HA group: {} on server {};"
+                  + " the group will be created lazily on first mutation.", haGroup, serverName);
               }
               iterator.remove();
               LOGGER.info("Prewarmed HAGroupStoreClient: {} ({} remaining)", haGroup,
@@ -354,7 +352,7 @@ public class PhoenixRegionServerEndpoint extends
   /**
    * Eagerly initialize ReplicationLogGroup only on clusters whose local role is currently active
    * (ACTIVE or ACTIVE_TO_STANDBY). On STANDBY/OFFLINE/UNKNOWN clusters the group will be created
-   * lazily on first mutation if the role transitions.
+   * lazily on first mutation.
    */
   private boolean shouldEagerlyInit(HAGroupStoreManager manager, String haGroup) {
     if (serverName == null) {
