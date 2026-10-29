@@ -35,16 +35,20 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -58,6 +62,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Admin;
@@ -69,10 +74,13 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -407,5 +415,69 @@ public class ConnectionQueryServicesImplTest {
     verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
     verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
     verify(mockConn).getAdmin();
+  }
+
+  @Test
+  public void testEnableTableAlreadyEnabledSwallowsException() throws Exception {
+    // PHOENIX-7788: enableTable helper must swallow TableNotDisabledException,
+    // so a concurrent client that already re-enabled the table does not fail the CREATE.
+    TableName tableName = TableName.valueOf("TEST_TABLE");
+    doThrow(new TableNotDisabledException(tableName)).when(mockAdmin).enableTable(tableName);
+    invokeEnableTable(mockCqs, mockAdmin, tableName);
+    verify(mockAdmin, Mockito.times(1)).enableTable(tableName);
+  }
+
+  private static void invokeEnableTable(ConnectionQueryServicesImpl cqs, Admin admin,
+    TableName tableName) throws Exception {
+    Method m = ConnectionQueryServicesImpl.class.getDeclaredMethod("enableTable", Admin.class,
+      TableName.class);
+    m.setAccessible(true);
+    m.invoke(cqs, admin, tableName);
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableDerivesLogicalNameForNamespaceMapped()
+    throws Exception {
+    // PHOENIX-7788: for a namespace-mapped physical name "MYSCHEMA:MYTABLE" the metadata
+    // lookup must be against logical schema="MYSCHEMA", table="MYTABLE".
+    byte[] name = "MYSCHEMA:MYTABLE".getBytes(StandardCharsets.UTF_8);
+    MetaDataMutationResult notFound =
+      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
+    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
+    verify(mockCqs).getTable(Mockito.<PName> any(), eq("MYSCHEMA".getBytes(StandardCharsets.UTF_8)),
+      eq("MYTABLE".getBytes(StandardCharsets.UTF_8)), anyLong(), anyLong());
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableDerivesLogicalNameForNonNamespaceMapped()
+    throws Exception {
+    // PHOENIX-7788: for a non-namespace-mapped physical name "MYSCHEMA.MYTABLE" the metadata
+    // lookup must be against logical schema="MYSCHEMA", table="MYTABLE".
+    byte[] name = "MYSCHEMA.MYTABLE".getBytes(StandardCharsets.UTF_8);
+    MetaDataMutationResult notFound =
+      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
+    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
+    verify(mockCqs).getTable(Mockito.<PName> any(), eq("MYSCHEMA".getBytes(StandardCharsets.UTF_8)),
+      eq("MYTABLE".getBytes(StandardCharsets.UTF_8)), anyLong(), anyLong());
+  }
+
+  private static void invokeReenableOrphanedDisabledHBaseTable(ConnectionQueryServicesImpl cqs,
+    byte[] physicalTableNameBytes, Admin admin) throws Exception {
+    Method m = ConnectionQueryServicesImpl.class.getDeclaredMethod(
+      "reenableOrphanedDisabledHBaseTable", byte[].class, boolean.class, Admin.class);
+    m.setAccessible(true);
+    try {
+      // These cases exercise base (non-view-index) physical tables, so isViewIndexTable is false.
+      m.invoke(cqs, physicalTableNameBytes, false, admin);
+    } catch (InvocationTargetException e) {
+      if (e.getCause() instanceof Exception) {
+        throw (Exception) e.getCause();
+      }
+      throw e;
+    }
   }
 }
