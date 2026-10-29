@@ -17,16 +17,35 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EXPECTED_UPPER_REGION_KEY;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
@@ -514,6 +533,87 @@ public class ScanUtilTest {
 
       assertArrayEquals(expectedStartKey, startKey);
       assertArrayEquals(expectedEndKey, endKey);
+    }
+
+    private static Scan newLocalIndexScan() {
+      Scan scan = new Scan();
+      scan.setAttribute(LOCAL_INDEX, PDataType.TRUE_BYTES);
+      return scan;
+    }
+
+    @Test
+    public void testSetLocalIndexAttributesSetsExpectedUpperRegionKey() {
+      Scan scan = newLocalIndexScan();
+      ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 0, 1 }, new byte[] { 0, 2 });
+      assertArrayEquals(Bytes.toBytes("i"), scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertArrayEquals(Bytes.toBytes("e"), scan.getAttribute(SCAN_ACTUAL_START_ROW));
+      assertArrayEquals(Bytes.toBytes("e"), scan.getStartRow());
+      assertArrayEquals(Bytes.toBytes("i"), scan.getStopRow());
+    }
+
+    @Test
+    public void testExpectedUpperRegionKeyForLastOpenEndedRegion() {
+      for (boolean reversed : new boolean[] { false, true }) {
+        Scan scan = newLocalIndexScan();
+        ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("o"), HConstants.EMPTY_END_ROW,
+          new byte[] { 0, 1 }, new byte[] { 0, 2 });
+        if (reversed) {
+          ScanUtil.setReversed(scan);
+          ScanUtil.setupReverseScan(scan);
+        }
+        byte[] expectedUpper = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+        assertNotNull(expectedUpper);
+        assertArrayEquals(HConstants.EMPTY_END_ROW, expectedUpper);
+      }
+    }
+
+    @Test
+    public void testExpectedUpperRegionKeyWithKeyOffset() {
+      Scan scan = newLocalIndexScan();
+      ScanUtil.setLocalIndexAttributes(scan, 1, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 'e', 0, 1 }, new byte[] { 'e', 0, 2 });
+      assertArrayEquals(Bytes.toBytes("i"), scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertArrayEquals(new byte[] { 0, 1 }, scan.getAttribute(SCAN_START_ROW_SUFFIX));
+      assertArrayEquals(new byte[] { 0, 2 }, scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+    }
+
+    @Test
+    public void testPhoenixTTLRewrapKeepsExpectedUpperRegionKey() throws Exception {
+      PName name = mock(PName.class);
+      when(name.getString()).thenReturn("T");
+      PName schemaName = mock(PName.class);
+      when(schemaName.getString()).thenReturn("S");
+      PTable table = mock(PTable.class);
+      when(table.isStrictTTL()).thenReturn(true);
+      when(table.getType()).thenReturn(PTableType.TABLE);
+      when(table.getSchemaName()).thenReturn(schemaName);
+      when(table.getTableName()).thenReturn(name);
+      when(table.getName()).thenReturn(name);
+      when(table.getColumnFamilies()).thenReturn(Collections.emptyList());
+      when(table.getEncodingScheme())
+        .thenReturn(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS);
+      when(table.getCompiledTTLExpression(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(new LiteralTTLExpression(100));
+      ConnectionQueryServices services = mock(ConnectionQueryServices.class);
+      when(services.getConfiguration()).thenReturn(new Configuration(false));
+      PhoenixConnection connection = mock(PhoenixConnection.class);
+      when(connection.getQueryServices()).thenReturn(services);
+
+      Scan scan = newLocalIndexScan();
+      ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 0, 1 }, new byte[] { 0, 2 });
+      ScanUtil.setScanAttributesForPhoenixTTL(scan, table, connection);
+      assertArrayEquals(Bytes.toBytes("i"), scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+    }
+
+    @Test
+    public void testSetLocalIndexAttributesNoopForNonLocalIndexScan() {
+      Scan scan = new Scan();
+      ScanUtil.setLocalIndexAttributes(scan, 0, Bytes.toBytes("e"), Bytes.toBytes("i"),
+        new byte[] { 0, 1 }, new byte[] { 0, 2 });
+      assertNull(scan.getAttribute(EXPECTED_UPPER_REGION_KEY));
+      assertNull(scan.getAttribute(SCAN_ACTUAL_START_ROW));
     }
   }
 
