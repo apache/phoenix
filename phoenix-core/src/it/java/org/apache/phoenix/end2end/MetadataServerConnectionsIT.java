@@ -52,7 +52,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -80,7 +79,6 @@ public class MetadataServerConnectionsIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
     props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props));
