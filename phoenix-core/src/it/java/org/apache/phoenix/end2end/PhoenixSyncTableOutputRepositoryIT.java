@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.mapreduce;
+package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.*;
 
@@ -33,8 +33,10 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Status;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRepository;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -44,14 +46,16 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
- * Unit tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableCheckpointOutputRow. Tests
- * checkpoint table operations and data model functionality.
+ * Integration tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableCheckpointOutputRow.
+ * Tests checkpoint table operations and data model functionality.
  */
-public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
+@Category(NeedsOwnMiniClusterTest.class)
+public class PhoenixSyncTableOutputRepositoryIT extends BaseTest {
 
   private Connection connection;
   private PhoenixSyncTableOutputRepository repository;
