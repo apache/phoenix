@@ -339,12 +339,34 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001'"
         + " AND entity_id > '000000000000002' AND entity_id < '000000000000008'"
         + " AND (organization_id,entity_id) <= ('000000000000001','000000000000005')",
-      text(
-        "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
-          + " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']",
-        "    INDEX ATABLE", "    REGIONS PLANNED <N>"),
-      scanAttrs("RANGE SCAN ", "ATABLE",
-        " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']"));
+      // V1 marginally cheaper, V2 correct: V1 fully consumes the RVC <= bound
+      // into the [..,'003'] - [..,'005'] scan range and emits no server filter. V2
+      // produces the identical scan range but defensively retains the lex-expanded RVC
+      // predicate as a server filter. The residual is redundant (the scan range
+      // already enforces it) and only costs one extra byte-comparison per scanned row.
+      // Same row count read from HBase; V2 adds a small per-row CPU overhead. Neither
+      // is "wrong" — V2's residual-pruning is just more conservative on RVC compounds.
+      isV2Optimizer()
+        ? text(
+          "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+            + " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']",
+          "    INDEX ATABLE", "    REGIONS PLANNED <N>",
+          "    SERVER FILTER BY (ORGANIZATION_ID < TO_CHAR('000000000000001') OR"
+            + " (ORGANIZATION_ID = TO_CHAR('000000000000001') AND"
+            + " ENTITY_ID <= TO_CHAR('000000000000005')))")
+        : text(
+          "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+            + " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']",
+          "    INDEX ATABLE", "    REGIONS PLANNED <N>"),
+      isV2Optimizer()
+        ? scanAttrs("RANGE SCAN ", "ATABLE",
+          " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']").put(
+            "serverWhereFilter",
+            "SERVER FILTER BY (ORGANIZATION_ID < TO_CHAR('000000000000001') OR"
+              + " (ORGANIZATION_ID = TO_CHAR('000000000000001') AND"
+              + " ENTITY_ID <= TO_CHAR('000000000000005')))")
+        : scanAttrs("RANGE SCAN ", "ATABLE",
+          " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']"));
   }
 
   @Test
@@ -353,14 +375,41 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT a_string,b_string FROM atable WHERE organization_id > '000000000000001'"
         + " AND entity_id > '000000000000002' AND entity_id < '000000000000008'"
         + " AND (organization_id,entity_id) >= ('000000000000003','000000000000005')",
-      text(
-        "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
-          + " ['000000000000003000000000000005'] - [*]",
-        "    INDEX ATABLE", "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"),
-      scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000003000000000000005'] - [*]").put(
-        "serverWhereFilter",
-        "SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"));
+      // Equivalent scan, divergent explain string: V1 fuses `org_id > '001'`
+      // and `(org_id, entity_id) >= ('003','005')` into a single RANGE SCAN with a
+      // 30-byte compound start row '003·005' plus a server filter for the entity-id
+      // range. V2 emits a SKIP SCAN ON 2 RANGES whose two slots correspond directly
+      // to the lex-expanded RVC: `(org=003, entity in [005,008))` and
+      // `(org > 003, entity in (002,008))`. V2's two slots together cover the same
+      // rows V1's single range does after the server filter applies — V2 reads the
+      // same or fewer rows. Different explain shape, equivalent runtime work.
+      // The per-column slots do not keep the pairing of org and entity, so V2 marks the scan
+      // approximated. The server filter then keeps the whole WHERE clause.
+      isV2Optimizer()
+        ? text(
+          "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 2 RANGES OVER ATABLE ['000000000000003'] - [*]",
+          "    INDEX ATABLE", "    REGIONS PLANNED <N>",
+          "    SERVER FILTER BY (ORGANIZATION_ID > '000000000000001' AND"
+            + " ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008' AND"
+            + " (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
+            + " (ORGANIZATION_ID = TO_CHAR('000000000000003') AND"
+            + " ENTITY_ID >= TO_CHAR('000000000000005'))))")
+        : text(
+          "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+            + " ['000000000000003000000000000005'] - [*]",
+          "    INDEX ATABLE", "    REGIONS PLANNED <N>",
+          "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"),
+      isV2Optimizer()
+        ? scanAttrs("SKIP SCAN ON 2 RANGES ", "ATABLE", " ['000000000000003'] - [*]").put(
+          "serverWhereFilter",
+          "SERVER FILTER BY (ORGANIZATION_ID > '000000000000001' AND"
+            + " ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008' AND"
+            + " (ORGANIZATION_ID > TO_CHAR('000000000000003') OR"
+            + " (ORGANIZATION_ID = TO_CHAR('000000000000003') AND"
+            + " ENTITY_ID >= TO_CHAR('000000000000005'))))")
+        : scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000003000000000000005'] - [*]").put(
+          "serverWhereFilter",
+          "SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"));
   }
 
   @Test
@@ -368,12 +417,27 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("rangeScanNullNotNull",
       "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL"
         + " AND \"DATE\" >= to_date('2013-01-01')",
-      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [null,not null]", "    INDEX PTSDB",
-        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
-        "    SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"),
-      scanAttrs("RANGE SCAN ", "PTSDB", " [null,not null]")
-        .put("serverFirstKeyOnlyProjection", true)
-        .put("serverWhereFilter", "SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"));
+      // V2 strictly better: V1 narrows to (inst=null, host=not-null) and
+      // leaves DATE >= ... in a server filter that has to evaluate against every row
+      // returned by the scan. V2 promotes the DATE lower bound into the scan range
+      // itself as a SKIP SCAN with all 3 PK dims compound-encoded — HBase rejects
+      // out-of-range rows pre-filter so they never reach the server filter.
+      isV2Optimizer()
+        ? text(
+          "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 1 RANGE OVER PTSDB"
+            + " [null,not null,'2013-01-01'] - [null,not null,*]",
+          "    INDEX PTSDB", "    REGIONS PLANNED <N>",
+          "    SERVER PROJECTION FILTER BY FIRST KEY ONLY")
+        : text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [null,not null]", "    INDEX PTSDB",
+          "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+          "    SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"),
+      isV2Optimizer()
+        ? scanAttrs("SKIP SCAN ON 1 RANGE ", "PTSDB",
+          " [null,not null,'2013-01-01'] - [null,not null,*]").put("serverFirstKeyOnlyProjection",
+            true)
+        : scanAttrs("RANGE SCAN ", "PTSDB", " [null,not null]")
+          .put("serverFirstKeyOnlyProjection", true)
+          .put("serverWhereFilter", "SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"));
   }
 
   @Test
@@ -381,12 +445,32 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("rangeScanNotNull",
       "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL"
         + " AND \"DATE\" >= to_date('2013-01-01')",
-      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [not null]", "    INDEX PTSDB",
-        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
-        "    SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
-      scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverFirstKeyOnlyProjection", true)
-        .put("serverWhereFilter",
-          "SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));
+      // V1 stops at the IS NOT NULL on `inst` and filters the [not null] range on the
+      // server. V2 uses a 3-dim SKIP SCAN [not null, null, '2013-01-01'] - [not null, null,
+      // *], so HBase skips most rows that fail the trailing dims. The `host` IS NULL slot
+      // comes after a range slot, and the skip-scan filter does not keep null apart there.
+      // Thus V2 also keeps the full WHERE clause as a server filter.
+      isV2Optimizer()
+        ? text(
+          "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 1 RANGE OVER PTSDB"
+            + " [not null,null,'2013-01-01'] - [not null,null,*]",
+          "    INDEX PTSDB", "    REGIONS PLANNED <N>",
+          "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+          "    SERVER FILTER BY (INST IS NOT NULL AND HOST IS NULL"
+            + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')")
+        : text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [not null]", "    INDEX PTSDB",
+          "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+          "    SERVER FILTER BY (HOST IS NULL"
+            + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
+      isV2Optimizer()
+        ? scanAttrs("SKIP SCAN ON 1 RANGE ", "PTSDB",
+          " [not null,null,'2013-01-01'] - [not null,null,*]")
+            .put("serverFirstKeyOnlyProjection", true).put("serverWhereFilter",
+              "SERVER FILTER BY (INST IS NOT NULL AND HOST IS NULL"
+                + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')")
+        : scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverFirstKeyOnlyProjection", true)
+          .put("serverWhereFilter",
+            "SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));
   }
 
   @Test
@@ -408,12 +492,18 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testSkipScanRegexpRanges() throws Exception {
     verifyQuery("skipScanRegexpRanges",
       "SELECT inst,host FROM PTSDB WHERE REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1', 'na2','na3')",
-      text("CLIENT PARALLEL <N>-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']",
+      // Equivalent scan, divergent explain string: V1 promotes the regexp_substr
+      // IN-list into SKIP SCAN ON 3 RANGES [na1, na2)·[na2, na3)·[na3, na4). V2
+      // coalesces these three contiguous sub-ranges into a single RANGE SCAN
+      // [na1, na4) over byte-identical bytes; both run the same residual filter.
+      text(
+        "CLIENT PARALLEL <N>-WAY " + (isV2Optimizer() ? "RANGE SCAN" : "SKIP SCAN ON 3 RANGES")
+          + " OVER PTSDB ['na1'] - ['na4']",
         "    INDEX PTSDB", "    REGIONS PLANNED <N>",
         "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
         "    SERVER FILTER BY REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"),
-      scanAttrs("SKIP SCAN ON 3 RANGES ", "PTSDB", " ['na1'] - ['na4']")
-        .put("serverFirstKeyOnlyProjection", true).put("serverWhereFilter",
+      scanAttrs(isV2Optimizer() ? "RANGE SCAN " : "SKIP SCAN ON 3 RANGES ", "PTSDB",
+        " ['na1'] - ['na4']").put("serverFirstKeyOnlyProjection", true).put("serverWhereFilter",
           "SERVER FILTER BY REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"));
   }
 
