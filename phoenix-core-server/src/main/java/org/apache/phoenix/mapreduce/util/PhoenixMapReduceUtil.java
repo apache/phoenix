@@ -35,7 +35,6 @@ import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
-import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
@@ -83,8 +82,6 @@ public final class PhoenixMapReduceUtil {
       Chronology.class,
       // antlr-runtime
       CharStream.class,
-      // htrace-core
-      SpanReceiver.class,
       // hbase-metrics-api (Gauge)
       Gauge.class,
       // hbase-metrics (MetricRegistriesImpl)
