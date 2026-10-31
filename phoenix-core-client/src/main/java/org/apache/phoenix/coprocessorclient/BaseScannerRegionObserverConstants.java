@@ -193,6 +193,41 @@ public class BaseScannerRegionObserverConstants {
   public static final int DEFAULT_PHOENIX_MAX_LOOKBACK_AGE = 0;
 
   /**
+   * Scan attribute that requests a full rebuild of the HNSW segments of the scanned region. The
+   * value is an 8-byte time and then the name of the HNSW index. The time is Long.MAX_VALUE for a
+   * first request, or the time that an earlier request of the same build returned. The scan returns
+   * one cell whose value is the 8-byte server time at which the region accepted the request.
+   */
+  public static final String HNSW_BUILD = "_HnswBuild";
+  /**
+   * Scan attribute that requests the purge of the segment cells of a dropped HNSW index from the
+   * scanned region. The value is the index name without view prefixes. The region refuses the
+   * request while the name is an HNSW index of its table. The scan returns one cell whose value is
+   * the 8-byte number of cells that the region deleted.
+   */
+  public static final String HNSW_PURGE = "_HnswPurge";
+  /**
+   * Scan attribute that asks if the scanned region is in overflow for an HNSW index. The value is
+   * the index name without view prefixes. The request opens no index manager in the region. The
+   * scan returns one cell whose value is the 8-byte number 1 if the region is in overflow, and 0
+   * otherwise.
+   */
+  public static final String HNSW_OVERFLOW = "_HnswOverflow";
+  /**
+   * Scan attribute that asks for the time of the base segment that the scanned region searches for
+   * an HNSW index. The value is the name of the HNSW index. The request opens the index manager of
+   * the region if it is not open. The scan returns one cell whose value is the 8-byte time of the
+   * base that covers the range of the region exactly, or Long.MIN_VALUE if the region searches no
+   * such base. A region reports the base of a full rebuild only after it cuts over to the base. It
+   * writes the base to V# before that, so a listing of V# can show a base that it does not search.
+   */
+  public static final String HNSW_BASE_TIME = "_HnswBaseTime";
+  /** Scan attribute that names the HNSW index of a nearest neighbor search. */
+  public static final String HNSW_SEARCH_INDEX = "_HnswSearchIndex";
+  /** Scan attribute that holds the candidate count, the target row count and the query vector. */
+  public static final String HNSW_SEARCH_QUERY = "_HnswSearchQuery";
+
+  /**
    * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom
    * annotations are used to augment log lines emitted by Phoenix. See
    * https://issues.apache.org/jira/browse/PHOENIX-1198.

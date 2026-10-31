@@ -82,6 +82,9 @@ if [ "$RUNNING_IN_DOCKER" = "1" ]; then
   if [ -n "$JAVA_HOME" ]; then
     echo "Using JAVA_HOME from host."
     export PATH="$JAVA_HOME/bin:$PATH"
+  elif [ "$PROJECT" = "phoenix" ]; then
+    # Phoenix requires Java 11 or later, so use the OpenJDK 17 package.
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64/
   else
     # JAVA_HOME for the openjdk package.
     export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/

@@ -12,7 +12,8 @@ For usage, pass '-h':
                default to dry run mode, which checks and does local builds, but does not upload anything.
   -t [tag]     tag for the phoenix-rm docker image to use for building (default: "latest").
   -j [path]    path to local JDK installation to use building. By default the script will
-               use openjdk8 installed in the docker image.
+               use openjdk17 installed in the docker image for phoenix, and openjdk8 for
+               other projects.
   -p [project] project to build, such as 'phoenix' or 'phoenix-connectors'; defaults to phoenix env var
   -r [repo]    git repo to use for remote git operations. defaults to ASF gitbox for project.
   -s [step]    runs a single step of the process; valid steps are: tag|publish-dist|publish-release.

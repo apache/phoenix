@@ -515,4 +515,29 @@ public class DelegateTable implements PTable {
   public Long getVectorBuildingGeneration() {
     return delegate.getVectorBuildingGeneration();
   }
+
+  @Override
+  public Integer getVectorHnswM() {
+    return delegate.getVectorHnswM();
+  }
+
+  @Override
+  public Integer getVectorHnswEfConstruction() {
+    return delegate.getVectorHnswEfConstruction();
+  }
+
+  @Override
+  public Double getVectorHnswAlpha() {
+    return delegate.getVectorHnswAlpha();
+  }
+
+  @Override
+  public String getVectorQuantizationType() {
+    return delegate.getVectorQuantizationType();
+  }
+
+  @Override
+  public Integer getVectorPqSegments() {
+    return delegate.getVectorPqSegments();
+  }
 }

@@ -144,7 +144,7 @@ if [[ "true" = "${RUN_IN_DOCKER}" ]]; then
   YETUS_ARGS=(
     --docker \
     --dockermemlimit=20g \
-    "--multijdkdirs=/usr/lib/jvm/java-8-openjdk-amd64" \
+    "--multijdkdirs=/usr/lib/jvm/java-11-openjdk-amd64" \
     "${YETUS_ARGS[@]}" \
   )
   if [ -r "${COMPONENT}/dev/docker/Dockerfile.yetus" ]; then

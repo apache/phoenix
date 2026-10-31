@@ -82,9 +82,14 @@
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
     <hbase-2.6.runtime.version>2.6.5-hadoop3</hbase-2.6.runtime.version>
 
-    <compileSource>1.8</compileSource>
+    <!-- Phoenix requires Java 11 or later. The enforce-java-version rule of the Apache parent POM
+    rejects an older build JDK. The release flag compiles against the Java 11 API, so the bytecode
+    cannot use a newer JDK API. -->
+    <compileSource>11</compileSource>
+    <minimalJavaBuildVersion>${compileSource}</minimalJavaBuildVersion>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
     <maven.compiler.target>${compileSource}</maven.compiler.target>
+    <maven.compiler.release>${compileSource}</maven.compiler.release>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -134,6 +139,7 @@
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <json-path.version>2.9.0</json-path.version>
     <bson.version>5.3.1</bson.version>
+    <jvector.version>4.0.1</jvector.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
@@ -191,9 +197,6 @@
       -Dio.netty.eventLoopThreads=3 -Duser.timezone="America/Los_Angeles"
       -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/
       "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</phoenix-surefire.argLine>
-    <phoenix-surefire.jdk8.tuning.flags>-XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC
-        -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled
-        -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</phoenix-surefire.jdk8.tuning.flags>
     <phoenix-surefire.jdk11.flags>-Dorg.apache.hbase.thirdparty.io.netty.tryReflectionSetAccessible=true
       --add-modules jdk.unsupported
       --add-opens java.base/java.nio=ALL-UNNAMED
@@ -205,15 +208,18 @@
       --add-opens java.base/java.util.concurrent=ALL-UNNAMED
       --add-exports java.base/jdk.internal.misc=ALL-UNNAMED
       --add-exports java.security.jgss/sun.security.krb5=ALL-UNNAMED</phoenix-surefire.jdk11.flags>
-    <phoenix-surefire.jdk11.tuning.flags>${phoenix-surefire.jdk8.tuning.flags}</phoenix-surefire.jdk11.tuning.flags>
+    <phoenix-surefire.jdk11.tuning.flags>-XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC
+        -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled
+        -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</phoenix-surefire.jdk11.tuning.flags>
     <phoenix-surefire.jdk17.flags>--add-opens java.base/jdk.internal.util.random=ALL-UNNAMED</phoenix-surefire.jdk17.flags>
     <phoenix-surefire.jdk17.tuning.flags/>
     <!-- This is needed for SystemExitRule to work correctly. This may mask related issues in
     dependencies -->
     <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow</phoenix-surefire.jdk21.flags>
 
-    <!-- Surefire argLine defaults for Linux + JDK8 -->
-    <argLine>${phoenix-surefire.argLine} ${phoenix-surefire.jdk8.tuning.flags} @{jacocoArgLine}</argLine>
+    <!-- This is the default Surefire argLine. The build-with-jdk* profiles add the flags that each
+    JVM version needs. -->
+    <argLine>${phoenix-surefire.argLine} @{jacocoArgLine}</argLine>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -1397,6 +1403,11 @@
         <artifactId>bson</artifactId>
         <version>${bson.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.github.jbellis</groupId>
+        <artifactId>jvector</artifactId>
+        <version>${jvector.version}</version>
+      </dependency>
 
       <!-- Other test dependencies -->
       <dependency>
@@ -1668,6 +1679,7 @@
                    jdk18on:1.79, but the 2.6.0 profile's HBase pulls jdk15on:1.68 transitively. The
                    analyzer then flags jdk18on as unused for that profile. -->
               <ignoredUnusedDeclaredDependency>org.bouncycastle:bcprov-jdk18on</ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>io.github.jbellis:jvector</ignoredUnusedDeclaredDependency>
             </ignoredUnusedDeclaredDependencies>
             <ignoredUsedUndeclaredDependencies>
               <ignoredUsedUndeclaredDependency>
@@ -2476,12 +2488,6 @@
       <properties>
         <protoc.arch>osx-x86_64</protoc.arch>
       </properties>
-    </profile>
-    <profile>
-      <id>build-with-jdk8</id>
-      <activation>
-        <jdk>[1.8,11)</jdk>
-      </activation>
     </profile>
     <!-- See PHOENIX-6997 when building with with Java9+ -->
     <profile>
