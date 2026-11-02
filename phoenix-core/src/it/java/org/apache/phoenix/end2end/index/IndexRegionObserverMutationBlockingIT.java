@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end.index;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -49,8 +48,8 @@ import org.junit.rules.TestName;
 
 /**
  * Integration test for mutation blocking functionality in IndexRegionObserver.preBatchMutate()
- * Tests that MutationBlockedIOException is properly thrown when cluster role-based mutation
- * blocking is enabled and CRRs are in ACTIVE_TO_STANDBY state.
+ * Tests that MutationBlockedIOException is properly thrown when CRRs are in ACTIVE_TO_STANDBY
+ * state.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
@@ -67,10 +66,6 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
-    CLUSTERS.getHBaseCluster2().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

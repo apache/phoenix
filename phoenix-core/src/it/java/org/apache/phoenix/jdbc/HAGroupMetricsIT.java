@@ -27,7 +27,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_MUTATI
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_FAILURES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_STALE_CRR_DETECTED_COUNT;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -71,10 +70,6 @@ public class HAGroupMetricsIT extends HABaseIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
-    CLUSTERS.getHBaseCluster2().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

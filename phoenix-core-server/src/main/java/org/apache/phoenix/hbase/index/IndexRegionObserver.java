@@ -912,7 +912,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /*
-   * Also checks for mutationBlockEnabled if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled.
+   * When sync replication is enabled, also rejects HA client batches whose HA group is stale on the
+   * client or whose local cluster role is ACTIVE_TO_STANDBY.
    */
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
@@ -980,9 +981,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
 
         if (StringUtils.isNotBlank(name) && haGroupStoreManager.isMutationBlocked(name)) {
-          throw new MutationBlockedIOException(
-            "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
-              + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          throw new MutationBlockedIOException(String.format(
+            "Blocking mutation because the cluster role for HA group %s is ACTIVE_TO_STANDBY",
+            name));
         }
       }
 

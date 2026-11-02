@@ -35,7 +35,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.query.BaseTest.extractThreadPoolExecutorFromCQSI;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_CORE_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_ENABLED;
@@ -126,10 +125,6 @@ public class ParallelPhoenixConnectionIT extends HABaseIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
-    CLUSTERS.getHBaseCluster2().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     DriverManager.registerDriver(new PhoenixTestDriver());

@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -47,10 +46,6 @@ public class BypassedMutationBlockMetricsIT extends HABaseIT {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
-    CLUSTERS.getHBaseCluster2().getConfiguration()
-      .setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

@@ -22,7 +22,6 @@ import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
@@ -35,14 +34,11 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
@@ -76,9 +72,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    conf1.setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     conf1.setLong(ZK_SESSION_TIMEOUT, 30 * 1000);
-    conf2.setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     conf2.setLong(ZK_SESSION_TIMEOUT, 30 * 1000);
     // Both mini-clusters run in one JVM. Keep background initialization from claiming shared
     // replay and log-group singletons before each test binds them to the intended cluster.
@@ -334,38 +328,6 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     // Should still be able to get the record after global invalidation
     recordOpt = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
     assertTrue(recordOpt.isPresent());
-  }
-
-  @Test
-  public void testMutationBlockDisabled() throws Exception {
-    String haGroupName = testName.getMethodName();
-
-    // Create configuration with mutation block disabled
-    Configuration conf = new Configuration();
-    conf.set(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "false");
-    conf.set(HConstants.ZOOKEEPER_QUORUM, getLocalZkUrl(conf1));
-
-    // Set the HAGroupStoreManager instance to null via reflection to force recreation
-    Field field = HAGroupStoreManager.class.getDeclaredField("instances");
-    field.setAccessible(true);
-    field.set(null, new ConcurrentHashMap<>());
-
-    HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
-    // Create HAGroupStoreRecord with ACTIVE_IN_SYNC_TO_STANDBY role
-    HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord("1.0", haGroupName,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
-      HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, CLUSTERS.getMasterAddress1(),
-      CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
-
-    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, -1);
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-
-    // Mutations should not be blocked even with ACTIVE_TO_STANDBY role
-    assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
-
-    // Set the HAGroupStoreManager instance back to null via reflection to force recreation for
-    // other tests
-    field.set(null, new ConcurrentHashMap<>());
   }
 
   @Test

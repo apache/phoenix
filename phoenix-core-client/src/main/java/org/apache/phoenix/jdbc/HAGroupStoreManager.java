@@ -23,9 +23,7 @@ import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_NOT
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY;
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 
 import java.io.IOException;
@@ -61,7 +59,6 @@ public class HAGroupStoreManager {
   // Can revert this but will fail for tests with one cluster down
   private static Map<String, HAGroupStoreManager> instances = new ConcurrentHashMap<>();
 
-  private final boolean mutationBlockEnabled;
   private final boolean checkStaleCRRForEveryMutation;
   private final String zkUrl;
   private final Configuration conf;
@@ -182,8 +179,6 @@ public class HAGroupStoreManager {
   }
 
   private HAGroupStoreManager(final Configuration conf, final String zkUrl) {
-    this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
-      DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
     this.checkStaleCRRForEveryMutation = conf.getBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED,
       DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED);
     this.zkUrl = zkUrl;
@@ -202,40 +197,37 @@ public class HAGroupStoreManager {
   }
 
   /**
-   * Checks whether mutation is blocked or not for a specific HA group.
+   * Checks whether mutation is blocked or not for a specific HA group. Mutations are blocked when
+   * the local cluster role is ACTIVE_TO_STANDBY.
    * @param haGroupName name of the HA group, null for default HA group which tracks all HA groups.
    * @return true if mutation is blocked, false otherwise.
    * @throws IOException when HAGroupStoreClient is not healthy.
    */
   public boolean isMutationBlocked(String haGroupName) throws IOException {
-    if (mutationBlockEnabled) {
-      HAGroupStoreClient haGroupStoreClient =
-        getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-      HAGroupStoreRecord recordWithMetadata = haGroupStoreClient.getHAGroupStoreRecord();
-      return recordWithMetadata != null && recordWithMetadata.getClusterRole() != null
-        && recordWithMetadata.getClusterRole().isMutationBlocked();
-    }
-    return false;
+    HAGroupStoreClient haGroupStoreClient =
+      getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
+    HAGroupStoreRecord recordWithMetadata = haGroupStoreClient.getHAGroupStoreRecord();
+    return recordWithMetadata != null && recordWithMetadata.getClusterRole() != null
+      && recordWithMetadata.getClusterRole().isMutationBlocked();
   }
 
   /**
-   * Returns whether the {@link HAGroupStoreClient} backing {@code haGroupName} has a live
-   * ZooKeeper connection. See {@link HAGroupStoreClient#isHealthy()} for the full state
-   * transitions (including the brief post-reconnect window where the flag returns
-   * {@code true} before Curator has resynchronized the local cache).
+   * Returns whether the {@link HAGroupStoreClient} backing {@code haGroupName} has a live ZooKeeper
+   * connection. See {@link HAGroupStoreClient#isHealthy()} for the full state transitions
+   * (including the brief post-reconnect window where the flag returns {@code true} before Curator
+   * has resynchronized the local cache).
    * <p>
    * Consumers that subscribe via {@link #subscribeToTargetState} and cache the resulting
-   * {@link HAGroupStateListener} events in memory should consult this before trusting the
-   * cached snapshot: a {@code false} return means the client stopped receiving events and
-   * the cached view may be stale until Curator reconnects. This gives listener-based
-   * consumers a first-class alternative to matching on the {@code "HAGroupStoreClient is
+   * {@link HAGroupStateListener} events in memory should consult this before trusting the cached
+   * snapshot: a {@code false} return means the client stopped receiving events and the cached view
+   * may be stale until Curator reconnects. This gives listener-based consumers a first-class
+   * alternative to matching on the {@code "HAGroupStoreClient is
    * not healthy"} {@link IOException} thrown by the state-reading methods.
-   *
    * @param haGroupName name of the HA group
-   * @return {@code true} if the underlying ZK connection is live; {@code false} if it has
-   *         been lost or suspended
-   * @throws IOException when the {@link HAGroupStoreClient} for {@code haGroupName} cannot
-   *         be resolved or set up
+   * @return {@code true} if the underlying ZK connection is live; {@code false} if it has been lost
+   *         or suspended
+   * @throws IOException when the {@link HAGroupStoreClient} for {@code haGroupName} cannot be
+   *                     resolved or set up
    */
   public boolean isHealthy(String haGroupName) throws IOException {
     HAGroupStoreClient haGroupStoreClient =
