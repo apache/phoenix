@@ -184,6 +184,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
           scan.setFilter(new PagingFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
         }
       }
+      // The uncovered index scanner owns the row limit. This hook removes the page filter now,
+      // so the scanner does not replace the region scanner that HBase opens.
+      UncoveredGlobalIndexRegionScanner.removePageFilterBeforeScannerOpen(scan);
     }
   }
 

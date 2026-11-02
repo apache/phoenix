@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
@@ -61,6 +63,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.DataTableScanMetrics;
 import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.UnverifiedRowFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -78,6 +81,11 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.FilterProtos;
 
 /**
  * Coprocessor that verifies the scanned rows of a non-transactional global index. If an index row
@@ -105,6 +113,12 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
   private static final String REPAIR_LOGGING_PERCENT_ATTRIB =
     "phoenix.index.repair.logging.percent";
   private static final double DEFAULT_REPAIR_LOGGING_PERCENT = 100;
+  /**
+   * Server-only scan attribute that holds the row limit of the client page filter. The checker sets
+   * this attribute in preScannerOpen and removes any value that the client supplies. Only the
+   * scanner hook of the checker reads this attribute.
+   */
+  private static final String PAGE_SIZE_ATTRIB = "_GlobalIndexCheckerPageSize";
 
   private GlobalIndexCheckerSource metricsSource;
   private CoprocessorEnvironment env;
@@ -156,9 +170,31 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private long pageSizeMs;
     private boolean initialized = false;
     private boolean isScanMetricsEnabled = false;
+    // The paging filter in the filter chain of the current scanner
+    private PagingFilter pagingFilter;
+    private final StreamReadSwitch streamReadSwitch;
+    // Client filters can keep state. For example, a skip scan filter keeps seek hints. A reopened
+    // scanner starts at or after the last row that the current scanner reads. Thus it shares the
+    // filter chain of the current scanner. A stream read scanner can start behind the state of
+    // that chain, so it gets a new chain. The state of a distinct prefix filter applies to the
+    // full scan, so each new chain shares that filter.
+    private FilterProtos.Filter clientFilterProto = null;
+    private DistinctPrefixFilter distinctPrefixFilter = null;
 
+    /**
+     * Creates a scanner for a scan that the checker did not prepare in preScannerOpen. The scanner
+     * gets the row limit from the page filter of the scan, if the scan has one.
+     */
     public GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner,
       GlobalIndexCheckerSource metricsSource) throws IOException {
+      this(env, scan, scanner, metricsSource, Long.MAX_VALUE);
+    }
+
+    /**
+     * Creates a scanner with the row limit that preScannerOpen removed from the scan.
+     */
+    GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner,
+      GlobalIndexCheckerSource metricsSource, long pageSize) throws IOException {
       super(scanner);
       this.env = env;
       this.scan = scan;
@@ -175,20 +211,16 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       maxTimestamp = scan.getTimeRange().getMax();
       byte[] indexTableNameBytes = region.getRegionInfo().getTable().getName();
       this.indexName = Bytes.toString(indexTableNameBytes);
-      byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-      List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
-      indexMaintainer = getIndexMaintainer(maintainers, indexTableNameBytes);
-      if (indexMaintainer == null) {
-        throw new DoNotRetryIOException(
-          "repairIndexRows: IndexMaintainer is not included in scan attributes for "
-            + region.getRegionInfo().getTable().getNameAsString());
-      }
+      indexMaintainer = deserializeIndexMaintainer(region, scan);
+      this.pageSize = pageSize;
       loggingPercent = env.getConfiguration().getDouble(REPAIR_LOGGING_PERCENT_ATTRIB,
         DEFAULT_REPAIR_LOGGING_PERCENT);
       random = new Random(EnvironmentEdgeManager.currentTimeMillis());
       pageSizeMs = getPageSizeMsForRegionScanner(scan);
       isScanMetricsEnabled =
         scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
+      pagingFilter = ScanUtil.getPhoenixPagingFilter(scan);
+      streamReadSwitch = new StreamReadSwitch(scan);
     }
 
     @Override
@@ -201,40 +233,141 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       return scanner.getMaxResultSize();
     }
 
+    /**
+     * Applies the scan changes that preScannerOpen did not apply. The checker usually changes the
+     * scan before HBase opens the region scanner, so this method has no effect. A scanner that
+     * another observer creates directly can receive a scan that the checker did not change. Then
+     * this method changes the scan and replaces the region scanner. HBase does not ship the
+     * replacement scanner, so the stream read switch applies to it.
+     */
     private void init() throws IOException {
+      boolean scanChanged = false;
       PageFilter pageFilter = ScanUtil.removePageFilter(scan);
       if (pageFilter != null) {
         pageSize = pageFilter.getPageSize();
-        scanner.close();
-        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
-      } else {
-        pageSize = Long.MAX_VALUE;
+        scanChanged = true;
       }
-
-      Filter filter = scan.getFilter();
-      Filter delegateFilter = filter;
-      if (filter instanceof PagingFilter) {
-        delegateFilter = ((PagingFilter) filter).getDelegateFilter();
+      if (addUnverifiedRowFilter(scan, indexMaintainer)) {
+        scanChanged = true;
       }
-      if (shouldCreateUnverifiedRowFilter(delegateFilter)) {
-        // we need to ensure that the PagingFilter remains the
-        // topmost (or outermost) filter so wrap the UnverifiedRowFilter
-        // around the original delegate and then set the UnverifiedRowFilter
-        // as the delegate of the PagingFilter
-        UnverifiedRowFilter unverifiedRowFilter =
-          new UnverifiedRowFilter(delegateFilter, emptyCF, emptyCQ);
-        if (filter instanceof PagingFilter) {
-          ((PagingFilter) filter).setDelegateFilter(unverifiedRowFilter);
-        } else {
-          scan.setFilter(unverifiedRowFilter);
-        }
+      if (scanChanged) {
         scanner.close();
-        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
+        scanner = openScanner(scan);
       }
     }
 
-    private boolean shouldCreateUnverifiedRowFilter(Filter delegateFilter) {
-      return delegateFilter != null && !indexMaintainer.isUncovered();
+    /**
+     * Opens a scanner on the index region and records it as a scanner that the checker owns.
+     */
+    private RegionScanner openScanner(Scan newScan) throws IOException {
+      RegionScanner newScanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(newScan);
+      streamReadSwitch.scannerOpened(newScan);
+      return newScanner;
+    }
+
+    /**
+     * Gets the scan for the scanners that the checker opens to continue the index scan. Read repair
+     * writes index rows that are newer than the read point of the original scan. The scan has no
+     * read point, so that each new scanner can see the repaired rows.
+     */
+    private Scan getIndexScan() throws IOException {
+      if (indexScan == null) {
+        indexScan = new Scan(scan);
+        PackagePrivateFieldAccessor.setMvccReadPoint(indexScan, -1);
+      }
+      return indexScan;
+    }
+
+    /**
+     * Gives the scan a new filter chain. A filter object that two scanners share gets state from
+     * both scanners. For example, a skip scan filter can then issue a seek hint behind its previous
+     * hint. The new chain has the same structure as the filter chain of the main scan.
+     */
+    private void setNewFilter(Scan newScan) throws IOException {
+      if (clientFilterProto == null) {
+        Filter clientFilter = getDelegateFilter(scan);
+        if (clientFilter instanceof UnverifiedRowFilter) {
+          clientFilter = ((UnverifiedRowFilter) clientFilter).getDelegateFilter();
+        }
+        if (clientFilter != null) {
+          // The serialized form holds only the filter configuration, not the scan position. Thus
+          // one serialized form serves all new chains. The stream read switch is rare, so one
+          // parse for each new chain is acceptable.
+          clientFilterProto = ProtobufUtil.toFilter(clientFilter);
+          distinctPrefixFilter = ScanUtil.findDistinctPrefixFilter(clientFilter);
+        }
+      }
+      Filter filter = clientFilterProto == null
+        ? null
+        : shareDistinctPrefixFilter(ProtobufUtil.toFilter(clientFilterProto));
+      if (pagingFilter != null) {
+        filter = new PagingFilter(filter, ScanUtil.getPageSizeMsForFilter(scan));
+      }
+      newScan.setFilter(filter);
+      addUnverifiedRowFilter(newScan, indexMaintainer);
+    }
+
+    /**
+     * Puts the distinct prefix filter of the main scan into a copy of the client filter. This
+     * filter keeps the row key prefix of the last row that the scan returns. All scanners of the
+     * scan must share this state. Otherwise the scan can return two rows with the same prefix.
+     */
+    private Filter shareDistinctPrefixFilter(Filter filter) {
+      if (distinctPrefixFilter == null) {
+        return filter;
+      }
+      if (filter instanceof DistinctPrefixFilter) {
+        return distinctPrefixFilter;
+      }
+      if (filter instanceof FilterList) {
+        FilterList filterList = (FilterList) filter;
+        List<Filter> filters = new ArrayList<>(filterList.getFilters().size());
+        for (Filter child : filterList.getFilters()) {
+          filters.add(shareDistinctPrefixFilter(child));
+        }
+        return new FilterList(filterList.getOperator(), filters);
+      }
+      return filter;
+    }
+
+    /**
+     * Opens a new scanner for the index scan at the given row. The caller closes the current
+     * scanner first. The new scanner uses the read type of the scan, so it starts with pread again.
+     * It can switch to stream read on its own, like each new scanner in HBase.
+     */
+    private void reopenScanner(byte[] startRow, boolean inclusive) throws IOException {
+      Scan newScan = getIndexScan();
+      newScan.withStartRow(startRow, inclusive);
+      scanner = openScanner(newScan);
+    }
+
+    /**
+     * Replaces the current scanner with a stream read scanner. The new scanner starts after the
+     * last row that the current scanner returned. If the current scanner returned no row, the new
+     * scanner starts at the start row of the current scan. The new scanner uses the same read
+     * point. Thus it returns the rows that the current scanner did not return yet.
+     */
+    private void switchToStreamRead() throws IOException {
+      // The current scanner can read past the restart row, so the current filter chain can be
+      // past rows that the new scanner reads again. Thus the new scanner gets a new chain. The
+      // index scan keeps this chain, so a later reopened scanner shares it.
+      setNewFilter(getIndexScan());
+      pagingFilter = ScanUtil.getPhoenixPagingFilter(getIndexScan());
+      Scan streamScan =
+        streamReadSwitch.createStreamScan(getIndexScan(), scanner.getMvccReadPoint());
+      // The old scanner stays open until the new scanner holds the read point. Thus a compaction
+      // cannot remove cell versions that the new scanner must read.
+      RegionScanner oldScanner = scanner;
+      try {
+        scanner = openScanner(streamScan);
+      } finally {
+        oldScanner.close();
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Index scan on region {} switches to stream read at row {}, inclusive {}",
+          region.getRegionInfo().getRegionNameAsString(),
+          Bytes.toStringBinary(streamScan.getStartRow()), streamScan.includeStartRow());
+      }
     }
 
     public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
@@ -245,6 +378,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           initialized = true;
         }
         do {
+          if (streamReadSwitch.isPending()) {
+            switchToStreamRead();
+          }
+          boolean wasReturnImmediately = PhoenixScannerContext.isReturnImmediately(scannerContext);
           if (raw) {
             hasMore = (scannerContext == null)
               ? scanner.nextRaw(result)
@@ -254,6 +391,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
               ? scanner.next(result)
               : scanner.next(result, scannerContext);
           }
+          streamReadSwitch.resultReturned(result);
+          streamReadSwitch.checkPreadLimit(wasReturnImmediately, scannerContext, pageSizeMs,
+            pagingFilter);
           if (result.isEmpty()) {
             return hasMore;
           }
@@ -339,7 +479,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
       if (buildIndexScanForDataTable == null) {
         buildIndexScanForDataTable = new Scan();
-        indexScan = new Scan(scan);
+        getIndexScan();
         singleRowIndexScan = new Scan(scan);
         // Scanners to be opened on index table using indexScan and singleRowIndexScan do
         // require scanning the latest/newer version of cells i.e. new rows updated on the
@@ -350,7 +490,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         // mvcc value of -1 will ensure that new scanners opened on index table using
         // indexScan and singleRowIndexScan are able to read the latest snapshot of the
         // index updates.
-        PackagePrivateFieldAccessor.setMvccReadPoint(indexScan, -1);
         PackagePrivateFieldAccessor.setMvccReadPoint(singleRowIndexScan, -1);
         byte[] dataTableName =
           scan.getAttribute(BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME);
@@ -433,8 +572,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           region.delete(indexMaintainer.createDelete(indexRowKey, ts, false));
         }
         // Open a new scanner starting from the row after the current row
-        indexScan.withStartRow(indexRowKey, false);
-        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        reopenScanner(indexRowKey, false);
         hasMore = true;
         // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row
         // is
@@ -444,9 +582,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       }
       // code == RebuildReturnCode.INDEX_ROW_EXISTS.getValue()
       // Open a new scanner starting from the current row
-      indexScan.withStartRow(indexRowKey, true);
-      scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+      reopenScanner(indexRowKey, true);
       hasMore = scanner.next(row);
+      streamReadSwitch.resultReturned(row);
       if (row.isEmpty()) {
         // This means the index row has been deleted before opening the new scanner.
         return;
@@ -469,8 +607,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         // The row is "unverified". Rewind the scanner and let the row be scanned again
         // so that it can be repaired
         scanner.close();
-        indexScan.withStartRow(CellUtil.cloneRow(row.get(0)), true);
-        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        reopenScanner(CellUtil.cloneRow(row.get(0)), true);
         hasMore = true;
         row.clear();
         return;
@@ -655,6 +792,203 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     }
   }
 
+  /**
+   * Decides when an index scan switches from pread to stream read on a scanner that the checker
+   * opens itself.
+   * <p>
+   * HBase starts a scan with pread. HBase switches a long scan to stream read only when it ships
+   * the scanner, and it ships only the scanner that the RPC layer opens. The checker opens its own
+   * scanners for read repair, and HBase never ships them. When such a scanner reads more than the
+   * pread limit, HBase sets returnImmediately on the scanner context at each cell. Then each RPC
+   * returns after one row.
+   * <p>
+   * This class finds that state and asks for one new scanner with stream read. The decision applies
+   * to each scanner separately. A scanner that the checker opens for a later repair starts with
+   * pread again, as each new scanner does in HBase. Thus many repairs close together stay on pread,
+   * and each long scan after a repair costs at most one more reopen. The class also keeps the
+   * position for the reopen, so that the new scanner does not return a row again or skip a row.
+   */
+  @VisibleForTesting
+  static class StreamReadSwitch {
+    private final boolean enabled;
+    // The scan of the current scanner. It is null while the RPC layer owns the current scanner.
+    private Scan currentScan;
+    // The last row that the current scanner returned. A dummy row also marks a scan position.
+    private byte[] lastRowKey;
+    // The current scanner passed the pread limit and must change to stream read.
+    private boolean pending;
+    // The current scanner uses stream read.
+    private boolean switched;
+
+    StreamReadSwitch(Scan scan) {
+      // HBase switches only a scan with the default read type. Pread and stream scans keep theirs.
+      enabled = scan.getReadType() == Scan.ReadType.DEFAULT;
+    }
+
+    /**
+     * Records a scanner that the checker opens with the given scan. The state of the previous
+     * scanner does not apply to the new scanner.
+     */
+    void scannerOpened(Scan scan) {
+      currentScan = scan;
+      lastRowKey = null;
+      pending = false;
+      switched = scan.getReadType() == Scan.ReadType.STREAM;
+    }
+
+    /**
+     * Records the position of the current scanner after a call to next.
+     */
+    void resultReturned(List<Cell> result) {
+      if (currentScan != null && !result.isEmpty()) {
+        lastRowKey = CellUtil.cloneRow(result.get(0));
+      }
+    }
+
+    /**
+     * Checks if the current scanner passed the pread limit during the last call to next. HBase
+     * gives this signal only through returnImmediately on the scanner context. The flag stays set
+     * until the RPC ends, so the check looks only for a change during the call. Server paging also
+     * sets the flag when a page times out or the paging filter stops. These cases are not a pread
+     * signal. The signal comes again in the next RPC, because the store scanner sets the flag at
+     * each cell until it switches.
+     */
+    void checkPreadLimit(boolean wasReturnImmediately, ScannerContext scannerContext,
+      long pageSizeMs, PagingFilter pagingFilter) {
+      if (!enabled || currentScan == null || switched || pending || wasReturnImmediately) {
+        return;
+      }
+      if (
+        !PhoenixScannerContext.isReturnImmediately(scannerContext)
+          || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+          || (pagingFilter != null && pagingFilter.isStopped())
+      ) {
+        return;
+      }
+      pending = true;
+    }
+
+    boolean isPending() {
+      return pending;
+    }
+
+    boolean isSwitched() {
+      return switched;
+    }
+
+    /**
+     * Creates the scan for the stream read scanner that replaces the current scanner. The new scan
+     * is a copy, so the given index scan keeps its read type for later repairs. The new scan uses
+     * the read point of the current scanner.
+     */
+    Scan createStreamScan(Scan indexScan, long mvccReadPoint) throws IOException {
+      Scan streamScan = new Scan(indexScan);
+      streamScan.setReadType(Scan.ReadType.STREAM);
+      streamScan.withStartRow(getRestartRow(), isRestartRowInclusive());
+      PackagePrivateFieldAccessor.setMvccReadPoint(streamScan, mvccReadPoint);
+      return streamScan;
+    }
+
+    /**
+     * Gets the start row for the stream read scanner. This is the last row that the current scanner
+     * returned. If the current scanner did not return a row, this is the start row of its scan.
+     */
+    byte[] getRestartRow() {
+      return lastRowKey != null ? lastRowKey : currentScan.getStartRow();
+    }
+
+    /**
+     * Returns true if the stream read scanner includes its start row. The checker already used the
+     * last returned row, so only the unread start row of the current scan is included. The last
+     * returned row is a whole row, because the row filter of the paging filter stops HBase from
+     * returning part of a row.
+     */
+    boolean isRestartRowInclusive() {
+      return lastRowKey == null && currentScan.includeStartRow();
+    }
+  }
+
+  /**
+   * Gets the index maintainer for the index table of the region from the scan attributes.
+   */
+  private static IndexMaintainer deserializeIndexMaintainer(Region region, Scan scan)
+    throws IOException {
+    byte[] indexTableNameBytes = region.getRegionInfo().getTable().getName();
+    byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+    List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
+    IndexMaintainer indexMaintainer = getIndexMaintainer(maintainers, indexTableNameBytes);
+    if (indexMaintainer == null) {
+      throw new DoNotRetryIOException("IndexMaintainer is not included in scan attributes for "
+        + region.getRegionInfo().getTable().getNameAsString());
+    }
+    return indexMaintainer;
+  }
+
+  private static Filter getDelegateFilter(Scan scan) {
+    Filter filter = scan.getFilter();
+    return filter instanceof PagingFilter ? ((PagingFilter) filter).getDelegateFilter() : filter;
+  }
+
+  private static boolean needsUnverifiedRowFilter(Scan scan) {
+    Filter delegateFilter = getDelegateFilter(scan);
+    return delegateFilter != null && !(delegateFilter instanceof UnverifiedRowFilter);
+  }
+
+  /**
+   * Wraps the scan filter of a covered index scan in an UnverifiedRowFilter. The scan filter can
+   * reject an unverified row that read repair makes valid, so the wrapper passes unverified rows to
+   * the checker. The PagingFilter stays the outermost filter. Returns true if the scan changes.
+   */
+  private static boolean addUnverifiedRowFilter(Scan scan, IndexMaintainer indexMaintainer) {
+    if (!needsUnverifiedRowFilter(scan) || indexMaintainer.isUncovered()) {
+      return false;
+    }
+    Filter filter = scan.getFilter();
+    UnverifiedRowFilter unverifiedRowFilter = new UnverifiedRowFilter(getDelegateFilter(scan),
+      scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME),
+      scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME));
+    if (filter instanceof PagingFilter) {
+      ((PagingFilter) filter).setDelegateFilter(unverifiedRowFilter);
+    } else {
+      scan.setFilter(unverifiedRowFilter);
+    }
+    return true;
+  }
+
+  /**
+   * Changes the index scan before HBase opens the region scanner. The checker removes the client
+   * page filter, because rows that fail verification must not count against the row limit. The
+   * checker also wraps the scan filter for read repair. HBase then opens one region scanner for the
+   * scan and the checker does not replace it. HBase ships only the scanner that it opens. Only a
+   * shipped scanner can switch from pread to stream read on a long scan.
+   */
+  @Override
+  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+    throws IOException {
+    boolean isCheckedScan = isRegionObserverFor(scan);
+    if (isCheckedScan) {
+      // The checker removes the page filter before the superclass hook runs. Otherwise the
+      // superclass hook gives the limit of a covered index scan in uncovered mode to the
+      // uncovered index scanner. The scan observer then clears that limit.
+      PageFilter pageFilter = ScanUtil.removePageFilter(scan);
+      scan.setAttribute(PAGE_SIZE_ATTRIB,
+        pageFilter == null ? null : Bytes.toBytes(pageFilter.getPageSize()));
+    }
+    super.preScannerOpen(c, scan);
+    if (!isCheckedScan) {
+      return;
+    }
+    Region region = c.getEnvironment().getRegion();
+    try {
+      if (needsUnverifiedRowFilter(scan)) {
+        addUnverifiedRowFilter(scan, deserializeIndexMaintainer(region, scan));
+      }
+    } catch (Throwable t) {
+      // An exception other than IOException from a coprocessor hook can abort the region server.
+      ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+    }
+  }
+
   @Override
   protected boolean isRegionObserverFor(Scan scan) {
     return scan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN) != null;
@@ -663,7 +997,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
   @Override
   protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
     final Scan scan, final RegionScanner s) throws IOException, SQLException {
-    return new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
+    // HBase calls preScannerOpen before this method, so the attribute holds a server value.
+    byte[] pageSizeBytes = scan.getAttribute(PAGE_SIZE_ATTRIB);
+    long pageSize = pageSizeBytes == null ? Long.MAX_VALUE : Bytes.toLong(pageSizeBytes);
+    return new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource, pageSize);
   }
 
   @Override

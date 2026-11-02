@@ -30,6 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.regionserver.CompactSplit;
@@ -39,6 +40,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -295,6 +297,126 @@ public class HBaseScanMetricsIT extends BaseTest {
       rs = stmt.executeQuery(sql);
       assertOnReadsFromBlockcache(indexName, getQueryReadMetrics(rs));
     }
+  }
+
+  @Test
+  public void testQueryOnUncoveredIndexWithParallelDataScans() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    int numRegions = 16;
+    int rowsPerRegion = 25;
+    int numRows = numRegions * rowsPerRegion;
+    StringBuilder splitPoints = new StringBuilder();
+    for (int i = 1; i < numRegions; i++) {
+      splitPoints.append(i > 1 ? ", " : "").append(i * rowsPerRegion);
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // Each data table region gets its own data scan task. The tasks report metrics in parallel.
+      createTable(conn, tableName, "SPLIT ON (" + splitPoints + ")");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (v1)");
+      conn.commit();
+      for (int i = 0; i < numRows; i++) {
+        stmt.execute(
+          "UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (" + i + ", 'a', 'v1', 'v2')");
+      }
+      conn.commit();
+      String hint = "/*+ INDEX(" + tableName + " " + indexName + ") */ ";
+      // An uncovered index query always reads the data rows to verify the index rows. The base
+      // query reads the same index rows and data rows as the main query, but not the V2 values.
+      String baseSql = "SELECT " + hint + "k1, k2, v1 FROM " + tableName + " WHERE v1 = 'v1'";
+      String sql = "SELECT " + hint + "k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'v1'";
+      assertPlan(conn, baseSql).table(indexName);
+      assertPlan(conn, sql).table(indexName);
+      // This key range selects the rows of one data table region. Thus one data scan task reads
+      // the V2 values of that region.
+      String oneRegionFilter = " AND k1 < " + rowsPerRegion;
+      assertPlan(conn, sql + oneRegionFilter).table(indexName);
+      long oneTaskV2Bytes =
+        getBytesReadFromMemstore(stmt.executeQuery(sql + oneRegionFilter), indexName, rowsPerRegion)
+          - getBytesReadFromMemstore(stmt.executeQuery(baseSql + oneRegionFilter), indexName,
+            rowsPerRegion);
+      Assert.assertTrue("V2 bytes of one task: " + oneTaskV2Bytes, oneTaskV2Bytes > 0);
+      long baseBytes = getBytesReadFromMemstore(stmt.executeQuery(baseSql), indexName, numRows);
+      for (int i = 0; i < 10; i++) {
+        ResultSet rs = stmt.executeQuery(sql);
+        int rowCount = 0;
+        while (rs.next()) {
+          Assert.assertEquals("v2", rs.getString("v2"));
+          rowCount++;
+        }
+        Assert.assertEquals(numRows, rowCount);
+        Map<String, Map<MetricType, Long>> readMetrics =
+          PhoenixRuntime.getRequestReadMetricInfo(rs);
+        // The query metrics include only the slowest data scan task. All tasks read the same
+        // number of rows. Thus the V2 bytes match one task and not the sum of all tasks.
+        long v2Bytes =
+          readMetrics.get(indexName).get(MetricType.BYTES_READ_FROM_MEMSTORE) - baseBytes;
+        Assert.assertTrue("V2 bytes: " + v2Bytes + ", V2 bytes of one task: " + oneTaskV2Bytes,
+          v2Bytes > 0 && v2Bytes < 2 * oneTaskV2Bytes);
+      }
+    }
+  }
+
+  @Test
+  public void testQueryOnUncoveredIndexWithManyDataScanBatches() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    int numRows = 200;
+    int rowsPerBatch = 10;
+    String largeValue = StringUtils.repeat('x', 50000);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTable(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (v1)");
+      conn.commit();
+      // The data rows of the first batch are large. Thus the first data scan reads most of the
+      // data table bytes.
+      for (int i = 0; i < numRows; i++) {
+        stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (" + i
+          + ", 'a', 'v1', '" + (i < rowsPerBatch ? largeValue : "v2") + "')");
+      }
+      conn.commit();
+      String sql = "SELECT k1, k2, v1, v2 FROM " + tableName + " WHERE v1 = 'v1'";
+      assertPlan(conn, sql).table(indexName);
+      // The fetch size makes each scan RPC read one batch. The scanner measures the data scan
+      // time from the start of the RPC. Thus the first batch stays the slowest data scan.
+      stmt.setFetchSize(rowsPerBatch);
+      long oneBatchBytes = getUncoveredIndexQueryBytes(stmt, sql, indexName, numRows, numRows);
+      long manyBatchBytes =
+        getUncoveredIndexQueryBytes(stmt, sql, indexName, numRows, rowsPerBatch);
+      // Each batch reports the slowest data scan of that batch only. Thus the reported bytes do
+      // not grow with the number of batches.
+      Assert.assertTrue(
+        "Bytes with one batch: " + oneBatchBytes + ", with many batches: " + manyBatchBytes,
+        manyBatchBytes < 2 * oneBatchBytes);
+    }
+  }
+
+  private long getUncoveredIndexQueryBytes(Statement stmt, String sql, String indexName,
+    int expectedRowCount, long rowsPerBatch) throws Exception {
+    setIndexPageSizeInRows(rowsPerBatch);
+    try {
+      return getBytesReadFromMemstore(stmt.executeQuery(sql), indexName, expectedRowCount);
+    } finally {
+      setIndexPageSizeInRows(QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
+    }
+  }
+
+  private void setIndexPageSizeInRows(long rowsPerBatch) {
+    utility.getHBaseCluster().getRegionServerThreads().forEach(thread -> thread.getRegionServer()
+      .getConfiguration().setLong(QueryServices.INDEX_PAGE_SIZE_IN_ROWS, rowsPerBatch));
+  }
+
+  private long getBytesReadFromMemstore(ResultSet rs, String tableName, int expectedRowCount)
+    throws Exception {
+    int rowCount = 0;
+    while (rs.next()) {
+      rowCount++;
+    }
+    Assert.assertEquals(expectedRowCount, rowCount);
+    Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+    return readMetrics.get(tableName).get(MetricType.BYTES_READ_FROM_MEMSTORE);
   }
 
   @Test
