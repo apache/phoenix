@@ -20,11 +20,12 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
@@ -72,10 +73,12 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   protected byte[][] regionEndKeys;
   protected final Table dataHTable;
   protected final int rowCountPerTask;
-  protected String exceptionMessage;
+  // Parallel data scan tasks can set this field, so it is volatile.
+  protected volatile String exceptionMessage;
   protected final HTableFactory hTableFactory;
   private final boolean isScanMetricsEnabled;
-  private List<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
+  // Parallel data scan tasks add to this queue, so the queue must be thread safe.
+  private Queue<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
   // to set the correct non-deprecated configs when an old one shows up.
@@ -108,7 +111,7 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     isScanMetricsEnabled =
       scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
     if (isScanMetricsEnabled) {
-      dataTableScanMetrics = new ArrayList<>();
+      dataTableScanMetrics = new ConcurrentLinkedQueue<>();
     }
   }
 
@@ -228,6 +231,11 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
     for (int i = 0; i < taskCount; i++) {
       addTasksForScanningDataTableRowsInParallel(tasks, setList.get(i), startTime);
+    }
+    if (isScanMetricsEnabled) {
+      // Each batch reports only the slowest scan of its own tasks. Earlier batches already
+      // reported their metrics.
+      dataTableScanMetrics.clear();
     }
     submitTasks(tasks);
     if (isScanMetricsEnabled) {
