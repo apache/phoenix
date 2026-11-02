@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
@@ -72,14 +74,22 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   public static final String INDEX_ROW_COUNTS_PER_TASK_CONF_KEY =
     "phoenix.index.row.count.per.task";
   public static final int DEFAULT_INDEX_ROW_COUNTS_PER_TASK = 2048;
+  /**
+   * Server-only scan attribute that holds the row limit of the client page filter. The region
+   * observer sets or removes this attribute before HBase opens the region scanner. Thus a value
+   * from the client has no effect on the scans that the region observer opens.
+   */
+  static final String PAGE_SIZE_ATTRIB = "_UncoveredGlobalIndexPageSize";
 
   protected byte[][] regionEndKeys;
   protected final Table dataHTable;
   protected final int rowCountPerTask;
-  protected String exceptionMessage;
+  // Parallel data scan tasks can set this field, so it is volatile.
+  protected volatile String exceptionMessage;
   protected final HTableFactory hTableFactory;
   private final boolean isScanMetricsEnabled;
-  private List<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
+  // Parallel data scan tasks add to this queue, so the queue must be thread safe.
+  private Queue<DataTableScanMetricsWithScanTime> dataTableScanMetrics;
   private final long maxRowCount;
   private long returnedRowCount;
 
@@ -95,10 +105,10 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
     final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
     final long queryLimit, boolean isDistinct) throws IOException {
-    // Index rows can be rejected when joined with the data table. Take the PageFilter limit
-    // here so only verified rows count toward it. Otherwise HBase's PageFilter, or
-    // TTLRegionScanner which takes over the PageFilter lazily on its first next(), would
-    // count rows that are later rejected. This must happen before TTLRegionScanner.init().
+    // The join with the data table can reject index rows. This scanner owns the row limit, so
+    // only verified rows count toward it. Usually the region observer removes the page filter
+    // before HBase opens the region scanner. If a page filter remains, this scanner removes it
+    // and reopens the region scanner before TTLRegionScanner can take the page filter.
     this(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
       viewConstants, ptr, pageSizeMs, queryLimit, isDistinct,
       !indexMaintainer.isCDCIndex() ? ScanUtil.removePageFilter(scan) : null);
@@ -113,8 +123,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     // If superclass initialization fails, the caller still owns the original scanner.
     super(pageFilter == null ? innerScanner : new DelegateRegionScanner(innerScanner), region, scan,
       env, dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-      pageFilter == null ? queryLimit : pageFilter.getPageSize(), isDistinct);
-    maxRowCount = pageFilter == null ? Long.MAX_VALUE : pageFilter.getPageSize();
+      getRowLimit(scan, pageFilter, queryLimit), isDistinct);
+    maxRowCount = getRowLimit(scan, pageFilter, Long.MAX_VALUE);
     RegionScanner reopened = null;
     HTableFactory tableFactory = null;
     Table table = null;
@@ -136,7 +146,7 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
       isScanMetricsEnabled =
         scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
       if (isScanMetricsEnabled) {
-        dataTableScanMetrics = new ArrayList<>();
+        dataTableScanMetrics = new ConcurrentLinkedQueue<>();
       }
       hTableFactory = tableFactory;
       dataHTable = table;
@@ -154,6 +164,36 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
       }
       throw failure;
     }
+  }
+
+  /**
+   * Moves the row limit of the client page filter into a server-only scan attribute. The region
+   * observer calls this method before HBase opens the region scanner. This scanner then owns the
+   * row limit and does not replace the region scanner. HBase ships only the scanner that it opens.
+   * Only a shipped scanner switches from pread to stream read on a long scan.
+   */
+  static void removePageFilterBeforeScannerOpen(Scan scan) {
+    PageFilter pageFilter = ownsRowLimit(scan) ? ScanUtil.removePageFilter(scan) : null;
+    scan.setAttribute(PAGE_SIZE_ATTRIB,
+      pageFilter == null ? null : Bytes.toBytes(pageFilter.getPageSize()));
+  }
+
+  /**
+   * Returns true if this scanner owns the row limit of the scan. These scan attributes select this
+   * scanner class in the region scanner factory. This scanner can reject an index row after the
+   * index scan returns it, so the row limit must apply after the join.
+   */
+  public static boolean ownsRowLimit(Scan scan) {
+    return ScanUtil.isUncoveredGlobalIndex(scan) && !ScanUtil.isLocalIndex(scan)
+      && scan.getAttribute(CDC_DATA_TABLE_DEF) == null;
+  }
+
+  private static long getRowLimit(Scan scan, PageFilter pageFilter, long defaultLimit) {
+    if (pageFilter != null) {
+      return pageFilter.getPageSize();
+    }
+    byte[] pageSizeBytes = scan.getAttribute(PAGE_SIZE_ATTRIB);
+    return pageSizeBytes == null ? defaultLimit : Bytes.toLong(pageSizeBytes);
   }
 
   private static void closeOnFailure(AutoCloseable resource, Throwable failure) {
@@ -317,6 +357,10 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
     for (int i = 0; i < taskCount; i++) {
       addTasksForScanningDataTableRowsInParallel(tasks, setList.get(i), startTime);
+    }
+    if (isScanMetricsEnabled) {
+      // Each batch reports only the slowest data scan among its own tasks.
+      dataTableScanMetrics.clear();
     }
     submitTasks(tasks);
     if (isScanMetricsEnabled) {
