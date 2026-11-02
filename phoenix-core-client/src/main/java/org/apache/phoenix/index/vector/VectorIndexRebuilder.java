@@ -335,8 +335,10 @@ public final class VectorIndexRebuilder {
     }
     // A build over a time range that starts after zero selects each data row that has a cell or
     // delete marker in the range. It looks only at the column families that the index reads. The
-    // build makes the index rows of each such data row again from its full state.
-    build(conn, index, dataTable, start, EnvironmentEdgeManager.currentTimeMillis());
+    // build makes the index rows of each such data row again from its full state. The end of the
+    // range is exclusive. Thus the range ends one millisecond after the current time. This
+    // includes a write that completes in the current millisecond.
+    build(conn, index, dataTable, start, EnvironmentEdgeManager.currentTimeMillis() + 1);
     claim.renew();
   }
 
