@@ -962,7 +962,10 @@ public class MetaDataUtil {
       if (desc == null) {
         return false;
       }
-      return hasLocalIndexColumnFamily(desc);
+      // The hidden family of VECTOR_LOCAL indexes also keeps index data in the data table. Thus a
+      // transform of the table fails, because the segments would stay in the old physical table.
+      return hasLocalIndexColumnFamily(desc)
+        || desc.hasColumnFamily(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
     } catch (TableNotFoundException e) {
       return false;
     }
@@ -1268,6 +1271,11 @@ public class MetaDataUtil {
   public static void deleteFromStatsTable(PhoenixConnection connection, PTable table,
     List<byte[]> physicalTableNames, List<MetaDataProtocol.SharedTableState> sharedTableStates)
     throws SQLException {
+    // A VECTOR_LOCAL index has no statistics, and its physical table is the data table. Thus the
+    // drop of the index deletes no statistics, and the statistics of the data table stay.
+    if (table.getIndexType() == IndexType.VECTOR_LOCAL) {
+      return;
+    }
     boolean isAutoCommit = connection.getAutoCommit();
     try {
       connection.setAutoCommit(true);

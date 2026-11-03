@@ -112,9 +112,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_ALPHA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_EF_CONSTRUCTION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_HNSW_M;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_PQ_SEGMENTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_QUANTIZATION_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -187,12 +192,14 @@ import java.util.UUID;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -214,6 +221,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ServerBuildIndexCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
@@ -230,6 +238,7 @@ import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.HnswRegionRequests;
 import org.apache.phoenix.index.vector.VectorIndexRebuilder;
 import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.index.vector.VectorIndexTrainer;
@@ -237,7 +246,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.TableMetricsManager;
-import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ChangePermsStatement;
@@ -365,9 +373,11 @@ public class MetaDataClient {
     + SCHEMA_VERSION + "," + STREAMING_TOPIC_NAME + "," + INDEX_WHERE + "," + CDC_INCLUDE_TABLE
     + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY + ","
     + VECTOR_INDEX_ALGORITHM + "," + VECTOR_DISTANCE_METRIC + "," + VECTOR_DIMENSION + ","
-    + VECTOR_IVF_LISTS + "," + VECTOR_IVF_SAMPLE_SIZE + "," + VECTOR_CENTROID_GENERATION
+    + VECTOR_IVF_LISTS + "," + VECTOR_IVF_SAMPLE_SIZE + "," + VECTOR_CENTROID_GENERATION + ","
+    + VECTOR_HNSW_M + "," + VECTOR_HNSW_EF_CONSTRUCTION + "," + VECTOR_HNSW_ALPHA + ","
+    + VECTOR_QUANTIZATION_TYPE + "," + VECTOR_PQ_SEGMENTS
     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
     + SYSTEM_CATALOG_TABLE + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1546,7 +1556,7 @@ public class MetaDataClient {
             dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
       alterIndex(indexStatement);
 
-      if (index.isVectorIndex()) {
+      if (index.getVectorIndexType() == VectorIndexType.IVF) {
         // Set the first scorecard counts from the built index. Inline index maintenance then
         // changes them.
         try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
@@ -1613,8 +1623,8 @@ public class MetaDataClient {
    * column.
    * @return MutationState from population of index table from data table
    */
-  public MutationState createIndex(CreateIndexStatement statement, byte[][] splits)
-    throws SQLException {
+  public MutationState createIndex(CreateIndexStatement statement, byte[][] splits,
+    PTable.VectorIndex vectorIndex) throws SQLException {
     IndexKeyConstraint ik = statement.getIndexConstraint();
     TableName indexTableName = statement.getIndexTableName();
 
@@ -1739,8 +1749,14 @@ public class MetaDataClient {
           col.getName().getString(), col.isRowTimestamp()));
       }
 
-      boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
-      if (isVectorIndex) {
+      boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL
+        || statement.getIndexType() == IndexType.VECTOR_LOCAL;
+      // An IVF index adds the centroid ID column to its primary key. An HNSW index has only the
+      // primary key columns of the data table.
+      if (
+        isVectorIndex
+          && VectorIndexType.fromAlgorithm(vectorIndex.getAlgorithm()) == VectorIndexType.IVF
+      ) {
         ColumnName centroidColName =
           ColumnName.caseSensitiveColumnName(MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME);
         allPkColumns
@@ -1749,7 +1765,6 @@ public class MetaDataClient {
           null, null, false, SortOrder.getDefault(), null, false));
       }
       List<ColumnDef> vectorColDefs = isVectorIndex ? new ArrayList<ColumnDef>() : null;
-      Integer vectorDimension = null;
 
       PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
       StatementContext context = new StatementContext(phoenixStatment, resolver);
@@ -1784,7 +1799,12 @@ public class MetaDataClient {
           throw new SQLExceptionInfo.Builder(
             SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
         }
-        unusedPkColumns.remove(expression);
+        // A VECTOR_LOCAL index keeps all primary key columns of the data table in its primary key.
+        // This includes a vector column of the key, which the index also keeps in another column.
+        // IndexMaintainer needs all of these columns.
+        if (statement.getIndexType() != IndexType.VECTOR_LOCAL) {
+          unusedPkColumns.remove(expression);
+        }
 
         // Go through parse node to get string as otherwise we
         // can lose information during compilation
@@ -1835,7 +1855,11 @@ public class MetaDataClient {
             vectorColDefName = ColumnName.caseSensitiveColumnName(defaultFamily,
               IndexUtil.getIndexColumnName(null, name));
           }
-          vectorDimension = expression.getMaxLength();
+          // A VECTOR_LOCAL index keeps its vector column in the hidden family of the data table
+          if (statement.getIndexType() == IndexType.VECTOR_LOCAL) {
+            vectorColDefName = ColumnName.caseSensitiveColumnName(
+              QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY, vectorColDefName.getColumnName());
+          }
           vectorColDefs
             .add(FACTORY.columnDef(vectorColDefName, expression.getDataType().getSqlTypeName(),
               expression.isNullable(), expression.getMaxLength(), expression.getScale(), false,
@@ -1975,12 +1999,16 @@ public class MetaDataClient {
       if (isVectorIndex) {
         // Send the normalized vector index metadata to createTableInternal in tableProps, which
         // writes it to SYSTEM.CATALOG.
-        tableProps.put(VECTOR_INDEX_ALGORITHM, statement.getVectorAlgorithm().toUpperCase());
-        tableProps.put(VECTOR_DISTANCE_METRIC,
-          DistanceMetric.fromString(statement.getVectorMetric()).name());
-        tableProps.put(VECTOR_DIMENSION, vectorDimension);
-        tableProps.put(VECTOR_IVF_LISTS, statement.getVectorLists());
-        tableProps.put(VECTOR_IVF_SAMPLE_SIZE, statement.getVectorSampleSize());
+        tableProps.put(VECTOR_INDEX_ALGORITHM, vectorIndex.getAlgorithm());
+        tableProps.put(VECTOR_DISTANCE_METRIC, vectorIndex.getDistanceMetric());
+        tableProps.put(VECTOR_DIMENSION, vectorIndex.getDimension());
+        tableProps.put(VECTOR_IVF_LISTS, vectorIndex.getIvfLists());
+        tableProps.put(VECTOR_IVF_SAMPLE_SIZE, vectorIndex.getIvfSampleSize());
+        tableProps.put(VECTOR_HNSW_M, vectorIndex.getHnswM());
+        tableProps.put(VECTOR_HNSW_EF_CONSTRUCTION, vectorIndex.getHnswEfConstruction());
+        tableProps.put(VECTOR_HNSW_ALPHA, vectorIndex.getHnswAlpha());
+        tableProps.put(VECTOR_QUANTIZATION_TYPE, vectorIndex.getQuantizationType());
+        tableProps.put(VECTOR_PQ_SEGMENTS, vectorIndex.getPqSegments());
       }
       CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
         statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX,
@@ -1998,7 +2026,7 @@ public class MetaDataClient {
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
 
-    if (table.isVectorIndex()) {
+    if (table.getVectorIndexType() == VectorIndexType.IVF) {
       enqueueScorecardReconciliation(table);
     }
 
@@ -2021,6 +2049,10 @@ public class MetaDataClient {
       return new MutationState(0, 0, connection);
     }
 
+    // An HNSW index stays in BUILDING state until IndexTool builds its segments
+    if (table.getVectorIndexType() == VectorIndexType.HNSW) {
+      return new MutationState(0, 0, connection);
+    }
     // A vector index must have a trained centroid generation before the build. buildVectorIndex
     // trains the first generation and then builds the index rows. If another rebuild holds the
     // claim, or the training does not complete, it does not build the index rows.
@@ -2680,6 +2712,9 @@ public class MetaDataClient {
         ? SchemaUtil.isNamespaceMappingEnabled(tableType, connection.getQueryServices().getProps())
         : parent.isNamespaceMapped();
       boolean isLocalIndex = indexType == IndexType.LOCAL;
+      // A VECTOR_LOCAL index uses the data table as its physical table, as a local index does. It
+      // has no index id.
+      boolean isVectorLocalIndex = indexType == IndexType.VECTOR_LOCAL;
       QualifierEncodingScheme encodingScheme = NON_ENCODED_QUALIFIERS;
       ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
       int baseTableColumnCount = tableType == PTableType.VIEW
@@ -2715,7 +2750,9 @@ public class MetaDataClient {
             .buildException();
         }
         ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
-      } else {
+      } else if (indexType != IndexType.VECTOR_LOCAL) {
+        // An HNSW index does not inherit the TTL of its data table, so it has no TTL. An inherited
+        // conditional TTL can refer to columns that the index does not hold.
         ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
@@ -2751,19 +2788,20 @@ public class MetaDataClient {
         // table instead of only a view? We don't have anywhere to put the link
         // from the table to the index, though.
         if (
-          isLocalIndex
+          isLocalIndex || isVectorLocalIndex
             || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)
         ) {
           PName physicalName = parent.getPhysicalName();
 
           saltBucketNum = parent.getBucketNum();
-          addSaltColumn = (saltBucketNum != null && !isLocalIndex);
+          addSaltColumn = (saltBucketNum != null && !isLocalIndex && !isVectorLocalIndex);
           defaultFamilyName = parent.getDefaultFamilyName() == null
             ? null
             : parent.getDefaultFamilyName().getString();
-          if (isLocalIndex) {
-            defaultFamilyName = parent.getDefaultFamilyName() == null
-              ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY
+          if (isLocalIndex || isVectorLocalIndex) {
+            defaultFamilyName = isVectorLocalIndex ? QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY
+              : parent.getDefaultFamilyName() == null
+                ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY
               : IndexUtil.getLocalIndexColumnFamily(parent.getDefaultFamilyName().getString());
             saltBucketNum = null;
             // Set physical name of local index table
@@ -2865,7 +2903,10 @@ public class MetaDataClient {
       }
 
       // Can't set any of these on views or shared indexes on views
-      if (tableType != PTableType.VIEW && tableType != PTableType.CDC && !allocateIndexId) {
+      if (
+        tableType != PTableType.VIEW && tableType != PTableType.CDC && !allocateIndexId
+          && !isVectorLocalIndex
+      ) {
         saltBucketNum = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
         if (saltBucketNum != null) {
           if (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM) {
@@ -3754,7 +3795,7 @@ public class MetaDataClient {
           defaultCreateState = PIndexState.BUILDING;
         }
       }
-      if (indexType == IndexType.VECTOR_GLOBAL) {
+      if (indexType == IndexType.VECTOR_GLOBAL || isVectorLocalIndex) {
         defaultCreateState = PIndexState.BUILDING;
       }
       PIndexState indexState =
@@ -3772,13 +3813,30 @@ public class MetaDataClient {
       Integer vectorIvfLists = null;
       Integer vectorIvfSampleSize = null;
       Long vectorCentroidGeneration = null;
-      if (indexType == IndexType.VECTOR_GLOBAL) {
+      Integer vectorHnswM = null;
+      Integer vectorHnswEfConstruction = null;
+      Double vectorHnswAlpha = null;
+      String vectorQuantizationType = null;
+      Integer vectorPqSegments = null;
+      if (indexType == IndexType.VECTOR_GLOBAL || isVectorLocalIndex) {
         vectorIndexAlgorithm = (String) tableProps.remove(VECTOR_INDEX_ALGORITHM);
         vectorDistanceMetric = (String) tableProps.remove(VECTOR_DISTANCE_METRIC);
         vectorDimension = (Integer) tableProps.remove(VECTOR_DIMENSION);
         vectorIvfLists = (Integer) tableProps.remove(VECTOR_IVF_LISTS);
         vectorIvfSampleSize = (Integer) tableProps.remove(VECTOR_IVF_SAMPLE_SIZE);
         vectorCentroidGeneration = (Long) tableProps.remove(VECTOR_CENTROID_GENERATION);
+        vectorHnswM = (Integer) tableProps.remove(VECTOR_HNSW_M);
+        vectorHnswEfConstruction = (Integer) tableProps.remove(VECTOR_HNSW_EF_CONSTRUCTION);
+        vectorHnswAlpha = (Double) tableProps.remove(VECTOR_HNSW_ALPHA);
+        vectorQuantizationType = (String) tableProps.remove(VECTOR_QUANTIZATION_TYPE);
+        vectorPqSegments = (Integer) tableProps.remove(VECTOR_PQ_SEGMENTS);
+      }
+      // A VECTOR_LOCAL index shares the HBase table of its data table. Like a local index, it
+      // accepts no HBase table properties. This check comes after the removal of the vector index
+      // keys, which are not HBase table properties.
+      if (isVectorLocalIndex && SchemaUtil.hasHTableDescriptorProps(tableProps)) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
+          .buildException();
       }
       PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
       tableUpsert.setString(1, tenantIdStr);
@@ -3954,6 +4012,36 @@ public class MetaDataClient {
         tableUpsert.setLong(45, vectorCentroidGeneration);
       }
 
+      if (vectorHnswM == null) {
+        tableUpsert.setNull(46, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(46, vectorHnswM);
+      }
+
+      if (vectorHnswEfConstruction == null) {
+        tableUpsert.setNull(47, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(47, vectorHnswEfConstruction);
+      }
+
+      if (vectorHnswAlpha == null) {
+        tableUpsert.setNull(48, Types.DOUBLE);
+      } else {
+        tableUpsert.setDouble(48, vectorHnswAlpha);
+      }
+
+      if (vectorQuantizationType == null) {
+        tableUpsert.setNull(49, Types.VARCHAR);
+      } else {
+        tableUpsert.setString(49, vectorQuantizationType);
+      }
+
+      if (vectorPqSegments == null) {
+        tableUpsert.setNull(50, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(50, vectorPqSegments);
+      }
+
       tableUpsert.execute();
 
       if (asyncCreatedDate != null) {
@@ -4001,7 +4089,9 @@ public class MetaDataClient {
           + allocateIndexId);
       }
       MetaDataMutationResult result = connection.getQueryServices().createTable(tableMetaData,
-        viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes() : null,
+        viewType == ViewType.MAPPED || allocateIndexId || isVectorLocalIndex
+          ? physicalNames.get(0).getBytes()
+          : null,
         tableType, tableProps, familyPropList, splits, isNamespaceMapped, allocateIndexId,
         UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
       MutationCode code = result.getMutationCode();
@@ -4094,7 +4184,10 @@ public class MetaDataClient {
           .setRowKeyMatcher(rowKeyMatcher).setVectorIndexAlgorithm(vectorIndexAlgorithm)
           .setVectorDistanceMetric(vectorDistanceMetric).setVectorDimension(vectorDimension)
           .setVectorIvfLists(vectorIvfLists).setVectorIvfSampleSize(vectorIvfSampleSize)
-          .setVectorCentroidGeneration(vectorCentroidGeneration).build();
+          .setVectorCentroidGeneration(vectorCentroidGeneration).setVectorHnswM(vectorHnswM)
+          .setVectorHnswEfConstruction(vectorHnswEfConstruction).setVectorHnswAlpha(vectorHnswAlpha)
+          .setVectorQuantizationType(vectorQuantizationType).setVectorPqSegments(vectorPqSegments)
+          .build();
         result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
         addTableToCache(result, false);
         return table;
@@ -4344,7 +4437,9 @@ public class MetaDataClient {
   private void truncateGlobalIndexes(PTable pTable, List<String> truncatedObjectList,
     boolean preserveSplits) throws SQLException {
     for (PTable index : pTable.getIndexes()) {
-      if (index.getIndexType() != IndexType.LOCAL) {
+      if (
+        index.getIndexType() != IndexType.LOCAL && index.getIndexType() != IndexType.VECTOR_LOCAL
+      ) {
         if (!preserveSplits && index.getBucketNum() != null) {
           throw new SQLExceptionInfo.Builder(
             SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE)
@@ -4598,6 +4693,7 @@ public class MetaDataClient {
           if (table != null) {
             if (tableType == PTableType.INDEX) {
               deleteVectorCentroids(table);
+              purgeHnswSegments(table);
             } else if (tableType == PTableType.TABLE) {
               for (PTable index : table.getIndexes()) {
                 deleteVectorCentroids(index);
@@ -4734,6 +4830,34 @@ public class MetaDataClient {
     } catch (SQLException e) {
       LOGGER.warn("Could not delete the centroids and tasks of dropped vector index {}; its "
         + "reconciliation task removes what remains.", indexName, e);
+    }
+  }
+
+  /**
+   * Asks each region of the data table to delete the segment cells of a dropped VECTOR_LOCAL index.
+   * The purge is best effort: a failure logs a warning, and the drop does not fail. A region that
+   * misses the purge keeps orphan cells. Queries ignore these cells, and repair removes them.
+   */
+  private void purgeHnswSegments(PTable index) {
+    if (index.getIndexType() != IndexType.VECTOR_LOCAL) {
+      return;
+    }
+    String indexKey = CentroidManager.getCentroidIndexName(index.getName().getString());
+    byte[] physical = index.getPhysicalName().getBytes();
+    try (Table data = connection.getQueryServices().getTable(physical)) {
+      List<RegionInfo> regions = new ArrayList<>();
+      for (HRegionLocation location : connection.getQueryServices().getAllTableRegions(physical)) {
+        regions.add(location.getRegion());
+      }
+      HnswRegionRequests.send(data, regions, BaseScannerRegionObserverConstants.HNSW_PURGE,
+        region -> Bytes.toBytes(indexKey), (region, value, failure) -> {
+          if (failure != null) {
+            LOGGER.warn("Could not purge the segments of dropped HNSW index {} from region {}",
+              indexKey, region.getEncodedName(), failure);
+          }
+        });
+    } catch (SQLException | IOException e) {
+      LOGGER.warn("Could not purge the segments of dropped HNSW index {}", indexKey, e);
     }
   }
 
@@ -5027,6 +5151,19 @@ public class MetaDataClient {
   }
 
   public MutationState addColumn(AddColumnStatement statement) throws SQLException {
+    // A new column must not go into a family whose name contains V#. That name is reserved for the
+    // hidden family of VECTOR_LOCAL indexes.
+    if (statement.getColumnDefs() != null) {
+      for (ColumnDef columnDef : statement.getColumnDefs()) {
+        String familyName = columnDef.getColumnDefName().getFamilyName();
+        if (
+          familyName != null && familyName.contains(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY)
+        ) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY).build()
+            .buildException();
+        }
+      }
+    }
     PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
     return addColumn(table, statement.getColumnDefs(), statement.getProps(),
       statement.ifNotExists(), false, statement.getTable(), statement.getTableType(),
@@ -6048,6 +6185,11 @@ public class MetaDataClient {
             }
             return new MutationState(0, 0, connection);
           }
+          // A DROP COLUMN of an indexed column drops the index. Then the regions purge the
+          // segments of each dropped VECTOR_LOCAL index
+          for (TableRef index : indexesToDrop) {
+            purgeHnswSegments(index.getTable());
+          }
           // If we've done any index metadata updates, don't bother trying to update
           // client-side cache as it would be too painful. Just let it pull it over from
           // the server when needed.
@@ -6276,7 +6418,9 @@ public class MetaDataClient {
           .setSchemaName(schemaName).setTableName(indexName).build().buildException();
       }
 
-      if (newIndexState == PIndexState.REBUILD && table.isVectorIndex()) {
+      if (
+        newIndexState == PIndexState.REBUILD && table.getVectorIndexType() == VectorIndexType.IVF
+      ) {
         return rebuildVectorIndex(table, isAsync);
       }
       if (newIndexState == PIndexState.REBUILD) {
@@ -6326,7 +6470,12 @@ public class MetaDataClient {
         }
 
         if (isTransformNeeded) {
-          if (indexRef.getTable().getViewIndexId() != null) {
+          // Like a local index, a VECTOR_LOCAL index uses the data table as its physical table, so
+          // it cannot move to a new physical table. It has no view index id.
+          if (
+            indexRef.getTable().getViewIndexId() != null
+              || indexRef.getTable().getIndexType() == IndexType.VECTOR_LOCAL
+          ) {
             throw new SQLExceptionInfo.Builder(
               SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX).setSchemaName(schemaName)
                 .setTableName(indexName).build().buildException();
@@ -6347,7 +6496,9 @@ public class MetaDataClient {
             // rowKeyOrderOptimizable flag set
             indexRef.setTable(result.getTable());
             if (newIndexState == PIndexState.BUILDING && isAsync) {
-              if (isRebuildAll) {
+              // IndexTool builds HNSW segments and deletes no index rows first. Thus an HNSW
+              // REBUILD ALL is a plain REBUILD, and it enqueues no rebuild task.
+              if (isRebuildAll && table.getVectorIndexType() != VectorIndexType.HNSW) {
                 List<Task.TaskRecord> tasks = Task.queryTaskTable(connection, null, schemaName,
                   tableName, PTable.TaskType.INDEX_REBUILD, tenantId, indexName);
                 if (tasks == null || tasks.size() == 0) {
@@ -6400,7 +6551,12 @@ public class MetaDataClient {
             }
           }
         }
-        if (newIndexState == PIndexState.BUILDING && !isAsync) {
+        // A synchronous REBUILD does not build HNSW segments on the client. IndexTool builds them,
+        // and the index stays in BUILDING state until then.
+        if (
+          newIndexState == PIndexState.BUILDING && !isAsync
+            && table.getVectorIndexType() != VectorIndexType.HNSW
+        ) {
           PTable index = indexRef.getTable();
           // First delete any existing rows of the index
           if (IndexUtil.isGlobalIndex(index) && index.getViewIndexId() == null) {

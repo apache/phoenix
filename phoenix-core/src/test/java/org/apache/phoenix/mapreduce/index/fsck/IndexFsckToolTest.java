@@ -48,6 +48,7 @@ import org.apache.phoenix.coprocessor.IndexToolVerificationResult.PhaseResult;
 import org.apache.phoenix.mapreduce.index.IndexTool.IndexVerifyType;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.mapreduce.index.fsck.RowKeyFormatter.KeyFormat;
+import org.apache.phoenix.mapreduce.index.fsck.hnsw.HnswIndexFsckProvider;
 import org.apache.phoenix.mapreduce.index.fsck.ivf.IvfIndexFsckProvider;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -104,6 +105,17 @@ public class IndexFsckToolTest {
     IndexFsckProvider provider = IndexFsckProviders.forIndex(ivfIndex);
     assertNotNull(provider);
     assertTrue(provider instanceof IvfIndexFsckProvider);
+  }
+
+  @Test
+  public void testProviderDispatchHnswVector() throws Exception {
+    PTable hnswIndex =
+      new PTableImpl.Builder().setType(PTableType.INDEX).setIndexType(IndexType.VECTOR_LOCAL)
+        .setVectorIndexAlgorithm("hnsw").setName(PNameFactory.newName("IDX_HNSW")).build();
+
+    IndexFsckProvider provider = IndexFsckProviders.forIndex(hnswIndex);
+    assertTrue(provider instanceof HnswIndexFsckProvider);
+    assertFalse(provider instanceof IvfIndexFsckProvider);
   }
 
   @Test

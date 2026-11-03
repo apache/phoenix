@@ -27,10 +27,12 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -567,6 +569,30 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
   }
 
   /**
+   * Adds the cells of a top N row to the results in KeyValue order. The client finds a column of a
+   * row with a binary search, which needs that order. A row that the scanner reads into an encoded
+   * qualifier list keeps its cells in qualifier order. That is KeyValue order for the cells of the
+   * one column family of the table, but not for a cell that the server adds in a reserved qualifier
+   * of another family, such as the cell of the data columns that a server merge adds to an index
+   * row. That cell sorts before the column cells by its qualifier, and after them by its family.
+   */
+  @VisibleForTesting
+  static void addCellsInKeyValueOrder(Tuple tuple, List<Cell> results) {
+    Cell[] cells = new Cell[tuple.size()];
+    boolean sorted = true;
+    for (int i = 0; i < cells.length; i++) {
+      cells[i] = tuple.getValue(i);
+      if (sorted && i > 0 && CellComparator.getInstance().compare(cells[i - 1], cells[i]) > 0) {
+        sorted = false;
+      }
+    }
+    if (!sorted) {
+      Arrays.sort(cells, CellComparator.getInstance());
+    }
+    Collections.addAll(results, cells);
+  }
+
+  /**
    * Return region scanner that does TopN. We only need to call startRegionOperation and
    * closeRegionOperation when getting the first Tuple (which forces running through the entire
    * region) since after this everything is held in memory
@@ -627,9 +653,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (isDummy(tuple)) {
             ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
           } else {
-            for (int i = 0; i < tuple.size(); i++) {
-              results.add(tuple.getValue(i));
-            }
+            addCellsInKeyValueOrder(tuple, results);
           }
           RegionScannerResultIterator delegate =
             (RegionScannerResultIterator) (iterator.getDelegate());
