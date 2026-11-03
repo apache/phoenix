@@ -41,6 +41,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.job.ThreadGroupSafeThreadFactory;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -197,8 +198,9 @@ public class PhoenixHAExecutorServiceProvider {
       handler = new ThreadPoolExecutor.CallerRunsPolicy();
     }
     ThreadPoolExecutor pool = new PhoenixHAThreadPoolExecutor(maxPoolSize, maxPoolSize,
-      KEEP_ALIVE_TIME_SECONDS, TimeUnit.SECONDS, queue, new ThreadFactoryBuilder().setDaemon(true)
-        .setNameFormat(threadPoolNamePrefix + "-%d").build(),
+      KEEP_ALIVE_TIME_SECONDS, TimeUnit.SECONDS, queue,
+      new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadPoolNamePrefix + "-%d")
+        .setThreadFactory(new ThreadGroupSafeThreadFactory()).build(),
       handler, metrics);
     pool.allowCoreThreadTimeOut(true);
     return pool;
