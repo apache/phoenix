@@ -338,6 +338,55 @@ public class VectorColumnParseTest {
     }
   }
 
+  /**
+   * Every order of the options and ASYNC parses with and without a trailing SPLIT ON list. The
+   * vector options leave the property map in each form.
+   */
+  @Test
+  public void testParseVectorIndexSplitOnWithEveryOptionOrder() throws Exception {
+    String opts = "algorithm='IVF', metric='L2', lists=8, sample_size=100";
+    String[] tails = { "WITH (" + opts + ")", "WITH (" + opts + ") ASYNC", "(" + opts + ")",
+      "(" + opts + ") ASYNC", opts, opts + " ASYNC", "WITH " + opts, "WITH " + opts + " ASYNC",
+      "ASYNC", "ASYNC WITH (" + opts + ")", "ASYNC (" + opts + ")", "ASYNC " + opts,
+      "ASYNC WITH " + opts, "" };
+    for (String tail : tails) {
+      boolean async = tail.contains("ASYNC");
+      boolean hasOptions = tail.contains("lists");
+      for (String split : new String[] { "", " SPLIT ON (4)", " SPLIT ON (2, 4, 6)" }) {
+        String ddl = ("CREATE VECTOR INDEX idx ON t (v) " + tail + split).trim();
+        CreateIndexStatement stmt = (CreateIndexStatement) new SQLParser(ddl).parseStatement();
+        assertEquals(ddl, PTable.IndexType.VECTOR_GLOBAL, stmt.getIndexType());
+        assertEquals(ddl, async, stmt.isAsync());
+        assertEquals(ddl, hasOptions ? Integer.valueOf(8) : null, stmt.getVectorLists());
+        assertEquals(ddl, hasOptions ? Integer.valueOf(100) : null, stmt.getVectorSampleSize());
+        assertTrue(ddl, stmt.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY).isEmpty());
+        List<ParseNode> splits = stmt.getSplitNodes();
+        int expected = split.isEmpty() ? 0 : split.split(",").length;
+        assertEquals(ddl, expected, splits.size());
+        if (expected > 0) {
+          assertEquals(ddl, 4, ((LiteralParseNode) splits.get(expected / 2)).getValue());
+        }
+      }
+    }
+  }
+
+  /** SPLIT ON comes after the options and ASYNC. Any other place is a parse error. */
+  @Test
+  public void testParseVectorIndexSplitOnPlacement() throws Exception {
+    String opts = "WITH (algorithm='IVF', metric='L2', lists=8, sample_size=100)";
+    String[] invalid = { "CREATE VECTOR INDEX idx ON t (v) SPLIT ON (4) " + opts,
+      "CREATE VECTOR INDEX idx ON t (v) " + opts + " SPLIT ON (4) ASYNC",
+      "CREATE VECTOR INDEX idx ON t (v) " + opts + " SPLIT ON 4",
+      "CREATE VECTOR INDEX idx ON t (v) " + opts + " SPLIT ON ()" };
+    for (String ddl : invalid) {
+      try {
+        new SQLParser(ddl).parseStatement();
+        fail("Expected a parse error for " + ddl);
+      } catch (SQLException expected) {
+      }
+    }
+  }
+
   @Test
   public void testNonVectorIndexAccessorValues() throws Exception {
     String ddl = "CREATE INDEX idx ON t (v)";

@@ -172,6 +172,12 @@ public class CreateIndexStatement extends SingleTableStatement {
     return indexTableName;
   }
 
+  /**
+   * Returns the SPLIT ON values. For a vector index, each value is a centroid ID of the first
+   * generation. SPLIT ON covers only the ID range of that generation. A rebuilt generation gets the
+   * IDs after the IDs of the generation that it replaces. If no split is above the first range, the
+   * rows of each rebuilt generation go into the last region.
+   */
   public List<ParseNode> getSplitNodes() {
     return splitNodes;
   }

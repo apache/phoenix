@@ -41,7 +41,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -56,6 +59,7 @@ import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -448,6 +452,120 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
         }
         assertEquals("Probe=" + probe + " must achieve 100% recall on well-separated clusters",
           oracleTop5, actualIds);
+      }
+    }
+  }
+
+  /**
+   * SPLIT ON (4) on an index with eight lists makes two index regions at the boundary between list
+   * 3 and list 4. A query on the split index gives the same top-k as an unsplit index on the same
+   * rows. A probe plans only the regions that hold its posting lists.
+   */
+  @Test
+  public void testSplitOnPreSplitsIndexAtListBoundary() throws Exception {
+    int lists = 8;
+    List<float[]> centroids = new ArrayList<>();
+    for (int k = 0; k < lists; k++) {
+      centroids.add(new float[] { k * 50.0f, 0.0f, 0.0f, 0.0f });
+    }
+    String splitTable = generateUniqueName();
+    String splitIndex = generateUniqueName();
+    String plainTable = generateUniqueName();
+    String plainIndex = generateUniqueName();
+    String options =
+      " WITH (algorithm = 'IVF', metric = 'L2', lists = " + lists + ", sample_size = 100)";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        for (String table : new String[] { splitTable, plainTable }) {
+          stmt.execute(
+            "CREATE TABLE " + table + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4))");
+        }
+        stmt.execute("CREATE VECTOR INDEX " + splitIndex + " ON " + splitTable + " (V)" + options
+          + " SPLIT ON (4)");
+        stmt.execute("CREATE VECTOR INDEX " + plainIndex + " ON " + plainTable + " (V)" + options);
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, splitTable, splitIndex, centroids);
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, plainTable, plainIndex, centroids);
+
+      Random rng = new Random(17);
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      for (int k = 0; k < lists; k++) {
+        for (int i = 0; i < 10; i++) {
+          rows.put(String.format("C%d_%02d", k, i),
+            new float[] { k * 50.0f + (float) rng.nextGaussian(), (float) rng.nextGaussian(),
+              (float) rng.nextGaussian(), (float) rng.nextGaussian() });
+        }
+      }
+      for (String table : new String[] { splitTable, plainTable }) {
+        try (PreparedStatement ps =
+          conn.prepareStatement("UPSERT INTO " + table + " (ID, V) VALUES (?, ?)")) {
+          for (Map.Entry<String, float[]> row : rows.entrySet()) {
+            float[] v = row.getValue();
+            ps.setString(1, row.getKey());
+            ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+            ps.executeUpdate();
+          }
+        }
+        conn.commit();
+      }
+
+      // The split index has two regions. Lists 0 to 3 are in the first region, and lists 4 to 7
+      // are in the second region.
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable index = pconn.getTableNoCache(splitIndex);
+      TableName physical = TableName.valueOf(index.getPhysicalName().getBytes());
+      byte[] boundary;
+      try (Admin admin = pconn.getQueryServices().getAdmin()) {
+        List<RegionInfo> regions = admin.getRegions(physical);
+        assertEquals(2, regions.size());
+        boundary = regions.get(0).getStartKey().length > 0
+          ? regions.get(0).getStartKey()
+          : regions.get(1).getStartKey();
+        assertArrayEquals(PInteger.INSTANCE.toBytes(4), Arrays.copyOf(boundary, Bytes.SIZEOF_INT));
+        assertEquals(1,
+          admin
+            .getRegions(
+              TableName.valueOf(pconn.getTableNoCache(plainIndex).getPhysicalName().getBytes()))
+            .size());
+      }
+      List<byte[]> rowKeys = VectorIndexTestUtil.getHBaseRowKeys(pconn, index);
+      assertEquals(rows.size(), rowKeys.size());
+      Set<Integer> seen = new HashSet<>();
+      for (byte[] rk : rowKeys) {
+        int cid = VectorIndexTestUtil.extractCentroidId(rk);
+        seen.add(cid);
+        assertEquals("centroid " + cid, cid < 4, Bytes.compareTo(rk, boundary) < 0);
+      }
+      assertEquals(lists, seen.size());
+
+      // Each query vector is near one list, or between list 3 and list 4.
+      float[][] queries = { { 50.2f, 0.1f, -0.1f, 0.05f }, { 300.1f, -0.2f, 0.1f, 0.0f },
+        { 175.0f, 0.3f, 0.0f, -0.1f } };
+      for (float[] query : queries) {
+        Float[] q = new Float[] { query[0], query[1], query[2], query[3] };
+        for (int probe : new int[] { 1, 2, lists }) {
+          String hint = "SELECT /*+ VECTOR_PROBE_COUNT(" + probe + ") */ ID FROM ";
+          String order = " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+          String label = Arrays.toString(query) + " probe=" + probe;
+          List<String> fromSplit = ids(conn, hint + splitTable + order, q);
+          assertEquals(label, ids(conn, hint + plainTable + order, q), fromSplit);
+          if (probe == lists) {
+            assertEquals(label, VectorIndexTestUtil.bruteForceTopK(rows, query, "L2", 5),
+              fromSplit);
+          }
+
+          QueryPlan plan = plan(conn, hint + splitTable + order, q);
+          VectorIndexScanPlan vectorPlan = VectorIndexTestUtil.vectorPlan(plan);
+          boolean below = false;
+          boolean above = false;
+          for (int cid : vectorPlan.getProbeCentroids()) {
+            below |= cid < 4;
+            above |= cid >= 4;
+          }
+          int expectedRegions = (below ? 1 : 0) + (above ? 1 : 0);
+          assertEquals(label, Integer.valueOf(expectedRegions),
+            plan.getExplainPlan().getPlanStepsAsAttributes().getRegionsPlanned());
+        }
       }
     }
   }

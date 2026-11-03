@@ -666,7 +666,8 @@ create_index_node returns [CreateIndexStatement ret]
     ;
 
 // Parse CREATE VECTOR INDEX. VECTOR is not a reserved word. The rule matches it as a NAME token,
-// so other statements can use VECTOR as an identifier.
+// so other statements can use VECTOR as an identifier. The optional SPLIT ON list follows the
+// options and ASYNC. Its values are centroid IDs of the first generation.
 create_vector_index_node returns [CreateIndexStatement ret]
     :   CREATE vec=NAME {"VECTOR".equalsIgnoreCase($vec.text)}? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
         (LPAREN ik=ik_constraint RPAREN)
@@ -674,8 +675,9 @@ create_vector_index_node returns [CreateIndexStatement ret]
         ( (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties) (async=ASYNC)?)
         | (async=ASYNC (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties))?)
         )?
+        (SPLIT ON v=value_expression_list)?
         {
-            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, null, p, ex!=null,
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null,
                     IndexType.VECTOR_GLOBAL, async != null, getBindCount(), new HashMap<String,
                     UDFParseNode>(udfParseNodes), null);
         }

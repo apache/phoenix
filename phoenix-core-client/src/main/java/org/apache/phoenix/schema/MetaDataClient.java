@@ -1598,6 +1598,30 @@ public class MetaDataClient {
   }
 
   /**
+   * Rejects SPLIT ON for a vector index whose row key does not start with the centroid ID. A salt
+   * byte or a tenant ID comes before the centroid ID in such a row key. A centroid ID alone then
+   * cannot mark a region boundary. Explicit split points also replace the split points of the salt
+   * buckets. Views need no check here because the compiler rejects every vector index on a view.
+   */
+  private static void verifyVectorIndexSplits(PTable dataTable, Map<String, Object> tableProps)
+    throws SQLException {
+    Integer saltBuckets = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
+    boolean salted = saltBuckets == null ? dataTable.getBucketNum() != null : saltBuckets > 0;
+    if (salted) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("SPLIT ON is not supported for a salted vector index. Set SALT_BUCKETS=0 "
+          + "to create the index without salt. Without SALT_BUCKETS, the index inherits the salt "
+          + "of the data table")
+        .build().buildException();
+    }
+    if (dataTable.isMultiTenant()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("SPLIT ON is not supported for a vector index on a multi-tenant table").build()
+        .buildException();
+    }
+  }
+
+  /**
    * Create an index table by morphing the CreateIndexStatement into a CreateTableStatement and
    * calling MetaDataClient.createTable. In doing so, we perform the following translations: 1)
    * Change the type of any columns being indexed to types that support null if the column is
@@ -1740,6 +1764,9 @@ public class MetaDataClient {
       }
 
       boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
+      if (isVectorIndex && splits != null && splits.length > 0) {
+        verifyVectorIndexSplits(dataTable, tableProps);
+      }
       if (isVectorIndex) {
         ColumnName centroidColName =
           ColumnName.caseSensitiveColumnName(MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME);
