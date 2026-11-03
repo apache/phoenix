@@ -24,8 +24,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
@@ -62,6 +64,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDateArray;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PNumericType;
 import org.apache.phoenix.schema.types.PTime;
@@ -81,6 +84,10 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class CreateIndexCompiler {
+  // The first generation of a vector index numbers its centroids from 0. A split at a lower ID
+  // makes an empty region.
+  private static final int MIN_VECTOR_SPLIT_CENTROID_ID = 1;
+
   private final PhoenixStatement statement;
   private final Operation operation;
 
@@ -273,6 +280,7 @@ public class CreateIndexCompiler {
       }
     }
     final byte[][] splits = new byte[splitNodes.size()][];
+    Set<Integer> centroidSplits = new HashSet<>();
     for (int i = 0; i < splits.length; i++) {
       ParseNode node = splitNodes.get(i);
       if (!node.isStateless()) {
@@ -280,7 +288,9 @@ public class CreateIndexCompiler {
           .setMessage("Node: " + node).build().buildException();
       }
       LiteralExpression expression = (LiteralExpression) node.accept(expressionCompiler);
-      splits[i] = expression.getBytes();
+      splits[i] = create.getIndexType() == IndexType.VECTOR_GLOBAL
+        ? getCentroidSplit(expression, centroidSplits)
+        : expression.getBytes();
     }
     final MetaDataClient client = new MetaDataClient(connection);
 
@@ -371,6 +381,40 @@ public class CreateIndexCompiler {
         .setMessage("Vector indexes do not support CONSISTENCY=" + create.getIndexConsistency())
         .build().buildException();
     }
+  }
+
+  /**
+   * Returns the split key for one SPLIT ON value of a vector index. The value is a centroid ID of
+   * the first generation. The split key is the INTEGER encoding of that ID. Phoenix pads the key
+   * with zero bytes for the other key columns. A split at ID n puts the posting lists below n in
+   * one region and the other posting lists in the next region. The first generation numbers its
+   * centroids from 0. Thus a split at 0 or below makes a region that never gets rows.
+   */
+  private static byte[] getCentroidSplit(LiteralExpression expression, Set<Integer> seen)
+    throws SQLException {
+    Object value = expression.getValue();
+    if (
+      !(value instanceof Integer || value instanceof Long || value instanceof Short
+        || value instanceof Byte)
+    ) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage(
+          "SPLIT ON values of a vector index must be INTEGER centroid IDs. Found: " + expression)
+        .build().buildException();
+    }
+    long id = ((Number) value).longValue();
+    if (id < MIN_VECTOR_SPLIT_CENTROID_ID || id > Integer.MAX_VALUE) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("SPLIT ON centroid IDs of a vector index must be from "
+          + MIN_VECTOR_SPLIT_CENTROID_ID + " to " + Integer.MAX_VALUE + ". Found: " + id)
+        .build().buildException();
+    }
+    if (!seen.add((int) id)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("SPLIT ON of a vector index has the centroid ID " + id + " more than once")
+        .build().buildException();
+    }
+    return PInteger.INSTANCE.toBytes((int) id);
   }
 
   /**
