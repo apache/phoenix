@@ -105,8 +105,6 @@ import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.exception.MutationBlockedIOException;
-import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -973,17 +971,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // roleRecord (I tried it and still it's slow due to haGroupStoreClient
         // initialization) and caching will give us old result in case one cluster
         // is unreachable instead of UNKNOWN.
-        // Check if mutation's haGroup is stale
-        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(name);
-        if (StringUtils.isNotBlank(name) && isHAGroupOnClientStale) {
-          throw new StaleClusterRoleRecordException(
-            String.format("HAGroupStoreRecord is stale for haGroup %s on " + "client", name));
-        }
-
-        if (StringUtils.isNotBlank(name) && haGroupStoreManager.isMutationBlocked(name)) {
-          throw new MutationBlockedIOException(String.format(
-            "Blocking mutation because the cluster role for HA group %s is ACTIVE_TO_STANDBY",
-            name));
+        // Throws StaleClusterRoleRecordException, then MutationBlockedIOException, from one read.
+        if (StringUtils.isNotBlank(name)) {
+          haGroupStoreManager.checkMutationAllowed(name);
         }
       }
 

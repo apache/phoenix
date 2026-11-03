@@ -30,6 +30,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -42,6 +43,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
@@ -115,7 +118,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf1);
 
     // Initially no mutation should be blocked
-    assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName));
+    haGroupStoreManager.checkMutationAllowed(haGroupName);
 
     // Update to ACTIVE_TO_STANDBY role (should block mutations)
     HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord("1.0", haGroupName,
@@ -126,7 +129,27 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Now mutations should be blocked
-    assertTrue(haGroupStoreManager.isMutationBlocked(haGroupName));
+    assertThrows(MutationBlockedIOException.class,
+      () -> haGroupStoreManager.checkMutationAllowed(haGroupName));
+  }
+
+  @Test
+  public void testMutationRejectedAsStaleOnStandby() throws Exception {
+    String haGroupName = testName.getMethodName();
+    HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf1);
+    haGroupStoreManager.checkMutationAllowed(haGroupName);
+
+    // A FAILOVER group whose local role is STANDBY means the client CRR is stale.
+    HAGroupStoreRecord standbyRecord =
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, CLUSTERS.getMasterAddress1(),
+        CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, standbyRecord, 0);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    assertTrue(haGroupStoreManager.isHAGroupOnClientStale(haGroupName));
+    assertThrows(StaleClusterRoleRecordException.class,
+      () -> haGroupStoreManager.checkMutationAllowed(haGroupName));
   }
 
   @Test
@@ -152,8 +175,8 @@ public class HAGroupStoreManagerIT extends HABaseIT {
       CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // No mutations should be blocked
-    assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName1));
-    assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName2));
+    haGroupStoreManager.checkMutationAllowed(haGroupName1);
+    haGroupStoreManager.checkMutationAllowed(haGroupName2);
 
     // Move only the second group into a mutation-blocking drain state
     // (ACTIVE_IN_SYNC_TO_STANDBY maps to ACTIVE_TO_STANDBY, which blocks mutations).
@@ -166,8 +189,9 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Blocking is per-group: only the second group is blocked; the first stays writable.
-    assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName1));
-    assertTrue(haGroupStoreManager.isMutationBlocked(haGroupName2));
+    haGroupStoreManager.checkMutationAllowed(haGroupName1);
+    assertThrows(MutationBlockedIOException.class,
+      () -> haGroupStoreManager.checkMutationAllowed(haGroupName2));
   }
 
   @Test
