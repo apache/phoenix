@@ -34,6 +34,8 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -72,10 +74,14 @@ public class HighAvailabilityTestingUtilityIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
-      false);
-    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
-      false);
+    for (HBaseTestingUtility cluster : new HBaseTestingUtility[] { CLUSTERS.getHBaseCluster1(),
+      CLUSTERS.getHBaseCluster2() }) {
+      cluster.getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
+      // A compaction that starts during teardown opens a server-side CQSI whose SYSTEM.CATALOG
+      // RPC can block RS shutdown, so compactions are off for this class.
+      cluster.getConfiguration().setBoolean(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION,
+        false);
+    }
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
