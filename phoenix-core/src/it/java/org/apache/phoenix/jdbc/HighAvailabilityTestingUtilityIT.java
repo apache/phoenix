@@ -128,12 +128,12 @@ public class HighAvailabilityTestingUtilityIT {
     try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
       createIndexedTableAndUpsert(conn, tableName + "_T1", tableName + "_I1");
     }
-    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
       try (Connection conn = CLUSTERS.getCluster2Connection(haGroup)) {
         createIndexedTableAndUpsert(conn, tableName + "_T2", tableName + "_I2");
       }
     });
-    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
       try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
         createIndexedTableAndUpsert(conn, tableName + "_T3", tableName + "_I3");
       }
