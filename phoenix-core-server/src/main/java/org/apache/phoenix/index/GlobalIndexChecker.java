@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
@@ -61,6 +63,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.DataTableScanMetrics;
 import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.UnverifiedRowFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -78,6 +81,9 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.FilterProtos;
 
 /**
  * Coprocessor that verifies the scanned rows of a non-transactional global index. If an index row
@@ -156,6 +162,14 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private long pageSizeMs;
     private boolean initialized = false;
     private boolean isScanMetricsEnabled = false;
+    // Client filters can keep state. For example, a skip scan filter keeps seek hints. The main
+    // scanner and its reopened scanners share the client filter. Each repair scan for one row uses
+    // a private copy. The state of a distinct prefix filter applies to the full scan, so the copy
+    // shares that filter.
+    private Filter clientFilter = null;
+    private DistinctPrefixFilter distinctPrefixFilter = null;
+    private FilterProtos.Filter clientFilterProto = null;
+    private boolean hasPagingFilter = false;
 
     public GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner,
       GlobalIndexCheckerSource metricsSource) throws IOException {
@@ -215,7 +229,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       Filter delegateFilter = filter;
       if (filter instanceof PagingFilter) {
         delegateFilter = ((PagingFilter) filter).getDelegateFilter();
+        hasPagingFilter = true;
       }
+      clientFilter = delegateFilter;
+      distinctPrefixFilter = ScanUtil.findDistinctPrefixFilter(delegateFilter);
       if (shouldCreateUnverifiedRowFilter(delegateFilter)) {
         // we need to ensure that the PagingFilter remains the
         // topmost (or outermost) filter so wrap the UnverifiedRowFilter
@@ -235,6 +252,55 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
 
     private boolean shouldCreateUnverifiedRowFilter(Filter delegateFilter) {
       return delegateFilter != null && !indexMaintainer.isUncovered();
+    }
+
+    /**
+     * Builds a new filter chain for a repair scan of one row. A filter object that two scanners
+     * share gets state from both scanners. For example, a skip scan filter can then issue a seek
+     * hint behind its previous hint. The new chain has the same structure as the filter chain of
+     * the main scan.
+     */
+    private Filter newSingleRowIndexScanFilter() throws IOException {
+      if (clientFilter != null && clientFilterProto == null) {
+        // The serialized form holds only the filter configuration, not the scan position. Thus
+        // one serialized form serves all repair scans. Repair is rare, so one parse for each
+        // repair scan is acceptable.
+        clientFilterProto = ProtobufUtil.toFilter(clientFilter);
+      }
+      Filter filter = null;
+      if (clientFilterProto != null) {
+        filter = shareDistinctPrefixFilter(ProtobufUtil.toFilter(clientFilterProto));
+        if (shouldCreateUnverifiedRowFilter(filter)) {
+          filter = new UnverifiedRowFilter(filter, emptyCF, emptyCQ);
+        }
+      }
+      if (hasPagingFilter) {
+        filter = new PagingFilter(filter, ScanUtil.getPageSizeMsForFilter(scan));
+      }
+      return filter;
+    }
+
+    /**
+     * Puts the distinct prefix filter of the main scan into a copy of the client filter. This
+     * filter keeps the row key prefix of the last row that the scan returns. All scanners of the
+     * scan must share this state. Otherwise the scan can return two rows with the same prefix.
+     */
+    private Filter shareDistinctPrefixFilter(Filter filter) {
+      if (distinctPrefixFilter == null) {
+        return filter;
+      }
+      if (filter instanceof DistinctPrefixFilter) {
+        return distinctPrefixFilter;
+      }
+      if (filter instanceof FilterList) {
+        FilterList filterList = (FilterList) filter;
+        List<Filter> filters = new ArrayList<>(filterList.getFilters().size());
+        for (Filter child : filterList.getFilters()) {
+          filters.add(shareDistinctPrefixFilter(child));
+        }
+        return new FilterList(filterList.getOperator(), filters);
+      }
+      return filter;
     }
 
     public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
@@ -505,6 +571,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         singleRowIndexScan.withStartRow(indexRowKey, true);
         singleRowIndexScan.withStopRow(indexRowKey, true);
         singleRowIndexScan.setTimeRange(minTimestamp, ts);
+        singleRowIndexScan.setFilter(newSingleRowIndexScanFilter());
         RegionScanner singleRowScanner =
           ((DelegateRegionScanner) delegate).getNewRegionScanner(singleRowIndexScan);
         row.clear();
