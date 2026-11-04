@@ -25,7 +25,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_QUEU
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -209,9 +208,9 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
   }
 
   /**
-   * Extension of the default thread factory returned by {@code Executors.defaultThreadFactory} that
-   * sets the context classloader on newly-created threads to be a specific classloader (and not the
-   * context classloader of the calling thread).
+   * Extension of {@link ThreadGroupSafeThreadFactory} that sets the context classloader on
+   * newly-created threads to be a specific classloader (and not the context classloader of the
+   * calling thread).
    * <p/>
    * See {@link org.apache.phoenix.util.PhoenixContextExecutor} for the rationale on changing the
    * context classloader.
@@ -221,7 +220,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
     private final ClassLoader contextClassLoader;
 
     public ContextClassLoaderThreadFactory(ClassLoader contextClassLoader) {
-      baseFactory = Executors.defaultThreadFactory();
+      baseFactory = new ThreadGroupSafeThreadFactory();
       this.contextClassLoader = contextClassLoader;
     }
 
