@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
@@ -38,8 +39,10 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
+import org.apache.phoenix.jdbc.HighAvailabilityUtil;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -270,6 +273,61 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
       conn.createStatement().execute("DELETE FROM " + SYSTEM_HA_GROUP_NAME
         + " WHERE HA_GROUP_NAME LIKE '" + haGroupName + "_test%'");
       conn.commit();
+    }
+  }
+
+  /**
+   * Server-side DELETE and same-table UPSERT SELECT write their mutations from the region scanner.
+   * Those mutations carry the HA group from the scan, so they must be blocked in ACTIVE_TO_STANDBY
+   * like client commits.
+   */
+  @Test
+  public void testServerSideDmlBlockedDuringActiveToStandby() throws Exception {
+    String dataTableName = generateUniqueName();
+    int rowCount = 10;
+
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(
+        "CREATE TABLE " + dataTableName + " (id VARCHAR PRIMARY KEY, name VARCHAR, age INTEGER)");
+      for (int i = 0; i < rowCount; i++) {
+        conn.createStatement().execute(
+          "UPSERT INTO " + dataTableName + " VALUES ('" + i + "', 'n" + i + "', " + i + ")");
+      }
+      conn.commit();
+
+      HAGroupStoreRecord haGroupStoreRecord =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
+          HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+      haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
+      awaitServerCachePropagation(haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+
+      conn.setAutoCommit(true);
+      String[] serverSideDml = { "DELETE FROM " + dataTableName + " WHERE age >= 0", "UPSERT INTO "
+        + dataTableName + " (id, name) SELECT id, 'u_' || name FROM " + dataTableName };
+      for (String sql : serverSideDml) {
+        try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql)) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("Expected a server-side plan for: " + sql + ", plan was: " + plan,
+            plan.contains("DELETE ROWS SERVER SELECT") || plan.contains("UPSERT ROWS"));
+        }
+        try {
+          conn.createStatement().executeUpdate(sql);
+          fail("Expected MutationBlockedIOException for server-side DML: " + sql);
+        } catch (SQLException e) {
+          assertTrue("Expected MutationBlockedIOException in the cause chain for: " + sql,
+            HighAvailabilityUtil.isMutationBlockedIOExceptionExistsInThrowable(e));
+        }
+      }
+
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + dataTableName + " WHERE name LIKE 'n%'")) {
+        assertTrue(rs.next());
+        assertEquals("Blocked server-side DML must not change any row", rowCount, rs.getInt(1));
+      }
     }
   }
 

@@ -77,6 +77,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.replication.reader.ReplicationLogProcessor;
 import org.apache.phoenix.replication.tool.LogFileAnalyzer;
 import org.apache.phoenix.schema.types.PInteger;
@@ -84,6 +85,7 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -141,6 +143,199 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     expected.put(SYSTEM_CATALOG_NAME, 0);
     expected.put(SYSTEM_CHILD_LINK_NAME, 0);
     verifyReplication(expected);
+  }
+
+  /**
+   * A server-side DELETE generates its row deletes in the region scanner, which copies
+   * {@code _HAGroupName} from the scan onto each mutation. The client must stamp the scan, else the
+   * deletes reach IndexRegionObserver as CLIENT_NON_HA and are never replicated to the standby.
+   */
+  @Test
+  public void testServerSideDeleteReplicates() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    final String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+    final String deleteSql = "delete from " + tableName + " where id >= 0";
+    final int rowCount = 20;
+    long bypassBefore;
+    long bypassAfter;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      upsertRows(conn, tableName, rowCount);
+
+      conn.setAutoCommit(true);
+      String plan = explain(conn, deleteSql);
+      assertTrue("Expected a server-side delete, plan was: " + plan,
+        plan.contains("DELETE ROWS SERVER SELECT"));
+      bypassBefore = bypassedMutationBlockCount();
+      assertEquals(rowCount, conn.createStatement().executeUpdate(deleteSql));
+      bypassAfter = bypassedMutationBlockCount();
+    }
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    // rowCount Puts from the client upserts plus one DeleteFamily per row from the server delete
+    assertEquals("Server-side delete batches must carry _HAGroupName", bypassBefore, bypassAfter);
+    expected.put(tableName, rowCount * 2);
+    verifyReplication(expected);
+    replayAndVerifyAcrossClusters(Collections.singletonList(createTableDdl), tableName);
+  }
+
+  /**
+   * Same-table UPSERT SELECT with auto-commit runs in the region scanner (UPSERT ROWS). Like the
+   * server-side DELETE, its mutations carry {@code _HAGroupName} only if the client stamped the
+   * scan.
+   */
+  @Test
+  public void testServerSideUpsertSelectReplicates() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    final String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+    final String upsertSelectSql =
+      "upsert into " + tableName + " (id, val) select id, 'u_' || val from " + tableName;
+    final int rowCount = 20;
+    long bypassBefore;
+    long bypassAfter;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      upsertRows(conn, tableName, rowCount);
+
+      conn.setAutoCommit(true);
+      String plan = explain(conn, upsertSelectSql);
+      assertTrue("Expected a server-side upsert select, plan was: " + plan,
+        plan.contains("UPSERT ROWS"));
+      bypassBefore = bypassedMutationBlockCount();
+      assertEquals(rowCount, conn.createStatement().executeUpdate(upsertSelectSql));
+      bypassAfter = bypassedMutationBlockCount();
+    }
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    // rowCount Puts from the client upserts plus rowCount Puts from the server upsert select
+    assertEquals("Server-side upsert select batches must carry _HAGroupName", bypassBefore,
+      bypassAfter);
+    expected.put(tableName, rowCount * 2);
+    verifyReplication(expected);
+    replayAndVerifyAcrossClusters(Collections.singletonList(createTableDdl), tableName);
+  }
+
+  /**
+   * A single-row {@code DELETE ... RETURNING *} with a non-PK filter runs as an atomic server-side
+   * delete that opens its own scanner on a copy of the statement scan, bypassing the parallel
+   * iterators, so it needs the same scan stamp.
+   */
+  @Test
+  public void testServerSideSingleRowDeleteReturningReplicates() throws Exception {
+    Assume.assumeTrue("Atomic delete RETURNING needs HBase 2.4.18+, 2.5.9+, or 2.6.0+",
+      isSetCorrectResultEnabledOnHBase());
+    final String tableName = "T_" + generateUniqueName();
+    final String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+    // The non-PK filter forces a server scan; a bare PK point delete is sent from the client.
+    final String deleteSql = "delete from " + tableName + " where id = 3 and val = 'v3'";
+    final int rowCount = 5;
+    long bypassBefore;
+    long bypassAfter;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      upsertRows(conn, tableName, rowCount);
+
+      conn.setAutoCommit(true);
+      // EXPLAIN compiles without RETURNING, so it shows the server-side plan but not the
+      // single-row flag; the returned row below proves the atomic path ran.
+      String plan = explain(conn, deleteSql);
+      assertTrue("Expected a server-side delete, plan was: " + plan,
+        plan.contains("DELETE ROWS SERVER SELECT"));
+      bypassBefore = bypassedMutationBlockCount();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.executeUpdate(deleteSql + " RETURNING *");
+        ResultSet rs = stmt.getResultSet();
+        assertNotNull("Atomic delete should return the deleted row", rs);
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+      }
+      bypassAfter = bypassedMutationBlockCount();
+      try (
+        ResultSet rs = conn.createStatement().executeQuery("select count(*) from " + tableName)) {
+        assertTrue(rs.next());
+        assertEquals(rowCount - 1, rs.getInt(1));
+      }
+    }
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    assertEquals("Atomic server-side delete batches must carry _HAGroupName", bypassBefore,
+      bypassAfter);
+    expected.put(tableName, rowCount + 1);
+    verifyReplication(expected);
+    replayAndVerifyAcrossClusters(Collections.singletonList(createTableDdl), tableName);
+  }
+
+  /**
+   * With {@code ENABLE_SERVER_UPSERT_SELECT}, a cross-table UPSERT SELECT also runs in the region
+   * scanner, which writes the target rows through a remote table. Those writes need the same scan
+   * stamp.
+   */
+  @Test
+  public void testServerSideCrossTableUpsertSelectReplicates() throws Exception {
+    final String sourceTable = "T_" + generateUniqueName();
+    final String targetTable = "T_" + generateUniqueName();
+    final String createSourceDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", sourceTable);
+    final String createTargetDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", targetTable);
+    final String upsertSelectSql =
+      "upsert into " + targetTable + " (id, val) select id, val from " + sourceTable;
+    final int rowCount = 20;
+    Properties props = new Properties();
+    props.putAll(clientProps);
+    props.setProperty(QueryServices.ENABLE_SERVER_UPSERT_SELECT, "true");
+    long bypassBefore;
+    long bypassAfter;
+    try (FailoverPhoenixConnection conn =
+      (FailoverPhoenixConnection) DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), props)) {
+      conn.createStatement().execute(createSourceDdl);
+      conn.createStatement().execute(createTargetDdl);
+      upsertRows(conn, sourceTable, rowCount);
+
+      conn.setAutoCommit(true);
+      String plan = explain(conn, upsertSelectSql);
+      assertTrue("Expected a server-side upsert select, plan was: " + plan,
+        plan.contains("UPSERT ROWS"));
+      bypassBefore = bypassedMutationBlockCount();
+      assertEquals(rowCount, conn.createStatement().executeUpdate(upsertSelectSql));
+      bypassAfter = bypassedMutationBlockCount();
+    }
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    assertEquals("Server-side cross-table upsert select batches must carry _HAGroupName",
+      bypassBefore, bypassAfter);
+    expected.put(sourceTable, rowCount);
+    expected.put(targetTable, rowCount);
+    verifyReplication(expected);
+    replayAndVerifyAcrossClusters(Arrays.asList(createSourceDdl, createTargetDdl), sourceTable,
+      targetTable);
+  }
+
+  private static void upsertRows(Connection conn, String tableName, int rowCount) throws Exception {
+    PreparedStatement insert = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
+    for (int i = 0; i < rowCount; i++) {
+      insert.setInt(1, i);
+      insert.setString(2, "v" + i);
+      insert.executeUpdate();
+    }
+    conn.commit();
+  }
+
+  private static String explain(Connection conn, String sql) throws Exception {
+    try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql)) {
+      return QueryUtil.getExplainPlan(rs);
+    }
+  }
+
+  private static long bypassedMutationBlockCount() {
+    return ((MetricsHaBypassSourceImpl) MetricsHaBypassSourceFactory.getInstance())
+      .getBypassedMutationBlockCountForTesting();
   }
 
   @Test
