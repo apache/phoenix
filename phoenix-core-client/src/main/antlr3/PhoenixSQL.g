@@ -576,8 +576,9 @@ create_cdc_node returns [CreateCDCStatement ret]
     :   CREATE CDC (IF NOT ex=EXISTS)? o=cdc_name ON t=from_table_name
         (INCLUDE LPAREN v=cdc_change_scopes RPAREN)?
         (p=fam_properties)?
+        (SPLIT ON s=value_expression_list)?
         {
-            ret = factory.createCDC(o, t, v, p, ex != null, getBindCount());
+            ret = factory.createCDC(o, t, v, p, s, ex != null, getBindCount());
         }
     ;
 

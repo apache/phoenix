@@ -1271,14 +1271,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     implements CompilableStatement {
     public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
       Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
-      boolean ifNotExists, int bindCount) {
-      super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
+      List<ParseNode> splits, boolean ifNotExists, int bindCount) {
+      super(cdcObjName, dataTable, includeScopes, props, splits, ifNotExists, bindCount);
     }
 
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
       final StatementContext context = new StatementContext(stmt);
+      final byte[][] splits = CreateTableCompiler.compileSplits(context, getSplitNodes());
       return new BaseMutationPlan(context, this.getOperation()) {
 
         @Override
@@ -1289,7 +1290,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @Override
         public MutationState execute() throws SQLException {
           MetaDataClient client = new MetaDataClient(getContext().getConnection());
-          return client.createCDC(ExecutableCreateCDCStatement.this);
+          return client.createCDC(ExecutableCreateCDCStatement.this, splits);
         }
       };
     }
@@ -2206,9 +2207,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
       Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
-      boolean ifNotExists, int bindCount) {
-      return new ExecutableCreateCDCStatement(cdcObj, dataTable, includeScopes, props, ifNotExists,
-        bindCount);
+      List<ParseNode> splits, boolean ifNotExists, int bindCount) {
+      return new ExecutableCreateCDCStatement(cdcObj, dataTable, includeScopes, props, splits,
+        ifNotExists, bindCount);
     }
 
     @Override

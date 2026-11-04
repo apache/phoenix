@@ -465,9 +465,25 @@ public class QueryParserTest {
   }
 
   @Test
+  public void testCreateCDCWithSplitPoints() throws Exception {
+    CreateCDCStatement stmt = parseCreateCDCSimple("create cdc foo on bar", false);
+    assertTrue(stmt.getSplitNodes().isEmpty());
+    stmt = parseCreateCDCSimple("create cdc foo on bar split on ('a', 'b')", false);
+    assertEquals(Arrays.asList(new LiteralParseNode("a"), new LiteralParseNode("b")),
+      stmt.getSplitNodes());
+    stmt = parseCreateCDCSimple(
+      "create cdc if not exists foo on bar include (pre) TTL=100 split on ('a', ?)", true);
+    assertEquals(Arrays.asList(new Pair("TTL", 100)), stmt.getProps().get(""));
+    assertEquals(2, stmt.getSplitNodes().size());
+    assertTrue(stmt.getSplitNodes().get(1) instanceof BindParseNode);
+    assertEquals(1, stmt.getBindCount());
+  }
+
+  @Test
   public void testCreateCDCWithErrors() throws Exception {
     parseQueryThatShouldFail("create cdc foo");
     parseQueryThatShouldFail("create cdc foo on bar include (abc)");
+    parseQueryThatShouldFail("create cdc foo on bar split on ('a') TTL=100");
   }
 
   private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {
