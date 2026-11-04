@@ -34,6 +34,7 @@ import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.HABaseIT;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
@@ -343,7 +344,8 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
           HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, CLUSTERS.getMasterAddress1(),
           CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
-      awaitZkPropagation(haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      awaitServerCachePropagation(haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
       long startMs = System.currentTimeMillis();
       try {
@@ -426,7 +428,8 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
           HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, CLUSTERS.getMasterAddress1(),
           CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
-      awaitZkPropagation(haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      awaitServerCachePropagation(haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
       long startMs = System.currentTimeMillis();
       try {
@@ -451,36 +454,29 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
   }
 
   /**
-   * Polls ZooKeeper for the HAGroupStoreRecord to reflect the {@code expectedState} after a
-   * {@code haAdmin.updateHAGroupStoreRecordInZooKeeper} write. Returns as soon as the cached state
-   * matches the expected, or after a timeout. Replaces the unconditional
-   * {@code Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS)} pattern with a bounded polling
-   * loop (with a short between-poll park) so the wait is condition-driven rather than
-   * fixed-duration.
-   * <p>
-   * The poll interval is short ({@link #ZK_PROPAGATION_POLL_INTERVAL_MS} ms) so the typical wait is
-   * well under the propagation budget; the deadline gives generous CI headroom. Throws
-   * {@code AssertionError} via {@code fail()} if the state never converges, which surfaces the same
-   * failure shape a stale read would (the subsequent UPSERT would observe the old state).
-   * @param haGroupName   the HA group whose state to await
-   * @param expectedState the {@link HAGroupStoreRecord.HAGroupState} the cached record must reach
-   * @throws Exception if reading the cached record throws
+   * Waits until the cluster 1 RegionServer's cached HAGroupStoreRecord (the one
+   * {@code preBatchMutate} reads) reaches {@code expectedState}. A direct ZK read can return the
+   * new state before the Curator cache event arrives, so polling ZK alone lets the next UPSERT race
+   * the cache. The mini-cluster shares this JVM, so {@link HAGroupStoreManager#getInstance} returns
+   * the RegionServer's instance.
    */
   // java:S2925 (Thread.sleep in tests) suppressed: the sleep here is bounded between condition
   // checks inside a deadline-bounded polling loop, not an unconditional wait. The rule's flake
   // concern (fixed-duration sleeps) does not apply.
   @SuppressWarnings("java:S2925")
-  private void awaitZkPropagation(String haGroupName, HAGroupStoreRecord.HAGroupState expectedState)
-    throws Exception {
+  private void awaitServerCachePropagation(String haGroupName,
+    HAGroupStoreRecord.HAGroupState expectedState) throws Exception {
+    HAGroupStoreManager manager =
+      HAGroupStoreManager.getInstance(CLUSTERS.getHBaseCluster1().getConfiguration());
     long deadlineMs = System.currentTimeMillis() + ZK_PROPAGATION_AWAIT_DEADLINE_MS;
     while (System.currentTimeMillis() < deadlineMs) {
-      HAGroupStoreRecord cached = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
+      HAGroupStoreRecord cached = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
       if (cached != null && cached.getHAGroupState() == expectedState) {
         return;
       }
       Thread.sleep(ZK_PROPAGATION_POLL_INTERVAL_MS);
     }
-    fail("Timed out waiting for ZK to propagate HAGroupStoreRecord state " + expectedState
+    fail("Timed out waiting for the RegionServer HA group cache to reach state " + expectedState
       + " for HA group " + haGroupName + " within " + ZK_PROPAGATION_AWAIT_DEADLINE_MS + "ms");
   }
 
