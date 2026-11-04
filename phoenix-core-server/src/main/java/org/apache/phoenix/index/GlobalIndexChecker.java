@@ -303,7 +303,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         for (Filter child : filterList.getFilters()) {
           filters.add(shareDistinctPrefixFilter(child));
         }
-        return new FilterList(filterList.getOperator(), filters);
+        FilterList newFilterList = new FilterList(filterList.getOperator(), filters);
+        // The constructor does not set the direction of the list itself. Copy it from the old list.
+        newFilterList.setReversed(filterList.isReversed());
+        return newFilterList;
       }
       return filter;
     }
