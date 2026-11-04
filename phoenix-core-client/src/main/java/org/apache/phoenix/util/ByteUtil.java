@@ -470,9 +470,10 @@ public class ByteUtil {
    * [startKey, endKey). If startKey and endKey are empty, the empty key is returned. This function
    * is used to return valid rowkey for some ungrouped aggregation e.g. while returning count value
    * after scanning the rows. If any error or validation issues (e.g. startKey > endKey) are
-   * encountered, null value is returned.
+   * encountered, null value is returned. An empty endKey means that the range has no upper bound.
+   * Then the returned rowkey is a rowkey just after startKey.
    * @param startKey start rowkey for the range.
-   * @param endKey   end rowkey for the range.
+   * @param endKey   end rowkey for the range, or the empty key for no upper bound.
    * @return best attempt of largest rowkey in the range of [startKey, endKey).
    */
   public static byte[] getLargestPossibleRowKeyInRange(byte[] startKey, byte[] endKey) {
@@ -535,7 +536,11 @@ public class ByteUtil {
           Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey));
         return null;
       }
-      if (Bytes.compareTo(startKey, rowKey) >= 0 || Bytes.compareTo(rowKey, endKey) >= 0) {
+      // An empty endKey is not an upper bound, so only a non-empty endKey limits the rowkey.
+      if (
+        Bytes.compareTo(startKey, rowKey) >= 0
+          || (endKey.length > 0 && Bytes.compareTo(rowKey, endKey) >= 0)
+      ) {
         LOGGER.error(
           "Unexpected result while comparing result rowkey in range " + "({} , {}) , rowKey: {}",
           Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey),
