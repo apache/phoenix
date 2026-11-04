@@ -297,9 +297,15 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           distinctPrefixFilter = ScanUtil.findDistinctPrefixFilter(clientFilter);
         }
       }
-      Filter filter = clientFilterProto == null
-        ? null
-        : shareDistinctPrefixFilter(ProtobufUtil.toFilter(clientFilterProto));
+      Filter filter = null;
+      if (clientFilterProto != null) {
+        // The serialized form does not hold the scan direction. The shared distinct prefix filter
+        // has the direction of the main scan, and a filter list needs one direction for all of
+        // its filters.
+        filter = ProtobufUtil.toFilter(clientFilterProto);
+        filter.setReversed(scan.isReversed());
+        filter = shareDistinctPrefixFilter(filter);
+      }
       if (pagingFilter != null) {
         filter = new PagingFilter(filter, ScanUtil.getPageSizeMsForFilter(scan));
       }
