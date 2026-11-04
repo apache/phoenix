@@ -6288,12 +6288,19 @@ public class MetaDataClient {
             createCDCForEventuallyConsistentIndex(dataTable);
           }
 
-          connection.getQueryServices().clearTableFromCache(
-            connection.getTenantId() == null
-              ? ByteUtil.EMPTY_BYTE_ARRAY
-              : connection.getTenantId().getBytes(),
-            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+          byte[] tenantIdBytes = connection.getTenantId() == null
+            ? ByteUtil.EMPTY_BYTE_ARRAY
+            : connection.getTenantId().getBytes();
+          byte[] schemaBytes =
+            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName);
+          connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
             Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP);
+          // The server caches the data table together with its indexes. Clear that entry
+          // also. A new resolve of the data table then gets the new consistency.
+          connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
+            Bytes.toBytes(dataTableName), HConstants.LATEST_TIMESTAMP);
+          // Remove the index and its parent from the client cache. The next resolve then
+          // gets the full parent with the changed index.
           connection.removeTable(connection.getTenantId(),
             SchemaUtil.getTableName(schemaName, indexName),
             SchemaUtil.getTableName(schemaName, dataTableName), HConstants.LATEST_TIMESTAMP);

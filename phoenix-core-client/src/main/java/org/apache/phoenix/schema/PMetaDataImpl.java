@@ -222,14 +222,18 @@ public class PMetaDataImpl implements PMetaData {
         for (int i = 0; i < newIndexes.size(); i++) {
           PTable index = newIndexes.get(i);
           if (index.getName().getString().equals(tableName)) {
-            newIndexes.remove(i);
-            PTableImpl.Builder parentTableBuilder =
-              PTableImpl.builderWithColumns(parentTableRef.getTable(),
-                getColumnsToClone(parentTableRef.getTable())).setIndexes(newIndexes);
-            if (tableTimeStamp != HConstants.LATEST_TIMESTAMP) {
-              parentTableBuilder.setTimeStamp(tableTimeStamp);
+            if (tableTimeStamp == HConstants.LATEST_TIMESTAMP) {
+              // A parent copy without the index keeps the server timestamp. The server then
+              // reports no change, and the incomplete copy stays in the cache. Remove the
+              // parent entry instead. The next resolve then gets the full table.
+              metaData.remove(parentTableRef.getTable().getKey());
+              break;
             }
-            PTable parentTable = parentTableBuilder.build();
+            newIndexes.remove(i);
+            PTable parentTable = PTableImpl
+              .builderWithColumns(parentTableRef.getTable(),
+                getColumnsToClone(parentTableRef.getTable()))
+              .setIndexes(newIndexes).setTimeStamp(tableTimeStamp).build();
             metaData.put(parentTable.getKey(), tableRefFactory.makePTableRef(parentTable,
               this.timeKeeper.getCurrentTime(), parentTableRef.getResolvedTimeStamp()));
             GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();

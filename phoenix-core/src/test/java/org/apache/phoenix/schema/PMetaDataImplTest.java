@@ -17,21 +17,30 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
@@ -198,6 +207,73 @@ public class PMetaDataImplTest {
       fail("the schema should be removed");
     } catch (SchemaNotFoundException e) {
     }
+  }
+
+  private static PTable newTable(String name, PTableType type, String parentName, long timeStamp,
+    List<PTable> indexes) throws SQLException {
+    PColumn pkColumn =
+      new PColumnImpl(PNameFactory.newName("K"), null, PVarchar.INSTANCE, null, null, false, 0,
+        SortOrder.ASC, null, null, false, null, false, false, null, HConstants.LATEST_TIMESTAMP);
+    return new PTableImpl.Builder().setType(type).setTimeStamp(timeStamp)
+      .setIndexDisableTimestamp(0L).setSequenceNumber(PTable.INITIAL_SEQ_NUM)
+      .setImmutableRows(false).setDisableWAL(false).setMultiTenant(false).setStoreNulls(false)
+      .setUpdateCacheFrequency(0).setNamespaceMapped(false).setAppendOnlySchema(false)
+      .setImmutableStorageScheme(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)
+      .setQualifierEncodingScheme(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
+      .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
+      .setEncodedCQCounter(EncodedCQCounter.NULL_COUNTER).setUseStatsForParallelization(true)
+      .setExcludedColumns(ImmutableList.of()).setSchemaName(PName.EMPTY_NAME)
+      .setTableName(PNameFactory.newName(name))
+      .setParentTableName(parentName == null ? null : PNameFactory.newName(parentName))
+      .setRowKeyOrderOptimizable(true).setIndexes(indexes).setPhysicalNames(ImmutableList.of())
+      .setColumns(Collections.singletonList(pkColumn)).build();
+  }
+
+  private static PTableRef getRefOrNull(PMetaData metaData, String name) {
+    try {
+      return metaData.getTableRef(new PTableKey(null, name));
+    } catch (TableNotFoundException e) {
+      return null;
+    }
+  }
+
+  @Test
+  public void testRemoveIndexWithoutTimestampEvictsParent() throws Exception {
+    long tableTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP + 100;
+    PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, new TestTimeKeeper(),
+      new ReadOnlyProps(Collections.EMPTY_MAP));
+    PTable index = newTable("I", PTableType.INDEX, "T", tableTimeStamp, Collections.emptyList());
+    PTable table =
+      newTable("T", PTableType.TABLE, null, tableTimeStamp, Collections.singletonList(index));
+    metaData.addTable(table, tableTimeStamp);
+    PTable snapshot = metaData.getTableRef(table.getKey()).getTable();
+
+    metaData.removeTable(null, "I", "T", HConstants.LATEST_TIMESTAMP);
+
+    // The cache must not keep the parent. A parent without the index keeps the server timestamp,
+    // so the server reports no change and does not send the full table.
+    assertNull(getRefOrNull(metaData, "T"));
+
+    // A stale resolve can write back its snapshot. This restores a complete parent.
+    metaData.updateResolvedTimestamp(snapshot, tableTimeStamp);
+    assertEquals(1, metaData.getTableRef(table.getKey()).getTable().getIndexes().size());
+  }
+
+  @Test
+  public void testRemoveIndexWithTimestampStampsParent() throws Exception {
+    long tableTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP + 100;
+    PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, new TestTimeKeeper(),
+      new ReadOnlyProps(Collections.EMPTY_MAP));
+    PTable index = newTable("I", PTableType.INDEX, "T", tableTimeStamp, Collections.emptyList());
+    PTable table =
+      newTable("T", PTableType.TABLE, null, tableTimeStamp, Collections.singletonList(index));
+    metaData.addTable(table, tableTimeStamp);
+
+    metaData.removeTable(null, "I", "T", tableTimeStamp + 1);
+
+    PTable parent = metaData.getTableRef(table.getKey()).getTable();
+    assertEquals(0, parent.getIndexes().size());
+    assertEquals(tableTimeStamp + 1, parent.getTimeStamp());
   }
 
   private static class PSizedTable extends PTableImpl {
