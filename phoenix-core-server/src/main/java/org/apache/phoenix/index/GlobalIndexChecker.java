@@ -269,7 +269,12 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       }
       Filter filter = null;
       if (clientFilterProto != null) {
-        filter = shareDistinctPrefixFilter(ProtobufUtil.toFilter(clientFilterProto));
+        // The serialized form does not hold the scan direction. The shared distinct prefix filter
+        // has the direction of the main scan, and a filter list needs one direction for all of
+        // its filters.
+        filter = ProtobufUtil.toFilter(clientFilterProto);
+        filter.setReversed(clientFilter.isReversed());
+        filter = shareDistinctPrefixFilter(filter);
         if (shouldCreateUnverifiedRowFilter(filter)) {
           filter = new UnverifiedRowFilter(filter, emptyCF, emptyCQ);
         }
