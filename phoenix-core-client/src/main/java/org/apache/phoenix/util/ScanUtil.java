@@ -21,6 +21,7 @@ import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORD
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EXPECTED_UPPER_REGION_KEY;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
@@ -912,20 +913,34 @@ public class ScanUtil {
   }
 
   /**
-   * prefix region start key to the start row/stop row suffix and set as scan boundaries.
+   * prefix region start key to the start row/stop row suffix and set as scan boundaries. A reversed
+   * scan arrives with its boundaries already swapped by the client. For that scan, the stop row
+   * holds the region start key, and the stop row suffix gives the new start row.
    */
   public static void setupLocalIndexScan(Scan scan) {
-    byte[] prefix =
-      scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length] : scan.getStartRow();
-    int prefixLength =
-      scan.getStartRow().length == 0 ? scan.getStopRow().length : scan.getStartRow().length;
-    if (scan.getAttribute(SCAN_START_ROW_SUFFIX) != null) {
-      scan.withStartRow(
-        ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
+    boolean reversed = scan.isReversed();
+    byte[] regionStartKey = reversed ? scan.getStopRow() : scan.getStartRow();
+    byte[] regionEndKey = reversed ? scan.getStartRow() : scan.getStopRow();
+    byte[] prefix = regionStartKey.length == 0 ? new byte[regionEndKey.length] : regionStartKey;
+    int prefixLength = regionStartKey.length == 0 ? regionEndKey.length : regionStartKey.length;
+    byte[] lowerSuffix = scan.getAttribute(SCAN_START_ROW_SUFFIX);
+    byte[] upperSuffix = scan.getAttribute(SCAN_STOP_ROW_SUFFIX);
+    if (reversed) {
+      if (upperSuffix != null) {
+        scan.withStartRow(ScanRanges.prefixKey(upperSuffix, 0, prefix, prefixLength),
+          scan.includeStartRow());
+      }
+      if (lowerSuffix != null) {
+        scan.withStopRow(ScanRanges.prefixKey(lowerSuffix, 0, prefix, prefixLength),
+          scan.includeStopRow());
+      }
+      return;
     }
-    if (scan.getAttribute(SCAN_STOP_ROW_SUFFIX) != null) {
-      scan.withStopRow(
-        ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
+    if (lowerSuffix != null) {
+      scan.withStartRow(ScanRanges.prefixKey(lowerSuffix, 0, prefix, prefixLength));
+    }
+    if (upperSuffix != null) {
+      scan.withStopRow(ScanRanges.prefixKey(upperSuffix, 0, prefix, prefixLength));
     }
   }
 
@@ -948,6 +963,7 @@ public class ScanUtil {
     byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
     if (ScanUtil.isLocalIndex(newScan)) {
       newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
+      newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, regionEndKey);
       newScan.withStartRow(regionStartKey);
       newScan.withStopRow(regionEndKey);
       if (keyOffset > 0) {
@@ -1589,8 +1605,13 @@ public class ScanUtil {
         byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null
           ? scan.getAttribute(SCAN_ACTUAL_START_ROW)
           : HConstants.EMPTY_BYTE_ARRAY;
+        // The region end key is not known here. Keep the one that the region scan already has.
+        byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
         ScanUtil.setLocalIndexAttributes(scan, 0, actualStartRow, HConstants.EMPTY_BYTE_ARRAY,
           scan.getStartRow(), scan.getStopRow());
+        if (expectedUpperRegionKey != null) {
+          scan.setAttribute(EXPECTED_UPPER_REGION_KEY, expectedUpperRegionKey);
+        }
       }
     }
   }
