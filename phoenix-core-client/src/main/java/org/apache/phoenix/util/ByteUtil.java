@@ -538,7 +538,7 @@ public class ByteUtil {
         return null;
       }
       // An empty endKey is not an upper bound, so only a non-empty endKey limits the rowkey.
-      boolean hasUpperBound = endKey.length > 0;
+      boolean hasUpperBound = !Bytes.isEmpty(endKey);
       boolean outOfRange = Bytes.compareTo(startKey, rowKey) >= 0
         || (hasUpperBound && Bytes.compareTo(rowKey, endKey) >= 0);
       if (outOfRange) {
