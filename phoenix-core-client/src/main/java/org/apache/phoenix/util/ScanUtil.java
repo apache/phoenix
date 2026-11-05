@@ -79,6 +79,7 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.filter.UnverifiedRowFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.CDCTableInfo;
@@ -2080,6 +2081,10 @@ public class ScanUtil {
     }
     if (filter instanceof DistinctPrefixFilter) {
       return (DistinctPrefixFilter) filter;
+    }
+    // The global index checker can wrap the scan filter before the region scanners read it.
+    if (filter instanceof UnverifiedRowFilter) {
+      return findDistinctPrefixFilter(((UnverifiedRowFilter) filter).getDelegateFilter());
     }
     if (filter instanceof FilterList) {
       Iterator<Filter> filterIterator = ((FilterList) filter).getFilters().iterator();
