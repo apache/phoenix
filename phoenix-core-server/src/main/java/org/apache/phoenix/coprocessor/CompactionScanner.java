@@ -621,6 +621,13 @@ public class CompactionScanner implements InternalScanner {
       if (tableList != null && !tableList.isEmpty()) {
         tableList.forEach(m -> {
           if (!m.getTTL().equals(TTL_EXPRESSION_NOT_DEFINED)) {
+            // Skip entries with null/empty match patterns. These can occur for views whose
+            // ROW_KEY_MATCHER could not be computed at creation time (e.g., tenant-id type
+            // mismatch). Inserting a null key into the trie would throw NullPointerException.
+            if (m.getMatchPattern() == null || m.getMatchPattern().length == 0) {
+              LOGGER.warn("Skipping {} entry with empty match pattern: {}", type, m);
+              return;
+            }
             // add the ttlInfo to the cache.
             // each new/unique ttlInfo object added returns a unique tableId.
             int tableId = -1;
@@ -690,6 +697,11 @@ public class CompactionScanner implements InternalScanner {
       if (tableList != null && !tableList.isEmpty()) {
         tableList.forEach(m -> {
           if (!m.getTTL().equals(TTL_EXPRESSION_NOT_DEFINED)) {
+            // Skip entries with null/empty match patterns (see initializeMatcher for context).
+            if (m.getMatchPattern() == null || m.getMatchPattern().length == 0) {
+              LOGGER.warn("Skipping {} refresh entry with empty match pattern: {}", type, m);
+              return;
+            }
             // add the ttlInfo to the cache.
             // each new/unique ttlInfo object added returns a unique tableId.
             int tableId = -1;
