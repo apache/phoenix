@@ -816,10 +816,20 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
         "select VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL")
           .scanType("FULL SCAN").tableContains(FULL_SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME);
 
+      // V1 narrows only on the leading `ROW_KEY_MATCHER IS NOT NULL` and emits
+      // `RANGE SCAN [not null]`, leaving `TABLE_TYPE = 'v'` on a trailing PK
+      // column as a server filter. V2 emits the full compound across the middle-
+      // EVERYTHING gap, projecting the trailing `TABLE_TYPE = 'v'` point into the
+      // stop-row → `SKIP SCAN ON 1 RANGE [not null,*,'v']`. V2 is strictly better:
+      // HBase rejects rows whose TABLE_TYPE ≠ 'v' before they reach the server
+      // filter, the index range walked is much narrower (TABLE_TYPE has many
+      // distinct values in SYSTEM.CATALOG, so projecting `='v'` substantially
+      // shrinks the scan), and the dropped server filter saves CPU. Same rows.
       assertPlan(conn,
         "select ROW_KEY_MATCHER, TTL, TABLE_NAME FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL")
-          .scanType("RANGE SCAN").tableContains(FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME)
-          .keyRanges("[not null]");
+          .scanType(isV2Optimizer() ? "SKIP SCAN ON 1 RANGE" : "RANGE SCAN")
+          .tableContains(FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME)
+          .keyRanges(isV2Optimizer() ? "[not null,*,'v']" : "[not null]");
     }
 
     /**

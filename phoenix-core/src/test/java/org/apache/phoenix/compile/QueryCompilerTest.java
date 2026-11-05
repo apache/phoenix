@@ -1021,18 +1021,22 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testRegexpSubstrSetScanKeys() throws Exception {
+    // Same SEP-byte parity as testSubstrSetScanKey.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
     // First test scan keys are set when the offset is 0 or 1.
     String query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+') = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() != null);
 
     query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+', 0) = 'abc'";
     binds = Collections.emptyList();
     scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() != null);
 
@@ -1149,7 +1153,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     String query = "SELECT inst FROM ptsdb WHERE substr(inst, 0, 3) = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    // V2 encoder appends the SEP byte after `inst` on the startRow because dim 0 is
+    // var-width and there are trailing PK columns; V1 strips it. Both ranges admit
+    // the same rows.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() == null); // Extracted.
   }
@@ -1159,7 +1169,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     String query = "SELECT inst FROM ptsdb WHERE rtrim(inst) = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    // Same SEP-byte parity as testSubstrSetScanKey.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc ")), scan.getStopRow());
     assertNotNull(scan.getFilter());
   }
@@ -7197,11 +7211,17 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       stmt.execute("create index ii on dd (k4, k1, k2, k3)");
       String query = "select /*+ index(dd ii) */ k1, k2, k3, k4, v1, v2, v3, v4 from dd"
         + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
-      assertPlan(conn, query).scanType("RANGE SCAN").table("II").keyRanges("[1]")
+      // V1 emits a RANGE SCAN [1] with K2=1 in the server filter; V2 promotes the K2
+      // equality into the scan range itself via SKIP_SCAN ON 1 KEY [1,*,1] — either
+      // form is correct (same row set), differing only in where the K2=1 narrowing is
+      // applied (scan vs filter).
+      assertPlan(conn, query).scanType(isV2Optimizer() ? "SKIP SCAN ON 1 KEY" : "RANGE SCAN")
+        .table("II").keyRanges(isV2Optimizer() ? "[1,*,1]" : "[1]")
         .serverMergeColumns("[0.V1, 0.V2, 0.V3, 0.V4]").serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter("SERVER FILTER BY \"K2\" = 1").serverSortedBy("[\"K1\", \"V1\"]")
-        .serverRowLimit(1L).clientRowLimit(1).clientSortAlgo("CLIENT MERGE SORT")
-        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
+        .serverWhereFilter(isV2Optimizer() ? null : "SERVER FILTER BY \"K2\" = 1")
+        .serverSortedBy("[\"K1\", \"V1\"]").serverRowLimit(1L).clientRowLimit(1)
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_HINT)
+        .indexRejectedNone();
     }
   }
 

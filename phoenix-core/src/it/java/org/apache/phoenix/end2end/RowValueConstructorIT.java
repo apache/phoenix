@@ -1348,8 +1348,12 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
+      // V1 and V2 produce equivalent scan plans (salt=0..3, col0 ∈ [2, 4]) but format the
+      // explain string differently: V1 shows only the leading constrained PK column (col0)
+      // while V2's compound emission also surfaces col1. Both are semantically identical.
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("SKIP SCAN ON 12 KEYS")
-        .table(tempTableWithCompositePK).keyRanges("[X'00',2] - [X'03',4]")
+        .table(tempTableWithCompositePK)
+        .keyRanges(isV2Optimizer() ? "[X'00',2,3] - [X'03',4,5]" : "[X'00',2] - [X'03',4]")
         .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
       conn.close();
