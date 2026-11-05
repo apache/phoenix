@@ -187,7 +187,7 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
         return null;
       }
       if (dataType == PTimestamp.INSTANCE) {
-        return DateUtil.parseTimestamp(input.toString());
+        return DateUtil.parseTimestamp(input.toString(), dateTimeParser);
       }
       if (dateTimeParser != null && input instanceof String) {
         final String s = (String) input;

@@ -162,7 +162,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
         return null;
       }
       if (dataType == PTimestamp.INSTANCE) {
-        return DateUtil.parseTimestamp(input);
+        return DateUtil.parseTimestamp(input, dateTimeParser);
       }
       if (dateTimeParser != null) {
         long epochTime = dateTimeParser.parseDateTime(input);
