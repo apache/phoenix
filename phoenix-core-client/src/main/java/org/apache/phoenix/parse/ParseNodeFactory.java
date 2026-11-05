@@ -408,8 +408,9 @@ public class ParseNodeFactory {
 
   public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
     Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
-    boolean ifNotExists, int bindCount) {
-    return new CreateCDCStatement(cdcObj, dataTable, includeScopes, props, ifNotExists, bindCount);
+    List<ParseNode> splits, boolean ifNotExists, int bindCount) {
+    return new CreateCDCStatement(cdcObj, dataTable, includeScopes, props, splits, ifNotExists,
+      bindCount);
   }
 
   public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
