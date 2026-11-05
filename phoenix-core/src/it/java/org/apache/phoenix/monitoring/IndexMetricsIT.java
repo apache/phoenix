@@ -47,7 +47,6 @@ public class IndexMetricsIT extends ParallelStatsDisabledIT {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     // disable renewing leases as this will force spooling to happen.
     props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

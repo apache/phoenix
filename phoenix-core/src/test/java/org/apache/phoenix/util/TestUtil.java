@@ -87,6 +87,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
@@ -104,6 +105,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.coprocessor.CompactionScanner;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -139,6 +141,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -1150,6 +1153,20 @@ public class TestUtil {
   public static void waitForIndexRebuild(Connection conn, String fullIndexName,
     PIndexState indexState) throws InterruptedException, SQLException {
     waitForIndexState(conn, fullIndexName, indexState, 0L);
+  }
+
+  /**
+   * Runs a single synchronous tick of {@link TaskRegionObserver.SelfHealingTask} against the
+   * SYSTEM.TASK region on the running mini-cluster.
+   */
+  public static void runSelfHealingTaskOnce() throws Exception {
+    RegionCoprocessorEnvironment taskRegionEnvironment = BaseTest.getUtility()
+      .getRSForFirstRegionInTable(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+      .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME).get(0).getCoprocessorHost()
+      .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+    TaskRegionObserver.SelfHealingTask task = new TaskRegionObserver.SelfHealingTask(
+      taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+    task.run();
   }
 
   private static class IndexStateCheck {
