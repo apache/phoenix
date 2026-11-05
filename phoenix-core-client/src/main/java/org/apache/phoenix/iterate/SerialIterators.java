@@ -41,7 +41,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -98,7 +98,7 @@ public class SerialIterators extends BaseResultIterators {
       }
       final List<Scan> finalScans = flattenedScans;
       Future<PeekingResultIterator> future =
-        executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+        executor.submit(PhoenixTracing.wrap(new JobCallable<PeekingResultIterator>() {
           @Override
           public PeekingResultIterator call() throws Exception {
             PeekingResultIterator itr = new SerialIterator(finalScans, tableName,
@@ -120,7 +120,7 @@ public class SerialIterators extends BaseResultIterators {
           public TaskExecutionMetricsHolder getTaskExecutionMetric() {
             return taskMetrics;
           }
-        }, "Serial scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
+        }));
       // Add our singleton Future which will execute serially
       nestedFutures.add(Collections.singletonList(
         new Pair<Scan, Future<PeekingResultIterator>>(flattenedScans.get(0), future)));
