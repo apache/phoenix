@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import org.antlr.runtime.CharStream;
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.io.input.UnsynchronizedBufferedReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -99,6 +100,9 @@ public final class PhoenixMapReduceUtil {
       JsonAutoDetect.class,
       // commons-csv
       CSVFormat.class,
+      // commons-io. commons-csv needs this class, which older releases such as the one in Hadoop
+      // do not have. The class therefore also selects a jar that is new enough.
+      UnsynchronizedBufferedReader.class,
       // json-path
       JsonProvider.class,
       // bson
