@@ -37,7 +37,10 @@ public class PhoenixSyncTableCheckpointOutputRow {
 
   public enum Status {
     VERIFIED,
-    MISMATCHED
+    MISMATCHED,
+    REPAIRED,
+    UNREPAIRABLE,
+    REPAIR_FAILED
   }
 
   private String tableName;
@@ -143,12 +146,14 @@ public class PhoenixSyncTableCheckpointOutputRow {
 
   @VisibleForTesting
   public long getSourceRowsProcessed() {
-    return CounterFormatter.parseSourceRows(counters);
+    return CounterFormatter.parseCounterValue(counters,
+      PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
   }
 
   @VisibleForTesting
   public long getTargetRowsProcessed() {
-    return CounterFormatter.parseTargetRows(counters);
+    return CounterFormatter.parseCounterValue(counters,
+      PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
   }
 
   /**
@@ -156,56 +161,54 @@ public class PhoenixSyncTableCheckpointOutputRow {
    * contract to ensure consistency between formatting (in mapper) and parsing (in tests).
    */
   public static class CounterFormatter {
-    private static final String FORMAT_CHUNK = "%s=%d,%s=%d";
-    private static final String FORMAT_MAPPER = "%s=%d,%s=%d,%s=%d,%s=%d";
+    private static final String FORMAT_CHUNK =
+      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
+    private static final String FORMAT_MAPPER =
+      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
 
     /**
-     * Formats chunk counters as comma-separated key=value pairs.
-     * @param sourceRows Source rows processed
-     * @param targetRows Target rows processed
-     * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
+     * Formats chunk counters as comma-separated key=value pairs. Always emits all nine counters;
+     * unpopulated counters are 0 so operators querying the checkpoint table see a uniform format.
+     * {@code ROWS_DIFFERENT_ON_TARGET} is populated only in dry-run; cell-level counters and
+     * {@code ROWS_CANNOT_REPAIR} are populated only in repair mode.
      */
-    public static String formatChunk(long sourceRows, long targetRows) {
+    public static String formatChunk(long sourceRows, long targetRows, long rowsMissingOnTarget,
+      long rowsExtraOnTarget, long rowsDifferentOnTarget, long rowsCannotRepair,
+      long cellsMissingOnTarget, long cellsExtraOnTarget, long cellsDifferentOnTarget) {
       return String.format(FORMAT_CHUNK,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET.name(), rowsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET.name(), rowsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_DIFFERENT_ON_TARGET.name(), rowsDifferentOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR.name(), rowsCannotRepair,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET.name(), cellsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET.name(), cellsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET.name(),
+        cellsDifferentOnTarget);
     }
 
     /**
-     * Formats mapper counters as comma-separated key=value pairs.
-     * @param chunksVerified   Chunks verified count
-     * @param chunksMismatched Chunks mismatched count
-     * @param sourceRows       Source rows processed
-     * @param targetRows       Target rows processed
-     * @return Formatted string with all mapper counters
+     * Formats mapper (region-level) counters as comma-separated key=value pairs. The seven drift
+     * counters are the per-region sum of the same fields emitted by {@link #formatChunk}.
      */
     public static String formatMapper(long chunksVerified, long chunksMismatched, long sourceRows,
-      long targetRows) {
+      long targetRows, long rowsMissingOnTarget, long rowsExtraOnTarget, long rowsDifferentOnTarget,
+      long rowsCannotRepair, long cellsMissingOnTarget, long cellsExtraOnTarget,
+      long cellsDifferentOnTarget) {
       return String.format(FORMAT_MAPPER,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED.name(), chunksVerified,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
-    }
-
-    /**
-     * Parses SOURCE_ROWS_PROCESSED value from counter string.
-     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
-     * @return Source rows processed, or 0 if not found
-     */
-    public static long parseSourceRows(String counters) {
-      return parseCounterValue(counters,
-        PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
-    }
-
-    /**
-     * Parses TARGET_ROWS_PROCESSED value from counter string.
-     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
-     * @return Target rows processed, or 0 if not found
-     */
-    public static long parseTargetRows(String counters) {
-      return parseCounterValue(counters,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET.name(), rowsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET.name(), rowsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_DIFFERENT_ON_TARGET.name(), rowsDifferentOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR.name(), rowsCannotRepair,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET.name(), cellsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET.name(), cellsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET.name(),
+        cellsDifferentOnTarget);
     }
 
     /**
@@ -214,7 +217,7 @@ public class PhoenixSyncTableCheckpointOutputRow {
      * @param counterName Name of the counter to extract
      * @return Counter value, or 0 if not found
      */
-    private static long parseCounterValue(String counters, String counterName) {
+    public static long parseCounterValue(String counters, String counterName) {
       if (counters == null || counters.isEmpty()) {
         return 0;
       }

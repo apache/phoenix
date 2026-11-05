@@ -120,22 +120,29 @@ public class PhoenixSyncTableOutputRepository {
    * @param fromTime      Start timestamp
    * @param toTime        End timestamp
    * @param tenantId      Tenant ID
+   * @param isDryRun      When false (repair mode)
    * @return List of completed mapper regions
    */
   public List<PhoenixSyncTableCheckpointOutputRow> getProcessedMapperRegions(String tableName,
-    String targetCluster, Long fromTime, Long toTime, String tenantId) throws SQLException {
+    String targetCluster, Long fromTime, Long toTime, String tenantId, boolean isDryRun)
+    throws SQLException {
 
     StringBuilder queryBuilder = new StringBuilder();
     queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY FROM ")
       .append(SYNC_TABLE_CHECKPOINT_TABLE_NAME)
       .append(" WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ?")
-      .append(" AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? ");
+      .append(" AND TYPE = 'REGION' AND FROM_TIME = ? AND TO_TIME = ? ");
 
     // Conditionally build TENANT_ID clause based on whether tenantId is null
     if (tenantId == null) {
       queryBuilder.append(" AND TENANT_ID IS NULL");
     } else {
       queryBuilder.append(" AND TENANT_ID = ?");
+    }
+
+    // In repair mode: only skip regions that are fully done (VERIFIED or REPAIRED).
+    if (!isDryRun) {
+      queryBuilder.append(" AND STATUS IN ('VERIFIED', 'REPAIRED')");
     }
 
     queryBuilder.append(
@@ -146,7 +153,6 @@ public class PhoenixSyncTableOutputRepository {
       int paramIndex = 1;
       ps.setString(paramIndex++, tableName);
       ps.setString(paramIndex++, targetCluster);
-      ps.setString(paramIndex++, Type.REGION.name());
       ps.setLong(paramIndex++, fromTime);
       ps.setLong(paramIndex++, toTime);
       // Only bind tenantId parameter if non-null
@@ -175,11 +181,12 @@ public class PhoenixSyncTableOutputRepository {
    * @param tenantId          Tenant ID
    * @param mapperRegionStart Mapper region start key
    * @param mapperRegionEnd   Mapper region end key
+   * @param isDryRun          When false (repair mode)
    * @return List of processed chunks in the region
    */
   public List<PhoenixSyncTableCheckpointOutputRow> getProcessedChunks(String tableName,
     String targetCluster, Long fromTime, Long toTime, String tenantId, byte[] mapperRegionStart,
-    byte[] mapperRegionEnd) throws SQLException {
+    byte[] mapperRegionEnd, boolean isDryRun) throws SQLException {
     StringBuilder queryBuilder = new StringBuilder();
     queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY FROM " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
       + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
@@ -190,6 +197,11 @@ public class PhoenixSyncTableOutputRepository {
       queryBuilder.append(" AND TENANT_ID IS NULL");
     } else {
       queryBuilder.append(" AND TENANT_ID = ?");
+    }
+
+    // In repair mode: only skip chunks that are fully done (VERIFIED or REPAIRED).
+    if (!isDryRun) {
+      queryBuilder.append(" AND STATUS IN ('VERIFIED', 'REPAIRED')");
     }
 
     // Check if mapper region boundaries are non-empty (i.e., NOT first/last regions)
