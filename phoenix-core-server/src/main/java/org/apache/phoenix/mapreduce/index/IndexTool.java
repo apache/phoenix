@@ -36,7 +36,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -61,6 +60,7 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -819,6 +819,12 @@ public class IndexTool extends Configured implements Tool {
       job.setMapOutputValueClass(IntWritable.class);
       job.setOutputKeyClass(NullWritable.class);
       job.setOutputValueClass(NullWritable.class);
+      // The mappers write the index rows directly. The reducer only updates the index state and
+      // emits no records. The output path is optional, and a file output format without a path
+      // fails the job submission.
+      if (FileOutputFormat.getOutputPath(job) == null) {
+        job.setOutputFormatClass(NullOutputFormat.class);
+      }
       TableMapReduceUtil.addDependencyJars(job);
       PhoenixMapReduceUtil.addPhoenixDependencyJars(job.getConfiguration());
       job.setNumReduceTasks(1);
@@ -879,8 +885,7 @@ public class IndexTool extends Configured implements Tool {
         return -1;
       }
     } catch (Exception ex) {
-      LOGGER.error("An exception occurred while performing the indexing job: "
-        + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
+      LOGGER.error("An exception occurred while performing the indexing job", ex);
       return -1;
     } finally {
       if (vectorIndexClaim != null) {
