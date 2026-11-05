@@ -23,9 +23,7 @@ import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_NOT
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY;
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 
 import java.io.IOException;
@@ -40,8 +38,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.slf4j.Logger;
@@ -61,7 +61,6 @@ public class HAGroupStoreManager {
   // Can revert this but will fail for tests with one cluster down
   private static Map<String, HAGroupStoreManager> instances = new ConcurrentHashMap<>();
 
-  private final boolean mutationBlockEnabled;
   private final boolean checkStaleCRRForEveryMutation;
   private final String zkUrl;
   private final Configuration conf;
@@ -182,8 +181,6 @@ public class HAGroupStoreManager {
   }
 
   private HAGroupStoreManager(final Configuration conf, final String zkUrl) {
-    this.mutationBlockEnabled = conf.getBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED,
-      DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED);
     this.checkStaleCRRForEveryMutation = conf.getBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED,
       DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED);
     this.zkUrl = zkUrl;
@@ -202,40 +199,47 @@ public class HAGroupStoreManager {
   }
 
   /**
-   * Checks whether mutation is blocked or not for a specific HA group.
-   * @param haGroupName name of the HA group, null for default HA group which tracks all HA groups.
-   * @return true if mutation is blocked, false otherwise.
-   * @throws IOException when HAGroupStoreClient is not healthy.
+   * Checks an HA client mutation for {@code haGroupName} with one read of the HA group record.
+   * Throws {@link StaleClusterRoleRecordException} if the record is stale for the client (see
+   * {@link #isHAGroupOnClientStale}), then {@link MutationBlockedIOException} if the local cluster
+   * role is ACTIVE_TO_STANDBY. A missing record passes both checks.
+   * @param haGroupName name of the HA group
+   * @throws IOException when the mutation is rejected or HAGroupStoreClient is not healthy
    */
-  public boolean isMutationBlocked(String haGroupName) throws IOException {
-    if (mutationBlockEnabled) {
-      HAGroupStoreClient haGroupStoreClient =
-        getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-      HAGroupStoreRecord recordWithMetadata = haGroupStoreClient.getHAGroupStoreRecord();
-      return recordWithMetadata != null && recordWithMetadata.getClusterRole() != null
-        && recordWithMetadata.getClusterRole().isMutationBlocked();
+  public void checkMutationAllowed(String haGroupName) throws IOException {
+    HAGroupStoreRecord record =
+      getHAGroupStoreClientAndSetupFailoverManagement(haGroupName).getHAGroupStoreRecord();
+    if (!hasClusterRole(record)) {
+      return;
     }
-    return false;
+    if (checkStaleCRRForEveryMutation && isStaleOnClient(record)) {
+      throw new StaleClusterRoleRecordException(
+        String.format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
+    }
+    if (record.getClusterRole().isMutationBlocked()) {
+      throw new MutationBlockedIOException(String.format(
+        "Blocking mutation because the cluster role for HA group %s is ACTIVE_TO_STANDBY",
+        haGroupName));
+    }
   }
 
   /**
-   * Returns whether the {@link HAGroupStoreClient} backing {@code haGroupName} has a live
-   * ZooKeeper connection. See {@link HAGroupStoreClient#isHealthy()} for the full state
-   * transitions (including the brief post-reconnect window where the flag returns
-   * {@code true} before Curator has resynchronized the local cache).
+   * Returns whether the {@link HAGroupStoreClient} backing {@code haGroupName} has a live ZooKeeper
+   * connection. See {@link HAGroupStoreClient#isHealthy()} for the full state transitions
+   * (including the brief post-reconnect window where the flag returns {@code true} before Curator
+   * has resynchronized the local cache).
    * <p>
    * Consumers that subscribe via {@link #subscribeToTargetState} and cache the resulting
-   * {@link HAGroupStateListener} events in memory should consult this before trusting the
-   * cached snapshot: a {@code false} return means the client stopped receiving events and
-   * the cached view may be stale until Curator reconnects. This gives listener-based
-   * consumers a first-class alternative to matching on the {@code "HAGroupStoreClient is
+   * {@link HAGroupStateListener} events in memory should consult this before trusting the cached
+   * snapshot: a {@code false} return means the client stopped receiving events and the cached view
+   * may be stale until Curator reconnects. This gives listener-based consumers a first-class
+   * alternative to matching on the {@code "HAGroupStoreClient is
    * not healthy"} {@link IOException} thrown by the state-reading methods.
-   *
    * @param haGroupName name of the HA group
-   * @return {@code true} if the underlying ZK connection is live; {@code false} if it has
-   *         been lost or suspended
-   * @throws IOException when the {@link HAGroupStoreClient} for {@code haGroupName} cannot
-   *         be resolved or set up
+   * @return {@code true} if the underlying ZK connection is live; {@code false} if it has been lost
+   *         or suspended
+   * @throws IOException when the {@link HAGroupStoreClient} for {@code haGroupName} cannot be
+   *                     resolved or set up
    */
   public boolean isHealthy(String haGroupName) throws IOException {
     HAGroupStoreClient haGroupStoreClient =
@@ -245,23 +249,30 @@ public class HAGroupStoreManager {
 
   public boolean isHAGroupOnClientStale(String haGroupName) throws IOException {
     if (checkStaleCRRForEveryMutation) {
-      HAGroupStoreClient haGroupStoreClient =
-        getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-      // If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale
-      // on client as they are trying to write/read from a STANDBY cluster.
-      // If we plan to use Standby clusters for scan operations, depends on whether the
-      // connection is an SCN connection or not, If a connection is not an SCN connection then
-      // Standby cluster can't be used as most recent data is only available through ACTIVE
-      // cluster. For SCN connections, future client functionality might allow attempts to
-      // open connections to the standby cluster, which would then accept or reject the query
-      // based on whether the SCN falls within its consistency point, and will require a change
-      // in the logic her, with much bigger change.
-      HAGroupStoreRecord hagroupStoreRecord = haGroupStoreClient.getHAGroupStoreRecord();
-      return HighAvailabilityPolicy.valueOf(hagroupStoreRecord.getPolicy())
-          == HighAvailabilityPolicy.FAILOVER
-        && !(hagroupStoreRecord.getHAGroupState().getClusterRole().isActive());
+      HAGroupStoreRecord record =
+        getHAGroupStoreClientAndSetupFailoverManagement(haGroupName).getHAGroupStoreRecord();
+      return hasClusterRole(record) && isStaleOnClient(record);
     }
     return false;
+  }
+
+  private static boolean hasClusterRole(HAGroupStoreRecord record) {
+    return record != null && record.getClusterRole() != null;
+  }
+
+  /** Caller must check {@link #hasClusterRole} first. */
+  private static boolean isStaleOnClient(HAGroupStoreRecord record) {
+    // If local cluster is not ACTIVE/ACTIVE_TO_STANDBY, it means the Failover CRR is stale
+    // on client as they are trying to write/read from a STANDBY cluster.
+    // If we plan to use Standby clusters for scan operations, depends on whether the
+    // connection is an SCN connection or not, If a connection is not an SCN connection then
+    // Standby cluster can't be used as most recent data is only available through ACTIVE
+    // cluster. For SCN connections, future client functionality might allow attempts to
+    // open connections to the standby cluster, which would then accept or reject the query
+    // based on whether the SCN falls within its consistency point, and will require a change
+    // in the logic her, with much bigger change.
+    return HighAvailabilityPolicy.valueOf(record.getPolicy()) == HighAvailabilityPolicy.FAILOVER
+      && !record.getClusterRole().isActive();
   }
 
   /**

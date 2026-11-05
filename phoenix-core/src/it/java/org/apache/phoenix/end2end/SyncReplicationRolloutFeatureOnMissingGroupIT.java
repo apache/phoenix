@@ -21,7 +21,6 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.junit.Assert.assertFalse;
@@ -68,10 +67,9 @@ public class SyncReplicationRolloutFeatureOnMissingGroupIT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
     // Feature on, but the HA group does not exist yet; production-representative HA guard flags on.
     props.put(SYNCHRONOUS_REPLICATION_ENABLED, Boolean.TRUE.toString());
-    props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.TRUE.toString());
     props.put(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED, Boolean.TRUE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }

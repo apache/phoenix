@@ -105,8 +105,6 @@ import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.exception.MutationBlockedIOException;
-import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -912,7 +910,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /*
-   * Also checks for mutationBlockEnabled if CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is enabled.
+   * When sync replication is enabled, also rejects HA client batches whose HA group is stale on the
+   * client or whose local cluster role is ACTIVE_TO_STANDBY.
    */
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
@@ -972,17 +971,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // roleRecord (I tried it and still it's slow due to haGroupStoreClient
         // initialization) and caching will give us old result in case one cluster
         // is unreachable instead of UNKNOWN.
-        // Check if mutation's haGroup is stale
-        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(name);
-        if (StringUtils.isNotBlank(name) && isHAGroupOnClientStale) {
-          throw new StaleClusterRoleRecordException(
-            String.format("HAGroupStoreRecord is stale for haGroup %s on " + "client", name));
-        }
-
-        if (StringUtils.isNotBlank(name) && haGroupStoreManager.isMutationBlocked(name)) {
-          throw new MutationBlockedIOException(
-            "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
-              + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+        // Throws StaleClusterRoleRecordException, then MutationBlockedIOException, from one read.
+        if (StringUtils.isNotBlank(name)) {
+          haGroupStoreManager.checkMutationAllowed(name);
         }
       }
 

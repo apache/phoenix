@@ -21,7 +21,6 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.junit.Assert.assertEquals;
@@ -51,24 +50,23 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * = false}) and the HA group has not been created yet, while clients — upgraded first — already
  * attach the {@code _HAGroupName} attribute to every mutation.
  * <p>
- * Production runs {@code phoenix.cluster.role.based.mutation.block.enabled = true} and the
- * stale-CRR check defaults on, so in this window {@code IndexRegionObserver.preBatchMutate} reaches
- * the cluster-role-based mutation-block / staleness gate — which keys off {@code _HAGroupName}
- * presence, not the feature flag — and resolves the (absent) HA group, failing the write.
+ * The mutation block is always on and the stale-CRR check defaults on, so without the master switch
+ * {@code IndexRegionObserver.preBatchMutate} would reach the cluster-role-based mutation-block /
+ * staleness gate in this window — which keys off {@code _HAGroupName} presence — and resolve the
+ * (absent) HA group, failing the write.
  * <p>
  * The contract this test asserts (design decision D1): {@code SYNCHRONOUS_REPLICATION_ENABLED} is
  * the master switch for all HA semantics, so with the feature off the gate must not run and the
- * write must succeed regardless of the block/stale sub-flags or whether the HA group exists.
+ * write must succeed regardless of the stale-check sub-flag or whether the HA group exists.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class SyncReplicationRolloutStep1IT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
     // Step-1 state: feature dark, but production-representative HA guard flags on.
     props.put(SYNCHRONOUS_REPLICATION_ENABLED, Boolean.FALSE.toString());
-    props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, Boolean.TRUE.toString());
     props.put(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED, Boolean.TRUE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }

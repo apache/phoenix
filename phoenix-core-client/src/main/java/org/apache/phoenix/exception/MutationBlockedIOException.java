@@ -20,8 +20,8 @@ package org.apache.phoenix.exception;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 
 /**
- * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set and the current cluster
- * role is ACTIVE_TO_STANDBY.
+ * Exception thrown when an HA client mutation reaches a cluster whose role for the mutation's HA
+ * group is ACTIVE_TO_STANDBY.
  * <p>
  * Extends {@link DoNotRetryIOException} so HBase's RPC retry layers
  * ({@code AsyncRequestFutureImpl}, {@code RpcRetryingCallerImpl}) fail-fast on the first hit
