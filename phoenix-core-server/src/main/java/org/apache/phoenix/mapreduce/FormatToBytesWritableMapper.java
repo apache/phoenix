@@ -20,6 +20,9 @@ package org.apache.phoenix.mapreduce;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +33,8 @@ import java.util.Properties;
 import java.util.TreeMap;
 import javax.annotation.Nullable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -90,6 +95,9 @@ public abstract class FormatToBytesWritableMapper<RECORD>
   public static final String IGNORE_INVALID_ROW_CONFKEY =
     "phoenix.mapreduce.import.ignoreinvalidrow";
 
+  /** Configuration key for the HDFS path to write bad/rejected records */
+  public static final String BAD_RECORDS_PATH_CONFKEY = "phoenix.mapreduce.import.badrecordspath";
+
   /** Configuration key for the table names */
   public static final String TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
 
@@ -111,6 +119,7 @@ public abstract class FormatToBytesWritableMapper<RECORD>
   protected List<String> logicalNames;
   protected MapperUpsertListener<RECORD> upsertListener;
   protected boolean ignoreInvalidRows;
+  protected PrintWriter badRecordsWriter;
 
   /*
    * lookup table for column index. Index in the List matches to the index in tableNames List
@@ -149,9 +158,23 @@ public abstract class FormatToBytesWritableMapper<RECORD>
     }
 
     ignoreInvalidRows = conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true);
-    upsertListener = new MapperUpsertListener<RECORD>(context, ignoreInvalidRows);
+    upsertListener = new MapperUpsertListener<RECORD>(context, ignoreInvalidRows,
+      this::writeBadRecord);
     upsertExecutor = buildUpsertExecutor(conf);
     preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+
+    String badRecordsPath = conf.get(BAD_RECORDS_PATH_CONFKEY);
+    if (badRecordsPath != null) {
+      Path outputDir = new Path(badRecordsPath);
+      FileSystem fs = outputDir.getFileSystem(conf);
+      if (!fs.exists(outputDir)) {
+        fs.mkdirs(outputDir);
+      }
+      String taskAttemptId = context.getTaskAttemptID().toString();
+      Path badRecordFile = new Path(outputDir, taskAttemptId + ".bad");
+      badRecordsWriter = new PrintWriter(
+        new OutputStreamWriter(fs.create(badRecordFile, false), StandardCharsets.UTF_8));
+    }
   }
 
   @Override
@@ -172,6 +195,7 @@ public abstract class FormatToBytesWritableMapper<RECORD>
         if (!ignoreInvalidRows) {
           throw new IOException("Error parsing input: " + e.getMessage(), e);
         }
+        writeBadRecord(value.toString(), e.getMessage());
         return;
       }
 
@@ -337,9 +361,24 @@ public abstract class FormatToBytesWritableMapper<RECORD>
     }
   }
 
+  /**
+   * Write a rejected record to the bad records file if configured.
+   */
+  private void writeBadRecord(String record, String errorMessage) {
+    if (badRecordsWriter != null) {
+      String sanitizedError = errorMessage != null
+        ? errorMessage.replace('\n', ' ').replace('\t', ' ')
+        : "unknown";
+      badRecordsWriter.println(sanitizedError + "\t" + record);
+    }
+  }
+
   @Override
   protected void cleanup(Context context) throws IOException, InterruptedException {
     try {
+      if (badRecordsWriter != null) {
+        badRecordsWriter.close();
+      }
       if (conn != null) {
         conn.close();
       }
@@ -381,6 +420,14 @@ public abstract class FormatToBytesWritableMapper<RECORD>
   }
 
   /**
+   * Functional interface for writing bad records from the upsert listener.
+   */
+  @FunctionalInterface
+  interface BadRecordWriter {
+    void write(String record, String errorMessage);
+  }
+
+  /**
    * Listener that logs successful upserts and errors to job counters.
    */
   @VisibleForTesting
@@ -389,12 +436,15 @@ public abstract class FormatToBytesWritableMapper<RECORD>
     private final Mapper<LongWritable, Text, TableRowkeyPair,
       ImmutableBytesWritable>.Context context;
     private final boolean ignoreRecordErrors;
+    private final BadRecordWriter badRecordWriter;
 
-    private MapperUpsertListener(
+    @VisibleForTesting
+    MapperUpsertListener(
       Mapper<LongWritable, Text, TableRowkeyPair, ImmutableBytesWritable>.Context context,
-      boolean ignoreRecordErrors) {
+      boolean ignoreRecordErrors, BadRecordWriter badRecordWriter) {
       this.context = context;
       this.ignoreRecordErrors = ignoreRecordErrors;
+      this.badRecordWriter = badRecordWriter;
     }
 
     @Override
@@ -406,6 +456,9 @@ public abstract class FormatToBytesWritableMapper<RECORD>
     public void errorOnRecord(T record, Throwable throwable) {
       LOGGER.error("Error on record " + record, throwable);
       context.getCounter(COUNTER_GROUP_NAME, "Errors on records").increment(1L);
+      if (badRecordWriter != null) {
+        badRecordWriter.write(String.valueOf(record), throwable.getMessage());
+      }
       if (!ignoreRecordErrors) {
         Throwables.propagate(throwable);
       }
