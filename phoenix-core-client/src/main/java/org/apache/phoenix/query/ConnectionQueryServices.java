@@ -163,7 +163,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
   public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] tableName,
     PTableType tableType, Map<String, Object> tableProps,
     List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean isNamespaceMapped,
-    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable) throws SQLException;
+    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable, boolean createIfNotExists) throws SQLException;
 
   public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType,
     boolean cascade) throws SQLException;

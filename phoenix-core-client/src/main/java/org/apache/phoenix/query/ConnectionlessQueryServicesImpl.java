@@ -363,7 +363,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName,
     PTableType tableType, Map<String, Object> tableProps,
     List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean isNamespaceMapped,
-    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable)
+    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable, boolean createIfNotExists)
     throws SQLException {
     if (
       tableType == PTableType.INDEX
