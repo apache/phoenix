@@ -236,6 +236,8 @@ public enum MetricType {
   PHOENIX_CONNECTIONS_FAILED_COUNTER("cf",
     "Number of client Phoenix Connections Failed to open" + ", not including throttled connections",
     LogLevel.OFF, PLong.INSTANCE),
+  PHOENIX_CONNECTION_CREATION_DURATION_MS("cct",
+    "Time spent in creating Phoenix connections in milliseconds", LogLevel.OFF, PLong.INSTANCE),
   CLIENT_METADATA_CACHE_MISS_COUNTER("cmcm", "Number of cache misses for the CQSI cache.",
     LogLevel.DEBUG, PLong.INSTANCE),
   CLIENT_METADATA_CACHE_HIT_COUNTER("cmch", "Number of cache hits for the CQSI cache.",
