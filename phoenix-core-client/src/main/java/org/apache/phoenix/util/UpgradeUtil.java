@@ -2788,7 +2788,7 @@ public class UpgradeUtil {
         conn.commit();
       } else {
         throw new RuntimeException(
-          "Error: problem occured during upgrade. " + "Table is not upgraded successfully");
+          "Error: problem occurred during upgrade. " + "Table is not upgraded successfully");
       }
       if (table.getType() == PTableType.VIEW) {
         LOGGER
