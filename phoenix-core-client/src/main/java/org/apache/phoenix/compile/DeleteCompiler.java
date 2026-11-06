@@ -919,6 +919,7 @@ public class DeleteCompiler {
       PTable table = dataPlan.getTableRef().getTable();
       table.getIndexMaintainers(ptr, context.getConnection());
       ScanUtil.annotateScanWithMetadataAttributes(table, context.getScan());
+      ScanUtil.setScanAttributeForHA(context.getScan(), connection);
       byte[] txState = table.isTransactional()
         ? connection.getMutationState().encodeTransaction()
         : ByteUtil.EMPTY_BYTE_ARRAY;

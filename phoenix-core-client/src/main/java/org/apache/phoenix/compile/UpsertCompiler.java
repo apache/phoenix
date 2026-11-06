@@ -1221,6 +1221,7 @@ public class UpsertCompiler {
       PTable table = tableRef.getTable();
       table.getIndexMaintainers(ptr, context.getConnection());
       ScanUtil.annotateScanWithMetadataAttributes(table, scan);
+      ScanUtil.setScanAttributeForHA(scan, connection);
       byte[] txState = table.isTransactional()
         ? connection.getMutationState().encodeTransaction()
         : ByteUtil.EMPTY_BYTE_ARRAY;

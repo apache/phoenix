@@ -1516,7 +1516,20 @@ public class ScanUtil {
    */
   public static void setScanAttributeForHAForPointLookups(Scan scan, PhoenixConnection conn,
     StatementContext context) {
-    if (context.getScanRanges().isPointLookup() && conn.getHAGroup() != null) {
+    if (context.getScanRanges().isPointLookup()) {
+      setScanAttributeForHA(scan, conn);
+    }
+  }
+
+  /**
+   * Set the connection's haGroupName as a scan attribute, if the connection has an HA group. A scan
+   * whose region scanner generates mutations (server-side DELETE and UPSERT SELECT) needs it, as
+   * the server copies it onto those mutations for replication and cluster-role checks.
+   * @param scan the scan to stamp
+   * @param conn the connection that owns the scan
+   */
+  public static void setScanAttributeForHA(Scan scan, PhoenixConnection conn) {
+    if (conn.getHAGroup() != null) {
       scan.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
         Bytes.toBytes(conn.getHAGroup().getName()));
     }
