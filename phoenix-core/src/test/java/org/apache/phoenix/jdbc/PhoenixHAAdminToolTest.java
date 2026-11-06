@@ -36,6 +36,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.jdbc.PhoenixHAAdminTool.FailoverMarker;
 import org.junit.Test;
 
 public class PhoenixHAAdminToolTest {
@@ -57,6 +59,54 @@ public class PhoenixHAAdminToolTest {
       PhoenixHAAdminTool.isStableFailoverPair(STANDBY, ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER));
     assertFalse(PhoenixHAAdminTool.isStableFailoverPair(null, ACTIVE_IN_SYNC));
     assertFalse(PhoenixHAAdminTool.isStableFailoverPair(STANDBY, null));
+  }
+
+  @Test
+  public void testFailoverMarkerFormat() {
+    assertEquals(
+      "PHOENIX_HA_FAILOVER_MARKER marker=FAILOVER_START group=g1 ts=1762387954123"
+        + " ts_utc=2025-11-06T00:12:34.123Z",
+      PhoenixHAAdminTool.formatFailoverMarker(FailoverMarker.FAILOVER_START, "g1", 1762387954123L));
+    assertEquals(
+      "PHOENIX_HA_FAILOVER_MARKER marker=ABORT_TIMEOUT group=g2 ts=0"
+        + " ts_utc=1970-01-01T00:00:00.000Z",
+      PhoenixHAAdminTool.formatFailoverMarker(FailoverMarker.ABORT_TIMEOUT, "g2", 0L));
+  }
+
+  @Test
+  public void testEarlyExitPrintsFailedEndMarker() throws Exception {
+    assertEarlyExitMarkers("initiate-failover", "FAILOVER_START", "FAILOVER_FAILED");
+    assertEarlyExitMarkers("abort-failover", "ABORT_START", "ABORT_FAILED");
+  }
+
+  private void assertEarlyExitMarkers(String command, String startMarker, String endMarker)
+    throws Exception {
+    // No ZK quorum in the configuration, so the command stops after the start marker.
+    String output = runWithCapturedOutput(command, "-g", "g1");
+    int start = output.indexOf("marker=" + startMarker + " group=g1 ts=");
+    int end = output.indexOf("marker=" + endMarker + " group=g1 ts=");
+    assertTrue(output, start >= 0 && start < end);
+
+    // A missing HA group fails before the start marker, so no marker is printed.
+    output = runWithCapturedOutput(command);
+    assertFalse(output, output.contains(PhoenixHAAdminTool.FAILOVER_MARKER_PREFIX));
+  }
+
+  private String runWithCapturedOutput(String... args) throws Exception {
+    PrintStream originalOut = System.out;
+    PrintStream originalErr = System.err;
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try {
+      System.setOut(new PrintStream(output));
+      System.setErr(new PrintStream(output));
+      PhoenixHAAdminTool tool = new PhoenixHAAdminTool();
+      tool.setConf(new Configuration(false));
+      assertEquals(RET_ARGUMENT_ERROR, tool.run(args));
+    } finally {
+      System.setOut(originalOut);
+      System.setErr(originalErr);
+    }
+    return output.toString();
   }
 
   @Test
