@@ -42,6 +42,7 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
   private final MetricHistogram duplicateKeyTimeHisto;
   private final MutableFastCounter slowDuplicateKeyCalls;
   private final MetricHistogram replicationSyncTimeHisto;
+  private final MutableFastCounter replicationDivergence;
 
   private final MetricHistogram preIndexUpdateTimeHisto;
   private final MetricHistogram postIndexUpdateTimeHisto;
@@ -92,6 +93,8 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
       getMetricsRegistry().newCounter(SLOW_DUPLICATE_KEY, SLOW_DUPLICATE_KEY_DESC, 0L);
     replicationSyncTimeHisto =
       getMetricsRegistry().newHistogram(REPLICATION_SYNC_TIME, REPLICATION_SYNC_TIME_DESC);
+    replicationDivergence =
+      getMetricsRegistry().newCounter(REPLICATION_DIVERGENCE, REPLICATION_DIVERGENCE_DESC, 0L);
 
     postIndexUpdateTimeHisto =
       getMetricsRegistry().newHistogram(POST_INDEX_UPDATE_TIME, POST_INDEX_UPDATE_TIME_DESC);
@@ -231,6 +234,12 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
   public void updateReplicationSyncTime(String dataTableName, long t) {
     incrementTableSpecificHistogram(REPLICATION_SYNC_TIME, dataTableName, t);
     replicationSyncTimeHisto.add(t);
+  }
+
+  @Override
+  public void incrementReplicationDivergence(String dataTableName) {
+    incrementTableSpecificCounter(REPLICATION_DIVERGENCE, dataTableName);
+    replicationDivergence.incr();
   }
 
   private void incrementTableSpecificCounter(String baseCounterName, String tableName) {

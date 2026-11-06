@@ -26,6 +26,7 @@ import java.util.Collections;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
 import org.junit.Test;
 
 /**
@@ -67,5 +68,23 @@ public class HighAvailabilityUtilTest {
     Throwable outer = new RuntimeException("outer", mid);
     assertTrue("recursive getCause() walk must surface a deeply-nested MBIOE",
       HighAvailabilityUtil.isMutationBlockedIOExceptionExistsInThrowable(outer));
+  }
+
+  @Test
+  public void testReplicationFailoverInProgressDetection() {
+    assertFalse(
+      HighAvailabilityUtil.isReplicationFailoverInProgressExceptionExistsInThrowable(null));
+    ReplicationFailoverInProgressException failover =
+      new ReplicationFailoverInProgressException("failover");
+    assertTrue(HighAvailabilityUtil.isReplicationFailoverInProgressExceptionExistsInThrowable(
+      new RuntimeException("outer", failover)));
+    RetriesExhaustedWithDetailsException rewde = new RetriesExhaustedWithDetailsException(
+      Arrays.<Throwable> asList(new IOException("unrelated"), failover),
+      Collections.<Row> emptyList(), Collections.<String> emptyList());
+    assertTrue("RetriesExhaustedWithDetailsException causes must be scanned",
+      HighAvailabilityUtil.isReplicationFailoverInProgressExceptionExistsInThrowable(rewde));
+    assertFalse("A blocked write is not a failover failure",
+      HighAvailabilityUtil.isReplicationFailoverInProgressExceptionExistsInThrowable(
+        new MutationBlockedIOException("blocked")));
   }
 }

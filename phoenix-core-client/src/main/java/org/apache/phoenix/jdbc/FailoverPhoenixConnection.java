@@ -18,9 +18,11 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isMutationBlockedIOExceptionExistsInThrowable;
+import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isReplicationFailoverInProgressExceptionExistsInThrowable;
 import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isStaleClusterRoleRecordExceptionExistsInThrowable;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_MUTATION_BLOCKED_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_STALE_CRR_DETECTED_COUNT;
 
 import java.sql.Array;
@@ -367,6 +369,11 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
           GLOBAL_HA_MUTATION_BLOCKED_COUNT.increment();
           HAGroupMetricsManager.increment(context.getHAGroup().getName(),
             MetricType.HA_MUTATION_BLOCKED_COUNT);
+        }
+        if (isReplicationFailoverInProgressExceptionExistsInThrowable(e)) {
+          GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT.increment();
+          HAGroupMetricsManager.increment(context.getHAGroup().getName(),
+            MetricType.HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT);
         }
         if (policy.shouldFailover(e, ++failoverCount)) {
           failover(timeoutMs);

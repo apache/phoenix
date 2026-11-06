@@ -385,6 +385,10 @@ public enum MetricType {
   HA_MUTATION_BLOCKED_COUNT("hambc",
     "Counter for MutationBlockedIOException surfaces caught by wrapActionDuringFailover",
     LogLevel.DEBUG, PLong.INSTANCE),
+  HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT("harfc",
+    "Counter for ReplicationFailoverInProgressException surfaces caught by "
+      + "wrapActionDuringFailover: writes committed on the old active whose replication failed",
+    LogLevel.DEBUG, PLong.INSTANCE),
   HA_STALE_CRR_DETECTED_COUNT("hascd",
     "Counter for StaleClusterRoleRecordException surfaces caught by wrapActionDuringFailover",
     LogLevel.DEBUG, PLong.INSTANCE),

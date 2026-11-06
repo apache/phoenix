@@ -21,7 +21,12 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 
 /**
  * Exception thrown when an HA client mutation reaches a cluster whose role for the mutation's HA
- * group is ACTIVE_TO_STANDBY.
+ * group is ACTIVE_TO_STANDBY, or when a consistent failover stopped the HA group's replication log
+ * and is still in progress (or the HA state cannot be read), or when creating the replication log
+ * failed during a failover. Either way the write was refused before it was committed: no change was
+ * made, unlike {@link ReplicationFailoverInProgressException}, which reports a divergence. As for
+ * any exception from {@code preBatchMutate}, HBase reports it for every row of the region call,
+ * including rows of an earlier mini-batch of the same call that did commit.
  * <p>
  * Extends {@link DoNotRetryIOException} so HBase's RPC retry layers
  * ({@code AsyncRequestFutureImpl}, {@code RpcRetryingCallerImpl}) fail-fast on the first hit

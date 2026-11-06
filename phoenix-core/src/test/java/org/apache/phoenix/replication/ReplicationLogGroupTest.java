@@ -70,6 +70,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
+import org.apache.phoenix.exception.ReplicationLogGroupUnavailableException;
 import org.apache.phoenix.jdbc.ClusterType;
 import org.apache.phoenix.jdbc.HAGroupStateListener;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
@@ -1128,6 +1131,123 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * Makes every peer sync fail and the STORE_AND_FORWARD fallback be rejected from {@code from},
+   * then returns the exception the write gets.
+   */
+  private IOException failSyncWithRejectedTransitionFrom(HAGroupState from) throws Exception {
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulated sync failure")).when(w).sync();
+      return w;
+    }).when(activeLog).createNewWriter();
+    doThrow(new InvalidClusterRoleTransitionException(
+      "Cannot transition from " + from + " to " + HAGroupState.ACTIVE_NOT_IN_SYNC, from,
+      HAGroupState.ACTIVE_NOT_IN_SYNC)).when(haGroupStoreManager)
+        .setHAGroupStatusToStoreAndForward(haGroupName);
+    logGroup.append("TBLREJECT", 1L, put);
+    try {
+      logGroup.sync();
+      fail("A rejected STORE_AND_FORWARD fallback must fail the write");
+    } catch (IOException ex) {
+      return ex;
+    }
+    return null;
+  }
+
+  /** The write failed with the failover exception, and the RS was not aborted. */
+  private void assertFailedWithoutAbort(IOException ex, String reason) throws IOException {
+    assertTrue(String.valueOf(ex), ex instanceof ReplicationFailoverInProgressException);
+    assertTrue(ex.getMessage(), ex.getMessage().contains(reason));
+    verify(logGroup, never()).abort(anyString(), any());
+    assertFalse("The group must not be closed", logGroup.isClosed());
+  }
+
+  @Test
+  public void testRejectedFallbackInFailoverFailsWrite() throws Exception {
+    IOException ex = failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertFailedWithoutAbort(ex, "the in-sync failover started");
+  }
+
+  @Test
+  public void testRejectedFallbackWhileFailoverCancelsFailsWrite() throws Exception {
+    IOException ex = failSyncWithRejectedTransitionFrom(HAGroupState.ABORT_TO_ACTIVE_IN_SYNC);
+    assertFailedWithoutAbort(ex, "the in-sync failover is being cancelled");
+  }
+
+  @Test
+  public void testRejectedFallbackAfterDemotionNamesIt() throws Exception {
+    for (HAGroupState demoted : new HAGroupState[] { HAGroupState.STANDBY,
+      HAGroupState.DEGRADED_STANDBY, HAGroupState.ABORT_TO_STANDBY }) {
+      recreateLogGroup();
+      IOException ex = failSyncWithRejectedTransitionFrom(demoted);
+      assertFailedWithoutAbort(ex, "the local cluster was demoted");
+    }
+  }
+
+  @Test
+  public void testRejectedFallbackInUnsupportedStateSaysAbortFailover() throws Exception {
+    IOException ex = failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY);
+    assertTrue(ex.getMessage(), ex.getMessage().contains("run abort-failover"));
+    assertFalse(ex instanceof ReplicationFailoverInProgressException);
+    verify(logGroup).abort(anyString(), any());
+  }
+
+  @Test
+  public void testRejectedFallbackInUnexpectedStateAborts() throws Exception {
+    IOException ex = failSyncWithRejectedTransitionFrom(HAGroupState.OFFLINE);
+    assertTrue(ex.getMessage(), ex.getMessage().contains("unexpected state OFFLINE"));
+    assertFalse(ex instanceof ReplicationFailoverInProgressException);
+    verify(logGroup).abort(anyString(), any());
+  }
+
+  /**
+   * After a write fails because of a failover, the group stays fatal but open: later writes on it
+   * fail fast with the same exception and never abort the RS.
+   */
+  @Test
+  public void testFailoverFailureFailsLaterWritesWithoutAbort() throws Exception {
+    IOException first = failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertFailedWithoutAbort(first, "the in-sync failover started");
+    assertNotNull("The group must be fatal", logGroup.eventHandler.getFatalException());
+
+    // append() rethrows the fatal failover exception.
+    try {
+      logGroup.append("TBLREJECT", 2L, LogFileTestUtil.newPut("row2", 2, 1));
+      fail("A later append on the fatal group must fail");
+    } catch (IOException ex) {
+      assertFailedWithoutAbort(ex, "the in-sync failover started");
+    }
+    // So does sync(), for a batch whose append got in before the group went fatal.
+    try {
+      logGroup.sync();
+      fail("A later sync on the fatal group must fail");
+    } catch (IOException ex) {
+      assertFailedWithoutAbort(ex, "the in-sync failover started");
+    }
+  }
+
+  /** SYNC_AND_FORWARD goes through the same fallback, so it gets the same outcome. */
+  @Test
+  public void testRejectedFallbackInSyncAndForwardFailsWrite() throws Exception {
+    assertTrue(logGroup.checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD));
+    waitForHandlerMode(SYNC_AND_FORWARD);
+    // The handler publishes the new mode before onEnter creates its log; wait for the writer.
+    long deadline = System.currentTimeMillis() + 5000;
+    while (
+      (logGroup.getActiveLog() == null || logGroup.getActiveLog().getWriter() == null)
+        && System.currentTimeMillis() < deadline
+    ) {
+      sleep(20);
+    }
+    IOException ex = failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertFailedWithoutAbort(ex, "SYNC_AND_FORWARD write failed");
+  }
+
+  /**
    * Tests rotation during an in-flight batch. When a pending writer is staged by the rotation task
    * while appends are in flight, the sync's apply() drains the pending writer, replays the 5
    * unsynced records into the new writer, then syncs the new writer.
@@ -1772,8 +1892,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
    * A teardown step that throws inside close() must still remove the instance from the cache;
    * otherwise a dangling closed instance is stranded and an active->standby->active cycle (which
    * calls close() on demotion) would, on re-promotion without a JVM restart, hand the dead instance
-   * back to get() and every append()/sync() would throw "Closed" forever. The removal lives in a
-   * finally to guarantee this.
+   * back to get() and every append()/sync() would throw the closed-group error forever. The removal
+   * lives in a finally to guarantee this.
    */
   @Test
   public void testCloseRemovesFromCacheEvenWhenTeardownThrows() throws Exception {
@@ -3331,29 +3451,30 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * ACTIVE_IN_SYNC_TO_STANDBY is the in-sync cutover gate (role ACTIVE_TO_STANDBY, mutations
-   * blocked). init() reaches it not from the live write path (blocked) but from preWALRestore
-   * recovery on an RS restart / region reassignment during cutover. It must NOT fail fast: throwing
-   * would abort WAL replay and silently fail to re-ship already-committed edits to the peer.
-   * Instead the writer starts in SYNC with failoverPending already set, so recovery ships its edits
-   * while rotation stays suspended (no new files that would re-arm the standby deadlock).
+   * ACTIVE_IN_SYNC_TO_STANDBY is the in-sync failover gate (role ACTIVE_TO_STANDBY, mutations
+   * blocked when the mutation block is on). init() reaches it from preWALRestore recovery on an RS
+   * restart / region reassignment during failover. It must NOT fail fast: throwing would abort WAL
+   * replay and silently fail to re-ship already-committed edits to the peer. Instead the writer
+   * starts in SYNC and, with no listener event (the state was read, not transitioned into), still
+   * reports failover-pending from the cached state, so recovery ships its edits while rotation
+   * stays suspended.
    */
   @Test
-  public void testInitInCutoverStartsSyncWithFailoverPending() throws Exception {
-    final String cutoverGroup = haGroupName + "-cutover";
-    HAGroupStoreManager cutoverManager = Mockito.mock(HAGroupStoreManager.class);
-    HAGroupStoreRecord cutoverRecord = new HAGroupStoreRecord(null, cutoverGroup,
+  public void testInitInFailoverStartsSyncWithFailoverPending() throws Exception {
+    final String failoverGroup = haGroupName + "-failover";
+    HAGroupStoreManager failoverManager = Mockito.mock(HAGroupStoreManager.class);
+    HAGroupStoreRecord failoverRecord = new HAGroupStoreRecord(null, failoverGroup,
       HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0, HighAvailabilityPolicy.FAILOVER.toString(),
       "peerZKUrl", "clusterUrl", "peerClusterUrl", localUri.toString(), peerUri.toString(), 0L);
-    doReturn(Optional.of(cutoverRecord)).when(cutoverManager)
+    doReturn(Optional.of(failoverRecord)).when(failoverManager)
       .getEffectiveHAGroupStoreRecord(anyString());
 
     ReplicationLogGroup group =
-      new TestableLogGroup(conf, serverName, cutoverGroup, cutoverManager, useAlignedRotation());
+      new TestableLogGroup(conf, serverName, failoverGroup, failoverManager, useAlignedRotation());
     group.init();
     try {
-      assertEquals("Cutover init must start in SYNC", SYNC, group.getMode());
-      assertTrue("Cutover init must seed failover-pending so rotation stays suspended",
+      assertEquals("Failover init must start in SYNC", SYNC, group.getMode());
+      assertTrue("A group created in the failover gate must report failover-pending",
         group.isFailoverPending());
     } finally {
       group.close();
@@ -3361,27 +3482,55 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * On the live demotion path (an existing writer created while ACTIVE_IN_SYNC), entering the
-   * in-sync cutover gate (ACTIVE_IN_SYNC_TO_STANDBY) must set failoverPending — which suspends
-   * rotation — but must NOT close the group: a straggler write that committed locally before the
-   * mutation block still needs the open writer to reach the peer.
+   * A SYNC onEnter that fails during a restart-in-failover init attempts the STORE_AND_FORWARD
+   * fallback, whose rejection from ACTIVE_IN_SYNC_TO_STANDBY fails the init with the failover
+   * exception: the group never enters STORE_AND_FORWARD, and the RS is not aborted.
    */
   @Test
-  public void testCutoverSetsFailoverPending() throws Exception {
-    ArgumentCaptor<HAGroupStateListener> captor =
-      ArgumentCaptor.forClass(HAGroupStateListener.class);
-    verify(haGroupStoreManager).subscribeToTargetState(eq(haGroupName),
-      eq(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY), eq(ClusterType.LOCAL), captor.capture());
-    HAGroupStateListener demotionListener = captor.getValue();
-    assertNotNull("A LOCAL ACTIVE_IN_SYNC_TO_STANDBY listener should be registered",
-      demotionListener);
-    assertFalse("Group should not be failover-pending before cutover",
+  public void testInitInFailoverWithFailingPeerSkipsStoreAndForward() throws Exception {
+    final String failoverGroup = haGroupName + "-failover-fail";
+    HAGroupStoreManager failoverManager = Mockito.mock(HAGroupStoreManager.class);
+    HAGroupStoreRecord failoverRecord = new HAGroupStoreRecord(null, failoverGroup,
+      HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0, HighAvailabilityPolicy.FAILOVER.toString(),
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", localUri.toString(), peerUri.toString(), 0L);
+    doReturn(Optional.of(failoverRecord)).when(failoverManager)
+      .getEffectiveHAGroupStoreRecord(anyString());
+    doThrow(new InvalidClusterRoleTransitionException("Cannot transition",
+      HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, HAGroupState.ACTIVE_NOT_IN_SYNC))
+        .when(failoverManager).setHAGroupStatusToStoreAndForward(failoverGroup);
+
+    ReplicationLogGroup group =
+      new TestableLogGroup(conf, serverName, failoverGroup, failoverManager, useAlignedRotation()) {
+        @Override
+        protected ReplicationLog createReplicationLog(ReplicationShardDirectoryManager shardManager)
+          throws IOException {
+          throw new IOException("Simulated peer failure");
+        }
+      };
+    try {
+      group.init();
+      fail("Init in failover with a failing peer must fail");
+    } catch (IOException expected) {
+      assertTrue(String.valueOf(expected),
+        expected instanceof ReplicationFailoverInProgressException);
+      assertTrue(group.isFailoverPending());
+    }
+    assertNotEquals(STORE_AND_FORWARD, group.getMode());
+  }
+
+  /**
+   * failoverPending follows the cached local state with no listener: it holds while the state is
+   * the in-sync failover gate (ACTIVE_IN_SYNC_TO_STANDBY), where rotation is suspended but the
+   * group stays open so a straggler that committed locally still reaches the peer, and clears once
+   * the state moves on.
+   */
+  @Test
+  public void testFailoverPendingFollowsCachedState() throws Exception {
+    assertFalse("Group should not be failover-pending before failover",
       logGroup.isFailoverPending());
 
-    demotionListener.onStateChange(haGroupName, HAGroupState.ACTIVE_IN_SYNC,
-      HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L, ClusterType.LOCAL, 0L);
-
-    assertTrue("Cutover must set failover-pending", logGroup.isFailoverPending());
+    setLocalState(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertTrue("The failover gate must report failover-pending", logGroup.isFailoverPending());
     // Rotation is suspended: forceRotation() stages no new writer, and the current writer stays
     // open.
     ReplicationLog activeLog = logGroup.getActiveLog();
@@ -3389,92 +3538,218 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     activeLog.forceRotation();
     assertEquals("Rotation must be suppressed while failover-pending", writerBefore,
       activeLog.getWriter());
-    assertFalse("Group must stay open during cutover", logGroup.isClosed());
+    assertFalse("Group must stay open during failover", logGroup.isClosed());
+
+    setLocalState(HAGroupState.ABORT_TO_ACTIVE_IN_SYNC);
+    assertFalse("A cancel in progress must reopen rotation", logGroup.isFailoverPending());
+  }
+
+  /** If the HA state cannot be read, rotation is not suspended. */
+  @Test
+  public void testFailoverPendingFalseWhenStateUnreadable() throws Exception {
+    doThrow(new IOException("HAGroupStoreClient is not healthy")).when(haGroupStoreManager)
+      .getEffectiveHAGroupStoreRecord(anyString());
+    assertFalse(logGroup.isFailoverPending());
   }
 
   /**
    * With failoverPending set, rotation is suspended: even an explicit forceRotation() must be a
    * no-op, leaving the same writer open so an in-flight append + sync still lands on it (the
-   * straggler mutation reaches the peer instead of hitting IOException("Closed") or a fresh file).
+   * straggler mutation reaches the peer instead of hitting the closed-group error or a fresh file).
    */
   @Test
-  public void testCutoverKeepsWriterOpenForInflight() throws Exception {
+  public void testFailoverKeepsWriterOpenForInflight() throws Exception {
     final String tableName = "TBLCUT";
     final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
     ReplicationLog activeLog = logGroup.getActiveLog();
     LogFileWriter writerBefore = activeLog.getWriter();
-    logGroup.setFailoverPending(true);
+    setLocalState(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
     // Rotation is suspended: forceRotation() stages no new writer.
     activeLog.forceRotation();
-    assertSame("Cutover must keep the same writer open, not rotate to a new one", writerBefore,
+    assertSame("Failover must keep the same writer open, not rotate to a new one", writerBefore,
       activeLog.getWriter());
 
     // The in-flight write still lands on that open writer.
     logGroup.append(tableName, 1L, put);
     logGroup.sync();
 
-    assertFalse("Group must stay open during cutover", logGroup.isClosed());
+    assertFalse("Group must stay open during failover", logGroup.isClosed());
     assertSame("Append + sync must not have rotated the writer", writerBefore,
       activeLog.getWriter());
     verify(writerBefore, times(1)).sync();
   }
 
-  /**
-   * A cutover abort (ACTIVE_IN_SYNC_TO_STANDBY → ABORT_TO_ACTIVE_IN_SYNC → ACTIVE_IN_SYNC) must
-   * clear failoverPending on the same live group, resuming rotation.
-   */
-  @Test
-  public void testAbortClearsFailoverPending() throws Exception {
+  /** Sets the local HA state the group reads from the (mocked) HA store cache. */
+  private void setLocalState(HAGroupState state) {
+    storeRecord = storeRecord.withHAGroupState(state);
+  }
+
+  /** Fires the group's LOCAL ACTIVE_IN_SYNC listener as a transition from {@code from}. */
+  private void enterActiveInSyncFrom(HAGroupState from) throws IOException {
     ArgumentCaptor<HAGroupStateListener> captor =
       ArgumentCaptor.forClass(HAGroupStateListener.class);
-    verify(haGroupStoreManager).subscribeToTargetState(eq(haGroupName),
+    verify(haGroupStoreManager, atLeastOnce()).subscribeToTargetState(eq(haGroupName),
       eq(HAGroupState.ACTIVE_IN_SYNC), eq(ClusterType.LOCAL), captor.capture());
-    HAGroupStateListener abortResumeListener = captor.getValue();
+    captor.getValue().onStateChange(haGroupName, from, HAGroupState.ACTIVE_IN_SYNC, 0L,
+      ClusterType.LOCAL, 0L);
+  }
 
-    logGroup.setFailoverPending(true);
-    abortResumeListener.onStateChange(haGroupName, HAGroupState.ABORT_TO_ACTIVE_IN_SYNC,
-      HAGroupState.ACTIVE_IN_SYNC, 0L, ClusterType.LOCAL, 0L);
-
-    assertFalse("Cutover abort must clear failover-pending", logGroup.isFailoverPending());
-    // Rotation resumes: forceRotation() now stages a new writer.
-    ReplicationLog activeLog = logGroup.getActiveLog();
-    LogFileWriter writerBefore = activeLog.getWriter();
-    activeLog.forceRotation();
-    logGroup.append("TBLRES", 1L, LogFileTestUtil.newPut("row", 1, 1));
-    logGroup.sync();
-    assertNotEquals("Rotation must resume after abort clears the flag", writerBefore,
-      activeLog.getWriter());
+  /** A healthy group is usable. */
+  @Test
+  public void testCheckUsableOnHealthyGroup() throws Exception {
+    logGroup.checkUsable();
   }
 
   /**
-   * A SYNC write that fails while failoverPending must NOT transition to STORE_AND_FORWARD (that
-   * targets ACTIVE_NOT_IN_SYNC, an illegal transition from the cutover gate). Instead it
-   * fail-stops: the sync throws and the group aborts, never calling
-   * setHAGroupStatusToStoreAndForward.
+   * While the failover is in progress or being cancelled, or the state cannot be read, a group it
+   * stopped refuses writes with the failover exception (IRO reports that as blocked, since nothing
+   * was written yet) and is not replaced.
    */
   @Test
-  public void testCutoverSyncFailureAborts() throws Exception {
-    final String tableName = "TBLCUTFAIL";
-    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+  public void testCheckUsableDuringFailoverRefusesWithoutReplacing() throws Exception {
+    failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertTrue(logGroup.isStoppedByFailover());
+    for (HAGroupState state : new HAGroupState[] { HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+      HAGroupState.ABORT_TO_ACTIVE_IN_SYNC }) {
+      setLocalState(state);
+      try {
+        logGroup.checkUsable();
+        fail("A group stopped by a failover must refuse writes during " + state);
+      } catch (ReplicationFailoverInProgressException expected) {
+      }
+    }
+    doThrow(new IOException("HAGroupStoreClient is not healthy")).when(haGroupStoreManager)
+      .getEffectiveHAGroupStoreRecord(anyString());
+    try {
+      logGroup.checkUsable();
+      fail("With the state unreadable the group must keep refusing writes");
+    } catch (ReplicationFailoverInProgressException expected) {
+    }
+    assertFalse("The group must not be replaced while the failover is on", logGroup.isClosed());
+    verify(logGroup, never()).abort(anyString(), any());
+  }
 
+  /**
+   * Once the failover is over (the cancel reached ACTIVE_IN_SYNC), a group it stopped is closed
+   * exactly once however many writers notice, and every writer gets the retriable
+   * ReplicationLogGroupUnavailableException. This holds without any listener event, so a cancel the
+   * cache collapsed or missed still recovers.
+   */
+  @Test
+  public void testCheckUsableAfterCancelReplacesGroupOnce() throws Exception {
+    failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    setLocalState(HAGroupState.ACTIVE_IN_SYNC);
+    int writers = 8;
+    ExecutorService pool = Executors.newFixedThreadPool(writers);
+    CountDownLatch start = new CountDownLatch(1);
+    AtomicInteger unavailable = new AtomicInteger();
+    try {
+      List<Future<?>> futures = new ArrayList<>();
+      for (int i = 0; i < writers; i++) {
+        futures.add(pool.submit(() -> {
+          start.await();
+          try {
+            logGroup.checkUsable();
+          } catch (ReplicationLogGroupUnavailableException expected) {
+            unavailable.incrementAndGet();
+          }
+          return null;
+        }));
+      }
+      start.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+    assertEquals("Every writer must be told to retry", writers, unavailable.get());
+    assertTrue("The group must be closed for replacement", logGroup.isClosed());
+    // A straggler that committed before the replace still reports the divergence, not "closed".
+    try {
+      logGroup.append("TBLSTRAGGLER", 3L, LogFileTestUtil.newPut("row3", 3, 1));
+      fail("An append on a group stopped by a failover must fail");
+    } catch (ReplicationFailoverInProgressException expected) {
+    }
+    try {
+      logGroup.sync();
+      fail("A sync on a group stopped by a failover must fail");
+    } catch (ReplicationFailoverInProgressException expected) {
+    }
+    verify(logGroup, never()).abort(anyString(), any());
+  }
+
+  /** A closed group refuses writes with the retriable exception. */
+  @Test
+  public void testCheckUsableOnClosedGroup() throws Exception {
+    logGroup.close();
+    try {
+      logGroup.checkUsable();
+      fail("A closed group must refuse writes");
+    } catch (ReplicationLogGroupUnavailableException expected) {
+      assertTrue(expected.getMessage(), expected.getMessage().contains("is closed"));
+    }
+  }
+
+  /**
+   * A group stopped by a failover does not rotate once the failover is over, so it does not create
+   * empty peer files until it is replaced.
+   */
+  @Test
+  public void testRotationSuspendedWhenStoppedByFailover() throws Exception {
+    failSyncWithRejectedTransitionFrom(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    setLocalState(HAGroupState.ACTIVE_IN_SYNC);
+    assertFalse(logGroup.isFailoverPending());
+    assertFalse("Rotation must be suspended on a group stopped by a failover",
+      logGroup.getActiveLog().requestRotation(true));
+  }
+
+  /** The ACTIVE_IN_SYNC listener no longer closes a group on a cancel; a healthy group is kept. */
+  @Test
+  public void testFailoverCancelKeepsHealthyGroup() throws Exception {
+    for (HAGroupState from : new HAGroupState[] { HAGroupState.ABORT_TO_ACTIVE_IN_SYNC,
+      HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY }) {
+      recreateLogGroup();
+      setLocalState(HAGroupState.ACTIVE_IN_SYNC);
+      enterActiveInSyncFrom(from);
+      assertFalse("A healthy group must be kept across a cancel from " + from, logGroup.isClosed());
+      logGroup.checkUsable();
+      logGroup.append("TBLKEEP", 1L, LogFileTestUtil.newPut("row", 1, 1));
+      logGroup.sync();
+    }
+  }
+
+  /** Recovery from STORE_AND_FORWARD into ACTIVE_IN_SYNC keeps the group. */
+  @Test
+  public void testRecoveryToActiveInSyncKeepsGroup() throws Exception {
+    enterActiveInSyncFrom(HAGroupState.ACTIVE_NOT_IN_SYNC);
+    sleep(200);
+    assertFalse("Recovery must not close the group", logGroup.isClosed());
+    logGroup.append("TBLRECOVER", 1L, LogFileTestUtil.newPut("row", 1, 1));
+    logGroup.sync();
+  }
+
+  /**
+   * failoverPending does not decide the fallback: with the cached state still showing the failover
+   * gate (for example lagging a cancel) but the STORE_AND_FORWARD transition allowed, a failed SYNC
+   * write falls back to STORE_AND_FORWARD and succeeds.
+   */
+  @Test
+  public void testFailoverPendingDoesNotBlockStoreAndForward() throws Exception {
     ReplicationLog activeLog = logGroup.getActiveLog();
     LogFileWriter initialWriter = activeLog.getWriter();
     doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
 
-    logGroup.setFailoverPending(true);
-    logGroup.append(tableName, 1L, put);
-    try {
-      logGroup.sync();
-      fail("Sync failure during cutover should abort, not fall back to STORE_AND_FORWARD");
-    } catch (IOException expected) {
-      // expected — the fail-stop path
-    }
+    setLocalState(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    logGroup.append("TBLSTALEFLAG", 1L, LogFileTestUtil.newPut("row", 1, 1));
+    logGroup.sync();
 
-    verify(haGroupStoreManager, never()).setHAGroupStatusToStoreAndForward(haGroupName);
-    assertNotEquals("Must not transition to STORE_AND_FORWARD during cutover", STORE_AND_FORWARD,
-      logGroup.getMode());
+    // atLeastOnce: STORE_AND_FORWARD's heartbeat also writes the status as soon as it is entered.
+    verify(haGroupStoreManager, atLeastOnce()).setHAGroupStatusToStoreAndForward(haGroupName);
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+    verify(logGroup, never()).abort(anyString(), any());
   }
 
   /**
@@ -3531,16 +3806,15 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * close() must unsubscribe every LOCAL state listener registered during init() —
-   * ACTIVE_IN_SYNC_TO_STANDBY / STANDBY / DEGRADED_STANDBY (demotion), ACTIVE_IN_SYNC (abort resume
-   * + SYNC mode flip), and ACTIVE_NOT_IN_SYNC (mode flip) — so a group closed on demotion leaks no
-   * listeners holding a reference to the dead group.
+   * close() must unsubscribe every LOCAL state listener registered during init() — STANDBY /
+   * DEGRADED_STANDBY (demotion), ACTIVE_IN_SYNC (SYNC mode flip), and ACTIVE_NOT_IN_SYNC (mode
+   * flip) — so a group closed on demotion leaks no listeners holding a reference to the dead group.
    */
   @Test
   public void testCloseUnsubscribesListeners() throws Exception {
     logGroup.close();
 
-    verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupName),
+    verify(haGroupStoreManager, never()).subscribeToTargetState(eq(haGroupName),
       eq(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY), eq(ClusterType.LOCAL),
       any(HAGroupStateListener.class));
     verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupName),

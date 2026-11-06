@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
 import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 
 /**
@@ -73,6 +74,28 @@ public class HighAvailabilityUtil {
     }
 
     return false;
+  }
+
+  /**
+   * Walks the throwable chain (including {@link RetriesExhaustedWithDetailsException} causes) to
+   * detect a {@link ReplicationFailoverInProgressException}: a write committed on the old active
+   * whose replication failed during a consistent failover, so its outcome on the peer is unknown.
+   */
+  public static boolean isReplicationFailoverInProgressExceptionExistsInThrowable(Throwable e) {
+    if (e == null) {
+      return false;
+    }
+    if (e instanceof ReplicationFailoverInProgressException) {
+      return true;
+    }
+    if (e instanceof RetriesExhaustedWithDetailsException) {
+      for (Throwable t : ((RetriesExhaustedWithDetailsException) e).getCauses()) {
+        if (t instanceof ReplicationFailoverInProgressException) {
+          return true;
+        }
+      }
+    }
+    return isReplicationFailoverInProgressExceptionExistsInThrowable(e.getCause());
   }
 
   private static boolean isGivenThrowableStaleException(Throwable t) {
