@@ -18,7 +18,9 @@
 package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -26,13 +28,22 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -353,6 +364,155 @@ public class CountRowsScannedIT extends BaseTest {
       }
       assertEquals(limit + offset, getRowsScanned(rs));
     }
+  }
+
+  /**
+   * Proves that a server top-N scan reports the rows it scans when no row matches the filter. The
+   * region sorts all rows before the first response. The response has no rows, but it must still
+   * carry the scan metrics.
+   */
+  @Test
+  public void testTopNWithNoMatchingRows() throws Exception {
+    try (Connection conn = getConnectionWithoutServerPaging()) {
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      String tableName = createAndLoadTable(conn, false);
+
+      String limitQuery = "SELECT A,Z FROM " + tableName + " WHERE Z > 1000 ORDER BY Z LIMIT 1";
+      assertPlanContains(stmt, limitQuery, "SERVER TOP 1 ROW SORTED BY");
+      assertNoRowsAndRowsScanned(stmt, limitQuery, 100);
+
+      // Without a limit, the server still sorts all rows of the region.
+      String noLimitQuery = "SELECT A,Z FROM " + tableName + " WHERE Z > 1000 ORDER BY Z";
+      assertPlanContains(stmt, noLimitQuery, "SERVER SORTED BY");
+      assertNoRowsAndRowsScanned(stmt, noLimitQuery, 100);
+    }
+  }
+
+  /**
+   * Proves that a server top-N scan over two regions reports the rows of each region. One region
+   * has a matching row and the other region has none. The client total must include the rows that
+   * the region without a match scans.
+   */
+  @Test
+  public void testTopNWithNoMatchingRowsInOneRegion() throws Exception {
+    try (Connection conn = getConnectionWithoutServerPaging()) {
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      String tableName = createAndLoadTable(conn, true);
+
+      String query = "SELECT A,Z FROM " + tableName + " WHERE Z <= 10 ORDER BY Z LIMIT 1";
+      assertPlanContains(stmt, query, "SERVER TOP 1 ROW SORTED BY");
+      ResultSet rs = stmt.executeQuery(query);
+      assertTrue(rs.next());
+      assertEquals(1, rs.getLong(1));
+      assertEquals(1, rs.getLong(2));
+      assertFalse(rs.next());
+      assertEquals(2, countScans(stmt));
+      assertEquals("Rows scanned for " + query, 100, getRowsScanned(rs));
+    }
+  }
+
+  /**
+   * Proves that a server offset scan reports the rows it skips when the offset consumes all rows.
+   * The region skips all rows before the first response. The response has no rows, but it must
+   * still carry the scan metrics. A filter that no row passes has the same effect.
+   */
+  @Test
+  public void testServerOffsetConsumesAllRows() throws Exception {
+    try (Connection conn = getConnectionWithoutServerPaging()) {
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      String tableName = createAndLoadTable(conn, false);
+
+      String offsetQuery = "SELECT A,Z FROM " + tableName + " OFFSET 200";
+      assertPlanContains(stmt, offsetQuery, "SERVER OFFSET 200");
+      assertNoRowsAndRowsScanned(stmt, offsetQuery, 100);
+
+      String selectiveQuery = "SELECT A,Z FROM " + tableName + " WHERE Z > 1000 OFFSET 1";
+      assertPlanContains(stmt, selectiveQuery, "SERVER OFFSET 1");
+      assertNoRowsAndRowsScanned(stmt, selectiveQuery, 100);
+    }
+  }
+
+  /**
+   * Proves that a server offset scan over two regions reports the rows of each region. The first
+   * region returns the remaining offset to the client. The last region skips all its rows and
+   * returns no rows, but the client total must include them.
+   */
+  @Test
+  public void testServerOffsetConsumesAllRowsWithSplit() throws Exception {
+    try (Connection conn = getConnectionWithoutServerPaging()) {
+      PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+      String tableName = createAndLoadTable(conn, true);
+
+      String query = "SELECT A,Z FROM " + tableName + " OFFSET 200";
+      assertPlanContains(stmt, query, "SERVER OFFSET 200");
+      assertNoRowsAndRowsScanned(stmt, query, 100);
+      assertEquals(2, countScans(stmt));
+    }
+  }
+
+  /**
+   * Opens a connection with server paging turned off. With paging, the region returns a dummy row
+   * before it reads all of its rows. The dummy row carries the scan metrics and hides their loss.
+   */
+  private Connection getConnectionWithoutServerPaging() throws SQLException {
+    Properties props = new Properties();
+    props.setProperty(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, "false");
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    // A silently ignored override makes the test pass for the wrong reason.
+    assertFalse(conn.unwrap(PhoenixConnection.class).getQueryServices().getProps()
+      .getBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true));
+    return conn;
+  }
+
+  /**
+   * Creates a table with 100 rows where the key and the value are both 1 to 100. The value column
+   * is not part of the key, so a filter on it reads every row. The split option puts keys 1 to 50
+   * in the first region and keys 51 to 100 in the second region.
+   */
+  private String createAndLoadTable(Connection conn, boolean splitInTwo) throws Exception {
+    String tableName = generateUniqueName();
+    try (Statement stmt = conn.createStatement()) {
+      // The split point must have the key type. A plain integer literal sorts after all keys.
+      stmt.execute(
+        "CREATE TABLE " + tableName + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)"
+          + (splitInTwo ? " SPLIT ON (CAST(51 AS UNSIGNED_LONG))" : ""));
+      for (int i = 1; i <= 100; i++) {
+        stmt.execute(String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i));
+      }
+    }
+    conn.commit();
+    try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+      List<RegionInfo> regions = admin.getRegions(TableName.valueOf(tableName));
+      if (splitInTwo) {
+        assertEquals(2, regions.size());
+        RegionInfo second =
+          regions.get(0).getStartKey().length == 0 ? regions.get(1) : regions.get(0);
+        assertArrayEquals(PUnsignedLong.INSTANCE.toBytes(51L), second.getStartKey());
+      } else {
+        assertEquals(1, regions.size());
+      }
+    }
+    return tableName;
+  }
+
+  private void assertPlanContains(Statement stmt, String query, String step) throws SQLException {
+    String plan = QueryUtil.getExplainPlan(stmt.executeQuery("EXPLAIN " + query));
+    assertTrue("Plan does not contain " + step + ": " + plan, plan.contains(step));
+  }
+
+  private void assertNoRowsAndRowsScanned(Statement stmt, String query, long expected)
+    throws SQLException {
+    ResultSet rs = stmt.executeQuery(query);
+    assertFalse(rs.next());
+    assertEquals("Rows scanned for " + query, expected, getRowsScanned(rs));
+  }
+
+  private int countScans(PhoenixStatement stmt) throws SQLException {
+    int count = 0;
+    for (List<Scan> scans : stmt.getQueryPlan().getScans()) {
+      count += scans.size();
+    }
+    return count;
   }
 
   private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {
