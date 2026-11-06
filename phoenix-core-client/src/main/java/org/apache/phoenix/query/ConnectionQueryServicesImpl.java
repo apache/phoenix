@@ -165,6 +165,7 @@ import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
@@ -1092,7 +1093,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   public PMetaData getMetaDataCache() {
-    return latestMetaData;
+    // A concurrent close() (e.g. connection pool teardown or cluster failover) nulls out
+    // latestMetaData. Read it once into a local so the null-check and the returned reference
+    // are guaranteed to be the same value; a caller that immediately dereferences the result
+    // then surfaces the descriptive "connection closed" exception instead of a bare NPE,
+    // matching every other cache accessor/mutator on this class.
+    PMetaData cache = latestMetaData;
+    if (cache == null) {
+      throwConnectionClosedException();
+    }
+    return cache;
   }
 
   @Override
@@ -1921,6 +1931,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
 
+      // PHOENIX-7788: recover an orphaned disabled physical table before modifyTable runs on it.
+      if (
+        tableExist && tableType == PTableType.TABLE
+          && admin.isTableDisabled(TableName.valueOf(physicalTableName))
+      ) {
+        byte[] viewIndexMarker = existingDesc == null
+          ? null
+          : existingDesc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES);
+        // Classify by the descriptor marker, falling back to the _IDX_ name prefix for older
+        // view-index tables that predate the marker.
+        boolean hasViewIndexMarker = viewIndexMarker != null
+          && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(viewIndexMarker));
+        boolean isViewIndexTable =
+          hasViewIndexMarker || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName));
+        reenableOrphanedDisabledHBaseTable(physicalTableName, isViewIndexTable, admin);
+      }
+
       TableDescriptorBuilder newDesc =
         generateTableDescriptor(physicalTableName, parentPhysicalTableName, existingDesc, tableType,
           props, families, splits, isNamespaceMapped);
@@ -2455,6 +2482,49 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       admin.disableTable(tableName);
     } catch (TableNotEnabledException e) {
       LOGGER.info("Table already disabled, continuing with next steps", e);
+    }
+  }
+
+  private void enableTable(Admin admin, TableName tableName) throws IOException {
+    try {
+      admin.enableTable(tableName);
+    } catch (TableNotDisabledException e) {
+      LOGGER.info("Table already enabled, continuing with next steps", e);
+    }
+  }
+
+  /**
+   * PHOENIX-7788: re-enable a disabled physical HBase table if SYSTEM.CATALOG has no row for it. If
+   * metadata exists, leave it disabled — an admin may have disabled the registered table. Caller
+   * must have already confirmed the physical table exists and is disabled.
+   */
+  private void reenableOrphanedDisabledHBaseTable(byte[] physicalTableNameBytes,
+    boolean isViewIndexTable, Admin admin) throws SQLException {
+    TableName physicalTableName = TableName.valueOf(physicalTableNameBytes);
+    // For a view-index physical table, resolve to the base table name; otherwise the physical
+    // name is itself the metadata key.
+    String physicalName = Bytes.toString(physicalTableNameBytes);
+    String metadataName =
+      isViewIndexTable ? MetaDataUtil.getViewIndexUserTableName(physicalName) : physicalName;
+    byte[] schemaBytes = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(metadataName));
+    byte[] tableBytes = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(metadataName));
+    // No-cache read straight from the server; a stale/absent client-cache entry must not drive
+    // the orphan decision.
+    PTable existingTable = getTable(null, schemaBytes, tableBytes, HConstants.LATEST_TIMESTAMP,
+      HConstants.LATEST_TIMESTAMP).getTable();
+    if (existingTable != null) {
+      LOGGER.info(
+        "Physical HBase table {} is disabled but {} has metadata for it; "
+          + "leaving it disabled to preserve any intentional admin action.",
+        physicalTableName, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+      return;
+    }
+    LOGGER.info("Re-enabling orphaned disabled HBase table {} during CREATE TABLE",
+      physicalTableName);
+    try {
+      enableTable(admin, physicalTableName);
+    } catch (IOException e) {
+      throw ClientUtil.parseServerException(e);
     }
   }
 
@@ -5489,38 +5559,143 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   private void createSnapshot(String snapshotName, String tableName) throws SQLException {
-    Admin admin = null;
+    // The HMaster prepares a snapshot under a per-table master lock. A concurrent admin
+    // operation on the same table can transiently hold the lock, and TakeSnapshotHandler.prepare
+    // then bubbles a SnapshotCreationException("Could not build snapshot handler") whose root
+    // cause is DoNotRetryIOException("Master lock could not be acquired"). Because the snapshot
+    // is rejected at prepare (never registered with the master), retrying the same name
+    // is safe.
+    // A second flavor of transient failure is "already running another snapshot on the same table",
+    // produced by RPC-level retries. The original snapshot() RPC has already been accepted by the
+    // master and the snapshot procedure is in flight, but the client retries the call and the
+    // master
+    // rejects the duplicate. In that case the existing snapshot procedure will succeed, so we treat
+    // it as success once the snapshot of that name shows up in listSnapshots(). If it never appears
+    // within the polling window we fall through to a normal retry.
+    final int maxAttempts = 5;
+    final long backoffMs = 1000L;
+    final long alreadyRunningWaitMs = TimeUnit.MINUTES.toMillis(2L);
     SQLException sqlE = null;
-    try {
-      admin = getAdmin();
-      admin.snapshot(snapshotName, TableName.valueOf(tableName));
-      LOGGER.info("Successfully created snapshot " + snapshotName + " for " + tableName);
-    } catch (SnapshotCreationException e) {
-      if (e.getMessage().contains("doesn't exist")) {
-        LOGGER.warn("Could not create snapshot {}, table is missing." + snapshotName, e);
-      } else {
-        sqlE = new SQLException(e);
-      }
-    } catch (Exception e) {
-      sqlE = new SQLException(e);
-    } finally {
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      sqlE = null;
+      Admin admin = null;
       try {
-        if (admin != null) {
-          admin.close();
+        admin = getAdmin();
+        admin.snapshot(snapshotName, TableName.valueOf(tableName));
+        LOGGER.info("Successfully created snapshot " + snapshotName + " for " + tableName);
+        return;
+      } catch (SnapshotCreationException e) {
+        if (e.getMessage() != null && e.getMessage().contains("doesn't exist")) {
+          LOGGER.warn("Could not create snapshot {}, table is missing." + snapshotName, e);
+          return;
+        }
+        if (isAlreadyRunningSnapshotFailure(e)) {
+          LOGGER.warn(
+            "Snapshot {} for {} rejected as already in flight (attempt {}/{}); "
+              + "polling for completion of the in-flight snapshot",
+            snapshotName, tableName, attempt, maxAttempts, e);
+          if (waitForSnapshotToAppear(admin, snapshotName, alreadyRunningWaitMs)) {
+            LOGGER.info("In-flight snapshot {} for {} completed; treating create as success",
+              snapshotName, tableName);
+            return;
+          }
+          sqlE = new SQLException(e);
+          if (attempt < maxAttempts) {
+            LOGGER.warn(
+              "In-flight snapshot {} for {} did not complete within {}ms; will retry create",
+              snapshotName, tableName, alreadyRunningWaitMs);
+          } else {
+            break;
+          }
+        } else {
+          sqlE = new SQLException(e);
+          if (attempt < maxAttempts && isTransientSnapshotFailure(e)) {
+            LOGGER.warn("Transient failure creating snapshot {} for {} (attempt {}/{}); retrying",
+              snapshotName, tableName, attempt, maxAttempts, e);
+          } else {
+            break;
+          }
         }
       } catch (Exception e) {
-        SQLException adminCloseEx = new SQLException(e);
-        if (sqlE == null) {
-          sqlE = adminCloseEx;
-        } else {
-          sqlE.setNextException(adminCloseEx);
-        }
+        sqlE = new SQLException(e);
+        break;
       } finally {
-        if (sqlE != null) {
-          throw sqlE;
+        if (admin != null) {
+          try {
+            admin.close();
+          } catch (Exception e) {
+            SQLException adminCloseEx = new SQLException(e);
+            if (sqlE == null) {
+              sqlE = adminCloseEx;
+            } else {
+              sqlE.setNextException(adminCloseEx);
+            }
+          }
         }
       }
+      try {
+        Thread.sleep(backoffMs);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        break;
+      }
     }
+    if (sqlE != null) {
+      throw sqlE;
+    }
+  }
+
+  private static boolean isTransientSnapshotFailure(Throwable t) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      String msg = cur.getMessage();
+      if (msg != null && msg.contains("Master lock could not be acquired")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isAlreadyRunningSnapshotFailure(Throwable t) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      String msg = cur.getMessage();
+      if (msg != null && msg.contains("already running another snapshot on the same table")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Polls the master for completion of a snapshot named {@code snapshotName}. Returns true if the
+   * snapshot is observed in {@link Admin#listSnapshots(java.util.regex.Pattern)} within
+   * {@code timeoutMs}, false otherwise. The caller's thread interrupt status is restored if
+   * interrupted while sleeping.
+   */
+  private static boolean waitForSnapshotToAppear(Admin admin, String snapshotName, long timeoutMs) {
+    if (admin == null) {
+      return false;
+    }
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + timeoutMs;
+    java.util.regex.Pattern pattern =
+      java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(snapshotName));
+    while (EnvironmentEdgeManager.currentTimeMillis() < deadline) {
+      try {
+        for (org.apache.hadoop.hbase.client.SnapshotDescription d : admin.listSnapshots(pattern)) {
+          if (snapshotName.equals(d.getName())) {
+            return true;
+          }
+        }
+      } catch (IOException ioe) {
+        LOGGER.debug("Polling for snapshot {} failed transiently", snapshotName, ioe);
+      }
+      try {
+        Thread.sleep(500L);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        return false;
+      }
+    }
+    return false;
   }
 
   void ensureSystemTablesMigratedToSystemNamespace()

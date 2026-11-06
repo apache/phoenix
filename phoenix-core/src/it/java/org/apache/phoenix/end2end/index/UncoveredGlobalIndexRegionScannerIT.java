@@ -19,24 +19,39 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -44,11 +59,13 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -65,6 +82,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
+  private static final long AGE_THRESHOLD_MS = 60_000;
+  // Keep stale entries live in HBase and in Phoenix while testing the independent repair threshold.
+  private static final int TTL_SECONDS = 3600;
+  private static final int ROW_COUNT = 20;
+  private static final long UPDATED_TIME_BASE = 1_700_000_000_000L;
   private final boolean uncovered;
   private final boolean salted;
 
@@ -192,7 +214,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -212,7 +234,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -228,7 +250,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
           + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -241,9 +263,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -261,7 +281,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + " val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("de", rs.getString(1));
@@ -288,7 +308,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -375,7 +395,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -394,7 +414,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -409,7 +429,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -421,9 +441,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains(salted ? "RANGE" : "FULL" + " SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType(salted ? "RANGE SCAN" : "FULL SCAN")
+        .table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -441,7 +460,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + " val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("de", rs.getString(1));
@@ -468,7 +487,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -532,6 +551,22 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
   }
 
+  /**
+   * Asserts the query is served by the index, disclosing the optimizer's selection rule (and, for a
+   * functional index, the separate {@code matches <expr>}).
+   */
+  private void assertIndexPlan(Connection conn, String sql, String dataTableName,
+    String indexTableName, String functionalExpr) throws SQLException {
+    String rule = sql.contains("/*+ INDEX(")
+      ? OptimizerReasons.RULE_HINT
+      : OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS;
+    if (functionalExpr == null) {
+      assertExplainPlan(conn, sql, dataTableName, indexTableName, rule);
+    } else {
+      assertExplainPlan(conn, sql, dataTableName, indexTableName, rule, functionalExpr);
+    }
+  }
+
   @Test
   public void testUncoveredQuery() throws Exception {
     String dataTableName = generateUniqueName();
@@ -585,7 +620,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("b", rs.getString(1));
@@ -605,7 +640,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0' GROUP BY val1";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
@@ -619,7 +654,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(3, rs.getInt(1));
@@ -634,7 +669,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abcd", rs.getString(1));
@@ -673,11 +708,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         // is not included by the index table
         selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val4 from "
           + dataTableName + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
-        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+        assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       } else {
         // Verify that an index hint is not necessary for an uncovered index
         selectSql = "SELECT  val4 from " + dataTableName + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
-        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+        assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       }
 
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -759,7 +794,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + "Count(v3) from " + dataTableName + " where v1 = 5";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(count, rs.getInt(1));
@@ -795,7 +830,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + "val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the first index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abc", rs.getString(1));
@@ -816,7 +851,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       String selectSql = "SELECT id from " + dataTableName + " WHERE val1  = 'ab'";
 
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -867,26 +902,337 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       // Index hint is incorrect as full index name with schema is used
       String sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + fullIndexName
         + ")*/ val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
-      rs = stmt.executeQuery(sql);
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
+      ResultSet rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // No explicit index hint and being point lookup no index will be used
       sql = "SELECT val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // Index hint with point lookup over data table, still index should be used
       sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + indexName + ")*/ val2, val3 from "
         + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("FULL SCAN OVER " + fullIndexName));
+      assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
+    }
+  }
+
+  @Test
+  public void testUncoveredIndexLimitSkipsStaleRows() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(false, 0);
+  }
+
+  @Test
+  public void testUncoveredIndexLimitWithTTLMasking() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(true, 0);
+  }
+
+  @Test
+  public void testUncoveredIndexLimitWithOffset() throws Exception {
+    assumeTrue(uncovered);
+    assertUncoveredIndexLimit(false, 2);
+  }
+
+  private void assertUncoveredIndexLimit(boolean finiteTTL, int offset) throws Exception {
+    Map<Configuration, String> originalThresholds = new LinkedHashMap<>();
+    Configuration clusterConfig = getUtility().getConfiguration();
+    originalThresholds.put(clusterConfig,
+      clusterConfig.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    getUtility().getHBaseCluster().getRegionServerThreads().forEach(thread -> {
+      Configuration config = thread.getRegionServer().getConfiguration();
+      originalThresholds.putIfAbsent(config,
+        config.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    });
+    EnvironmentEdge originalClock = EnvironmentEdgeManager.getDelegate();
+    ManualEnvironmentEdge clock = new ManualEnvironmentEdge();
+    try {
+      // Keep stale entries young so LIMIT correctness cannot depend on read-repair deletion.
+      originalThresholds.keySet().forEach(config -> config
+        .setLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 60_000));
+      try (Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = conn.createStatement()) {
+        String dataTable = generateUniqueName();
+        String indexTable = generateUniqueName();
+        stmt.execute("CREATE TABLE " + dataTable
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, UPDATED_TIME TIMESTAMP, VAL VARCHAR)"
+          + (finiteTTL ? " TTL=3600, IS_STRICT_TTL=true" : "")
+          + (salted ? (finiteTTL ? ", " : " ") + "SALT_BUCKETS=4" : ""));
+        stmt.execute("CREATE UNCOVERED INDEX " + indexTable + " ON " + dataTable + " (UPDATED_TIME)"
+          + (salted ? " SALT_BUCKETS=4" : ""));
+        long insertTime = EnvironmentEdgeManager.currentTimeMillis() + 1;
+        long timestampBase = 1_700_000_000_000L;
+        int rows = 20;
+        int limit = 3;
+        clock.setValue(insertTime);
+        EnvironmentEdgeManager.injectEdge(clock);
+        upsertLimitRows(conn, dataTable, rows, timestampBase, false);
+        List<byte[]> staleKeys = new ArrayList<>();
+        try (Table index = getUtility().getConnection().getTable(TableName.valueOf(indexTable))) {
+          // No Phoenix attributes: inspect the physical fixture without verification or repair.
+          try (ResultScanner scanner = index.getScanner(new Scan())) {
+            for (Result row : scanner) {
+              staleKeys.add(row.getRow());
+              assertEquals(insertTime, row.rawCells()[0].getTimestamp());
+            }
+          }
+          assertEquals(rows, staleKeys.size());
+          clock.incrementValue(1000);
+          upsertLimitRows(conn, dataTable, rows, timestampBase, true);
+          for (byte[] key : staleKeys) {
+            assertFalse("The fixture must retain its stale index entries",
+              index.get(new Get(key)).isEmpty());
+          }
+          String sql = "SELECT /*+ INDEX(" + dataTable + " " + indexTable
+            + ") */ ID, VAL, UPDATED_TIME FROM " + dataTable + " ORDER BY UPDATED_TIME ASC LIMIT "
+            + limit + (offset == 0 ? "" : " OFFSET " + offset);
+          assertPlan(conn, sql).table(indexTable).scanType("FULL SCAN");
+          try (ResultSet rs = stmt.executeQuery(sql)) {
+            for (int i = offset; i < offset + limit; i++) {
+              assertTrue("LIMIT must return valid rows after the stale prefix", rs.next());
+              assertEquals("id-" + i, rs.getString(1));
+              assertEquals("value-" + i, rs.getString(2));
+              assertEquals(new Timestamp(timestampBase + i * 1000L), rs.getTimestamp(3));
+            }
+            assertFalse(rs.next());
+          }
+          for (byte[] key : staleKeys) {
+            Result stale = index.get(new Get(key));
+            assertFalse("LIMIT must work while young stale entries remain", stale.isEmpty());
+            assertEquals(insertTime, stale.rawCells()[0].getTimestamp());
+          }
+        }
+      }
+    } finally {
+      EnvironmentEdgeManager.injectEdge(originalClock);
+      originalThresholds.forEach((config, value) -> {
+        if (value == null) {
+          config.unset(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB);
+        } else {
+          config.set(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, value);
+        }
+      });
+    }
+  }
+
+  private void upsertLimitRows(Connection conn, String dataTable, int rows, long timestampBase,
+    boolean nonNullTimestamp) throws SQLException {
+    try (PreparedStatement stmt = conn
+      .prepareStatement("UPSERT INTO " + dataTable + " (ID, UPDATED_TIME, VAL) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < rows; i++) {
+        stmt.setString(1, "id-" + i);
+        if (nonNullTimestamp) {
+          stmt.setTimestamp(2, new Timestamp(timestampBase + i * 1000L));
+        } else {
+          stmt.setNull(2, Types.TIMESTAMP);
+        }
+        stmt.setString(3, "value-" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+  }
+
+  /** PHOENIX-8016: an old index entry must be aged independently of its recent base row. */
+  @Test
+  public void testOldStaleEntriesAreDeletedWhileDataRowsAreRecent() throws Exception {
+    assumeTrue(uncovered);
+    verifyStaleEntryRepair(true);
+  }
+
+  @Test
+  public void testYoungStaleEntriesAreNotDeleted() throws Exception {
+    assumeTrue(uncovered);
+    verifyStaleEntryRepair(false);
+  }
+
+  private void verifyStaleEntryRepair(boolean oldEntries) throws Exception {
+    Map<Configuration, String> originalThresholds = new LinkedHashMap<>();
+    Configuration clusterConfig = getUtility().getConfiguration();
+    originalThresholds.put(clusterConfig,
+      clusterConfig.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    getUtility().getHBaseCluster().getRegionServerThreads().forEach(thread -> {
+      Configuration config = thread.getRegionServer().getConfiguration();
+      originalThresholds.putIfAbsent(config,
+        config.getRaw(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB));
+    });
+    EnvironmentEdge originalClock = EnvironmentEdgeManager.getDelegate();
+    ManualEnvironmentEdge clock = new ManualEnvironmentEdge();
+    try {
+      // Keep the class-wide zero threshold for existing tests; use a positive age only here.
+      for (Configuration config : originalThresholds.keySet()) {
+        config.setLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+          AGE_THRESHOLD_MS);
+        assertEquals(AGE_THRESHOLD_MS,
+          config.getLong(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, -1));
+      }
+      try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Fixture fixture = createFixture(conn, clock, oldEntries ? AGE_THRESHOLD_MS * 2 : 1000);
+        // No LIMIT: isolate cleanup from premature scan termination in PHOENIX-8015.
+        String query = fixture.indexQuery("");
+        assertPlan(conn, query).table(fixture.indexTable).scanType("FULL SCAN");
+        assertRows(conn, query, ROW_COUNT);
+        if (oldEntries) {
+          try (Table index =
+            getUtility().getConnection().getTable(TableName.valueOf(fixture.indexTable))) {
+            for (Result stale : fixture.staleRows) {
+              assertTrue("Old stale index entry survived read repair",
+                index.get(new Get(stale.getRow())).isEmpty());
+              assertStaleEntryDeleteTimestamp(index, stale, fixture.dataTimestamp);
+            }
+          }
+          assertEquals("Current index entries must survive cleanup", ROW_COUNT,
+            readPhysicalRows(fixture.indexTable).size());
+        } else {
+          assertStaleEntriesPresent(fixture);
+        }
+        assertRows(conn, "SELECT /*+ NO_INDEX */ ID, PAYLOAD, UPDATED_TIME FROM "
+          + fixture.dataTable + " ORDER BY UPDATED_TIME ASC", ROW_COUNT);
+      }
+    } finally {
+      EnvironmentEdgeManager.injectEdge(originalClock);
+      originalThresholds.forEach((config, value) -> {
+        if (value == null) {
+          config.unset(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB);
+        } else {
+          config.set(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, value);
+        }
+      });
+    }
+  }
+
+  private Fixture createFixture(Connection conn, ManualEnvironmentEdge clock, long updateDelayMs)
+    throws Exception {
+    String dataTable = generateUniqueName();
+    String indexTable = generateUniqueName();
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE TABLE " + dataTable
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, UPDATED_TIME TIMESTAMP, PAYLOAD VARCHAR)" + " TTL="
+        + TTL_SECONDS + ", IS_STRICT_TTL=true" + (salted ? ", SALT_BUCKETS=4" : ""));
+      stmt.execute("CREATE UNCOVERED INDEX " + indexTable + " ON " + dataTable + " (UPDATED_TIME)"
+        + (salted ? " SALT_BUCKETS=4" : ""));
+    }
+    clock.setValue(EnvironmentEdgeManager.currentTimeMillis() + 1);
+    EnvironmentEdgeManager.injectEdge(clock);
+    long insertTime = clock.currentTime();
+    upsertRows(conn, dataTable, false);
+    List<Result> staleRows = readPhysicalRows(indexTable);
+    assertEquals("Initial NULL-keyed index entries", ROW_COUNT, staleRows.size());
+    for (Result stale : staleRows) {
+      assertEquals(insertTime, stale.rawCells()[0].getTimestamp());
+    }
+
+    clock.incrementValue(updateDelayMs);
+    // Supply the indexed column explicitly to take the write-optimized uncovered-index path.
+    upsertRows(conn, dataTable, true);
+    Fixture fixture = new Fixture(dataTable, indexTable, staleRows, clock.currentTime());
+    assertEquals("Both stale and current index entries must physically exist", ROW_COUNT * 2,
+      readPhysicalRows(indexTable).size());
+    assertStaleEntriesPresent(fixture);
+    for (Result data : readPhysicalRows(dataTable)) {
+      assertEquals("Base rows must have the recent update timestamp", fixture.dataTimestamp,
+        data.rawCells()[0].getTimestamp());
+    }
+    return fixture;
+  }
+
+  private void upsertRows(Connection conn, String dataTable, boolean nonNullTimestamp)
+    throws Exception {
+    try (PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + dataTable + " (ID, UPDATED_TIME, PAYLOAD) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < ROW_COUNT; i++) {
+        stmt.setString(1, "tenant-" + i);
+        if (nonNullTimestamp) {
+          stmt.setTimestamp(2, new Timestamp(UPDATED_TIME_BASE + i * 1000L));
+        } else {
+          stmt.setNull(2, Types.TIMESTAMP);
+        }
+        stmt.setString(3, "payload-" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+  }
+
+  private void assertStaleEntryDeleteTimestamp(Table index, Result stale, long dataTimestamp)
+    throws Exception {
+    // The stale entry is aged by its own timestamp but must be deleted at the data row timestamp,
+    // when the row stopped mapping to this key, so IndexTool sees consistent row histories.
+    Scan scan = new Scan().withStartRow(stale.getRow()).withStopRow(stale.getRow(), true);
+    scan.setRaw(true);
+    scan.readAllVersions();
+    boolean foundDelete = false;
+    try (ResultScanner scanner = index.getScanner(scan)) {
+      for (Result result : scanner) {
+        for (Cell cell : result.rawCells()) {
+          if (CellUtil.isDeleteFamily(cell)) {
+            foundDelete = true;
+            assertEquals("Stale-entry deletion must use the data row timestamp", dataTimestamp,
+              cell.getTimestamp());
+          }
+        }
+      }
+    }
+    assertTrue("Stale-entry cleanup must leave a family delete marker", foundDelete);
+  }
+
+  private List<Result> readPhysicalRows(String tableName) throws Exception {
+    // No Phoenix scan attributes: inspect live HBase entries without uncovered verification.
+    List<Result> rows = new ArrayList<>();
+    try (Table table = getUtility().getConnection().getTable(TableName.valueOf(tableName));
+      ResultScanner scanner = table.getScanner(new Scan())) {
+      for (Result result : scanner) {
+        rows.add(result);
+      }
+    }
+    return rows;
+  }
+
+  private void assertStaleEntriesPresent(Fixture fixture) throws Exception {
+    try (
+      Table index = getUtility().getConnection().getTable(TableName.valueOf(fixture.indexTable))) {
+      for (Result stale : fixture.staleRows) {
+        Result current = index.get(new Get(stale.getRow()));
+        assertFalse("Fixture lost a stale index entry", current.isEmpty());
+        assertEquals("Stale entry timestamp must not advance with the data row",
+          stale.rawCells()[0].getTimestamp(), current.rawCells()[0].getTimestamp());
+      }
+    }
+  }
+
+  private void assertRows(Connection conn, String query, int expectedRows) throws Exception {
+    try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
+      int count = 0;
+      while (rs.next()) {
+        assertEquals("tenant-" + count, rs.getString(1));
+        assertEquals("payload-" + count, rs.getString(2));
+        assertEquals(new Timestamp(UPDATED_TIME_BASE + count * 1000L), rs.getTimestamp(3));
+        count++;
+      }
+      assertEquals("Valid rows returned by: " + query, expectedRows, count);
+    }
+  }
+
+  private static class Fixture {
+    final String dataTable;
+    final String indexTable;
+    final List<Result> staleRows;
+    final long dataTimestamp;
+
+    Fixture(String dataTable, String indexTable, List<Result> staleRows, long dataTimestamp) {
+      this.dataTable = dataTable;
+      this.indexTable = indexTable;
+      this.staleRows = staleRows;
+      this.dataTimestamp = dataTimestamp;
+    }
+
+    String indexQuery(String predicate) {
+      return "SELECT /*+ INDEX(" + dataTable + " " + indexTable
+        + ") */ ID, PAYLOAD, UPDATED_TIME FROM " + dataTable + predicate
+        + " ORDER BY UPDATED_TIME ASC";
     }
   }
 

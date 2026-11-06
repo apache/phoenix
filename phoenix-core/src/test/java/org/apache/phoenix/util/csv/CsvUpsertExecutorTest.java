@@ -18,6 +18,7 @@
 package org.apache.phoenix.util.csv;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -60,7 +61,8 @@ public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord,
       }
     }
     String inputRecord = Joiner.on(',').join(columnValues);
-    return Iterables.getFirst(CSVParser.parse(inputRecord, CSVFormat.DEFAULT), null);
+    return Iterables.getFirst(CSVParser.builder().setFormat(CSVFormat.DEFAULT)
+      .setReader(new StringReader(inputRecord)).get(), null);
   }
 
   @Before

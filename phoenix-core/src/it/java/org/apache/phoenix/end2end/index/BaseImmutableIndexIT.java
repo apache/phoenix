@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.IndexToolIT.assertExplainPlan;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
@@ -465,9 +466,9 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       admin.truncateTable(TableName.valueOf(fullTableName), true);
       String selectFromIndex = "SELECT long_pk, varchar_pk, long_col1 FROM " + TABLE_NAME
         + " WHERE varchar_pk='varchar2' AND long_pk=2";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertExplainPlan(false, actualExplainPlan, fullTableName, fullIndexName);
+      // Verify the query is served by a RANGE SCAN over the index table.
+      assertPlan(conn, selectFromIndex).scanType("RANGE SCAN")
+        .tableContains(SchemaUtil.normalizeIdentifier(fullIndexName));
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertFalse(rs.next());
@@ -830,9 +831,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
         "SELECT /*+ NO_INDEX */ id, val1, val2, val3 FROM " + tableName + " WHERE val1 = 'ab'";
       // Full upsert: the index is actually used (guards against a vacuous data-scan agreement) and
       // returns the complete row.
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
-        tableName, indexName);
+      assertExplainPlan(conn, false, idxSql, tableName, indexName);
       assertEquals("[a|ab|abc|abcd]", readRows(conn, idxSql).toString());
       assertEquals(readRows(conn, dataSql), readRows(conn, idxSql));
 
@@ -883,9 +882,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
         + tableName + " WHERE val1 = 'ab'";
       String dataCount = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + " WHERE val1 = 'ab'";
       // Full upsert: the uncovered index is used and resolves the row.
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
-        tableName, indexName);
+      assertExplainPlan(conn, false, idxSql, tableName, indexName);
       assertEquals("[a]", readRows(conn, idxSql).toString());
 
       // Partial upsert omits the indexed column val1.
@@ -942,12 +939,8 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       String viaIdx2 = "SELECT /*+ INDEX(" + tableName + " " + indexName2 + ") */ val3 FROM "
         + tableName + " WHERE val2 = 'abc'";
       String data = "SELECT /*+ NO_INDEX */ val3 FROM " + tableName + " WHERE id = 'a'";
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIdx1)),
-        tableName, indexName1);
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIdx2)),
-        tableName, indexName2);
+      assertExplainPlan(conn, false, viaIdx1, tableName, indexName1);
+      assertExplainPlan(conn, false, viaIdx2, tableName, indexName2);
       assertEquals("index1 must agree with data", readRows(conn, data), readRows(conn, viaIdx1));
       assertEquals("index2 must agree with data", readRows(conn, data), readRows(conn, viaIdx2));
     }
@@ -986,9 +979,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
         + ") */ val1, val2, val3 FROM " + tableName + " WHERE val1 = 'ab'";
       String dataSql =
         "SELECT /*+ NO_INDEX */ val1, val2, val3 FROM " + tableName + " WHERE id = 'a'";
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
-        tableName, indexName);
+      assertExplainPlan(conn, false, idxSql, tableName, indexName);
       List<String> dataRows = readRows(conn, dataSql);
       List<String> idxRows = readRows(conn, idxSql);
       if (tableDDLOptions.contains("ONE_CELL_PER_COLUMN")) {
@@ -1098,9 +1089,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       String viaMatching = "SELECT /*+ INDEX(" + tableName + " " + matchingIndex
         + ") */ id, val3 FROM " + tableName + " WHERE val1 = 'ab'";
       String data = "SELECT /*+ NO_INDEX */ id, val3 FROM " + tableName + " WHERE id = 'a'";
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaMatching)),
-        tableName, matchingIndex);
+      assertExplainPlan(conn, false, viaMatching, tableName, matchingIndex);
       List<String> dataRows = readRows(conn, data);
       if (oneCellBase) {
         // ONE_CELL base keeps the omitted covered column, so val3 must survive as 'abcd' (id
@@ -1113,9 +1102,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       if (oneCellBase) {
         String viaMismatched = "SELECT /*+ INDEX(" + tableName + " " + mismatchedIndex + ") */ id, "
           + "val3 FROM " + tableName + " WHERE val2 = 'abc'";
-        assertExplainPlan(false,
-          QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaMismatched)),
-          tableName, mismatchedIndex);
+        assertExplainPlan(conn, false, viaMismatched, tableName, mismatchedIndex);
         // The mismatched index is always server-maintained (schemes differ); it must read back the
         // same retained covered column as the data table, even when the matching index in the same
         // batch is maintained on the client (flag off).
@@ -1177,9 +1164,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
         assertEquals(2, rs.getInt(1));
       }
       String countViaIndex = "SELECT COUNT(*) FROM " + tableName + " WHERE val IS NOT NULL";
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + countViaIndex)),
-        tableName, indexName);
+      assertExplainPlan(conn, false, countViaIndex, tableName, indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(countViaIndex)) {
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
@@ -1205,9 +1190,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       }
       // Index read resolves a surviving row to its original ROW_TIMESTAMP key.
       String viaIndex = "SELECT k1 FROM " + tableName + " WHERE val = 'v3'";
-      assertExplainPlan(false,
-        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIndex)),
-        tableName, indexName);
+      assertExplainPlan(conn, false, viaIndex, tableName, indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(viaIndex)) {
         assertTrue(rs.next());
         assertEquals(300L, rs.getLong(1));

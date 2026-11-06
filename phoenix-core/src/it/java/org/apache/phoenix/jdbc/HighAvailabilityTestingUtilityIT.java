@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -33,6 +34,8 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.regionserver.CompactSplit;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -71,10 +74,14 @@ public class HighAvailabilityTestingUtilityIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
-      false);
-    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
-      false);
+    for (HBaseTestingUtility cluster : new HBaseTestingUtility[] { CLUSTERS.getHBaseCluster1(),
+      CLUSTERS.getHBaseCluster2() }) {
+      cluster.getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
+      // A compaction that starts during teardown opens a server-side CQSI whose SYSTEM.CATALOG
+      // RPC can block RS shutdown, so compactions are off for this class.
+      cluster.getConfiguration().setBoolean(CompactSplit.HBASE_REGION_SERVER_ENABLE_COMPACTION,
+        false);
+    }
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
@@ -120,6 +127,44 @@ public class HighAvailabilityTestingUtilityIT {
         doTestBasicOperationsWithConnection(conn, tableName, null);
       }
     });
+  }
+
+  @Test(timeout = 300000)
+  public void testServerSideIndexMetadataLookupUsesLocalCluster() throws Exception {
+    try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
+      createIndexedTableAndUpsert(conn, tableName + "_T1", tableName + "_I1");
+    }
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+      try (Connection conn = CLUSTERS.getCluster2Connection(haGroup)) {
+        createIndexedTableAndUpsert(conn, tableName + "_T2", tableName + "_I2");
+      }
+    });
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+      try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
+        createIndexedTableAndUpsert(conn, tableName + "_T3", tableName + "_I3");
+      }
+    });
+  }
+
+  private static void createIndexedTableAndUpsert(Connection conn, String table, String index)
+    throws Exception {
+    final int numRows = 5;
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute(String.format(
+        "CREATE TABLE %s (PK VARCHAR PRIMARY KEY, V1 VARCHAR) UPDATE_CACHE_FREQUENCY=60000",
+        table));
+      stmt.execute(String.format("CREATE INDEX %s ON %s (V1)", index, table));
+      for (int i = 0; i < numRows; i++) {
+        stmt.execute(String.format("UPSERT INTO %s VALUES ('k%d', 'v%d')", table, i, i));
+      }
+      conn.commit();
+      for (String name : new String[] { table, index }) {
+        try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + name)) {
+          assertTrue(rs.next());
+          assertEquals(numRows, rs.getInt(1));
+        }
+      }
+    }
   }
 
   /**

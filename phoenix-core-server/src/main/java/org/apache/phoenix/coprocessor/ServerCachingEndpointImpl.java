@@ -23,6 +23,7 @@ import com.google.protobuf.Service;
 import java.io.IOException;
 import java.util.Collections;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -36,6 +37,8 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServer
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachingService;
 import org.apache.phoenix.coprocessorclient.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.IndexMetaDataCacheFactory;
+import org.apache.phoenix.join.HashCacheFactory;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -68,10 +71,15 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements R
       request.hasTxState() ? request.getTxState().toByteArray() : ByteUtil.EMPTY_BYTE_ARRAY;
 
     try {
-      @SuppressWarnings("unchecked")
-      Class<ServerCacheFactory> serverCacheFactoryClass =
-        (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
-      ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
+      String factoryClassName = request.getCacheFactory().getClassName();
+      ServerCacheFactory cacheFactory;
+      if (HashCacheFactory.class.getName().equals(factoryClassName)) {
+        cacheFactory = new HashCacheFactory();
+      } else if (IndexMetaDataCacheFactory.class.getName().equals(factoryClassName)) {
+        cacheFactory = new IndexMetaDataCacheFactory();
+      } else {
+        throw new DoNotRetryIOException("Disallowed ServerCacheFactory class: " + factoryClassName);
+      }
       tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
         cachePtr, txState, cacheFactory,
         request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer(),

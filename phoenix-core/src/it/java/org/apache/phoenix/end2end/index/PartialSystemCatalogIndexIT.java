@@ -22,6 +22,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.PARSER_ERROR;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_COLUMNS;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -31,16 +32,12 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -168,7 +165,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
 
   // SQL on the index table - SYSTEM.SYS_VIEW_INDEX_HDR_TEST_INDEX,
   static final String SYS_CATALOG_IDX_VIEW_INDEX_HEADER_SQL =
-    "SELECT \": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)\" FROM %s "
+    "SELECT \":DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)\" FROM %s "
       + "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'";
 
   private static RegionCoprocessorEnvironment taskRegionEnvironment;
@@ -570,19 +567,6 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
-  private List<String> getExplain(String query, Properties props) throws SQLException {
-    List<String> explainPlan = new ArrayList<>();
-    try (Connection conn = DriverManager.getConnection(getUrl(), props);
-      PreparedStatement statement = conn.prepareStatement("EXPLAIN " + query);
-      ResultSet rs = statement.executeQuery()) {
-      while (rs.next()) {
-        String plan = rs.getString(1);
-        explainPlan.add(plan);
-      }
-    }
-    return explainPlan;
-  }
-
   protected PhoenixTestBuilder.SchemaBuilder createLevel2TenantViewWithGlobalLevelTTL(int globalTTL,
     PhoenixTestBuilder.SchemaBuilder.TenantViewOptions tenantViewOptions,
     PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions tenantViewIndexOptions,
@@ -823,24 +807,20 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
      * Testing explain plans
      */
 
-    List<String> plans = getExplain(
-      "select TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, TABLE_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' ",
-      new Properties());
-    assertEquals(
-      String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s", FULL_SYS_VIEW_HDR_TEST_INDEX_NAME),
-      plans.get(0));
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      assertPlan(conn,
+        "select TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, TABLE_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' ")
+          .scanType("FULL SCAN").tableContains(FULL_SYS_VIEW_HDR_TEST_INDEX_NAME);
 
-    plans = getExplain(
-      "select VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL",
-      new Properties());
-    assertEquals(String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-      FULL_SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME), plans.get(0));
+      assertPlan(conn,
+        "select VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'i' AND LINK_TYPE IS NULL AND VIEW_INDEX_ID IS NOT NULL")
+          .scanType("FULL SCAN").tableContains(FULL_SYS_VIEW_INDEX_HDR_TEST_INDEX_NAME);
 
-    plans = getExplain(
-      "select ROW_KEY_MATCHER, TTL, TABLE_NAME FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL",
-      new Properties());
-    assertEquals(String.format("CLIENT PARALLEL 1-WAY RANGE SCAN OVER %s [not null]",
-      FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME), plans.get(0));
+      assertPlan(conn,
+        "select ROW_KEY_MATCHER, TTL, TABLE_NAME FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL")
+          .scanType("RANGE SCAN").tableContains(FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME)
+          .keyRanges("[not null]");
+    }
 
     /**
      * Testing cleanup of SYS_INDEX rows after dropping tables and views

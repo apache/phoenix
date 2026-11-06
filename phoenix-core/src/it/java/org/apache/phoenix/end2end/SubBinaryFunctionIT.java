@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -379,14 +380,11 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
       count++;
     }
     Assert.assertEquals(2, count);
-    rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
-    String plan = QueryUtil.getExplainPlan(rs);
-    Assert.assertTrue(plan.contains("RANGE SCAN OVER " + tableName + " [1,X'01'] - [1,X'02']"));
+    assertPlan(conn, sql).scanType("RANGE SCAN").table(tableName)
+      .keyRanges("[1,X'01'] - [1,X'02']");
 
     sql = "SELECT * FROM " + tableName + " WHERE id = 1 AND SUBBINARY(VAR_BIN_COL, 2, 1) = X'01'";
-    rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
-    plan = QueryUtil.getExplainPlan(rs);
-    Assert.assertTrue(plan.contains("RANGE SCAN OVER " + tableName + " [1]"));
+    assertPlan(conn, sql).scanType("RANGE SCAN").table(tableName).keyRanges("[1]");
   }
 
   private void upsertRow(PreparedStatement stmt, int id, byte[] b1, byte[] b2) throws SQLException {

@@ -641,6 +641,7 @@ public class TransformTool extends Configured implements Tool {
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(NullWritable.class);
     TableMapReduceUtil.addDependencyJars(job);
+    PhoenixMapReduceUtil.addPhoenixDependencyJars(job.getConfiguration());
 
     job.setReducerClass(PhoenixTransformReducer.class);
 

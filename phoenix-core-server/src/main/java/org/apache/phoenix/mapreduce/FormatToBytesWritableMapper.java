@@ -110,6 +110,7 @@ public abstract class FormatToBytesWritableMapper<RECORD>
   protected List<String> tableNames;
   protected List<String> logicalNames;
   protected MapperUpsertListener<RECORD> upsertListener;
+  protected boolean ignoreInvalidRows;
 
   /*
    * lookup table for column index. Index in the List matches to the index in tableNames List
@@ -147,8 +148,8 @@ public abstract class FormatToBytesWritableMapper<RECORD>
       throw new RuntimeException(e);
     }
 
-    upsertListener =
-      new MapperUpsertListener<RECORD>(context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
+    ignoreInvalidRows = conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true);
+    upsertListener = new MapperUpsertListener<RECORD>(context, ignoreInvalidRows);
     upsertExecutor = buildUpsertExecutor(conf);
     preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
   }
@@ -164,7 +165,13 @@ public abstract class FormatToBytesWritableMapper<RECORD>
       try {
         record = getLineParser().parse(value.toString());
       } catch (IOException e) {
+        // When --ignore-errors (-g) is not set, a malformed record (e.g. unterminated quote)
+        // fails the mapper and hence the entire job. When --ignore-errors is set, the bad
+        // record is skipped and counted via the "Parser errors" counter.
         context.getCounter(COUNTER_GROUP_NAME, "Parser errors").increment(1L);
+        if (!ignoreInvalidRows) {
+          throw new IOException("Error parsing input: " + e.getMessage(), e);
+        }
         return;
       }
 

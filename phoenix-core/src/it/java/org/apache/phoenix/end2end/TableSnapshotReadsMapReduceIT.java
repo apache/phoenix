@@ -89,7 +89,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   private static final String RECORDING_YEAR = "RECORDING_YEAR";
   private static final String RECORDINGS_QUARTER = "RECORDINGS_QUARTER";
   private static final String MAX_RECORDING = "MAX_RECORDING";
-  private final static String SNAPSHOT_NAME = "FOO";
   private static final String FIELD1 = "FIELD1";
   private static final String FIELD2 = "FIELD2";
   private static final String FIELD3 = "FIELD3";
@@ -106,6 +105,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   private static List<List<Object>> result;
   private long timestamp;
   private String tableName;
+  private String snapshotName;
   private Job job;
   private Path tmpDir;
   private Configuration conf;
@@ -133,6 +133,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
     // create table
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       tableName = generateUniqueName();
+      snapshotName = "SNAP_" + tableName;
       conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
       conn.commit();
     }
@@ -144,7 +145,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
 
   @Test
   public void testMapReduceSnapshots() throws Exception {
-    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
+    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName, tableName,
       tmpDir, null, FIELD1, FIELD2, FIELD3);
     configureJob(job, tableName, null, null, false);
   }
@@ -152,14 +153,14 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   @Test
   public void testMapReduceSnapshotsMultiRegion() throws Exception {
     String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD1 asc";
-    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
+    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName, tableName,
       tmpDir, inputQuery);
     configureJob(job, tableName, null, null, true);
   }
 
   @Test
   public void testMapReduceSnapshotsWithCondition() throws Exception {
-    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
+    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName, tableName,
       tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
     configureJob(job, tableName, null, "FIELD3 > 0001", false);
   }
@@ -167,7 +168,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   @Test
   public void testMapReduceSnapshotWithLimit() throws Exception {
     String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD2 LIMIT 1";
-    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
+    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName, tableName,
       tmpDir, inputQuery);
     configureJob(job, tableName, inputQuery, null, false);
   }
@@ -175,13 +176,13 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
   @Test
   public void testSnapshotMapReduceJobNotImpactingTableMapReduceJob() throws Exception {
     // Submitting and asserting successful Map Reduce Job over snapshots
-    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
+    PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName, tableName,
       tmpDir, null, FIELD1, FIELD2, FIELD3);
     configureJob(job, tableName, null, null, false);
 
     // Asserting that snapshot name is set in configuration
     Configuration config = job.getConfiguration();
-    Assert.assertEquals("Correct snapshot name not found in configuration", SNAPSHOT_NAME,
+    Assert.assertEquals("Correct snapshot name not found in configuration", snapshotName,
       config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
 
     TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
@@ -311,7 +312,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
         rs.next());
       assertRestoreDirCount(conf, tmpDir.toString(), 1);
     } finally {
-      deleteSnapshotIfExists(SNAPSHOT_NAME);
+      deleteSnapshotIfExists(snapshotName);
     }
   }
 
@@ -374,6 +375,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
 
   private void upsertAndSnapshot(String tableName, boolean shouldSplit, Configuration configuration)
     throws Exception {
+    deleteSnapshotIfExists(snapshotName);
     if (shouldSplit) {
       // having very few rows in table doesn't really help much with splitting case.
       // we should upsert large no of rows as a prerequisite to splitting
@@ -390,7 +392,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
         splitTableSync(admin, hbaseTableName, Bytes.toBytes("CCCC"), 2);
       }
 
-      snapshotCreateSync(hbaseTableName, admin, SNAPSHOT_NAME);
+      snapshotCreateSync(hbaseTableName, admin, snapshotName);
 
       List<SnapshotDescription> snapshots = admin.listSnapshots();
       Assert.assertEquals(tableName, snapshots.get(0).getTableNameAsString());
@@ -409,7 +411,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
         FileSystem fs = rootDir.getFileSystem(configuration);
         Path restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
         RestoreSnapshotHelper.copySnapshotForScanner(configuration, fs, rootDir, restoreDir,
-          SNAPSHOT_NAME);
+          snapshotName);
         PhoenixConfigurationUtil.setMRSnapshotManagedExternally(configuration, true);
       }
     }

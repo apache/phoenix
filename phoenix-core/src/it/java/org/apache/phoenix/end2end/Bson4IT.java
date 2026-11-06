@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -43,7 +44,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
@@ -60,6 +60,7 @@ import org.bson.BsonArray;
 import org.bson.BsonBinary;
 import org.bson.BsonDocument;
 import org.bson.BsonDouble;
+import org.bson.BsonInt32;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.Document;
@@ -641,7 +642,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonDouble(529.435))))))
         .append("$UNSET",
           new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
@@ -725,7 +728,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("new_field1", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft_new_val"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonString("track[0].shot[2][0].city.problem[2] + 123")));
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonInt32(123))))));
 
       stmt = conn.prepareStatement(
         "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
@@ -827,7 +832,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonString("track[0].shot[2][0].city.problem[2] + 529.435")))
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonDouble(529.435))))))
         .append("$UNSET",
           new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
@@ -907,7 +914,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("new_field1", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft_new_val"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonString("track[0].shot[2][0].city.problem[2] + 123")));
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonInt32(123))))));
 
       stmt = conn.prepareStatement(
         "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
@@ -1179,21 +1188,15 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
   private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
     throws SQLException {
-    ExplainPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    validatePlan(tableName, scanType, plan);
+    assertPlan(ps.unwrap(PhoenixPreparedStatement.class)).table(tableName)
+      .iteratorType("PARALLEL 1-WAY").scanType(scanType);
   }
 
   private static void validateExplainPlan(Statement stmt, String query, String tableName,
     String scanType) throws SQLException {
     ExplainPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(query).getExplainPlan();
-    validatePlan(tableName, scanType, plan);
-  }
-
-  private static void validatePlan(String tableName, String scanType, ExplainPlan plan) {
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals(scanType, explainPlanAttributes.getExplainScanType());
+    assertPlan(plan.getPlanStepsAsAttributes()).table(tableName).iteratorType("PARALLEL 1-WAY")
+      .scanType(scanType);
   }
 
 }

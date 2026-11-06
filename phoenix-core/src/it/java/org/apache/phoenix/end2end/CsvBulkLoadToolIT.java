@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -45,7 +46,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -521,8 +521,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
     assertEquals("FirstName 2", rs.getString(2));
     String selectFromIndex =
       "SELECT FIRST_NAME FROM " + fullTableName + " where FIRST_NAME='FirstName 1'";
-    rs = stmt.executeQuery("EXPLAIN " + selectFromIndex);
-    assertTrue(QueryUtil.getExplainPlan(rs).contains(indexTableName));
+    assertPlan(conn, selectFromIndex).tableContains(indexTableName);
     rs = stmt.executeQuery(selectFromIndex);
     assertTrue(rs.next());
     assertEquals("FirstName 1", rs.getString(1));
@@ -538,8 +537,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         "--index-table", indexTableName, "--zookeeper", zkQuorum, "--corruptindexes" });
     assertEquals(0, exitCode);
     selectFromIndex = "SELECT FIRST_NAME FROM " + fullTableName + " where FIRST_NAME='FirstName 3'";
-    rs = stmt.executeQuery("EXPLAIN " + selectFromIndex);
-    assertTrue(QueryUtil.getExplainPlan(rs).contains(indexTableName));
+    assertPlan(conn, selectFromIndex).tableContains(indexTableName);
     rs = stmt.executeQuery(selectFromIndex);
     assertTrue(rs.next());
     assertEquals("FirstName 3", rs.getString(1));

@@ -19,7 +19,6 @@ package org.apache.phoenix.replication;
 
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_POLL_INTERVAL_MS;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 
@@ -53,10 +52,10 @@ public class ReplicationLogGroupEventualIndexIT extends ReplicationLogGroupBaseI
    * cluster independently: index mutations are never replicated, so cluster 2's eventual secondary
    * index is materialized solely by cluster 2's own consumer draining the CDC index the standby
    * regenerated. The test therefore verifies both the regenerated CDC index and the downstream
-   * secondary index it feeds. Startup delay and timestamp buffer are trimmed so a single fixed
-   * {@link #waitForEventualConsistency()} reliably covers a generate+apply cycle on both clusters.
-   * The {@code serializeCDCMutations} subclass calls this after setting its own toggle so the
-   * consumer wiring lives in one place.
+   * secondary index it feeds. Startup delay is trimmed (the timestamp buffer default is already 1s)
+   * so a single fixed {@link #waitForEventualConsistency()} reliably covers a generate+apply cycle
+   * on both clusters. The {@code serializeCDCMutations} subclass calls this after setting its own
+   * toggle so the consumer wiring lives in one place.
    */
   protected static void setupEventualIndexClusters() throws Exception {
     for (org.apache.hadoop.conf.Configuration conf : new org.apache.hadoop.conf.Configuration[] {
@@ -64,7 +63,6 @@ public class ReplicationLogGroupEventualIndexIT extends ReplicationLogGroupBaseI
       conf.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, true);
       conf.setLong(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, 1000);
       conf.setLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, 500);
-      conf.setLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, 1000);
     }
     setupClusters();
   }
