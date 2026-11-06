@@ -39,6 +39,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -59,6 +62,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
@@ -84,6 +88,28 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   public static final int RET_VALIDATION_ERROR = 4;
 
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminTool.class);
+
+  /**
+   * Prefix of the grep-friendly time markers that initiate-failover and abort-failover print. The
+   * markers record when the command started and ended, to find the related logs and to select the
+   * time range for the post-failover divergence check.
+   */
+  static final String FAILOVER_MARKER_PREFIX = "PHOENIX_HA_FAILOVER_MARKER";
+
+  private static final DateTimeFormatter FAILOVER_MARKER_UTC_FORMAT =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
+
+  /** Events that get a failover time marker. Each START marker gets exactly one end marker. */
+  enum FailoverMarker {
+    FAILOVER_START,
+    FAILOVER_COMPLETE,
+    FAILOVER_TIMEOUT,
+    FAILOVER_FAILED,
+    ABORT_START,
+    ABORT_COMPLETE,
+    ABORT_TIMEOUT,
+    ABORT_FAILED
+  }
 
   // Commands
   private static final String CMD_UPDATE = "update";
@@ -621,6 +647,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * @throws Exception for unexpected errors (caught and converted to error codes)
    */
   private int executeInitiateFailover(String[] args) throws Exception {
+    String haGroupName = null;
+    // Set once the start marker is printed; the finally block prints it as the end marker.
+    FailoverMarker endMarker = null;
     try {
       CommandLine cmdLine = new DefaultParser().parse(createInitiateFailoverOptions(), args);
 
@@ -629,13 +658,16 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         return RET_SUCCESS;
       }
 
-      String haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
+      haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
 
       // Parse timeout (default 120 seconds)
       int timeoutSeconds = 120;
       if (cmdLine.hasOption(TIMEOUT_OPT.getOpt())) {
         timeoutSeconds = Integer.parseInt(cmdLine.getOptionValue(TIMEOUT_OPT.getOpt()));
       }
+
+      printFailoverMarker(FailoverMarker.FAILOVER_START, haGroupName);
+      endMarker = FailoverMarker.FAILOVER_FAILED;
 
       // Get current state from ZK to show what will be changed
       String zkUrl = getLocalZkUrl(getConf());
@@ -695,6 +727,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         System.out
           .println("\n[Step 4] Monitoring state transitions (timeout: " + timeoutSeconds + "s)...");
         boolean transitionComplete = pollForStateTransition(manager, haGroupName, timeoutSeconds);
+        endMarker =
+          transitionComplete ? FailoverMarker.FAILOVER_COMPLETE : FailoverMarker.FAILOVER_TIMEOUT;
 
         if (transitionComplete) {
           System.out.println("\n✓ Failover completed successfully");
@@ -721,6 +755,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.err.println("\n✗ Failover initiation failed: " + e.getMessage());
       e.printStackTrace();
       return RET_UPDATE_ERROR;
+    } finally {
+      if (endMarker != null) {
+        printFailoverMarker(endMarker, haGroupName);
+      }
     }
   }
 
@@ -766,6 +804,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * @throws Exception for unexpected errors (caught and converted to error codes)
    */
   private int executeAbortFailover(String[] args) throws Exception {
+    String haGroupName = null;
+    // Set once the start marker is printed; the finally block prints it as the end marker.
+    FailoverMarker endMarker = null;
     try {
       CommandLine cmdLine = new DefaultParser().parse(createAbortFailoverOptions(), args);
 
@@ -774,13 +815,16 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         return RET_SUCCESS;
       }
 
-      String haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
+      haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
 
       // Parse timeout (default 120 seconds)
       int timeoutSeconds = 120;
       if (cmdLine.hasOption(TIMEOUT_OPT.getOpt())) {
         timeoutSeconds = Integer.parseInt(cmdLine.getOptionValue(TIMEOUT_OPT.getOpt()));
       }
+
+      printFailoverMarker(FailoverMarker.ABORT_START, haGroupName);
+      endMarker = FailoverMarker.ABORT_FAILED;
 
       // Get current state from ZK to show what will be changed
       String zkUrl = getLocalZkUrl(getConf());
@@ -827,6 +871,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         System.out
           .println("\n[Step 4] Monitoring state transitions (timeout: " + timeoutSeconds + "s)...");
         boolean transitionComplete = pollForStateTransition(manager, haGroupName, timeoutSeconds);
+        endMarker =
+          transitionComplete ? FailoverMarker.ABORT_COMPLETE : FailoverMarker.ABORT_TIMEOUT;
 
         if (transitionComplete) {
           System.out.println("\n✓ Failover abort completed successfully");
@@ -854,6 +900,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.err.println("\n✗ Abort failover failed: " + e.getMessage());
       e.printStackTrace();
       return RET_UPDATE_ERROR;
+    } finally {
+      if (endMarker != null) {
+        printFailoverMarker(endMarker, haGroupName);
+      }
     }
   }
 
@@ -1227,6 +1277,26 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.err.println("  ✗ Error during polling: " + e.getMessage());
       return false;
     }
+  }
+
+  /**
+   * Format one failover time marker line:
+   * {@code PHOENIX_HA_FAILOVER_MARKER marker=<NAME> group=<g> ts=<epoch ms> ts_utc=<ISO-8601>}.
+   */
+  @VisibleForTesting
+  static String formatFailoverMarker(FailoverMarker marker, String haGroupName, long timestamp) {
+    return FAILOVER_MARKER_PREFIX + " marker=" + marker + " group=" + haGroupName + " ts="
+      + timestamp + " ts_utc=" + FAILOVER_MARKER_UTC_FORMAT.format(Instant.ofEpochMilli(timestamp));
+  }
+
+  /**
+   * Print a failover time marker with the current time to stdout and to the log.
+   */
+  private static void printFailoverMarker(FailoverMarker marker, String haGroupName) {
+    String line =
+      formatFailoverMarker(marker, haGroupName, EnvironmentEdgeManager.currentTimeMillis());
+    System.out.println(line);
+    LOG.info(line);
   }
 
   @VisibleForTesting
@@ -1942,6 +2012,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("Note: This command polls the cluster state and waits for the failover to");
     System.out.println("      complete within the timeout period. Progress is shown in real-time.");
+    System.out.println("      It prints " + FAILOVER_MARKER_PREFIX + " lines at the start");
+    System.out.println("      (FAILOVER_START) and end (FAILOVER_COMPLETE, FAILOVER_TIMEOUT or");
+    System.out.println("      FAILOVER_FAILED).");
     System.out.println();
   }
 
@@ -1971,6 +2044,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("Note: This command polls the cluster state and waits for the abort to");
     System.out.println("      complete within the timeout period. Progress is shown in real-time.");
+    System.out.println("      It prints " + FAILOVER_MARKER_PREFIX + " lines at the start");
+    System.out
+      .println("      (ABORT_START) and end (ABORT_COMPLETE, ABORT_TIMEOUT or ABORT_FAILED).");
     System.out.println();
   }
 
