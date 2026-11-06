@@ -82,6 +82,8 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.FilterProtos;
 
@@ -132,6 +134,35 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
   }
 
   /**
+   * Replaces each distinct prefix filter in a copy of the client filter with the filter of the main
+   * scan. The distinct prefix filter keeps the row key prefix of the last row that the scan
+   * returns. All scanners of the scan must share this state. Otherwise the scan can return two rows
+   * with the same prefix. The method builds new filter lists and keeps the direction of each list.
+   */
+  @VisibleForTesting
+  static Filter shareDistinctPrefixFilter(Filter filter,
+    DistinctPrefixFilter distinctPrefixFilter) {
+    if (distinctPrefixFilter == null) {
+      return filter;
+    }
+    if (filter instanceof DistinctPrefixFilter) {
+      return distinctPrefixFilter;
+    }
+    if (filter instanceof FilterList) {
+      FilterList filterList = (FilterList) filter;
+      List<Filter> filters = new ArrayList<>(filterList.getFilters().size());
+      for (Filter child : filterList.getFilters()) {
+        filters.add(shareDistinctPrefixFilter(child, distinctPrefixFilter));
+      }
+      FilterList newFilterList = new FilterList(filterList.getOperator(), filters);
+      // The constructor does not set the direction of the list itself. Copy it from the old list.
+      newFilterList.setReversed(filterList.isReversed());
+      return newFilterList;
+    }
+    return filter;
+  }
+
+  /**
    * Class that verifies a given row of a non-transactional global index. An instance of this class
    * is created for each scanner on an index and used to verify individual rows and rebuild them if
    * they are not valid
@@ -169,7 +200,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private Filter clientFilter = null;
     private DistinctPrefixFilter distinctPrefixFilter = null;
     private FilterProtos.Filter clientFilterProto = null;
-    private boolean hasPagingFilter = false;
 
     public GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner,
       GlobalIndexCheckerSource metricsSource) throws IOException {
@@ -229,7 +259,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       Filter delegateFilter = filter;
       if (filter instanceof PagingFilter) {
         delegateFilter = ((PagingFilter) filter).getDelegateFilter();
-        hasPagingFilter = true;
       }
       clientFilter = delegateFilter;
       distinctPrefixFilter = ScanUtil.findDistinctPrefixFilter(delegateFilter);
@@ -257,8 +286,11 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     /**
      * Builds a new filter chain for a repair scan of one row. A filter object that two scanners
      * share gets state from both scanners. For example, a skip scan filter can then issue a seek
-     * hint behind its previous hint. The new chain has the same structure as the filter chain of
-     * the main scan.
+     * hint behind its previous hint. The new chain is a copy of the client part of the main chain.
+     * The only exception is the distinct prefix filter, which the copy shares with the main scan.
+     * The new chain has no paging filter. A paging filter stops a scan only between rows, so it
+     * cannot limit a scan of one row. After a repair, the main scanner returns the row or checks
+     * the page time.
      */
     private Filter newSingleRowIndexScanFilter() throws IOException {
       if (clientFilter != null && clientFilterProto == null) {
@@ -267,46 +299,17 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         // repair scan is acceptable.
         clientFilterProto = ProtobufUtil.toFilter(clientFilter);
       }
-      Filter filter = null;
-      if (clientFilterProto != null) {
-        // The serialized form does not hold the scan direction. The shared distinct prefix filter
-        // has the direction of the main scan, and a filter list needs one direction for all of
-        // its filters.
-        filter = ProtobufUtil.toFilter(clientFilterProto);
-        filter.setReversed(clientFilter.isReversed());
-        filter = shareDistinctPrefixFilter(filter);
-        if (shouldCreateUnverifiedRowFilter(filter)) {
-          filter = new UnverifiedRowFilter(filter, emptyCF, emptyCQ);
-        }
+      if (clientFilterProto == null) {
+        return null;
       }
-      if (hasPagingFilter) {
-        filter = new PagingFilter(filter, ScanUtil.getPageSizeMsForFilter(scan));
-      }
-      return filter;
-    }
-
-    /**
-     * Puts the distinct prefix filter of the main scan into a copy of the client filter. This
-     * filter keeps the row key prefix of the last row that the scan returns. All scanners of the
-     * scan must share this state. Otherwise the scan can return two rows with the same prefix.
-     */
-    private Filter shareDistinctPrefixFilter(Filter filter) {
-      if (distinctPrefixFilter == null) {
-        return filter;
-      }
-      if (filter instanceof DistinctPrefixFilter) {
-        return distinctPrefixFilter;
-      }
-      if (filter instanceof FilterList) {
-        FilterList filterList = (FilterList) filter;
-        List<Filter> filters = new ArrayList<>(filterList.getFilters().size());
-        for (Filter child : filterList.getFilters()) {
-          filters.add(shareDistinctPrefixFilter(child));
-        }
-        FilterList newFilterList = new FilterList(filterList.getOperator(), filters);
-        // The constructor does not set the direction of the list itself. Copy it from the old list.
-        newFilterList.setReversed(filterList.isReversed());
-        return newFilterList;
+      // The serialized form does not hold the scan direction. Thus the copy gets the direction of
+      // the main scan. The shared distinct prefix filter already has this direction. All filters
+      // in a filter list must have the same direction.
+      Filter filter = ProtobufUtil.toFilter(clientFilterProto);
+      filter.setReversed(clientFilter.isReversed());
+      filter = shareDistinctPrefixFilter(filter, distinctPrefixFilter);
+      if (shouldCreateUnverifiedRowFilter(filter)) {
+        filter = new UnverifiedRowFilter(filter, emptyCF, emptyCQ);
       }
       return filter;
     }
@@ -586,8 +589,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         singleRowScanner.next(row);
         singleRowScanner.close();
         if (row.isEmpty()) {
-          // This can happen if the unverified row matches the filter
-          // but after repair the verified row doesn't match the filter
+          // The unverified row can match the filter while the repaired row does not. The shared
+          // distinct prefix filter can also reject the repaired row, because an earlier row of
+          // the scan can have the same prefix.
           return;
         }
         if (isDummy(row)) {

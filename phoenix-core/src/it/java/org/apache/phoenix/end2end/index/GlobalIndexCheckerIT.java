@@ -1425,6 +1425,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       // No need to run the same test twice one for async = true and the other for async = false
       return;
     }
+    assumeStrongConsistency();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String dataTableName = generateUniqueName();
       String indexName = generateUniqueName();
@@ -1465,12 +1466,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
   @Test
   public void testUnverifiedIndexRowRepairWithDistinctPrefixLimit() throws Exception {
-    // The repair scan must share the distinct prefix state of the main scan. A private copy of
-    // the distinct prefix filter makes this query return too few rows.
     if (async) {
       // No need to run the same test twice one for async = true and the other for async = false
       return;
     }
+    assumeStrongConsistency();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String dataTableName = generateUniqueName();
       String indexName = generateUniqueName();
@@ -1493,11 +1493,13 @@ public class GlobalIndexCheckerIT extends BaseTest {
       commitWithException(conn);
       IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
 
-      // Read repair returns the older version of 'u'. The distinct prefix filter of the main
-      // scanner must then skip 'w', because the server row limit counts each returned row.
+      // Read repair returns the older version of 'u'. The shared distinct prefix filter then
+      // makes the main scanner skip 'w'. The server row limit counts each returned row. Thus a
+      // returned 'w' uses a place in the limit, and the query returns too few rows. The client
+      // merges duplicate values, so the test needs the server row limit.
       String selectSql = "SELECT DISTINCT val1 from " + dataTableName + " LIMIT 3";
       ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
-      assertPlan(attributes).table(indexName);
+      assertPlan(attributes).table(indexName).serverRowLimit(3L);
       assertNotNull(attributes.getServerDistinctFilter());
       List<String> actualValues = Lists.newArrayList();
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
@@ -1515,6 +1517,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       // No need to run the same test twice one for async = true and the other for async = false
       return;
     }
+    assumeStrongConsistency();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String dataTableName = generateUniqueName();
       String indexName = generateUniqueName();
@@ -1525,24 +1528,30 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement().execute(
         "CREATE INDEX " + indexName + " on " + dataTableName + " (val1)" + this.indexDDLOptions);
       conn.createStatement().execute("upsert into " + dataTableName + " values ('k1', 'a', 'x')");
-      conn.createStatement().execute("upsert into " + dataTableName + " values ('k2', 'a', 'x')");
       conn.createStatement().execute("upsert into " + dataTableName + " values ('u', 'b', 'x')");
       conn.createStatement().execute("upsert into " + dataTableName + " values ('v', 'c', 'x')");
-      conn.createStatement().execute("upsert into " + dataTableName + " values ('k3', 'd', 'x')");
-      conn.createStatement().execute("upsert into " + dataTableName + " values ('k4', 'd', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('d1', 'd', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('d2', 'd', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('k2', 'e', 'x')");
       conn.commit();
-      // Fail phase 2. The index row of 'u' keeps its key and gets a newer unverified version
-      // over the older verified version.
+      // Fail phase 2. The index rows of 'u' and 'd1' keep their keys and get a newer unverified
+      // version over the older verified version.
       IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
       conn.createStatement().execute("upsert into " + dataTableName + " values ('u', 'b', 'y')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('d1', 'd', 'y')");
       commitWithException(conn);
       IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
 
-      // The filter chain has a skip scan filter and a distinct prefix filter. The repair scan
-      // of 'u' gets a new skip scan filter and shares the distinct prefix filter.
-      String selectSql = "SELECT DISTINCT val1 from " + dataTableName + " WHERE val1 IN ('a', 'd')";
+      // The repair scans get a new skip scan filter and share the distinct prefix filter. The
+      // skip scan of the repair rejects the repaired row of 'u'. This repair must not change the
+      // skip scan state of the main scanner. The repaired row of 'd1' matches a skip scan key.
+      // The shared distinct prefix filter then records 'd', so the main scanner skips 'd2'. The
+      // server row limit counts each returned row. Without the shared filter, 'd2' uses the last
+      // place in the limit, and the query does not return 'e'.
+      String selectSql =
+        "SELECT DISTINCT val1 from " + dataTableName + " WHERE val1 IN ('a', 'd', 'e') LIMIT 3";
       ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
-      assertPlan(attributes).scanType("SKIP SCAN ON 2 KEYS").table(indexName);
+      assertPlan(attributes).scanType("SKIP SCAN ON 3 KEYS").table(indexName).serverRowLimit(3L);
       assertNotNull(attributes.getServerDistinctFilter());
       List<String> actualValues = Lists.newArrayList();
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
@@ -1550,7 +1559,58 @@ public class GlobalIndexCheckerIT extends BaseTest {
           actualValues.add(rs.getString(1));
         }
       }
-      assertEquals(Lists.newArrayList("a", "d"), actualValues);
+      assertEquals(Lists.newArrayList("a", "d", "e"), actualValues);
+    }
+  }
+
+  @Test
+  public void testUnverifiedIndexRowRepairWithReverseDistinctPrefix() throws Exception {
+    if (async) {
+      // No need to run the same test twice one for async = true and the other for async = false
+      return;
+    }
+    assumeStrongConsistency();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String indexName = generateUniqueName();
+      conn.createStatement()
+        .execute("create table " + dataTableName
+          + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10))"
+          + tableDDLOptions);
+      conn.createStatement().execute(
+        "CREATE INDEX " + indexName + " on " + dataTableName + " (val1)" + this.indexDDLOptions);
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('k1', 'a', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('k2', 'b', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('u', 'c', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('w', 'c', 'x')");
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('k3', 'd', 'x')");
+      conn.commit();
+      // Fail phase 2. The index row of 'w' keeps its key and gets a newer unverified version
+      // over the older verified version.
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " values ('w', 'c', 'y')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+
+      // The reverse scan reads the index row of 'w' before the index row of 'u'. The repair scan
+      // of 'w' uses a copy of the client filter list. All filters in the copy must have the
+      // direction of the main scan, because the copy holds the shared distinct prefix filter.
+      // After the repair, the shared distinct prefix filter makes the main scanner skip 'u'.
+      // A reverse scan returns null values last. The query must ask for NULLS LAST, because
+      // otherwise the plan sorts on the client and does not use a reverse scan.
+      String selectSql =
+        "SELECT DISTINCT val1 from " + dataTableName + " ORDER BY val1 DESC NULLS LAST LIMIT 3";
+      ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+      assertPlan(attributes).clientSortedBy("REVERSE").scanType("FULL SCAN").table(indexName)
+        .serverRowLimit(3L);
+      assertNotNull(attributes.getServerDistinctFilter());
+      List<String> actualValues = Lists.newArrayList();
+      try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+        while (rs.next()) {
+          actualValues.add(rs.getString(1));
+        }
+      }
+      assertEquals(Lists.newArrayList("d", "c", "b"), actualValues);
     }
   }
 
@@ -2140,6 +2200,15 @@ public class GlobalIndexCheckerIT extends BaseTest {
 
   protected boolean isEventualConsistency() {
     return false;
+  }
+
+  /**
+   * Skips a read repair test for an eventual index. Read repair runs the same code for all index
+   * consistency levels. A background consumer writes the rows of an eventual index. Thus the test
+   * needs long waits. The test also gives no new coverage.
+   */
+  private void assumeStrongConsistency() {
+    Assume.assumeFalse("Read repair does not depend on index consistency", isEventualConsistency());
   }
 
   protected void verifyTableHealth(Connection conn, String dataTableName, String indexTableName)
