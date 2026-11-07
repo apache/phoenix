@@ -71,6 +71,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_STRICT_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -406,6 +407,12 @@ public class MetaDataClient {
   public static final String UPDATE_INDEX_CONSISTENCY =
     "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + ","
       + TABLE_SCHEM + "," + TABLE_NAME + "," + INDEX_CONSISTENCY + ") VALUES (?, ?, ?, ?)";
+
+  private static final long CDC_STREAM_ENABLED_POLL_INTERVAL_MS = 1000L;
+
+  private static final String UPDATE_LAST_DDL_TIMESTAMP =
+    "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + ","
+      + TABLE_SCHEM + "," + TABLE_NAME + "," + LAST_DDL_TIMESTAMP + ") VALUES (?, ?, ?, ?)";
 
   /*
    * Custom sql to add a column to SYSTEM.CATALOG table during upgrade. We can't use the regular
@@ -2488,6 +2495,58 @@ public class MetaDataClient {
         throw e;
       }
       LOGGER.debug("CDC already exists for {}", fullTableName, e);
+    }
+  }
+
+  /**
+   * Waits until the CDC stream of the data table is ENABLED. A background task records the stream
+   * partitions, and until it does, a split or a merge does not record the parent partition. The
+   * consumers of the new regions then cannot replay the changes of the parent region. Thus the
+   * index must stay STRONG until the stream is ENABLED. There is no timeout, because the index
+   * stays STRONG and safe while the ALTER waits.
+   */
+  private void waitForCDCStreamEnabled(PTable dataTable) throws SQLException {
+    // Only tables have stream partition metadata.
+    if (dataTable.getType() != PTableType.TABLE) {
+      return;
+    }
+    String tableName = dataTable.getName().getString();
+    String query = "SELECT STREAM_STATUS FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
+      + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
+    boolean logged = false;
+    while (true) {
+      String status = null;
+      try (PreparedStatement ps = connection.prepareStatement(query)) {
+        ps.setString(1, tableName);
+        ps.setString(2, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
+        ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
+        try (ResultSet rs = ps.executeQuery()) {
+          if (rs.next()) {
+            status = rs.getString(1);
+          }
+        }
+      }
+      if (status == null) {
+        // The stream cannot become ENABLED, so do not wait for it.
+        throw new SQLException("No CDC stream is enabling or enabled for " + tableName);
+      }
+      if (CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue().equals(status)) {
+        if (logged) {
+          LOGGER.info("CDC stream for {} is enabled", tableName);
+        }
+        return;
+      }
+      if (!logged) {
+        LOGGER.info("Waiting for the CDC stream for {} to be enabled", tableName);
+        logged = true;
+      }
+      try {
+        Thread.sleep(CDC_STREAM_ENABLED_POLL_INTERVAL_MS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e)
+          .build().buildException();
+      }
     }
   }
 
@@ -4930,9 +4989,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function
-           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
-           * we are already traversing through allDescendantViews.
+           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
+           * byte[], List, int)} we are already traversing through allDescendantViews.
            */
         }
 
@@ -5991,30 +6050,59 @@ public class MetaDataClient {
       IndexConsistency newIndexConsistency = statement.getIndexConsistency();
 
       if (newIndexConsistency != null) {
-        try (PreparedStatement consistencyUpsert =
-          connection.prepareStatement(UPDATE_INDEX_CONSISTENCY)) {
+        // Create the CDC objects while the index is still STRONG. A writer that sees EVENTUAL
+        // then always writes CDC records for its changes. Writers that still see STRONG
+        // maintain the index and also write CDC records. The consumer replays them without
+        // harm. The switch also waits for the CDC stream, so that splits and merges keep the
+        // parent regions that the consumers replay.
+        if (newIndexConsistency.isAsynchronous()) {
+          PTable dataTable =
+            connection.getTable(tenantId, SchemaUtil.getTableName(schemaName, dataTableName));
+          createCDCForEventuallyConsistentIndex(dataTable);
+          waitForCDCStreamEnabled(dataTable);
+        }
+        // Write the consistency and the DDL timestamps in one commit. The parent row write
+        // changes the parent timestamp. Each client then gets the parent with its changed
+        // index on the next metadata RPC.
+        connection.setAutoCommit(false);
+        try (
+          PreparedStatement consistencyUpsert =
+            connection.prepareStatement(UPDATE_INDEX_CONSISTENCY);
+          PreparedStatement lastDDLTimestampUpsert =
+            connection.prepareStatement(UPDATE_LAST_DDL_TIMESTAMP)) {
           consistencyUpsert.setString(1, tenantId);
           consistencyUpsert.setString(2, schemaName);
           consistencyUpsert.setString(3, indexName);
           consistencyUpsert.setString(4, newIndexConsistency.getCodeAsString());
           consistencyUpsert.execute();
+          long lastDDLTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+          for (String name : new String[] { indexName, dataTableName }) {
+            lastDDLTimestampUpsert.setString(1, tenantId);
+            lastDDLTimestampUpsert.setString(2, schemaName);
+            lastDDLTimestampUpsert.setString(3, name);
+            lastDDLTimestampUpsert.setLong(4, lastDDLTimestamp);
+            lastDDLTimestampUpsert.execute();
+          }
           connection.commit();
 
-          if (newIndexConsistency == IndexConsistency.EVENTUAL) {
-            PTable dataTable =
-              connection.getTable(tenantId, SchemaUtil.getTableName(schemaName, dataTableName));
-            createCDCForEventuallyConsistentIndex(dataTable);
-          }
-
-          connection.getQueryServices().clearTableFromCache(
-            connection.getTenantId() == null
-              ? ByteUtil.EMPTY_BYTE_ARRAY
-              : connection.getTenantId().getBytes(),
-            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+          // The upserts do not go through the metadata endpoint. Clear its cache so that the
+          // next metadata RPC reads the changed rows.
+          byte[] tenantIdBytes = connection.getTenantId() == null
+            ? ByteUtil.EMPTY_BYTE_ARRAY
+            : connection.getTenantId().getBytes();
+          byte[] schemaBytes =
+            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName);
+          connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
             Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP);
+          connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
+            Bytes.toBytes(dataTableName), HConstants.LATEST_TIMESTAMP);
+
+          // Remove the parent and the index from the client cache. The next resolve then gets
+          // the parent with the changed index from the server.
           connection.removeTable(connection.getTenantId(),
-            SchemaUtil.getTableName(schemaName, indexName),
-            SchemaUtil.getTableName(schemaName, dataTableName), HConstants.LATEST_TIMESTAMP);
+            SchemaUtil.getTableName(schemaName, dataTableName), null, HConstants.LATEST_TIMESTAMP);
+          connection.removeTable(connection.getTenantId(),
+            SchemaUtil.getTableName(schemaName, indexName), null, HConstants.LATEST_TIMESTAMP);
 
           return new MutationState(1, 1000, connection);
         }
