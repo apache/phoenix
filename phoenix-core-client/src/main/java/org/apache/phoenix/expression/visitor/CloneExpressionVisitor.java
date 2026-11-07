@@ -44,6 +44,7 @@ import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
+import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
@@ -206,7 +207,14 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
   @Override
   public Expression visitLeave(ArrayAnyComparisonExpression node, List<Expression> l) {
-    return isCloneNode(node, l) ? new ArrayAnyComparisonExpression(l) : node;
+    // An ALL comparison uses this method too, and only its class tells it from ANY. Thus the copy
+    // must keep the class
+    if (!isCloneNode(node, l)) {
+      return node;
+    }
+    return node instanceof ArrayAllComparisonExpression
+      ? new ArrayAllComparisonExpression(l)
+      : new ArrayAnyComparisonExpression(l);
   }
 
   @Override
