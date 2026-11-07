@@ -156,6 +156,13 @@ public class IndexCDCConsumer implements Runnable {
   private static final long DEFAULT_LAG_SAMPLE_INTERVAL_MS = 5000L;
   private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
+  /**
+   * Extra time after a switch of an index from EVENTUAL to STRONG during which the consumer still
+   * applies CDC events to the index. It covers writes in flight at the switch, and clock skew
+   * between the DDL client and the region servers.
+   */
+  private static final long CONSISTENCY_SWITCH_GRACE_MS = 60000L;
+
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
   private final String encodedRegionName;
@@ -319,8 +326,42 @@ public class IndexCDCConsumer implements Runnable {
     return dataTable;
   }
 
+  /**
+   * Reads the data table definition from SYSTEM.CATALOG. The metadata cache of the region server
+   * can keep an old definition after an ALTER, for example when the region moves to this server.
+   */
   private void refreshDataTableCache(PhoenixConnection conn) throws SQLException {
-    cachedDataTable = conn.getTable(dataTableName);
+    cachedDataTable = conn.getTableNoCache(conn.getTenantId(), dataTableName);
+  }
+
+  /**
+   * Returns the timestamp of the last CDC event that the consumer applies to the index. An EVENTUAL
+   * index gets all events. After a switch from EVENTUAL to STRONG, a client with an old cache can
+   * send EVENTUAL maintainers for up to UPDATE_CACHE_FREQUENCY. Thus the consumer applies events up
+   * to the index LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the
+   * index synchronously in this period, and the replay writes the same cells again.
+   * @return the cutoff timestamp, or {@link Long#MIN_VALUE} when the consumer does not maintain the
+   *         index.
+   */
+  static long getApplyCutoff(PTable dataTable, PTable index) {
+    IndexConsistency consistency = index.getIndexConsistency();
+    if (consistency != null && consistency.isAsynchronous()) {
+      return Long.MAX_VALUE;
+    }
+    Long lastDDLTimestamp = index.getLastDDLTimestamp();
+    if (
+      lastDDLTimestamp == null || index.getIndexType() == PTable.IndexType.LOCAL
+        || CDCUtil.isCDCIndex(index)
+    ) {
+      return Long.MIN_VALUE;
+    }
+    long cacheLag = Math.max(dataTable.getUpdateCacheFrequency(), index.getUpdateCacheFrequency());
+    long allowance = cacheLag > Long.MAX_VALUE - CONSISTENCY_SWITCH_GRACE_MS
+      ? Long.MAX_VALUE
+      : cacheLag + CONSISTENCY_SWITCH_GRACE_MS;
+    return lastDDLTimestamp > Long.MAX_VALUE - allowance
+      ? Long.MAX_VALUE
+      : lastDDLTimestamp + allowance;
   }
 
   private void initTenantInfo(PhoenixConnection conn) throws SQLException {
@@ -451,14 +492,10 @@ public class IndexCDCConsumer implements Runnable {
       if (stopped) {
         return;
       }
-      if (!hasEventuallyConsistentIndexes()) {
-        LOG.trace("No eventually consistent indexes found for table {}. Exiting consumer.",
-          dataTableName);
+      if (!hasCDCIndex()) {
+        LOG.trace("No CDC index found for table {}. Exiting consumer.", dataTableName);
         return;
       }
-      // Only enable lag sampling once we've confirmed this table actually has an EC index,
-      // so non-EC-indexed tables don't pollute the lag histograms with cold-start samples.
-      lagEmissionEnabled = true;
       LOG.info(
         "IndexCDCConsumer started for table {} region {}"
           + " [batchSize: {}, pollIntervalMs: {}, idlePollIntervalMs: {}, timestampBufferMs: {},"
@@ -546,7 +583,13 @@ public class IndexCDCConsumer implements Runnable {
     LOG.info("IndexCDCConsumer exiting for table {} region {}", dataTableName, encodedRegionName);
   }
 
-  private boolean hasEventuallyConsistentIndexes() throws InterruptedException {
+  /**
+   * Returns true if the data table has an active CDC index. The consumer runs also when no index is
+   * EVENTUAL now. An index that changed from EVENTUAL to STRONG can still have CDC events that no
+   * consumer applied, for example in the parent regions of this region. Lag sampling starts only
+   * when an index needs the consumer, so that other tables do not add samples.
+   */
+  private boolean hasCDCIndex() throws InterruptedException {
     int retryCount = 0;
     while (!stopped) {
       try (PhoenixConnection conn =
@@ -558,15 +601,16 @@ public class IndexCDCConsumer implements Runnable {
           LOG.debug("No CDC index found for table {}. Exiting consumer.", dataTableName);
           return false;
         }
+        long now = EnvironmentEdgeManager.currentTimeMillis();
         for (PTable index : dataTable.getIndexes()) {
-          IndexConsistency consistency = index.getIndexConsistency();
-          if (consistency != null && consistency.isAsynchronous()) {
-            LOG.debug("Found eventually consistent index {} for table {}",
-              index.getName().getString(), dataTableName);
-            return true;
+          if (getApplyCutoff(dataTable, index) >= now) {
+            LOG.debug("Index {} of table {} needs the consumer", index.getName().getString(),
+              dataTableName);
+            lagEmissionEnabled = true;
+            break;
           }
         }
-        return false;
+        return true;
       } catch (SQLException e) {
         long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
         LOG.warn(
@@ -1061,6 +1105,7 @@ public class IndexCDCConsumer implements Runnable {
       }
       executeIndexMutations(partitionId, batchMutations, ownerPartitionId, newLastTimestamp);
       if (!batchMutations.isEmpty()) {
+        lagEmissionEnabled = true;
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
@@ -1263,24 +1308,44 @@ public class IndexCDCConsumer implements Runnable {
     refreshDataTableCache(conn);
     PTable dataTable = getDataTable(conn);
     byte[] encodedRegionNameBytes = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
-    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = new ArrayList<>();
+    List<Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long>> targets = new ArrayList<>();
     for (PTable index : dataTable.getIndexes()) {
-      IndexConsistency consistency = index.getIndexConsistency();
-      if (consistency != null && consistency.isAsynchronous()) {
+      long cutoff = getApplyCutoff(dataTable, index);
+      if (cutoff != Long.MIN_VALUE) {
         IndexMaintainer maintainer = index.getIndexMaintainer(dataTable, conn);
         HTableInterfaceReference tableRef =
           new HTableInterfaceReference(new ImmutableBytesPtr(maintainer.getIndexTableName()));
-        indexTables.add(new Pair<>(maintainer, tableRef));
+        targets.add(new Pair<>(new Pair<>(maintainer, tableRef), cutoff));
       }
     }
-    if (indexTables.isEmpty()) {
+    if (targets.isEmpty()) {
       return;
     }
+    // Each event goes to the indexes with a cutoff at or after the event timestamp. The list
+    // changes only when the event timestamp crosses a cutoff.
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = Collections.emptyList();
+    long tablesFrom = Long.MAX_VALUE;
+    long tablesUntil = Long.MIN_VALUE;
     ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = ArrayListMultimap.create();
     int totalMutations = 0;
     long generateStartTime = EnvironmentEdgeManager.currentTimeMillis();
     for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
       long ts = entry.getFirst();
+      if (ts < tablesFrom || ts > tablesUntil) {
+        indexTables = new ArrayList<>(targets.size());
+        tablesFrom = ts;
+        tablesUntil = Long.MAX_VALUE;
+        for (Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long> target : targets) {
+          if (ts <= target.getSecond()) {
+            indexTables.add(target.getFirst());
+            tablesUntil = Math.min(tablesUntil, target.getSecond());
+          }
+        }
+      }
+      if (indexTables.isEmpty()) {
+        continue;
+      }
+      lagEmissionEnabled = true;
       IndexMutationsProtos.DataRowStates dataRowStates = entry.getSecond();
       byte[] dataRowKey = dataRowStates.getDataRowKey().toByteArray();
       ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(dataRowKey);
