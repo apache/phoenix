@@ -146,7 +146,7 @@ public class VectorHybridFilterIT extends ParallelStatsDisabledIT {
       assertEquals(Arrays.asList("c0_b1", "c1_b1", "c2_b1"), search(conn, sql, ORIGIN));
       String plan = explain(conn, sql, ORIGIN);
       assertTrue(plan,
-        plan.contains("CLIENT PROBING 1 OF 4 CENTROIDS (L2) EXPANDING UP TO 4 BATCHES"));
+        plan.contains("CLIENT PROBING 1 OF 4 CENTROIDS (L2) EXPANDING UP TO 3 BATCHES"));
     }
   }
 
@@ -180,6 +180,7 @@ public class VectorHybridFilterIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       createFixture(conn, table, index);
+      // The batch limit also limits the probed posting lists to two
       String hinted = "SELECT /*+ VECTOR_PROBE_COUNT(1) MAX_PROBE_LIMIT(2) */ ID FROM " + table
         + " WHERE CATEGORY = 'B' ORDER BY L2_DISTANCE(V, ?) LIMIT 3";
       assertEquals(Arrays.asList("c0_b1", "c1_b1"), search(conn, hinted, ORIGIN));
@@ -206,12 +207,12 @@ public class VectorHybridFilterIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       createFixture(conn, table, index);
-      // The nearest posting list holds five rows, so a limit of ten expands to the next list
+      // The nearest posting list holds five rows, so a limit of ten expands to the next two lists
       String sql = "SELECT /*+ VECTOR_PROBE_COUNT(1) */ ID FROM " + table
         + " ORDER BY L2_DISTANCE(V, ?) LIMIT 10";
       assertEquals(Arrays.asList("c0_a1", "c0_a2", "c0_a3", "c0_a4", "c0_b1", "c1_a1", "c1_a2",
         "c1_a3", "c1_a4", "c1_b1"), search(conn, sql, ORIGIN));
-      assertTrue(explain(conn, sql, ORIGIN).contains("EXPANDING UP TO 4 BATCHES"));
+      assertTrue(explain(conn, sql, ORIGIN).contains("EXPANDING UP TO 3 BATCHES"));
     }
   }
 

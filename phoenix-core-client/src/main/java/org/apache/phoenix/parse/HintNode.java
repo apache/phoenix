@@ -134,6 +134,7 @@ public class HintNode {
 
     /**
      * Overrides the maximum number of probe batches that an adaptive vector index search can scan.
+     * The search also probes at most this number times the centroids of its first batch.
      */
     MAX_PROBE_LIMIT;
   };

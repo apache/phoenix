@@ -871,14 +871,14 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
   public void testNarrowBatchesSkipRegionLookup() throws Exception {
     // Lists of 100 bytes and a bound of 400 bytes
     try (Connection conn = trainedIndex("T_PRN", "I_PRN", 400L, 800L)) {
-      // No later batch is wider than the first batch of four lists
-      for (int batches : new int[] { 1, 2, 4 }) {
-        VectorIndexScanPlan plan = plan(conn, "T_PRN", 4, batches, "");
+      // One batch of two lists, and an adaptive budget of 2 x 2 = 4 lists
+      for (int batches : new int[] { 1, 2 }) {
+        VectorIndexScanPlan plan = plan(conn, "T_PRN", 2, batches, "");
         assertEquals(1,
           plan.getBoundedReadTypeRegions(noRegionLookup(), plan.getContext().getScan()));
       }
-      // A first batch of five lists is wider than the bound
-      VectorIndexScanPlan plan = plan(conn, "T_PRN", 5, 4, "");
+      // An adaptive budget of 8 lists, which is all the centroids, is wider than the bound
+      VectorIndexScanPlan plan = plan(conn, "T_PRN", 3, 4, "");
       assertEquals(5,
         plan.getBoundedReadTypeRegions(regionGrouper(5), plan.getContext().getScan()));
     }

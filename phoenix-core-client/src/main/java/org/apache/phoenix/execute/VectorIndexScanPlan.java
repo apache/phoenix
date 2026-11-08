@@ -93,7 +93,11 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
  * The client merges these rows into the final top K.
  * <p>
  * If the probed posting lists hold too few rows, the plan can probe more posting lists in batches.
- * During a migration, the plan probes both the active and the building generation.
+ * Each batch probes twice as many new posting lists as the batch before it. Thus the number of
+ * serial batches grows with the logarithm of the probe width that the query needs. The batch limit
+ * also sets a budget of posting lists: the limit times the probe count of the first batch. Thus the
+ * doubling does not increase the work of a query whose filter passes very few rows. During a
+ * migration, the plan probes both the active and the building generation.
  * <p>
  * A probe batch uses positional reads (PREAD) while its estimated bytes per index region scan are
  * at most a bound. The estimate comes from the index statistics. A larger batch, or a batch with no
@@ -382,8 +386,7 @@ public class VectorIndexScanPlan extends ScanPlan {
       probing += " ACROSS ACTIVE AND BUILDING GENERATIONS";
     }
     if (isAdaptive()) {
-      int batches = Math.min(maxProbeBatches, (centroidCount + probeCount - 1) / probeCount);
-      probing += " EXPANDING UP TO " + batches + " BATCHES";
+      probing += " EXPANDING UP TO " + coveringBatches() + " BATCHES";
     }
     steps.add(0, probing);
     ExplainPlanAttributes attributes = explainPlan.getPlanStepsAsAttributes();
@@ -392,6 +395,31 @@ public class VectorIndexScanPlan extends ScanPlan {
         ? new ExplainPlanAttributesBuilder()
         : new ExplainPlanAttributesBuilder(attributes)).setVectorProbeCount(probeCount)
           .setVectorCentroidCount(centroidCount).setVectorDistanceMetric(metric).build());
+  }
+
+  // Returns the number of batches that use the full probe budget. This is not more than the batch
+  // limit, because the widths double and the budget is the limit times the first width
+  private int coveringBatches() {
+    int batches = 1;
+    long width = probeCount;
+    long probed = probeCount;
+    while (probed < probeBudget() && batches < maxProbeBatches) {
+      width = nextBatchWidth(width, probed);
+      probed += width;
+      batches++;
+    }
+    return batches;
+  }
+
+  // Returns the maximum number of centroids that one query probes, in all its batches
+  private long probeBudget() {
+    return Math.min((long) maxProbeBatches * probeCount, centroidCount);
+  }
+
+  // Returns the maximum number of new centroids of the batch after a batch of the given width. The
+  // batch is smaller if fewer centroids remain
+  private long nextBatchWidth(long width, long probed) {
+    return Math.min(width * 2, probeBudget() - probed);
   }
 
   /**
@@ -518,8 +546,9 @@ public class VectorIndexScanPlan extends ScanPlan {
     if (listPartBytes == null || listPartBytes > preadMaxBytesPerRegion) {
       return 1;
     }
-    // No batch is wider than the first batch, so all batches use PREAD for any region count
-    if ((double) listPartBytes * probeCount * listParts() <= preadMaxBytesPerRegion) {
+    // All batches use PREAD for any region count
+    long widest = isAdaptive() ? probeBudget() : probeCount;
+    if ((double) listPartBytes * widest * listParts() <= preadMaxBytesPerRegion) {
       return 1;
     }
     return getProbedRegions(scanGrouper);
@@ -687,17 +716,19 @@ public class VectorIndexScanPlan extends ScanPlan {
       }
       int[] ranked = null;
       int batches = 1;
+      long width = probeCount;
       ScanRanges original = context.getScanRanges();
       try {
         while (
           isAdaptive() && found.size() < batchLimit && probed.size() < centroidCount
-            && batches < maxProbeBatches
+            && probed.size() < probeBudget() && batches < maxProbeBatches
         ) {
           if (ranked == null) {
             ranked = nearestCentroids(centroidCount);
           }
-          List<Integer> batch = new ArrayList<>(probeCount);
-          for (int i = 0; i < ranked.length && batch.size() < probeCount; i++) {
+          width = nextBatchWidth(width, probed.size());
+          List<Integer> batch = new ArrayList<>((int) width);
+          for (int i = 0; i < ranked.length && batch.size() < width; i++) {
             if (probed.add(ranked[i])) {
               batch.add(ranked[i]);
             }

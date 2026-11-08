@@ -155,7 +155,8 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.vector.centroid.cache.maxBytes";
   // Centroids that a vector query probes in each generation; 0 selects sqrt(centroid count)
   public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
-  // Maximum number of probe batches, including the first, that an adaptive vector query can scan
+  // Maximum number of probe batches, including the first, that an adaptive vector query can scan.
+  // The query also probes at most this number times the centroids of its first batch
   public static final String VECTOR_MAX_PROBE_LIMIT_ATTRIB = "phoenix.vector.max.probe.limit";
   // Largest estimated bytes per index region scan for which an IVF probe batch uses positional
   // reads (PREAD). The estimate comes from the index statistics. A batch above the bound, or with
