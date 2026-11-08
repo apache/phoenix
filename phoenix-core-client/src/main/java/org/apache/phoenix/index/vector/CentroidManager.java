@@ -730,16 +730,28 @@ public final class CentroidManager {
       }
     }
 
+    /**
+     * Releases the claim. The release needs a clear interrupt status, so an interrupted holder also
+     * frees the index before the lease expires. The interrupt status is set again after the
+     * release.
+     */
     @Override
     public void close() throws SQLException {
       renewal.cancel(false);
+      boolean interrupted = Thread.interrupted();
       try {
         synchronized (this) {
           closed = true;
           releaseRebuild(conn, indexName, token);
         }
       } finally {
-        conn.close();
+        try {
+          conn.close();
+        } finally {
+          if (interrupted) {
+            Thread.currentThread().interrupt();
+          }
+        }
       }
     }
   }

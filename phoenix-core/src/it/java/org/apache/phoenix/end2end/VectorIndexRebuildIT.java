@@ -32,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -42,6 +43,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,10 +53,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
@@ -86,6 +93,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JacksonUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.bson.BinaryVector;
 import org.bson.BsonBinary;
 import org.bson.BsonDocument;
@@ -674,6 +683,9 @@ public class VectorIndexRebuildIT extends ParallelStatsDisabledIT {
       assertEquals(GenerationSummary.ACTIVE, summary.getRebuildState());
       assertEquals(VectorIndexRebuilder.MANUAL_REASON, summary.getTriggerReason());
       assertNotNull(summary.getLastRebuildTime());
+      // Reconciliation and fsck keep an older generation until the retire time
+      assertNotNull(summary.getRetireAfter());
+      assertTrue(summary.getRetireAfter() > summary.getLastRebuildTime());
 
       float[] q = new float[] { 5, 5, 5, 5 };
       assertEquals(bruteForceTopK(rows, q, "L2", 5),
@@ -1156,6 +1168,210 @@ public class VectorIndexRebuildIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("ALTER INDEX " + index + " ON " + table + " REBUILD");
       assertEquals(40, count(conn, index));
       assertIndexConsistent(table, index);
+    }
+  }
+
+  /**
+   * Verifies that a rebuild waits until cached metadata expires before it migrates the index. The
+   * table has an UPDATE_CACHE_FREQUENCY of some seconds. One writer sends its own index
+   * maintainers. It has its own query services, and it caches the metadata of the active generation
+   * before the rebuild. After the promotion, each writer upserts a row and deletes a row. A full
+   * probe search then finds exactly the rows of the data table.
+   * <p>
+   * The other writer lets the region server build the index maintainers from its own metadata
+   * cache. Background tasks on the region server can refresh that cache. Thus this test does not
+   * reliably cover the cache of the region server. The test also does not cover the wait after the
+   * promotion. One JVM keeps the outgoing centroids in its centroid cache, so a short second wait
+   * has no visible effect.
+   */
+  @Test
+  public void testRebuildWaitsForCachedMetadataToExpire() throws Exception {
+    String table = "T_UCF_" + generateUniqueName();
+    String index = "IDX_UCF_" + generateUniqueName();
+    Map<String, float[]> rows = new LinkedHashMap<>();
+    Properties clientMetadata = props(false);
+    clientMetadata.setProperty(QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB, "false");
+    try (Connection conn = connect(false); Connection serverWriter = connect(false);
+      Connection clientWriter = DriverManager.getConnection(
+        QueryUtil.getConnectionUrl(clientMetadata, config, "ucf_client_" + generateUniqueName()),
+        clientMetadata)) {
+      // The rebuild refreshes the metadata cache of its own query services. The client writer
+      // must keep its stale metadata, so it must not share that cache.
+      assertNotSame(conn.unwrap(PhoenixConnection.class).getMetaDataCache(),
+        clientWriter.unwrap(PhoenixConnection.class).getMetaDataCache());
+      // The cache frequency is longer than a rebuild without the cache wait, and shorter than the
+      // test timeout
+      setupTableAndKnownCentroids(conn, table, index, "FLOAT", "UPDATE_CACHE_FREQUENCY=15000");
+      long active = index(conn, index).getVectorCentroidGeneration();
+      for (int i = 0; i < 40; i++) {
+        Float[] v = near(i % 4, 0.01f * i);
+        upsert(conn, table, "r" + i, v, "l" + i);
+        rows.put("r" + i, unbox(v));
+      }
+      conn.commit();
+      // Cache the metadata of the active generation in each writer and in the region server
+      upsert(serverWriter, table, "s0", near(0, 0.405f), "s0");
+      serverWriter.commit();
+      rows.put("s0", unbox(near(0, 0.405f)));
+      upsert(clientWriter, table, "c0", near(1, 0.415f), "c0");
+      clientWriter.commit();
+      rows.put("c0", unbox(near(1, 0.415f)));
+
+      ExecutorService executor = Executors.newSingleThreadExecutor();
+      try {
+        Future<Void> rebuild = executor.submit(() -> {
+          Properties props = props(false);
+          props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "2000");
+          try (Connection c = DriverManager.getConnection(getUrl(), props)) {
+            c.createStatement().execute("ALTER INDEX " + index + " ON " + table + " REBUILD");
+          }
+          return null;
+        });
+        long deadline = System.currentTimeMillis() + 120000;
+        while (Long.valueOf(active).equals(index(conn, index).getVectorCentroidGeneration())) {
+          if (rebuild.isDone()) {
+            rebuild.get();
+            fail("The rebuild ended without a promotion");
+          }
+          assertTrue("Timed out awaiting the promotion", System.currentTimeMillis() < deadline);
+          Thread.sleep(50);
+        }
+        // These writes are after the time range of the catch-up build. A writer with the metadata
+        // of the outgoing generation does not maintain the promoted generation.
+        upsert(serverWriter, table, "s1", near(2, 0.425f), "s1");
+        serverWriter.createStatement().execute("DELETE FROM " + table + " WHERE ID = 'r1'");
+        serverWriter.commit();
+        upsert(clientWriter, table, "c1", near(3, 0.435f), "c1");
+        clientWriter.createStatement().execute("DELETE FROM " + table + " WHERE ID = 'r2'");
+        clientWriter.commit();
+        rows.put("s1", unbox(near(2, 0.425f)));
+        rows.put("c1", unbox(near(3, 0.435f)));
+        rows.remove("r1");
+        rows.remove("r2");
+        rebuild.get(120, TimeUnit.SECONDS);
+      } finally {
+        executor.shutdownNow();
+      }
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.removeTable(null, table, null, HConstants.LATEST_TIMESTAMP);
+      PTable idx = index(conn, index);
+      assertNotEquals(Long.valueOf(active), idx.getVectorCentroidGeneration());
+      assertFalse(idx.isVectorRebuildInProgress());
+      assertEquals(0, countCentroids(conn, index, active));
+      assertEquals(rows.size(), count(conn, table));
+      assertEquals("index rows", rows.size(), count(conn, index));
+      List<String> found =
+        topK(conn, table, "/*+ VECTOR_PROBE_COUNT(" + idx.getVectorIvfLists() + ") */",
+          new float[] { 0, 0, 0, 0 }, rows.size() + 10);
+      assertEquals("rows that a full probe search finds", new TreeSet<>(rows.keySet()),
+        new TreeSet<>(found));
+    }
+  }
+
+  /**
+   * Verifies that a rebuild does not start if a metadata cache never expires. The rebuild then
+   * leaves the index state, its generations, and its centroid rows unchanged.
+   */
+  @Test
+  public void testRebuildRefusedIfCacheNeverExpires() throws Exception {
+    String table = "T_NEVER_" + generateUniqueName();
+    String index = "IDX_NEVER_" + generateUniqueName();
+    try (Connection conn = connect(false)) {
+      setupTableAndKnownCentroids(conn, table, index, "FLOAT", "UPDATE_CACHE_FREQUENCY=NEVER");
+      PTable before = index(conn, index);
+      List<Long> generations = CentroidManager.listGenerations(conn, index);
+      try {
+        conn.createStatement().execute("ALTER INDEX " + index + " ON " + table + " REBUILD");
+        fail("The rebuild did not refuse an index whose metadata cache never expires");
+      } catch (SQLException e) {
+        assertTrue(e.getMessage(), e.getMessage().contains(Outcome.CACHE_NEVER_EXPIRES.name()));
+      }
+      PTable after = index(conn, index);
+      assertEquals(before.getVectorCentroidGeneration(), after.getVectorCentroidGeneration());
+      assertFalse(after.isVectorRebuildInProgress());
+      assertEquals(PIndexState.ACTIVE, after.getIndexState());
+      assertEquals(generations, CentroidManager.listGenerations(conn, index));
+    }
+  }
+
+  /**
+   * Verifies that the cache lag includes the frequencies of all views of the data table. The views
+   * are global views, tenant views, and views of views. A view of a different table does not count,
+   * also if the name of that table starts with the name of the data table. An ALTER of a view and a
+   * DROP of a view change the lag at once. A view whose header row keeps an old NEVER of its parent
+   * counts with the current frequency of the parent.
+   */
+  @Test
+  public void testCacheLagIncludesAllViews() throws Exception {
+    String schema = "S_" + generateUniqueName();
+    String table = schema + ".T_" + generateUniqueName();
+    String index = "IDX_" + generateUniqueName();
+    // The other table has a name with the data table name as a prefix.
+    String other = table + "X";
+    String view = schema + ".V_" + generateUniqueName();
+    String viewOfView = schema + ".VV_" + generateUniqueName();
+    String viewOfViewOfView = schema + ".VVV_" + generateUniqueName();
+    String staleView = schema + ".SV_" + generateUniqueName();
+    String tenantView = "TV_" + generateUniqueName();
+    String tenantViewOfView = "TVV_" + generateUniqueName();
+    Properties tenantProps = new Properties();
+    tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "T_" + generateUniqueName());
+    try (Connection conn = connect(false);
+      Connection tenant = DriverManager.getConnection(getUrl(), tenantProps)) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + table + " (TENANT_ID VARCHAR NOT NULL, ID VARCHAR NOT NULL,"
+          + " V VECTOR(FLOAT, 4) CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))"
+          + " MULTI_TENANT=true, UPDATE_CACHE_FREQUENCY=1000");
+        stmt.execute("CREATE VECTOR INDEX " + index + " ON " + table + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+        // A view of another table never expires. It must not count.
+        stmt.execute("CREATE TABLE " + other + " (TENANT_ID VARCHAR NOT NULL, ID VARCHAR NOT NULL"
+          + " CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true");
+        stmt.execute("CREATE VIEW " + schema + ".OV_" + generateUniqueName() + " AS SELECT * FROM "
+          + other + " UPDATE_CACHE_FREQUENCY=NEVER");
+      }
+      PTable dataTable = pconn.getTableNoCache(table);
+      PTable idx = index(conn, schema + "." + index);
+      assertEquals(1000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+
+      conn.createStatement().execute(
+        "CREATE VIEW " + view + " AS SELECT * FROM " + table + " UPDATE_CACHE_FREQUENCY=2000");
+      assertEquals(2000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      conn.createStatement().execute(
+        "CREATE VIEW " + viewOfView + " AS SELECT * FROM " + view + " UPDATE_CACHE_FREQUENCY=4000");
+      assertEquals(4000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      tenant.createStatement().execute("CREATE VIEW " + tenantView + " AS SELECT * FROM " + table
+        + " UPDATE_CACHE_FREQUENCY=8000");
+      assertEquals(8000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      tenant.createStatement().execute("CREATE VIEW " + tenantViewOfView + " AS SELECT * FROM "
+        + tenantView + " UPDATE_CACHE_FREQUENCY=16000");
+      assertEquals(16000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+
+      conn.createStatement().execute("CREATE VIEW " + viewOfViewOfView + " AS SELECT * FROM "
+        + viewOfView + " UPDATE_CACHE_FREQUENCY=32000");
+      assertEquals(32000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      // One parent and one header row in each batch give the same lag
+      assertEquals(32000, VectorIndexRebuilderTestHooks.cacheLagMs(pconn, dataTable, idx, 1, 1));
+
+      conn.createStatement()
+        .execute("ALTER VIEW " + viewOfView + " SET UPDATE_CACHE_FREQUENCY=NEVER");
+      assertEquals(Long.MAX_VALUE, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      // A view without its own frequency keeps the NEVER of its parent in its header row. After
+      // the parent becomes finite, the view resolves to the frequency of the parent.
+      conn.createStatement()
+        .execute("CREATE VIEW " + staleView + " AS SELECT * FROM " + viewOfView);
+      assertEquals(Long.MAX_VALUE, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      conn.createStatement()
+        .execute("ALTER VIEW " + viewOfView + " SET UPDATE_CACHE_FREQUENCY=4000");
+      assertEquals(32000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
+      assertEquals(32000, VectorIndexRebuilderTestHooks.cacheLagMs(pconn, dataTable, idx, 1, 1));
+
+      conn.createStatement().execute("DROP VIEW " + staleView);
+      conn.createStatement().execute("DROP VIEW " + viewOfViewOfView);
+      conn.createStatement().execute("DROP VIEW " + viewOfView);
+      assertEquals(16000, VectorIndexRebuilder.cacheLagMs(pconn, dataTable, idx));
     }
   }
 

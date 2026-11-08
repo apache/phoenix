@@ -4724,6 +4724,11 @@ public class MetaDataClient {
   /**
    * Rebuilds a vector index and migrates it to a new generation. An asynchronous rebuild only
    * enqueues a rebuild task. A synchronous rebuild throws an exception if it does not rebuild.
+   * <p>
+   * A synchronous rebuild waits two times for metadata caches to expire. Each wait is the
+   * population wait plus the largest UPDATE_CACHE_FREQUENCY of the data table, its views, and the
+   * index. Use ASYNC for a table with a long frequency. The wait assumes that all clients and
+   * region servers use the same default frequency.
    */
   private MutationState rebuildVectorIndex(PTable index, boolean isAsync) throws SQLException {
     String indexName = index.getName().getString();
@@ -4737,8 +4742,11 @@ public class MetaDataClient {
     VectorIndexRebuilder.Outcome outcome =
       VectorIndexRebuilder.rebuild(connection, indexName, true, VectorIndexRebuilder.MANUAL_REASON);
     if (outcome != VectorIndexRebuilder.Outcome.REBUILT) {
+      String advice = outcome == VectorIndexRebuilder.Outcome.CACHE_NEVER_EXPIRES
+        ? ". " + VectorIndexRebuilder.CACHE_NEVER_EXPIRES_ADVICE
+        : "";
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
-        .setMessage("Vector index " + indexName + " was not rebuilt: " + outcome)
+        .setMessage("Vector index " + indexName + " was not rebuilt: " + outcome + advice)
         .setSchemaName(index.getSchemaName().getString())
         .setTableName(index.getTableName().getString()).build().buildException();
     }

@@ -30,6 +30,7 @@ import java.util.UUID;
 import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.GenerationSummary;
 import org.apache.phoenix.index.vector.ScorecardRow;
+import org.apache.phoenix.index.vector.VectorIndexRebuilder;
 import org.apache.phoenix.index.vector.VectorIndexScorecard;
 import org.apache.phoenix.mapreduce.index.fsck.Finding;
 import org.apache.phoenix.mapreduce.index.fsck.GlobalIndexFsckProvider;
@@ -445,12 +446,23 @@ public class IvfIndexFsckProvider extends GlobalIndexFsckProvider {
 
     if (ivf.getBuildingGeneration() != null) {
       boolean rebuildQueued = !reader.loadLiveTasks(TaskType.VECTOR_INDEX_REBUILD).isEmpty();
-      findings.add(liveClaim || rebuildQueued
-        ? new Finding(Severity.INFO, SCOPE_CATALOG, MIGRATION_IN_PROGRESS,
-          "The index is migrating to generation " + ivf.getBuildingGeneration())
-        : new Finding(Severity.WARN, SCOPE_CATALOG, MIGRATION_STALLED,
+      if (liveClaim || rebuildQueued) {
+        findings.add(new Finding(Severity.INFO, SCOPE_CATALOG, MIGRATION_IN_PROGRESS,
+          "The index is migrating to generation " + ivf.getBuildingGeneration()));
+      } else if (
+        VectorIndexRebuilder.cacheLagMs(ivf.getConnection(), ivf.getDataTable(), index)
+            == Long.MAX_VALUE
+      ) {
+        // A reconciliation does not resume a migration while a metadata cache never expires
+        findings.add(new Finding(Severity.WARN, SCOPE_CATALOG, MIGRATION_STALLED,
+          "The migration to generation " + ivf.getBuildingGeneration()
+            + " is stalled, because a metadata cache never expires. "
+            + VectorIndexRebuilder.CACHE_NEVER_EXPIRES_ADVICE));
+      } else {
+        findings.add(new Finding(Severity.WARN, SCOPE_CATALOG, MIGRATION_STALLED,
           "The migration to generation " + ivf.getBuildingGeneration()
             + " is stalled; the next reconciliation enqueues a rebuild to resume it"));
+      }
     }
 
     if (reader.loadLiveTasks(TaskType.VECTOR_SCORECARD_RECONCILE).isEmpty()) {

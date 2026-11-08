@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.index.vector;
 
+import java.sql.SQLException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 
 /**
@@ -44,5 +46,11 @@ public final class VectorIndexRebuilderTestHooks {
 
   public static void setReconcileHook(ReconcileHook hook) {
     VectorIndexScorecard.setReconcileHookForTesting(hook == null ? null : hook::loaded);
+  }
+
+  /** Returns the cache lag of an index, with the given batch sizes of the view walk. */
+  public static long cacheLagMs(PhoenixConnection conn, PTable dataTable, PTable index,
+    int parentBatch, int headerBatch) throws SQLException {
+    return VectorIndexRebuilder.cacheLagMs(conn, dataTable, index, parentBatch, headerBatch);
   }
 }

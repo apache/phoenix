@@ -68,6 +68,12 @@ public class VectorIndexRebuildTask extends BaseTask {
       if (outcome == Outcome.IN_PROGRESS) {
         return new TaskResult(TaskResultCode.SKIPPED, "Vector index " + indexName + " is busy");
       }
+      if (outcome == Outcome.CACHE_NEVER_EXPIRES) {
+        // Report the refusal as a failure, so that SYSTEM.TASK shows that the rebuild did not run
+        return new TaskResult(TaskResultCode.FAIL,
+          "Vector index " + indexName + " was not rebuilt: " + outcome.name() + ". "
+            + VectorIndexRebuilder.CACHE_NEVER_EXPIRES_ADVICE);
+      }
       if (outcome == Outcome.REBUILT) {
         VectorIndexTaskRunner.succeeded(indexName);
       }
