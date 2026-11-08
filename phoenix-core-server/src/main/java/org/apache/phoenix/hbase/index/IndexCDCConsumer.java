@@ -157,6 +157,14 @@ public class IndexCDCConsumer implements Runnable {
   private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
   /**
+   * Maximum time between two reads of the data table definition from SYSTEM.CATALOG. Usually the
+   * UPDATE_CACHE_FREQUENCY of the data table sets this time. This limit applies when that value is
+   * larger, for example NEVER. The consumer applies only events that are older than its last read,
+   * so without a limit the index could stop.
+   */
+  private static final long MAX_METADATA_REFRESH_INTERVAL_MS = 60000L;
+
+  /**
    * Extra time after a switch of an index from EVENTUAL to STRONG during which the consumer still
    * applies CDC events to the index. It covers writes in flight at the switch, and clock skew
    * between the DDL client and the region servers.
@@ -188,6 +196,8 @@ public class IndexCDCConsumer implements Runnable {
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
   private PTable cachedDataTable;
+  // Local time just before the last read of cachedDataTable from SYSTEM.CATALOG.
+  private long cachedDataTableReadTime = 0L;
 
   private boolean tenantInit = false;
   private boolean isMultiTenant = false;
@@ -331,15 +341,59 @@ public class IndexCDCConsumer implements Runnable {
    * can keep an old definition after an ALTER, for example when the region moves to this server.
    */
   private void refreshDataTableCache(PhoenixConnection conn) throws SQLException {
+    long readTime = EnvironmentEdgeManager.currentTimeMillis();
     cachedDataTable = conn.getTableNoCache(conn.getTenantId(), dataTableName);
+    cachedDataTableReadTime = readTime;
+  }
+
+  /**
+   * Removes from the batch the events that the cached data table definition does not cover. The
+   * definition covers an event when the consumer read it from SYSTEM.CATALOG after the event time.
+   * A writer that sees a consistency change resolves its metadata after the DDL commit. Thus, when
+   * a read does not show the DDL, the events of that writer are newer than the read. The consumer
+   * reads the definition again when the batch has newer events and the UPDATE_CACHE_FREQUENCY of
+   * the data table has expired. Thus that frequency controls the load on SYSTEM.CATALOG, as it does
+   * for clients. Removed events stay in the CDC for a later batch. The event timestamps and the
+   * read time come from the clock of the region server that hosts the region.
+   * @return the timestamp of the last event that the batch keeps, or {@code lastProcessedTimestamp}
+   *         when the batch keeps no events.
+   */
+  private long keepEventsCoveredByMetadata(PhoenixConnection conn,
+    List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates, long lastProcessedTimestamp,
+    long lastTimestamp) throws SQLException {
+    long maxEventTimestamp = Long.MIN_VALUE;
+    for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
+      maxEventTimestamp = Math.max(maxEventTimestamp, entry.getFirst());
+    }
+    if (maxEventTimestamp <= cachedDataTableReadTime) {
+      return lastTimestamp;
+    }
+    long refreshInterval =
+      Math.min(getDataTable(conn).getUpdateCacheFrequency(), MAX_METADATA_REFRESH_INTERVAL_MS);
+    if (EnvironmentEdgeManager.currentTimeMillis() - cachedDataTableReadTime >= refreshInterval) {
+      refreshDataTableCache(conn);
+      if (maxEventTimestamp <= cachedDataTableReadTime) {
+        return lastTimestamp;
+      }
+    }
+    final long readTime = cachedDataTableReadTime;
+    batchStates.removeIf(entry -> entry.getFirst() > readTime);
+    long keptTimestamp = lastProcessedTimestamp;
+    for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
+      keptTimestamp = Math.max(keptTimestamp, entry.getFirst());
+    }
+    LOG.debug("Deferred CDC events after {} for table {} region {} until the next metadata refresh",
+      readTime, dataTableName, encodedRegionName);
+    return keptTimestamp;
   }
 
   /**
    * Returns the timestamp of the last CDC event that the consumer applies to the index. An EVENTUAL
    * index gets all events. After a switch from EVENTUAL to STRONG, a client with an old cache can
-   * send EVENTUAL maintainers for up to UPDATE_CACHE_FREQUENCY. Thus the consumer applies events up
-   * to the index LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the
-   * index synchronously in this period, and the replay writes the same cells again.
+   * send EVENTUAL maintainers for up to the UPDATE_CACHE_FREQUENCY of the data table. Indexes use
+   * the frequency of their data table. Thus the consumer applies events up to the index
+   * LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the index
+   * synchronously in this period, and the replay writes the same cells again.
    * @return the cutoff timestamp, or {@link Long#MIN_VALUE} when the consumer does not maintain the
    *         index.
    */
@@ -355,7 +409,7 @@ public class IndexCDCConsumer implements Runnable {
     ) {
       return Long.MIN_VALUE;
     }
-    long cacheLag = Math.max(dataTable.getUpdateCacheFrequency(), index.getUpdateCacheFrequency());
+    long cacheLag = dataTable.getUpdateCacheFrequency();
     long allowance = cacheLag > Long.MAX_VALUE - CONSISTENCY_SWITCH_GRACE_MS
       ? Long.MAX_VALUE
       : cacheLag + CONSISTENCY_SWITCH_GRACE_MS;
@@ -1213,6 +1267,10 @@ public class IndexCDCConsumer implements Runnable {
       if (!hasMoreRows && !isParentReplay) {
         progress.recordEmptyPoll(lastQueryStartTime);
       }
+      if (!batchStates.isEmpty()) {
+        newLastTimestamp =
+          keepEventsCoveredByMetadata(conn, batchStates, lastProcessedTimestamp, newLastTimestamp);
+      }
       if (newLastTimestamp > lastProcessedTimestamp) {
         String sameTimestampQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1305,7 +1363,7 @@ public class IndexCDCConsumer implements Runnable {
     if (batchStates.isEmpty()) {
       return;
     }
-    refreshDataTableCache(conn);
+    // The cached definition covers every event of the batch.
     PTable dataTable = getDataTable(conn);
     byte[] encodedRegionNameBytes = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
     List<Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long>> targets = new ArrayList<>();
