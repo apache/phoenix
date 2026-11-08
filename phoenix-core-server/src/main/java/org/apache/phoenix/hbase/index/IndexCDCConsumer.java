@@ -157,12 +157,19 @@ public class IndexCDCConsumer implements Runnable {
   private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
   /**
-   * Maximum time between two reads of the data table definition from SYSTEM.CATALOG. Usually the
-   * UPDATE_CACHE_FREQUENCY of the data table sets this time. This limit applies when that value is
-   * larger, for example NEVER. The consumer applies only events that are older than its last read,
-   * so without a limit the index could stop.
+   * Minimum time between two reads of the data table definition from SYSTEM.CATALOG. The
+   * UPDATE_CACHE_FREQUENCY of the data table sets this time within the minimum and the maximum. The
+   * minimum applies when that value is smaller, for example ALWAYS. It limits the load that busy
+   * regions put on SYSTEM.CATALOG.
    */
-  private static final long MAX_METADATA_REFRESH_INTERVAL_MS = 60000L;
+  private static final long MIN_METADATA_REFRESH_INTERVAL_MS = 60000L;
+
+  /**
+   * Maximum time between two reads of the data table definition from SYSTEM.CATALOG. The maximum
+   * applies when the UPDATE_CACHE_FREQUENCY of the data table is larger, for example NEVER. It
+   * limits the time until the consumer sees a change of index consistency.
+   */
+  private static final long MAX_METADATA_REFRESH_INTERVAL_MS = 900000L;
 
   /**
    * Extra time after a switch of an index from EVENTUAL to STRONG during which the consumer still
@@ -188,9 +195,8 @@ public class IndexCDCConsumer implements Runnable {
   private final MetricsIndexCDCConsumerSource metricSource;
   private final long lagSampleIntervalMs;
   private final IndexCDCConsumerProgress progress;
-  // Flipped true once hasEventuallyConsistentIndexes() confirms this region actually has an EC
-  // index. Until then sleepWithLagSampling does not emit, so tables that immediately exit "no EC
-  // index" produce no cold-start lag samples into the global / per-table histograms.
+  // True when an index needs the consumer. Until then, sleepWithLagSampling emits no lag samples,
+  // so that tables without such an index do not add samples to the lag histograms.
   private volatile boolean lagEmissionEnabled = false;
   private volatile boolean stopped = false;
   private Thread consumerThread;
@@ -347,44 +353,24 @@ public class IndexCDCConsumer implements Runnable {
   }
 
   /**
-   * Removes from the batch the events that the cached data table definition does not cover. The
-   * definition covers an event when the consumer read it from SYSTEM.CATALOG after the event time.
-   * A writer that sees a consistency change resolves its metadata after the DDL commit. Thus, when
-   * a read does not show the DDL, the events of that writer are newer than the read. The consumer
-   * reads the definition again when the batch has newer events and the UPDATE_CACHE_FREQUENCY of
-   * the data table has expired. Thus that frequency controls the load on SYSTEM.CATALOG, as it does
-   * for clients. Removed events stay in the CDC for a later batch. The event timestamps and the
-   * read time come from the clock of the region server that hosts the region.
-   * @return the timestamp of the last event that the batch keeps, or {@code lastProcessedTimestamp}
-   *         when the batch keeps no events.
+   * Reads the data table definition again when the batch has events newer than the last read and
+   * the refresh interval has expired. The UPDATE_CACHE_FREQUENCY of the data table sets that
+   * interval, within fixed limits. Idle regions thus do not read SYSTEM.CATALOG.
    */
-  private long keepEventsCoveredByMetadata(PhoenixConnection conn,
-    List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates, long lastProcessedTimestamp,
-    long lastTimestamp) throws SQLException {
+  private void refreshDataTableCacheIfDue(PhoenixConnection conn,
+    List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates) throws SQLException {
     long maxEventTimestamp = Long.MIN_VALUE;
     for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
       maxEventTimestamp = Math.max(maxEventTimestamp, entry.getFirst());
     }
     if (maxEventTimestamp <= cachedDataTableReadTime) {
-      return lastTimestamp;
+      return;
     }
-    long refreshInterval =
-      Math.min(getDataTable(conn).getUpdateCacheFrequency(), MAX_METADATA_REFRESH_INTERVAL_MS);
+    long refreshInterval = Math.max(MIN_METADATA_REFRESH_INTERVAL_MS,
+      Math.min(getDataTable(conn).getUpdateCacheFrequency(), MAX_METADATA_REFRESH_INTERVAL_MS));
     if (EnvironmentEdgeManager.currentTimeMillis() - cachedDataTableReadTime >= refreshInterval) {
       refreshDataTableCache(conn);
-      if (maxEventTimestamp <= cachedDataTableReadTime) {
-        return lastTimestamp;
-      }
     }
-    final long readTime = cachedDataTableReadTime;
-    batchStates.removeIf(entry -> entry.getFirst() > readTime);
-    long keptTimestamp = lastProcessedTimestamp;
-    for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
-      keptTimestamp = Math.max(keptTimestamp, entry.getFirst());
-    }
-    LOG.debug("Deferred CDC events after {} for table {} region {} until the next metadata refresh",
-      readTime, dataTableName, encodedRegionName);
-    return keptTimestamp;
   }
 
   /**
@@ -1267,10 +1253,6 @@ public class IndexCDCConsumer implements Runnable {
       if (!hasMoreRows && !isParentReplay) {
         progress.recordEmptyPoll(lastQueryStartTime);
       }
-      if (!batchStates.isEmpty()) {
-        newLastTimestamp =
-          keepEventsCoveredByMetadata(conn, batchStates, lastProcessedTimestamp, newLastTimestamp);
-      }
       if (newLastTimestamp > lastProcessedTimestamp) {
         String sameTimestampQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1363,7 +1345,7 @@ public class IndexCDCConsumer implements Runnable {
     if (batchStates.isEmpty()) {
       return;
     }
-    // The cached definition covers every event of the batch.
+    refreshDataTableCacheIfDue(conn, batchStates);
     PTable dataTable = getDataTable(conn);
     byte[] encodedRegionNameBytes = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
     List<Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long>> targets = new ArrayList<>();
