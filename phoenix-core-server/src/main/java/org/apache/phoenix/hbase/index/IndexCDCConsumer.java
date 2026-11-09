@@ -448,9 +448,11 @@ public class IndexCDCConsumer implements Runnable {
    * LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the index
    * synchronously in this period, and the replay writes the same cells again.
    * <p>
-   * An UPDATE_CACHE_FREQUENCY of NEVER together with disabled LAST_DDL_TIMESTAMP validation is not
-   * supported. In that configuration, a client never reads the switch, so no cutoff is correct. The
-   * cutoff is then not limited, and the design does not try to handle this case.
+   * An UPDATE_CACHE_FREQUENCY of NEVER gets only the grace period. With NEVER, LAST_DDL_TIMESTAMP
+   * validation runs for each statement, so a client sees the switch at once. NEVER is not a time,
+   * so the cutoff does not add it. Otherwise the consumer applies events to each STRONG index
+   * forever. NEVER together with disabled validation is not supported, because a client then never
+   * sees the switch.
    * @return the cutoff timestamp, or {@link Long#MIN_VALUE} when the consumer does not maintain the
    *         index.
    */
@@ -467,6 +469,9 @@ public class IndexCDCConsumer implements Runnable {
       return Long.MIN_VALUE;
     }
     long cacheLag = dataTable.getUpdateCacheFrequency();
+    if (cacheLag == Long.MAX_VALUE) {
+      cacheLag = 0L;
+    }
     long allowance = cacheLag > Long.MAX_VALUE - CONSISTENCY_SWITCH_GRACE_MS
       ? Long.MAX_VALUE
       : cacheLag + CONSISTENCY_SWITCH_GRACE_MS;
