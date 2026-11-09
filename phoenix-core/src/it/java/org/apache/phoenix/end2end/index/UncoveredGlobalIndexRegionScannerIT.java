@@ -24,6 +24,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
@@ -925,13 +926,16 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
    */
   @Test
   public void testUncoveredConditionsAfterNullRow() throws Exception {
+    // The test needs the NULL row and the other rows in the same region scan. Salting can put
+    // them in different regions, so the salted variants do not run.
+    assumeFalse(salted);
     String dataTableName = generateUniqueName();
     String indexTableName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl());
       Statement stmt = conn.createStatement()) {
       stmt.execute("create table " + dataTableName
         + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10),"
-        + " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
+        + " val3 varchar(10))");
       // The first row in index order has a NULL val2. The other rows match all conditions.
       stmt.execute("upsert into " + dataTableName + " values ('a', 'x', null, 'z')");
       for (char id = 'b'; id <= 'h'; id++) {
