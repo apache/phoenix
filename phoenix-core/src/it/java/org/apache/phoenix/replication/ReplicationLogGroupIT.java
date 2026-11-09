@@ -75,6 +75,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.ipc.RpcClient;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1235,9 +1236,9 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     // the process is gone; here the group lives on in the test JVM with an open writer, so close
     // it.
     ReplicationLogGroup.closeAll(sn2);
-    Threads.sleep(20000); // just to be sure that the kill has fully started.
     // Regions will be re-opened and the WAL will be replayed
-    util.waitUntilAllRegionsAssigned(table);
+    waitForRegionsReopenedAway(sn2, table, TableName.valueOf(SYSTEM_CATALOG_NAME),
+      TableName.valueOf(SYSTEM_CHILD_LINK_NAME));
     try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
       .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
       Map<String, Integer> expected = Maps.newHashMap();
@@ -1256,6 +1257,143 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     // ignoreSyncReplicationForTesting must leave intact (it suppresses only the synchronous ship).
     replayAndVerifyAcrossClusters(Arrays.asList(createTableDdl, createIndexDdl), tableName,
       indexName);
+  }
+
+  /**
+   * The replicated watermark follows the write path: every replicated batch registers a floor at
+   * its WAL append and releases it once shipped, so after normal writes the region's watermark is
+   * its write point. A batch whose ship is skipped (the crash-before-ship simulation) keeps its
+   * floor pinned, so the watermark stays below that batch's sequence id while later writes advance
+   * the write point. The first table has no index, so preBatchMutate returns before locking rows;
+   * the floor is still registered and released. A second, indexed table checks that a batch failing
+   * before the WAL registers no floor.
+   */
+  @Test
+  public void testReplicationWatermarkReleasesShippedAndPinsUnshipped() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    TableName table = TableName.valueOf(tableName);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(
+        String.format("create table %s (id integer not null primary key, val varchar)", tableName));
+      conn.commit();
+      upsertRows(conn, tableName, 0, 10);
+      HRegion region = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegions(table).get(0);
+      IndexRegionObserver iro =
+        region.getCoprocessorHost().findCoprocessor(IndexRegionObserver.class);
+      assertEquals("every shipped batch releases its floor", region.getMVCC().getWritePoint(),
+        iro.getReplicationWatermark(region));
+
+      // A batch that fails before the WAL never registers a floor, so nothing is left pinned. The
+      // failure is injected after the row locks, which an unindexed table skips, so use an index.
+      String indexedTable = "T_" + generateUniqueName();
+      conn.createStatement().execute(String
+        .format("create table %s (id integer not null primary key, val varchar)", indexedTable));
+      conn.createStatement().execute(
+        String.format("create index %s on %s (val)", "I_" + generateUniqueName(), indexedTable));
+      conn.commit();
+      HRegion indexedRegion = CLUSTERS.getHBaseCluster1().getHBaseCluster()
+        .getRegions(TableName.valueOf(indexedTable)).get(0);
+      IndexRegionObserver indexedIro =
+        indexedRegion.getCoprocessorHost().findCoprocessor(IndexRegionObserver.class);
+      try {
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+        upsertRows(conn, indexedTable, 0, 1);
+        fail("the injected failure must fail the write");
+      } catch (SQLException expected) {
+        // injected in preBatchMutate, before the WAL append
+      } finally {
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      }
+      // A leaked floor would sit at the write point of the failed batch; a later write moves the
+      // write point past it, so the watermark would then lag.
+      upsertRows(conn, indexedTable, 1, 2);
+      assertEquals("a batch that fails before the WAL leaves no floor",
+        indexedRegion.getMVCC().getWritePoint(), indexedIro.getReplicationWatermark(indexedRegion));
+
+      try {
+        IndexRegionObserver.setIgnoreSyncReplicationForTesting(true);
+        upsertRows(conn, tableName, 10, 11);
+      } finally {
+        IndexRegionObserver.setIgnoreSyncReplicationForTesting(false);
+      }
+      long unshippedId = region.getMVCC().getWritePoint();
+      long pinned = iro.getReplicationWatermark(region);
+      assertTrue("an unshipped batch holds the watermark below its id", pinned < unshippedId);
+
+      upsertRows(conn, tableName, 11, 21);
+      assertTrue(region.getMVCC().getWritePoint() > unshippedId);
+      assertEquals("the pinned floor keeps holding the watermark", pinned,
+        iro.getReplicationWatermark(region));
+    }
+  }
+
+  /**
+   * WAL replay re-ships only the edits the replicated watermark does not cover. Ten shipped rows,
+   * one unshipped row (its floor stays pinned), then five shipped rows; the RS is killed and the
+   * region replays all sixteen edits. The pinned row's watermark covers the first ten, so only the
+   * pinned row and the five after it are re-shipped: 15 live mutations plus 6 re-shipped. Without
+   * the watermark all 16 would be re-shipped; a watermark that ran past the pinned row would skip
+   * it. No shipped mutation carries the watermark attribute.
+   */
+  @Test
+  public void testWALRestoreSkipsEditsCoveredByWatermark() throws Exception {
+    HBaseTestingUtility util = CLUSTERS.getHBaseCluster1();
+    MiniHBaseCluster cluster = util.getHBaseCluster();
+    final String tableName = "T_" + generateUniqueName();
+    TableName table = TableName.valueOf(tableName);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(
+        String.format("create table %s (id integer not null primary key, val varchar)", tableName));
+      conn.commit();
+    }
+    JVMClusterUtil.RegionServerThread rs2 = cluster.startRegionServer();
+    ServerName sn2 = rs2.getRegionServer().getServerName();
+    moveRegionToServer(table, sn2);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      upsertRows(conn, tableName, 0, 10);
+      try {
+        IndexRegionObserver.setIgnoreSyncReplicationForTesting(true);
+        upsertRows(conn, tableName, 10, 11);
+      } finally {
+        IndexRegionObserver.setIgnoreSyncReplicationForTesting(false);
+      }
+      upsertRows(conn, tableName, 11, 16);
+    }
+    cluster.killRegionServer(sn2);
+    // As in testWALRestore: the killed RS's group lives on in the test JVM, so close it.
+    ReplicationLogGroup.closeAll(sn2);
+    waitForRegionsReopenedAway(sn2, table);
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    expected.put(tableName, 15 + 6);
+    verifyReplication(expected);
+    Map<String, Integer> shipsByRow = Maps.newHashMap();
+    for (Mutation m : groupLogsByTable().get(tableName)) {
+      assertNull(m.getAttribute(IndexRegionObserver.REPL_WATERMARK_ATTR));
+      shipsByRow.merge(Bytes.toStringBinary(m.getRow()), 1, Integer::sum);
+    }
+    for (int i = 0; i < 16; i++) {
+      // Rows 0-9 shipped live only; row 10 only on the replay; rows 11-15 both.
+      int ships = i <= 10 ? 1 : 2;
+      assertEquals("row " + i, Integer.valueOf(ships),
+        shipsByRow.get(Bytes.toStringBinary(PInteger.INSTANCE.toBytes(i))));
+    }
+  }
+
+  private static void upsertRows(Connection conn, String tableName, int from, int to)
+    throws SQLException {
+    try (PreparedStatement stmt =
+      conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?)")) {
+      for (int i = from; i < to; i++) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "v" + i);
+        stmt.executeUpdate();
+        conn.commit();
+      }
+    }
   }
 
   /**
@@ -2358,6 +2496,13 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
         GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT.getMetric().getValue()
             > failoverFailuresBefore);
       assertFalse("The region server hosting the table must not abort", rs0.isAborted());
+      // The failed write is committed locally but not replicated, so its floor stays pinned and
+      // holds the watermark below it; later writes are refused before they commit.
+      HRegion region = rs0.getRegions(TableName.valueOf(tableName)).get(0);
+      IndexRegionObserver iro =
+        region.getCoprocessorHost().findCoprocessor(IndexRegionObserver.class);
+      assertTrue("A failed ship must keep its floor pinned",
+        iro.getReplicationWatermark(region) < region.getMVCC().getWritePoint());
 
       // The role, and the group the failover left fatal, refuse a later write before it commits.
       try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
