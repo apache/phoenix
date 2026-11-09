@@ -6054,7 +6054,10 @@ public class MetaDataClient {
         // then always writes CDC records for its changes. Writers that still see STRONG
         // maintain the index and also write CDC records. The consumer replays them without
         // harm. The switch also waits for the CDC stream, so that splits and merges keep the
-        // parent regions that the consumers replay.
+        // parent regions that the consumers replay. Clients see the switch through the
+        // UPDATE_CACHE_FREQUENCY of the data table or through LAST_DDL_TIMESTAMP validation.
+        // NEVER together with disabled validation is not supported, because clients then
+        // never see the switch.
         if (newIndexConsistency.isAsynchronous()) {
           PTable dataTable =
             connection.getTable(tenantId, SchemaUtil.getTableName(schemaName, dataTableName));

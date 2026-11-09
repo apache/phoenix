@@ -170,7 +170,9 @@ public class IndexCDCConsumer implements Runnable {
   /**
    * Maximum time between two reads of the data table definition from SYSTEM.CATALOG. The maximum
    * applies when the UPDATE_CACHE_FREQUENCY of the data table is larger, for example NEVER. It
-   * limits the time until the consumer sees a change of index consistency.
+   * limits the time until the consumer sees a change of index consistency. NEVER together with
+   * disabled LAST_DDL_TIMESTAMP validation is not supported, because clients then never see the
+   * change.
    */
   private static final long MAX_METADATA_REFRESH_INTERVAL_MS = 900000L;
 
@@ -445,6 +447,10 @@ public class IndexCDCConsumer implements Runnable {
    * the frequency of their data table. Thus the consumer applies events up to the index
    * LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the index
    * synchronously in this period, and the replay writes the same cells again.
+   * <p>
+   * An UPDATE_CACHE_FREQUENCY of NEVER together with disabled LAST_DDL_TIMESTAMP validation is not
+   * supported. In that configuration, a client never reads the switch, so no cutoff is correct. The
+   * cutoff is then not limited, and the design does not try to handle this case.
    * @return the cutoff timestamp, or {@link Long#MIN_VALUE} when the consumer does not maintain the
    *         index.
    */
