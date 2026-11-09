@@ -34,7 +34,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -685,6 +687,63 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       assertEquals("bcde", rs.getString(1));
       assertFalse(rs.next());
     }
+  }
+
+  @Test
+  public void testUncoveredQueryWithRejectedRows() throws Exception {
+    String dataTableName = generateUniqueName();
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + dataTableName
+          + " (id VARCHAR(10) NOT NULL PRIMARY KEY, val1 VARCHAR(10), val2 VARCHAR(10),"
+          + " val3 VARCHAR(10))");
+      conn.createStatement()
+        .execute("CREATE UNCOVERED INDEX " + indexTableName + " ON " + dataTableName + " (val1)");
+      PreparedStatement upsert =
+        conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES (?, ?, ?, ?)");
+      for (int i = 0; i < 60; i++) {
+        upsert.setString(1, String.format("r%02d", i));
+        upsert.setString(2, "k" + (i % 3));
+        upsert.setString(3, i % 10 == 0 ? "match" : (i % 7 == 0 ? null : "other"));
+        upsert.setString(4, i % 4 == 0 ? null : "v" + i);
+        upsert.executeUpdate();
+      }
+      conn.commit();
+      // Most rows fail the conditions on the uncovered columns. Some of these columns are NULL.
+      String[] wheres = { "val1 > 'a' AND val2 = 'match'",
+        "val1 > 'a' AND (val2 = 'match' OR val2 IS NULL)", "val1 > 'a' AND NOT (val2 = 'other')",
+        "val1 > 'a' AND COALESCE(val3, 'none') = 'none' AND val2 IS NOT NULL",
+        "val1 > 'a' AND val2 = 'none'" };
+      for (String where : wheres) {
+        String indexSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
+          + ") */ id, val2, val3 FROM " + dataTableName + " WHERE " + where;
+        String dataSql =
+          "SELECT /*+ NO_INDEX */ id, val2, val3 FROM " + dataTableName + " WHERE " + where;
+        assertPlan(conn, indexSql).tableContains(indexTableName);
+        assertEquals(where, sortedRows(conn, dataSql), sortedRows(conn, indexSql));
+      }
+      String countSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
+        + ") */ COUNT(*) FROM " + dataTableName + " WHERE val1 > 'a' AND val2 = 'match'";
+      assertPlan(conn, countSql).tableContains(indexTableName);
+      assertEquals(Collections.singletonList("6"), sortedRows(conn, countSql));
+    }
+  }
+
+  private static List<String> sortedRows(Connection conn, String sql) throws SQLException {
+    List<String> rows = new ArrayList<>();
+    try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+      int columnCount = rs.getMetaData().getColumnCount();
+      while (rs.next()) {
+        StringBuilder row = new StringBuilder();
+        for (int i = 1; i <= columnCount; i++) {
+          row.append(i > 1 ? "," : "").append(rs.getString(i));
+        }
+        rows.add(row.toString());
+      }
+    }
+    Collections.sort(rows);
+    return rows;
   }
 
   @Test

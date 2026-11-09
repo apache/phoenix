@@ -110,6 +110,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
   private byte[] previousResultRowKey = null;
   private final byte[] initStartRowKey;
   private final boolean includeInitStartRowKey;
+  private UncoveredIndexDataRowFilter dataRowFilter = null;
+  private long nextStartTime;
+  private ScannerContext nextScannerContext;
 
   public UncoveredIndexRegionScanner(final RegionScanner innerScanner, final Region region,
     final Scan scan, final RegionCoprocessorEnvironment env, final Scan dataTableScan,
@@ -188,6 +191,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
   @Override
   public int getBatch() {
     return innerScanner.getBatch();
+  }
+
+  /**
+   * Sets a filter that the scanner applies to each data row before the join. The scanner does not
+   * join or return a row that the filter rejects. A null filter disables the check.
+   */
+  public void setDataRowFilter(UncoveredIndexDataRowFilter dataRowFilter) {
+    this.dataRowFilter = dataRowFilter;
   }
 
   protected abstract void scanDataTableRows(long startTime) throws IOException;
@@ -371,12 +382,23 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     return false;
   }
 
+  /**
+   * Gets the next joined row of the current page. The scanner skips index rows that fail
+   * verification, index rows without a data row, and data rows that the filter rejects. A skip does
+   * not end the call, and the scanner continues with the next index row. The call stops at an
+   * accepted row, at the end of the page, or at the page time limit. After a time stop, the result
+   * is a dummy row at the last skipped row key.
+   */
   protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
-    if (indexRowIterator.hasNext()) {
+    if (!indexRowIterator.hasNext()) {
+      return false;
+    }
+    while (true) {
       List<Cell> indexRow = indexRowIterator.next();
       result.addAll(indexRow);
+      byte[] indexRowKey;
       try {
-        byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
+        indexRowKey = CellUtil.cloneRow(indexRow.get(0));
         Result dataRow = dataRows.get(new ImmutableBytesPtr(indexToDataRowKeyMap.get(indexRowKey)));
 
         if (dataRow != null) {
@@ -385,7 +407,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             !indexMaintainer.isUncovered()
               || verifyIndexRowAndRepairIfNecessary(dataRow, indexRowKey, ts)
           ) {
-            if (tupleProjector != null) {
+            // The filter runs after verification. Thus the scanner also repairs an index row when
+            // the filter rejects its data row.
+            if (dataRowFilter != null && dataRowFilter.rejects(dataRow)) {
+              result.clear();
+            } else if (tupleProjector != null) {
               IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow), tupleProjector, ptr);
             }
           } else {
@@ -417,10 +443,27 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
           + region.getRegionInfo().getRegionNameAsString(), e);
         throw e;
       }
-      return true;
-    } else {
-      return false;
+      if (!result.isEmpty()) {
+        return true;
+      }
+      // The scanner consumed this row. A later dummy row points at it, so that a restarted scan
+      // does not read it again.
+      previousResultRowKey = indexRowKey;
+      // At the end of the page, the result stays empty and the caller resets its distinct filter.
+      // A distinct scan has pages of one row, so each skipped row takes this path.
+      if (!indexRowIterator.hasNext()) {
+        return true;
+      }
+      if (isPageTimeUp()) {
+        updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey, scan);
+        return true;
+      }
     }
+  }
+
+  private boolean isPageTimeUp() {
+    return EnvironmentEdgeManager.currentTimeMillis() - nextStartTime > pageSizeMs
+      || PhoenixScannerContext.isReturnImmediately(nextScannerContext);
   }
 
   public boolean next(List<Cell> result) throws IOException {
@@ -442,6 +485,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
       ? ((PhoenixScannerContext) scannerContext).getStartTime()
       : EnvironmentEdgeManager.currentTimeMillis();
     boolean hasMore;
+    nextStartTime = startTime;
+    nextScannerContext = scannerContext;
     region.startRegionOperation();
     try {
       synchronized (innerScanner) {

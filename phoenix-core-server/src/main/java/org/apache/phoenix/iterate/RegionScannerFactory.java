@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.CDCGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
+import org.apache.phoenix.coprocessor.UncoveredIndexDataRowFilter;
 import org.apache.phoenix.coprocessor.UncoveredLocalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -175,19 +176,32 @@ public abstract class RegionScannerFactory {
             // If the DistinctPrefix filter is present on the scan we set the batch size to 1
             // when scanning uncovered index rows
             distinctFilter = ScanUtil.findDistinctPrefixFilter(scan);
+            // Each branch builds the data row filter before the scanner, because the scanner
+            // constructor opens resources that a later failure leaves open.
             if (ScanUtil.isLocalIndex(scan)) {
-              s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                offset, actualStartKey, extraLimit, distinctFilter != null);
+              UncoveredIndexDataRowFilter dataRowFilter =
+                UncoveredIndexDataRowFilter.create(scan, extraWhere, tupleProjector);
+              UncoveredLocalIndexRegionScanner localScanner =
+                new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
+                  offset, actualStartKey, extraLimit, distinctFilter != null);
+              localScanner.setDataRowFilter(dataRowFilter);
+              s = localScanner;
             } else {
               if (scan.getAttribute(CDC_DATA_TABLE_DEF) != null) {
+                // The CDC scanner builds its own joined rows, so it gets no data row filter.
                 s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                   dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
                   extraLimit, distinctFilter != null);
               } else {
-                s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                  extraLimit, distinctFilter != null);
+                UncoveredIndexDataRowFilter dataRowFilter =
+                  UncoveredIndexDataRowFilter.create(scan, extraWhere, tupleProjector);
+                UncoveredGlobalIndexRegionScanner globalScanner =
+                  new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                    dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
+                    extraLimit, distinctFilter != null);
+                globalScanner.setDataRowFilter(dataRowFilter);
+                s = globalScanner;
               }
             }
           }
