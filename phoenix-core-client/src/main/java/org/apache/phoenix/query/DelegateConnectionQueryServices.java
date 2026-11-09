@@ -318,6 +318,13 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
+  public void clearTableFromCache(byte[] tenantId, byte[] schemaName, byte[] tableName,
+    long clientTS, boolean invalidateServerMetadataCache) throws SQLException {
+    getDelegate().clearTableFromCache(tenantId, schemaName, tableName, clientTS,
+      invalidateServerMetadataCache);
+  }
+
+  @Override
   public GuidePostsInfo getTableStats(GuidePostsKey key) throws SQLException {
     return getDelegate().getTableStats(key);
   }

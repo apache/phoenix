@@ -189,6 +189,7 @@ message ClearTableFromCacheRequest {
   required bytes tableName = 3;
   required int64 clientTimestamp = 4;
   optional int32 clientVersion = 5;
+  optional bool invalidateServerMetadataCache = 6;
 }
 
 message ClearTableFromCacheResponse {

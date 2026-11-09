@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -64,6 +65,8 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
@@ -156,9 +159,56 @@ public class IndexCDCConsumer implements Runnable {
   private static final long DEFAULT_LAG_SAMPLE_INTERVAL_MS = 5000L;
   private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
+  /**
+   * Minimum time between two reads of the data table definition from SYSTEM.CATALOG. The
+   * UPDATE_CACHE_FREQUENCY of the data table sets this time within the minimum and the maximum. The
+   * minimum applies when that value is smaller, for example ALWAYS. It limits the load that busy
+   * regions put on SYSTEM.CATALOG.
+   */
+  private static final long MIN_METADATA_REFRESH_INTERVAL_MS = 60000L;
+
+  /**
+   * Maximum time between two reads of the data table definition from SYSTEM.CATALOG. The maximum
+   * applies when the UPDATE_CACHE_FREQUENCY of the data table is larger, for example NEVER. It
+   * limits the time until the consumer sees a change of index consistency. NEVER together with
+   * disabled LAST_DDL_TIMESTAMP validation is not supported, because clients then never see the
+   * change.
+   */
+  private static final long MAX_METADATA_REFRESH_INTERVAL_MS = 900000L;
+
+  /**
+   * Extra time after a switch of an index from EVENTUAL to STRONG during which the consumer still
+   * applies CDC events to the index. It covers writes in flight at the switch, and clock skew
+   * between the DDL client and the region servers.
+   */
+  private static final long CONSISTENCY_SWITCH_GRACE_MS = 60000L;
+
+  /**
+   * Minimum time between two starts of a consumer for the same region. The writers start a new
+   * consumer when the old consumer has exited. This limit stops a consumer that exits at once from
+   * starting again on each batch.
+   */
+  private static final long MIN_RESTART_INTERVAL_MS = 60000L;
+
+  /**
+   * The last startup read of each data table definition on this region server. The consumers of a
+   * table share it. Many regions of a table can open at the same time, for example when the server
+   * starts. The shared read then makes one SYSTEM.CATALOG read for the table, not one for each
+   * region. The time limit removes old entries. A removed entry causes only one more read.
+   */
+  private static final Cache<String, SharedTableRead> STARTUP_TABLE_READS = CacheBuilder
+    .newBuilder().expireAfterWrite(MIN_METADATA_REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS).build();
+
+  /** A data table definition and the local time just before its read from SYSTEM.CATALOG. */
+  private static final class SharedTableRead {
+    private PTable table;
+    private long readTime = Long.MIN_VALUE;
+  }
+
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
   private final String encodedRegionName;
+  private final String serverName;
   private final IndexWriter indexWriter;
   private final long pause;
   private final long startupDelayMs;
@@ -173,14 +223,19 @@ public class IndexCDCConsumer implements Runnable {
   private final MetricsIndexCDCConsumerSource metricSource;
   private final long lagSampleIntervalMs;
   private final IndexCDCConsumerProgress progress;
-  // Flipped true once hasEventuallyConsistentIndexes() confirms this region actually has an EC
-  // index. Until then sleepWithLagSampling does not emit, so tables that immediately exit "no EC
-  // index" produce no cold-start lag samples into the global / per-table histograms.
+  // Local time when the region opened.
+  private final long openTime;
+  // True when an index needs the consumer. Until then, sleepWithLagSampling emits no lag samples,
+  // so that tables without such an index do not add samples to the lag histograms.
   private volatile boolean lagEmissionEnabled = false;
   private volatile boolean stopped = false;
+  // True when the consumer thread has ended.
+  private volatile boolean exited = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
   private PTable cachedDataTable;
+  // Local time just before the last read of cachedDataTable from SYSTEM.CATALOG.
+  private long cachedDataTableReadTime = 0L;
 
   private boolean tenantInit = false;
   private boolean isMultiTenant = false;
@@ -235,6 +290,7 @@ public class IndexCDCConsumer implements Runnable {
     this.env = env;
     this.dataTableName = dataTableName;
     this.encodedRegionName = env.getRegion().getRegionInfo().getEncodedName();
+    this.serverName = serverName;
     this.config = env.getConfiguration();
     this.serializeCDCMutations = serializeCDCMutations;
     this.pause = config.getLong(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, DEFAULT_RETRY_PAUSE_MS);
@@ -258,8 +314,8 @@ public class IndexCDCConsumer implements Runnable {
     this.lagSampleIntervalMs = Math.max(MIN_LAG_SAMPLE_INTERVAL_MS,
       config.getLong(INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS, DEFAULT_LAG_SAMPLE_INTERVAL_MS));
     this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexCDCConsumerSource();
-    this.progress = new IndexCDCConsumerProgress(EnvironmentEdgeManager.currentTimeMillis(),
-      this.timestampBufferMs);
+    this.openTime = EnvironmentEdgeManager.currentTimeMillis();
+    this.progress = new IndexCDCConsumerProgress(this.openTime, this.timestampBufferMs);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -274,6 +330,20 @@ public class IndexCDCConsumer implements Runnable {
       new Thread(this, "IndexCDCConsumer-" + dataTableName + "-" + encodedRegionName);
     consumerThread.setDaemon(true);
     consumerThread.start();
+  }
+
+  /**
+   * Returns true when the consumer has exited and enough time has passed since it started. A new
+   * consumer for the region can then start.
+   */
+  boolean canRestart() {
+    return exited && !stopped
+      && EnvironmentEdgeManager.currentTimeMillis() - openTime >= MIN_RESTART_INTERVAL_MS;
+  }
+
+  /** Creates a consumer for the same region. The caller starts it. */
+  IndexCDCConsumer newInstance() throws IOException {
+    return new IndexCDCConsumer(env, dataTableName, serverName, serializeCDCMutations);
   }
 
   /**
@@ -319,8 +389,119 @@ public class IndexCDCConsumer implements Runnable {
     return dataTable;
   }
 
+  /**
+   * Reads the data table definition from SYSTEM.CATALOG. The metadata cache of the region server
+   * can keep an old definition after an ALTER, for example when the region moves to this server.
+   */
   private void refreshDataTableCache(PhoenixConnection conn) throws SQLException {
-    cachedDataTable = conn.getTable(dataTableName);
+    long readTime = EnvironmentEdgeManager.currentTimeMillis();
+    cachedDataTable = conn.getTableNoCache(conn.getTenantId(), dataTableName);
+    cachedDataTableReadTime = readTime;
+  }
+
+  /**
+   * Gets the data table definition at consumer startup. The consumer uses a shared read of another
+   * consumer when that read started after this region opened. That read then shows each DDL that
+   * committed before the region opened, as a read of this consumer does.
+   */
+  private void readDataTableAtStartup(PhoenixConnection conn) throws SQLException {
+    SharedTableRead shared =
+      STARTUP_TABLE_READS.asMap().computeIfAbsent(dataTableName, k -> new SharedTableRead());
+    synchronized (shared) {
+      if (shared.table != null && shared.readTime >= openTime) {
+        cachedDataTable = shared.table;
+        cachedDataTableReadTime = shared.readTime;
+        return;
+      }
+      refreshDataTableCache(conn);
+      shared.table = cachedDataTable;
+      shared.readTime = cachedDataTableReadTime;
+    }
+  }
+
+  /**
+   * Reads the data table definition again when the batch has events newer than the last read and
+   * the refresh interval has expired. The UPDATE_CACHE_FREQUENCY of the data table sets that
+   * interval, within fixed limits. Idle regions thus do not read SYSTEM.CATALOG.
+   */
+  private void refreshDataTableCacheIfDue(PhoenixConnection conn,
+    List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates) throws SQLException {
+    long maxEventTimestamp = Long.MIN_VALUE;
+    for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
+      maxEventTimestamp = Math.max(maxEventTimestamp, entry.getFirst());
+    }
+    if (maxEventTimestamp <= cachedDataTableReadTime) {
+      return;
+    }
+    long refreshInterval = Math.max(MIN_METADATA_REFRESH_INTERVAL_MS,
+      Math.min(getDataTable(conn).getUpdateCacheFrequency(), MAX_METADATA_REFRESH_INTERVAL_MS));
+    if (EnvironmentEdgeManager.currentTimeMillis() - cachedDataTableReadTime >= refreshInterval) {
+      refreshDataTableCache(conn);
+    }
+  }
+
+  /**
+   * Returns the timestamp of the last CDC event that the consumer applies to the index. An EVENTUAL
+   * index gets all events. After a switch from EVENTUAL to STRONG, a client with an old cache can
+   * send EVENTUAL maintainers for up to the UPDATE_CACHE_FREQUENCY of the data table. Indexes use
+   * the frequency of their data table. Thus the consumer applies events up to the index
+   * LAST_DDL_TIMESTAMP, plus that time, plus a grace period. Writers also maintain the index
+   * synchronously in this period, and the replay writes the same cells again.
+   * <p>
+   * An UPDATE_CACHE_FREQUENCY of NEVER gets only the grace period. With NEVER, LAST_DDL_TIMESTAMP
+   * validation runs for each statement, so a client sees the switch at once. NEVER is not a time,
+   * so the cutoff does not add it. Otherwise the consumer applies events to each STRONG index
+   * forever. NEVER together with disabled validation is not supported, because a client then never
+   * sees the switch.
+   * @return the cutoff timestamp, or {@link Long#MIN_VALUE} when the consumer does not maintain the
+   *         index.
+   */
+  static long getApplyCutoff(PTable dataTable, PTable index) {
+    IndexConsistency consistency = index.getIndexConsistency();
+    if (consistency != null && consistency.isAsynchronous()) {
+      return Long.MAX_VALUE;
+    }
+    Long lastDDLTimestamp = index.getLastDDLTimestamp();
+    if (
+      lastDDLTimestamp == null || index.getIndexType() == PTable.IndexType.LOCAL
+        || CDCUtil.isCDCIndex(index)
+    ) {
+      return Long.MIN_VALUE;
+    }
+    long cacheLag = dataTable.getUpdateCacheFrequency();
+    if (cacheLag == Long.MAX_VALUE) {
+      cacheLag = 0L;
+    }
+    long allowance = cacheLag > Long.MAX_VALUE - CONSISTENCY_SWITCH_GRACE_MS
+      ? Long.MAX_VALUE
+      : cacheLag + CONSISTENCY_SWITCH_GRACE_MS;
+    return lastDDLTimestamp > Long.MAX_VALUE - allowance
+      ? Long.MAX_VALUE
+      : lastDDLTimestamp + allowance;
+  }
+
+  /**
+   * Returns true when no index needs the CDC events of this region after the given timestamp. This
+   * is true when no index is EVENTUAL and each cutoff is at or before the timestamp. The consumer
+   * then exits. If an index changes to EVENTUAL later, the writers see the change and start a new
+   * consumer for the region.
+   */
+  private boolean noIndexNeedsEventsAfter(long timestamp) {
+    return getMaxApplyCutoff() <= timestamp;
+  }
+
+  /**
+   * Returns the latest cutoff of all indexes of the data table. No index needs a CDC event after
+   * this timestamp.
+   * @return the latest cutoff, or {@link Long#MIN_VALUE} when no index needs CDC events.
+   */
+  private long getMaxApplyCutoff() {
+    PTable dataTable = cachedDataTable;
+    long maxCutoff = Long.MIN_VALUE;
+    for (PTable index : dataTable.getIndexes()) {
+      maxCutoff = Math.max(maxCutoff, getApplyCutoff(dataTable, index));
+    }
+    return maxCutoff;
   }
 
   private void initTenantInfo(PhoenixConnection conn) throws SQLException {
@@ -451,14 +632,10 @@ public class IndexCDCConsumer implements Runnable {
       if (stopped) {
         return;
       }
-      if (!hasEventuallyConsistentIndexes()) {
-        LOG.trace("No eventually consistent indexes found for table {}. Exiting consumer.",
-          dataTableName);
+      if (!hasCDCIndex()) {
+        LOG.trace("No CDC index found for table {}. Exiting consumer.", dataTableName);
         return;
       }
-      // Only enable lag sampling once we've confirmed this table actually has an EC index,
-      // so non-EC-indexed tables don't pollute the lag histograms with cold-start samples.
-      lagEmissionEnabled = true;
       LOG.info(
         "IndexCDCConsumer started for table {} region {}"
           + " [batchSize: {}, pollIntervalMs: {}, idlePollIntervalMs: {}, timestampBufferMs: {},"
@@ -482,6 +659,11 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName, encodedRegionName);
         return;
       } else if (lastProcessedTimestamp > 0) {
+        if (noIndexNeedsEventsAfter(lastProcessedTimestamp)) {
+          LOG.info("No index of table {} needs the CDC events of region {} after {}."
+            + " Exiting consumer.", dataTableName, encodedRegionName, lastProcessedTimestamp);
+          return;
+        }
         progress.recordProcessed(lastProcessedTimestamp);
         LOG.info(
           "Found existing tracker entry for table {} region {} with lastTimestamp {}. "
@@ -489,16 +671,31 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName, encodedRegionName, lastProcessedTimestamp);
       } else {
         if (hasParentPartitions) {
-          metricSource.incrementCdcParentReplayActiveRegions(dataTableName);
-          try {
-            sleepWithLagSampling(timestampBufferMs + 1);
-            replayAndCompleteParentRegions(encodedRegionName);
-          } finally {
-            metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
+          // The replay reads only the parent events that an index needs. A table without such
+          // an index thus does not scan the CDC history of its parent regions.
+          long replayCutoff = getMaxApplyCutoff();
+          if (replayCutoff == Long.MIN_VALUE) {
+            LOG.info("No index of table {} needs the CDC events of the parents of region {},"
+              + " skipping parent replay", dataTableName, encodedRegionName);
+          } else {
+            metricSource.incrementCdcParentReplayActiveRegions(dataTableName);
+            try {
+              sleepWithLagSampling(timestampBufferMs + 1);
+              replayAndCompleteParentRegions(encodedRegionName, replayCutoff);
+            } finally {
+              metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
+            }
           }
         } else {
           LOG.info("No parent partitions for table {} region {}, skipping parent replay",
             dataTableName, encodedRegionName);
+        }
+        // The events of the region are newer than the creation of the region.
+        long regionCreateTime = env.getRegion().getRegionInfo().getRegionId();
+        if (noIndexNeedsEventsAfter(regionCreateTime - 1)) {
+          LOG.info("No index of table {} needs the CDC events of region {}. Exiting consumer.",
+            dataTableName, encodedRegionName);
+          return;
         }
       }
       int retryCount = 0;
@@ -509,12 +706,19 @@ public class IndexCDCConsumer implements Runnable {
             long previousTimestamp = lastProcessedTimestamp;
             if (serializeCDCMutations) {
               lastProcessedTimestamp = processCDCBatch(encodedRegionName, encodedRegionName,
-                lastProcessedTimestamp, false);
+                lastProcessedTimestamp, false, Long.MAX_VALUE);
             } else {
               lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName,
-                encodedRegionName, lastProcessedTimestamp, false);
+                encodedRegionName, lastProcessedTimestamp, false, Long.MAX_VALUE);
             }
             retryCount = 0;
+            // An empty poll also proves progress, so use the watermark of the region.
+            long caughtUpTo = Math.max(lastProcessedTimestamp, progress.getEffectiveWatermark());
+            if (noIndexNeedsEventsAfter(caughtUpTo)) {
+              LOG.info("No index of table {} needs the CDC events of region {} after {}."
+                + " Exiting consumer.", dataTableName, encodedRegionName, caughtUpTo);
+              break;
+            }
             if (lastProcessedTimestamp == previousTimestamp) {
               sleepWithLagSampling(idlePollIntervalMs);
             } else {
@@ -542,31 +746,41 @@ public class IndexCDCConsumer implements Runnable {
           encodedRegionName, e);
       }
       Thread.currentThread().interrupt();
+    } finally {
+      exited = true;
     }
     LOG.info("IndexCDCConsumer exiting for table {} region {}", dataTableName, encodedRegionName);
   }
 
-  private boolean hasEventuallyConsistentIndexes() throws InterruptedException {
+  /**
+   * Returns true if the data table has an active CDC index. The consumer then continues also when
+   * no index is EVENTUAL now. An index that changed from EVENTUAL to STRONG can still have CDC
+   * events that no consumer applied, for example in the parent regions of this region. The consumer
+   * exits later, when no index needs the events of the region. Lag sampling starts only when an
+   * index needs the consumer, so that other tables do not add samples.
+   */
+  private boolean hasCDCIndex() throws InterruptedException {
     int retryCount = 0;
     while (!stopped) {
       try (PhoenixConnection conn =
         QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
-        refreshDataTableCache(conn);
+        readDataTableAtStartup(conn);
         PTable dataTable = getDataTable(conn);
         String cdcObjectName = CDCUtil.getCDCObjectName(dataTable, false);
         if (cdcObjectName == null) {
           LOG.debug("No CDC index found for table {}. Exiting consumer.", dataTableName);
           return false;
         }
+        long now = EnvironmentEdgeManager.currentTimeMillis();
         for (PTable index : dataTable.getIndexes()) {
-          IndexConsistency consistency = index.getIndexConsistency();
-          if (consistency != null && consistency.isAsynchronous()) {
-            LOG.debug("Found eventually consistent index {} for table {}",
-              index.getName().getString(), dataTableName);
-            return true;
+          if (getApplyCutoff(dataTable, index) >= now) {
+            LOG.debug("Index {} of table {} needs the consumer", index.getName().getString(),
+              dataTableName);
+            lagEmissionEnabled = true;
+            break;
           }
         }
-        return false;
+        return true;
       } catch (SQLException e) {
         long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
         LOG.warn(
@@ -846,10 +1060,11 @@ public class IndexCDCConsumer implements Runnable {
    * @param partitionId            the partition ID to process.
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start processing from.
+   * @param replayCutoff           the timestamp of the last event to replay.
    * @throws InterruptedException if the thread is interrupted.
    */
   private void processPartitionToCompletion(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp) throws InterruptedException {
+    long lastProcessedTimestamp, long replayCutoff) throws InterruptedException {
     LOG.debug(
       "Processing partition {} owner {} to completion for table {}, starting from timestamp {}",
       partitionId, ownerPartitionId, dataTableName, lastProcessedTimestamp);
@@ -883,11 +1098,11 @@ public class IndexCDCConsumer implements Runnable {
           }
           long newTimestamp;
           if (serializeCDCMutations) {
-            newTimestamp =
-              processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
+            newTimestamp = processCDCBatch(partitionId, ownerPartitionId,
+              currentLastProcessedTimestamp, true, replayCutoff);
           } else {
             newTimestamp = processCDCBatchGenerated(partitionId, ownerPartitionId,
-              currentLastProcessedTimestamp, true);
+              currentLastProcessedTimestamp, true, replayCutoff);
           }
           batchCount++;
           retryCount = 0;
@@ -932,12 +1147,14 @@ public class IndexCDCConsumer implements Runnable {
   }
 
   /**
-   * Recursive helper method to replay and complete parent regions. Replays all remaining mutations
-   * from parent regions and marks them as COMPLETE. This is called during initialization when a
-   * region has parent regions (split/merge scenarios).
-   * @param partitionId the partition (region) ID to find and process parents for.
+   * Recursive helper method to replay and complete parent regions. Replays the remaining mutations
+   * of the parent regions up to the cutoff, and marks the parent regions as COMPLETE. This is
+   * called during initialization when a region has parent regions (split/merge scenarios).
+   * @param partitionId  the partition (region) ID to find and process parents for.
+   * @param replayCutoff the timestamp of the last event to replay. No index needs later events.
    */
-  private void replayAndCompleteParentRegions(String partitionId) throws InterruptedException {
+  private void replayAndCompleteParentRegions(String partitionId, long replayCutoff)
+    throws InterruptedException {
     List<String> parentIds = getParentPartitionIds(partitionId);
     if (parentIds.isEmpty()) {
       LOG.debug("No parent partitions found for table {} partition {}", dataTableName, partitionId);
@@ -952,7 +1169,7 @@ public class IndexCDCConsumer implements Runnable {
           parentId, dataTableName);
         continue;
       }
-      replayAndCompleteParentRegions(parentId);
+      replayAndCompleteParentRegions(parentId, replayCutoff);
       if (isPartitionCompleted(parentId)) {
         LOG.debug(
           "Parent partition {} for table {} was completed by sibling during ancestor processing, "
@@ -963,7 +1180,7 @@ public class IndexCDCConsumer implements Runnable {
       long parentProgress = getParentProgress(parentId);
       LOG.debug("Processing/Resuming parent partition {} for table {} from timestamp {} owner: {}",
         parentId, dataTableName, parentProgress, encodedRegionName);
-      processPartitionToCompletion(parentId, encodedRegionName, parentProgress);
+      processPartitionToCompletion(parentId, encodedRegionName, parentProgress, replayCutoff);
     }
   }
 
@@ -975,6 +1192,7 @@ public class IndexCDCConsumer implements Runnable {
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start reading CDC mutations from.
    * @param isParentReplay         true if replaying a closed parent partition.
+   * @param replayCutoff           the timestamp of the last event that a parent replay reads.
    * @return the new last processed timestamp after this batch, or the same timestamp if no new
    *         records were found.
    * @throws SQLException         if SQL error occurs.
@@ -982,7 +1200,7 @@ public class IndexCDCConsumer implements Runnable {
    * @throws InterruptedException if the thread is interrupted while waiting.
    */
   private long processCDCBatch(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp, boolean isParentReplay)
+    long lastProcessedTimestamp, boolean isParentReplay, long replayCutoff)
     throws SQLException, IOException, InterruptedException {
     long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug("Processing CDC batch for table {} partition {} owner {} from timestamp {}",
@@ -996,9 +1214,9 @@ public class IndexCDCConsumer implements Runnable {
       if (isParentReplay) {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? %s"
             + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
-          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
+          cdcObjectName, scanInfo.filter, getReplayCutoffFilter(replayCutoff), scanInfo.orderBy);
       } else {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1017,7 +1235,8 @@ public class IndexCDCConsumer implements Runnable {
       while (hasMoreRows && batchMutations.isEmpty()) {
         lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, replayCutoff, newLastTimestamp,
+            ps);
           Pair<Long, Boolean> result =
             getMutationsAndTimestamp(ps, newLastTimestamp, batchMutations);
           hasMoreRows = result.getSecond();
@@ -1061,6 +1280,7 @@ public class IndexCDCConsumer implements Runnable {
       }
       executeIndexMutations(partitionId, batchMutations, ownerPartitionId, newLastTimestamp);
       if (!batchMutations.isEmpty()) {
+        lagEmissionEnabled = true;
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
@@ -1093,6 +1313,7 @@ public class IndexCDCConsumer implements Runnable {
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start processing CDC events from.
    * @param isParentReplay         true if replaying a closed parent partition.
+   * @param replayCutoff           the timestamp of the last event that a parent replay reads.
    * @return the new last processed timestamp after this batch, or the same timestamp if no new
    *         records were found.
    * @throws SQLException         if a SQL error occurs.
@@ -1100,7 +1321,7 @@ public class IndexCDCConsumer implements Runnable {
    * @throws InterruptedException if the thread is interrupted while waiting.
    */
   private long processCDCBatchGenerated(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp, boolean isParentReplay)
+    long lastProcessedTimestamp, boolean isParentReplay, long replayCutoff)
     throws SQLException, IOException, InterruptedException {
     long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug(
@@ -1115,9 +1336,9 @@ public class IndexCDCConsumer implements Runnable {
       if (isParentReplay) {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? %s"
             + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
-          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
+          cdcObjectName, scanInfo.filter, getReplayCutoffFilter(replayCutoff), scanInfo.orderBy);
       } else {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1139,7 +1360,8 @@ public class IndexCDCConsumer implements Runnable {
       while (hasMoreRows && batchStates.isEmpty()) {
         lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, replayCutoff, newLastTimestamp,
+            ps);
           Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
             batchStates, lastScannedTimestamp, scannedRowCount);
           hasMoreRows = result.getSecond();
@@ -1209,12 +1431,24 @@ public class IndexCDCConsumer implements Runnable {
     }
   }
 
+  /**
+   * Returns the filter that stops a parent replay at the cutoff. An unlimited cutoff needs no
+   * filter.
+   */
+  private static String getReplayCutoffFilter(long replayCutoff) {
+    return replayCutoff == Long.MAX_VALUE ? "" : "AND PHOENIX_ROW_TIMESTAMP() <= ? ";
+  }
+
   private void setStatementParams(TenantScanInfo scanInfo, String partitionId,
-    boolean isParentReplay, long newLastTimestamp, PreparedStatement ps) throws SQLException {
+    boolean isParentReplay, long replayCutoff, long newLastTimestamp, PreparedStatement ps)
+    throws SQLException {
     int idx = scanInfo.bindParams(ps, 1);
     ps.setString(idx++, partitionId);
     ps.setDate(idx++, new Date(newLastTimestamp));
     if (isParentReplay) {
+      if (replayCutoff != Long.MAX_VALUE) {
+        ps.setDate(idx++, new Date(replayCutoff));
+      }
       ps.setInt(idx, batchSize);
     } else {
       long currentTime = EnvironmentEdgeManager.currentTimeMillis() - timestampBufferMs;
@@ -1260,27 +1494,47 @@ public class IndexCDCConsumer implements Runnable {
     if (batchStates.isEmpty()) {
       return;
     }
-    refreshDataTableCache(conn);
+    refreshDataTableCacheIfDue(conn, batchStates);
     PTable dataTable = getDataTable(conn);
     byte[] encodedRegionNameBytes = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
-    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = new ArrayList<>();
+    List<Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long>> targets = new ArrayList<>();
     for (PTable index : dataTable.getIndexes()) {
-      IndexConsistency consistency = index.getIndexConsistency();
-      if (consistency != null && consistency.isAsynchronous()) {
+      long cutoff = getApplyCutoff(dataTable, index);
+      if (cutoff != Long.MIN_VALUE) {
         IndexMaintainer maintainer = index.getIndexMaintainer(dataTable, conn);
         HTableInterfaceReference tableRef =
           new HTableInterfaceReference(new ImmutableBytesPtr(maintainer.getIndexTableName()));
-        indexTables.add(new Pair<>(maintainer, tableRef));
+        targets.add(new Pair<>(new Pair<>(maintainer, tableRef), cutoff));
       }
     }
-    if (indexTables.isEmpty()) {
+    if (targets.isEmpty()) {
       return;
     }
+    // Each event goes to the indexes with a cutoff at or after the event timestamp. The list
+    // changes only when the event timestamp crosses a cutoff.
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = Collections.emptyList();
+    long tablesFrom = Long.MAX_VALUE;
+    long tablesUntil = Long.MIN_VALUE;
     ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = ArrayListMultimap.create();
     int totalMutations = 0;
     long generateStartTime = EnvironmentEdgeManager.currentTimeMillis();
     for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
       long ts = entry.getFirst();
+      if (ts < tablesFrom || ts > tablesUntil) {
+        indexTables = new ArrayList<>(targets.size());
+        tablesFrom = ts;
+        tablesUntil = Long.MAX_VALUE;
+        for (Pair<Pair<IndexMaintainer, HTableInterfaceReference>, Long> target : targets) {
+          if (ts <= target.getSecond()) {
+            indexTables.add(target.getFirst());
+            tablesUntil = Math.min(tablesUntil, target.getSecond());
+          }
+        }
+      }
+      if (indexTables.isEmpty()) {
+        continue;
+      }
+      lagEmissionEnabled = true;
       IndexMutationsProtos.DataRowStates dataRowStates = entry.getSecond();
       byte[] dataRowKey = dataRowStates.getDataRowKey().toByteArray();
       ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(dataRowKey);
