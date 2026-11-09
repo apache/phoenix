@@ -482,13 +482,21 @@ public class IndexCDCConsumer implements Runnable {
    * consumer for the region.
    */
   private boolean noIndexNeedsEventsAfter(long timestamp) {
+    return getMaxApplyCutoff() <= timestamp;
+  }
+
+  /**
+   * Returns the latest cutoff of all indexes of the data table. No index needs a CDC event after
+   * this timestamp.
+   * @return the latest cutoff, or {@link Long#MIN_VALUE} when no index needs CDC events.
+   */
+  private long getMaxApplyCutoff() {
     PTable dataTable = cachedDataTable;
+    long maxCutoff = Long.MIN_VALUE;
     for (PTable index : dataTable.getIndexes()) {
-      if (getApplyCutoff(dataTable, index) > timestamp) {
-        return false;
-      }
+      maxCutoff = Math.max(maxCutoff, getApplyCutoff(dataTable, index));
     }
-    return true;
+    return maxCutoff;
   }
 
   private void initTenantInfo(PhoenixConnection conn) throws SQLException {
@@ -658,23 +666,31 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName, encodedRegionName, lastProcessedTimestamp);
       } else {
         if (hasParentPartitions) {
-          metricSource.incrementCdcParentReplayActiveRegions(dataTableName);
-          try {
-            sleepWithLagSampling(timestampBufferMs + 1);
-            replayAndCompleteParentRegions(encodedRegionName);
-          } finally {
-            metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
+          // The replay reads only the parent events that an index needs. A table without such
+          // an index thus does not scan the CDC history of its parent regions.
+          long replayCutoff = getMaxApplyCutoff();
+          if (replayCutoff == Long.MIN_VALUE) {
+            LOG.info("No index of table {} needs the CDC events of the parents of region {},"
+              + " skipping parent replay", dataTableName, encodedRegionName);
+          } else {
+            metricSource.incrementCdcParentReplayActiveRegions(dataTableName);
+            try {
+              sleepWithLagSampling(timestampBufferMs + 1);
+              replayAndCompleteParentRegions(encodedRegionName, replayCutoff);
+            } finally {
+              metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
+            }
           }
         } else {
-          // A region without parents has no events older than the region.
-          long regionCreateTime = env.getRegion().getRegionInfo().getRegionId();
-          if (noIndexNeedsEventsAfter(regionCreateTime - 1)) {
-            LOG.info("No index of table {} needs the CDC events of region {}. Exiting consumer.",
-              dataTableName, encodedRegionName);
-            return;
-          }
           LOG.info("No parent partitions for table {} region {}, skipping parent replay",
             dataTableName, encodedRegionName);
+        }
+        // The events of the region are newer than the creation of the region.
+        long regionCreateTime = env.getRegion().getRegionInfo().getRegionId();
+        if (noIndexNeedsEventsAfter(regionCreateTime - 1)) {
+          LOG.info("No index of table {} needs the CDC events of region {}. Exiting consumer.",
+            dataTableName, encodedRegionName);
+          return;
         }
       }
       int retryCount = 0;
@@ -685,10 +701,10 @@ public class IndexCDCConsumer implements Runnable {
             long previousTimestamp = lastProcessedTimestamp;
             if (serializeCDCMutations) {
               lastProcessedTimestamp = processCDCBatch(encodedRegionName, encodedRegionName,
-                lastProcessedTimestamp, false);
+                lastProcessedTimestamp, false, Long.MAX_VALUE);
             } else {
               lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName,
-                encodedRegionName, lastProcessedTimestamp, false);
+                encodedRegionName, lastProcessedTimestamp, false, Long.MAX_VALUE);
             }
             retryCount = 0;
             // An empty poll also proves progress, so use the watermark of the region.
@@ -1039,10 +1055,11 @@ public class IndexCDCConsumer implements Runnable {
    * @param partitionId            the partition ID to process.
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start processing from.
+   * @param replayCutoff           the timestamp of the last event to replay.
    * @throws InterruptedException if the thread is interrupted.
    */
   private void processPartitionToCompletion(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp) throws InterruptedException {
+    long lastProcessedTimestamp, long replayCutoff) throws InterruptedException {
     LOG.debug(
       "Processing partition {} owner {} to completion for table {}, starting from timestamp {}",
       partitionId, ownerPartitionId, dataTableName, lastProcessedTimestamp);
@@ -1076,11 +1093,11 @@ public class IndexCDCConsumer implements Runnable {
           }
           long newTimestamp;
           if (serializeCDCMutations) {
-            newTimestamp =
-              processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
+            newTimestamp = processCDCBatch(partitionId, ownerPartitionId,
+              currentLastProcessedTimestamp, true, replayCutoff);
           } else {
             newTimestamp = processCDCBatchGenerated(partitionId, ownerPartitionId,
-              currentLastProcessedTimestamp, true);
+              currentLastProcessedTimestamp, true, replayCutoff);
           }
           batchCount++;
           retryCount = 0;
@@ -1125,12 +1142,14 @@ public class IndexCDCConsumer implements Runnable {
   }
 
   /**
-   * Recursive helper method to replay and complete parent regions. Replays all remaining mutations
-   * from parent regions and marks them as COMPLETE. This is called during initialization when a
-   * region has parent regions (split/merge scenarios).
-   * @param partitionId the partition (region) ID to find and process parents for.
+   * Recursive helper method to replay and complete parent regions. Replays the remaining mutations
+   * of the parent regions up to the cutoff, and marks the parent regions as COMPLETE. This is
+   * called during initialization when a region has parent regions (split/merge scenarios).
+   * @param partitionId  the partition (region) ID to find and process parents for.
+   * @param replayCutoff the timestamp of the last event to replay. No index needs later events.
    */
-  private void replayAndCompleteParentRegions(String partitionId) throws InterruptedException {
+  private void replayAndCompleteParentRegions(String partitionId, long replayCutoff)
+    throws InterruptedException {
     List<String> parentIds = getParentPartitionIds(partitionId);
     if (parentIds.isEmpty()) {
       LOG.debug("No parent partitions found for table {} partition {}", dataTableName, partitionId);
@@ -1145,7 +1164,7 @@ public class IndexCDCConsumer implements Runnable {
           parentId, dataTableName);
         continue;
       }
-      replayAndCompleteParentRegions(parentId);
+      replayAndCompleteParentRegions(parentId, replayCutoff);
       if (isPartitionCompleted(parentId)) {
         LOG.debug(
           "Parent partition {} for table {} was completed by sibling during ancestor processing, "
@@ -1156,7 +1175,7 @@ public class IndexCDCConsumer implements Runnable {
       long parentProgress = getParentProgress(parentId);
       LOG.debug("Processing/Resuming parent partition {} for table {} from timestamp {} owner: {}",
         parentId, dataTableName, parentProgress, encodedRegionName);
-      processPartitionToCompletion(parentId, encodedRegionName, parentProgress);
+      processPartitionToCompletion(parentId, encodedRegionName, parentProgress, replayCutoff);
     }
   }
 
@@ -1168,6 +1187,7 @@ public class IndexCDCConsumer implements Runnable {
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start reading CDC mutations from.
    * @param isParentReplay         true if replaying a closed parent partition.
+   * @param replayCutoff           the timestamp of the last event that a parent replay reads.
    * @return the new last processed timestamp after this batch, or the same timestamp if no new
    *         records were found.
    * @throws SQLException         if SQL error occurs.
@@ -1175,7 +1195,7 @@ public class IndexCDCConsumer implements Runnable {
    * @throws InterruptedException if the thread is interrupted while waiting.
    */
   private long processCDCBatch(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp, boolean isParentReplay)
+    long lastProcessedTimestamp, boolean isParentReplay, long replayCutoff)
     throws SQLException, IOException, InterruptedException {
     long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug("Processing CDC batch for table {} partition {} owner {} from timestamp {}",
@@ -1189,9 +1209,9 @@ public class IndexCDCConsumer implements Runnable {
       if (isParentReplay) {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? %s"
             + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
-          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
+          cdcObjectName, scanInfo.filter, getReplayCutoffFilter(replayCutoff), scanInfo.orderBy);
       } else {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1210,7 +1230,8 @@ public class IndexCDCConsumer implements Runnable {
       while (hasMoreRows && batchMutations.isEmpty()) {
         lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, replayCutoff, newLastTimestamp,
+            ps);
           Pair<Long, Boolean> result =
             getMutationsAndTimestamp(ps, newLastTimestamp, batchMutations);
           hasMoreRows = result.getSecond();
@@ -1287,6 +1308,7 @@ public class IndexCDCConsumer implements Runnable {
    * @param ownerPartitionId       the owner partition ID.
    * @param lastProcessedTimestamp the timestamp to start processing CDC events from.
    * @param isParentReplay         true if replaying a closed parent partition.
+   * @param replayCutoff           the timestamp of the last event that a parent replay reads.
    * @return the new last processed timestamp after this batch, or the same timestamp if no new
    *         records were found.
    * @throws SQLException         if a SQL error occurs.
@@ -1294,7 +1316,7 @@ public class IndexCDCConsumer implements Runnable {
    * @throws InterruptedException if the thread is interrupted while waiting.
    */
   private long processCDCBatchGenerated(String partitionId, String ownerPartitionId,
-    long lastProcessedTimestamp, boolean isParentReplay)
+    long lastProcessedTimestamp, boolean isParentReplay, long replayCutoff)
     throws SQLException, IOException, InterruptedException {
     long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug(
@@ -1309,9 +1331,9 @@ public class IndexCDCConsumer implements Runnable {
       if (isParentReplay) {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? %s"
             + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
-          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
+          cdcObjectName, scanInfo.filter, getReplayCutoffFilter(replayCutoff), scanInfo.orderBy);
       } else {
         cdcQuery = String.format(
           "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
@@ -1333,7 +1355,8 @@ public class IndexCDCConsumer implements Runnable {
       while (hasMoreRows && batchStates.isEmpty()) {
         lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, replayCutoff, newLastTimestamp,
+            ps);
           Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
             batchStates, lastScannedTimestamp, scannedRowCount);
           hasMoreRows = result.getSecond();
@@ -1403,12 +1426,24 @@ public class IndexCDCConsumer implements Runnable {
     }
   }
 
+  /**
+   * Returns the filter that stops a parent replay at the cutoff. An unlimited cutoff needs no
+   * filter.
+   */
+  private static String getReplayCutoffFilter(long replayCutoff) {
+    return replayCutoff == Long.MAX_VALUE ? "" : "AND PHOENIX_ROW_TIMESTAMP() <= ? ";
+  }
+
   private void setStatementParams(TenantScanInfo scanInfo, String partitionId,
-    boolean isParentReplay, long newLastTimestamp, PreparedStatement ps) throws SQLException {
+    boolean isParentReplay, long replayCutoff, long newLastTimestamp, PreparedStatement ps)
+    throws SQLException {
     int idx = scanInfo.bindParams(ps, 1);
     ps.setString(idx++, partitionId);
     ps.setDate(idx++, new Date(newLastTimestamp));
     if (isParentReplay) {
+      if (replayCutoff != Long.MAX_VALUE) {
+        ps.setDate(idx++, new Date(replayCutoff));
+      }
       ps.setInt(idx, batchSize);
     } else {
       long currentTime = EnvironmentEdgeManager.currentTimeMillis() - timestampBufferMs;
