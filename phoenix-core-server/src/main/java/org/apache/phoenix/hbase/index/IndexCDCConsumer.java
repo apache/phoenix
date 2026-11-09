@@ -182,6 +182,13 @@ public class IndexCDCConsumer implements Runnable {
   private static final long CONSISTENCY_SWITCH_GRACE_MS = 60000L;
 
   /**
+   * Minimum time between two starts of a consumer for the same region. The writers start a new
+   * consumer when the old consumer has exited. This limit stops a consumer that exits at once from
+   * starting again on each batch.
+   */
+  private static final long MIN_RESTART_INTERVAL_MS = 60000L;
+
+  /**
    * The last startup read of each data table definition on this region server. The consumers of a
    * table share it. Many regions of a table can open at the same time, for example when the server
    * starts. The shared read then makes one SYSTEM.CATALOG read for the table, not one for each
@@ -199,6 +206,7 @@ public class IndexCDCConsumer implements Runnable {
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
   private final String encodedRegionName;
+  private final String serverName;
   private final IndexWriter indexWriter;
   private final long pause;
   private final long startupDelayMs;
@@ -219,6 +227,8 @@ public class IndexCDCConsumer implements Runnable {
   // so that tables without such an index do not add samples to the lag histograms.
   private volatile boolean lagEmissionEnabled = false;
   private volatile boolean stopped = false;
+  // True when the consumer thread has ended.
+  private volatile boolean exited = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
   private PTable cachedDataTable;
@@ -278,6 +288,7 @@ public class IndexCDCConsumer implements Runnable {
     this.env = env;
     this.dataTableName = dataTableName;
     this.encodedRegionName = env.getRegion().getRegionInfo().getEncodedName();
+    this.serverName = serverName;
     this.config = env.getConfiguration();
     this.serializeCDCMutations = serializeCDCMutations;
     this.pause = config.getLong(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, DEFAULT_RETRY_PAUSE_MS);
@@ -317,6 +328,20 @@ public class IndexCDCConsumer implements Runnable {
       new Thread(this, "IndexCDCConsumer-" + dataTableName + "-" + encodedRegionName);
     consumerThread.setDaemon(true);
     consumerThread.start();
+  }
+
+  /**
+   * Returns true when the consumer has exited and enough time has passed since it started. A new
+   * consumer for the region can then start.
+   */
+  boolean canRestart() {
+    return exited && !stopped
+      && EnvironmentEdgeManager.currentTimeMillis() - openTime >= MIN_RESTART_INTERVAL_MS;
+  }
+
+  /** Creates a consumer for the same region. The caller starts it. */
+  IndexCDCConsumer newInstance() throws IOException {
+    return new IndexCDCConsumer(env, dataTableName, serverName, serializeCDCMutations);
   }
 
   /**
@@ -442,6 +467,22 @@ public class IndexCDCConsumer implements Runnable {
     return lastDDLTimestamp > Long.MAX_VALUE - allowance
       ? Long.MAX_VALUE
       : lastDDLTimestamp + allowance;
+  }
+
+  /**
+   * Returns true when no index needs the CDC events of this region after the given timestamp. This
+   * is true when no index is EVENTUAL and each cutoff is at or before the timestamp. The consumer
+   * then exits. If an index changes to EVENTUAL later, the writers see the change and start a new
+   * consumer for the region.
+   */
+  private boolean noIndexNeedsEventsAfter(long timestamp) {
+    PTable dataTable = cachedDataTable;
+    for (PTable index : dataTable.getIndexes()) {
+      if (getApplyCutoff(dataTable, index) > timestamp) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private void initTenantInfo(PhoenixConnection conn) throws SQLException {
@@ -599,6 +640,11 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName, encodedRegionName);
         return;
       } else if (lastProcessedTimestamp > 0) {
+        if (noIndexNeedsEventsAfter(lastProcessedTimestamp)) {
+          LOG.info("No index of table {} needs the CDC events of region {} after {}."
+            + " Exiting consumer.", dataTableName, encodedRegionName, lastProcessedTimestamp);
+          return;
+        }
         progress.recordProcessed(lastProcessedTimestamp);
         LOG.info(
           "Found existing tracker entry for table {} region {} with lastTimestamp {}. "
@@ -614,6 +660,13 @@ public class IndexCDCConsumer implements Runnable {
             metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
           }
         } else {
+          // A region without parents has no events older than the region.
+          long regionCreateTime = env.getRegion().getRegionInfo().getRegionId();
+          if (noIndexNeedsEventsAfter(regionCreateTime - 1)) {
+            LOG.info("No index of table {} needs the CDC events of region {}. Exiting consumer.",
+              dataTableName, encodedRegionName);
+            return;
+          }
           LOG.info("No parent partitions for table {} region {}, skipping parent replay",
             dataTableName, encodedRegionName);
         }
@@ -632,6 +685,13 @@ public class IndexCDCConsumer implements Runnable {
                 encodedRegionName, lastProcessedTimestamp, false);
             }
             retryCount = 0;
+            // An empty poll also proves progress, so use the watermark of the region.
+            long caughtUpTo = Math.max(lastProcessedTimestamp, progress.getEffectiveWatermark());
+            if (noIndexNeedsEventsAfter(caughtUpTo)) {
+              LOG.info("No index of table {} needs the CDC events of region {} after {}."
+                + " Exiting consumer.", dataTableName, encodedRegionName, caughtUpTo);
+              break;
+            }
             if (lastProcessedTimestamp == previousTimestamp) {
               sleepWithLagSampling(idlePollIntervalMs);
             } else {
@@ -659,15 +719,18 @@ public class IndexCDCConsumer implements Runnable {
           encodedRegionName, e);
       }
       Thread.currentThread().interrupt();
+    } finally {
+      exited = true;
     }
     LOG.info("IndexCDCConsumer exiting for table {} region {}", dataTableName, encodedRegionName);
   }
 
   /**
-   * Returns true if the data table has an active CDC index. The consumer runs also when no index is
-   * EVENTUAL now. An index that changed from EVENTUAL to STRONG can still have CDC events that no
-   * consumer applied, for example in the parent regions of this region. Lag sampling starts only
-   * when an index needs the consumer, so that other tables do not add samples.
+   * Returns true if the data table has an active CDC index. The consumer then continues also when
+   * no index is EVENTUAL now. An index that changed from EVENTUAL to STRONG can still have CDC
+   * events that no consumer applied, for example in the parent regions of this region. The consumer
+   * exits later, when no index needs the events of the region. Lag sampling starts only when an
+   * index needs the consumer, so that other tables do not add samples.
    */
   private boolean hasCDCIndex() throws InterruptedException {
     int retryCount = 0;
