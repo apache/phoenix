@@ -619,18 +619,50 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     try {
       // Once we return from the first call to next, we've run through and cached
       // the topN rows, so we no longer need to start/stop a region operation.
-      firstTuple = iterator.next();
-      // Now that the topN are cached, we can resize based on the real size
-      long actualSize = iterator.getByteSize();
-      chunk.resize(actualSize);
+      firstTuple = getFirstTopNTuple(iterator, chunk);
     } catch (Throwable t) {
       ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
       return null;
     } finally {
       region.closeRegionOperation();
     }
+    return newTopNScanner(s, iterator, firstTuple, sc, chunk, region);
+  }
+
+  /**
+   * Return the first tuple of the topN build and size the memory chunk. A real tuple or no tuple
+   * shows that the build is complete, so the chunk gets the size of the cached rows. A dummy tuple
+   * shows that the build paged out. The chunk then keeps the estimated size until the build
+   * completes.
+   */
+  @VisibleForTesting
+  static Tuple getFirstTopNTuple(final OrderedResultIterator iterator,
+    final MemoryManager.MemoryChunk chunk) throws SQLException {
+    Tuple firstTuple = iterator.next();
+    if (!isDummy(firstTuple)) {
+      chunk.resize(iterator.getByteSize());
+    }
+    return firstTuple;
+  }
+
+  /**
+   * Return the region scanner that emits the cached topN rows. The scanner holds the next tuple to
+   * emit. A held dummy tuple has no row for the client. A call after the first call does not send
+   * the held dummy. The call gets the next tuple first. It sends a dummy only when that tuple is
+   * also a dummy. Thus one RPC can complete the build and return the rows. The build work counts
+   * against the RPC size and time limits. If the build reaches a limit, the RPC ends after the
+   * first row and the RPC count does not change. When the build completes after the open, the
+   * scanner sizes the memory chunk to the cached rows.
+   */
+  @VisibleForTesting
+  static RegionScanner newTopNScanner(final RegionScanner s, final OrderedResultIterator iterator,
+    final Tuple firstTuple, final PhoenixScannerContext sc, final MemoryManager.MemoryChunk chunk,
+    final Region region) {
     return new BaseRegionScanner(s) {
       private Tuple tuple = firstTuple;
+      // A dummy first tuple shows that the build is not complete. The chunk then holds only the
+      // estimated size.
+      private boolean isChunkSized = !isDummy(firstTuple);
       // scanner context used when we are opening the scanner and reading the topN rows
       // We copy this context to the hbase rpc context on the first next call
       private PhoenixScannerContext regionScannerContext = sc;
@@ -638,6 +670,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean isFilterDone() {
         return tuple == null;
+      }
+
+      // Get the next tuple. When the build becomes complete, size the chunk to the cached rows.
+      private void nextTuple() throws SQLException {
+        tuple = iterator.next();
+        if (!isChunkSized && !isDummy(tuple)) {
+          chunk.resize(iterator.getByteSize());
+          isChunkSized = true;
+        }
       }
 
       @Override
@@ -662,16 +703,28 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (first && PhoenixScannerContext.isReturnImmediately(scannerContext)) {
             return true;
           }
+          RegionScannerResultIterator delegate =
+            (RegionScannerResultIterator) (iterator.getDelegate());
+          // just use the scanner context passed to us from now on
+          delegate.setRegionScannerContext(scannerContext);
+          if (!first && isDummy(tuple)) {
+            // A dummy tuple only tells the client that work remains. Do that work now in this RPC.
+            // Send a dummy only when the iterator pages out again.
+            nextTuple();
+            if (isFilterDone()) {
+              return false;
+            }
+            if (isDummy(tuple)) {
+              ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
+              return true;
+            }
+          }
           if (isDummy(tuple)) {
             ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
           } else {
             addCellsInKeyValueOrder(tuple, results);
           }
-          RegionScannerResultIterator delegate =
-            (RegionScannerResultIterator) (iterator.getDelegate());
-          // just use the scanner context passed to us from now on
-          delegate.setRegionScannerContext(scannerContext);
-          tuple = iterator.next();
+          nextTuple();
           return !isFilterDone();
         } catch (Throwable t) {
           ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
