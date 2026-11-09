@@ -244,6 +244,16 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
   public void clearTableFromCache(final byte[] tenantId, final byte[] schemaName,
     final byte[] tableName, long clientTS) throws SQLException;
 
+  /**
+   * Removes the table from the metadata cache of the SYSTEM.CATALOG endpoint. When
+   * invalidateServerMetadataCache is true, the endpoint also removes the table from the metadata
+   * cache of each region server. Use this after a client writes SYSTEM.CATALOG rows directly.
+   */
+  default void clearTableFromCache(byte[] tenantId, byte[] schemaName, byte[] tableName,
+    long clientTS, boolean invalidateServerMetadataCache) throws SQLException {
+    clearTableFromCache(tenantId, schemaName, tableName, clientTS);
+  }
+
   public GuidePostsInfo getTableStats(GuidePostsKey key) throws SQLException;
 
   /**

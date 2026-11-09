@@ -6089,16 +6089,17 @@ public class MetaDataClient {
           connection.commit();
 
           // The upserts do not go through the metadata endpoint. Clear its cache so that the
-          // next metadata RPC reads the changed rows.
+          // next metadata RPC reads the changed rows. Also clear the metadata cache of each
+          // region server, so that LAST_DDL_TIMESTAMP validation sees the new timestamps.
           byte[] tenantIdBytes = connection.getTenantId() == null
             ? ByteUtil.EMPTY_BYTE_ARRAY
             : connection.getTenantId().getBytes();
           byte[] schemaBytes =
             schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName);
           connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
-            Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP);
+            Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP, true);
           connection.getQueryServices().clearTableFromCache(tenantIdBytes, schemaBytes,
-            Bytes.toBytes(dataTableName), HConstants.LATEST_TIMESTAMP);
+            Bytes.toBytes(dataTableName), HConstants.LATEST_TIMESTAMP, true);
 
           // Remove the parent and the index from the client cache. The next resolve then gets
           // the parent with the changed index from the server.
