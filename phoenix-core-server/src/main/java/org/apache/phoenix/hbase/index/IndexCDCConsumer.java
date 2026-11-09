@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -64,6 +65,8 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
@@ -178,6 +181,21 @@ public class IndexCDCConsumer implements Runnable {
    */
   private static final long CONSISTENCY_SWITCH_GRACE_MS = 60000L;
 
+  /**
+   * The last startup read of each data table definition on this region server. The consumers of a
+   * table share it. Many regions of a table can open at the same time, for example when the server
+   * starts. The shared read then makes one SYSTEM.CATALOG read for the table, not one for each
+   * region. The time limit removes old entries. A removed entry causes only one more read.
+   */
+  private static final Cache<String, SharedTableRead> STARTUP_TABLE_READS = CacheBuilder
+    .newBuilder().expireAfterWrite(MIN_METADATA_REFRESH_INTERVAL_MS, TimeUnit.MILLISECONDS).build();
+
+  /** A data table definition and the local time just before its read from SYSTEM.CATALOG. */
+  private static final class SharedTableRead {
+    private PTable table;
+    private long readTime = Long.MIN_VALUE;
+  }
+
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
   private final String encodedRegionName;
@@ -195,6 +213,8 @@ public class IndexCDCConsumer implements Runnable {
   private final MetricsIndexCDCConsumerSource metricSource;
   private final long lagSampleIntervalMs;
   private final IndexCDCConsumerProgress progress;
+  // Local time when the region opened.
+  private final long openTime;
   // True when an index needs the consumer. Until then, sleepWithLagSampling emits no lag samples,
   // so that tables without such an index do not add samples to the lag histograms.
   private volatile boolean lagEmissionEnabled = false;
@@ -281,8 +301,8 @@ public class IndexCDCConsumer implements Runnable {
     this.lagSampleIntervalMs = Math.max(MIN_LAG_SAMPLE_INTERVAL_MS,
       config.getLong(INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS, DEFAULT_LAG_SAMPLE_INTERVAL_MS));
     this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexCDCConsumerSource();
-    this.progress = new IndexCDCConsumerProgress(EnvironmentEdgeManager.currentTimeMillis(),
-      this.timestampBufferMs);
+    this.openTime = EnvironmentEdgeManager.currentTimeMillis();
+    this.progress = new IndexCDCConsumerProgress(this.openTime, this.timestampBufferMs);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -350,6 +370,26 @@ public class IndexCDCConsumer implements Runnable {
     long readTime = EnvironmentEdgeManager.currentTimeMillis();
     cachedDataTable = conn.getTableNoCache(conn.getTenantId(), dataTableName);
     cachedDataTableReadTime = readTime;
+  }
+
+  /**
+   * Gets the data table definition at consumer startup. The consumer uses a shared read of another
+   * consumer when that read started after this region opened. That read then shows each DDL that
+   * committed before the region opened, as a read of this consumer does.
+   */
+  private void readDataTableAtStartup(PhoenixConnection conn) throws SQLException {
+    SharedTableRead shared =
+      STARTUP_TABLE_READS.asMap().computeIfAbsent(dataTableName, k -> new SharedTableRead());
+    synchronized (shared) {
+      if (shared.table != null && shared.readTime >= openTime) {
+        cachedDataTable = shared.table;
+        cachedDataTableReadTime = shared.readTime;
+        return;
+      }
+      refreshDataTableCache(conn);
+      shared.table = cachedDataTable;
+      shared.readTime = cachedDataTableReadTime;
+    }
   }
 
   /**
@@ -634,7 +674,7 @@ public class IndexCDCConsumer implements Runnable {
     while (!stopped) {
       try (PhoenixConnection conn =
         QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
-        refreshDataTableCache(conn);
+        readDataTableAtStartup(conn);
         PTable dataTable = getDataTable(conn);
         String cdcObjectName = CDCUtil.getCDCObjectName(dataTable, false);
         if (cdcObjectName == null) {
