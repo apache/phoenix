@@ -282,6 +282,9 @@ public abstract class RegionScannerFactory {
                 ? new PositionBasedResultTuple(result)
                 : new ResultTuple(Result.create(result));
               ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+              // Reset the expression for each row. Some expressions keep state from the previous
+              // row, such as the NULL state of AND and OR.
+              extraWhere.reset();
               extraWhere.evaluate(merged, ptr);
               if (!Boolean.TRUE.equals(extraWhere.getDataType().toObject(ptr))) {
                 result.clear();
