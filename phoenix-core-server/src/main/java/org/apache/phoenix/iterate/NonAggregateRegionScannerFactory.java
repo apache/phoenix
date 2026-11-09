@@ -588,8 +588,27 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     } finally {
       region.closeRegionOperation();
     }
+    return newTopNScanner(s, iterator, firstTuple, sc, chunk, region);
+  }
+
+  /**
+   * Return the region scanner that emits the cached topN rows. The scanner holds the next tuple to
+   * emit. A held dummy tuple has no row for the client. A call after the first call does not send
+   * the held dummy. The call gets the next tuple first. It sends a dummy only when that tuple is
+   * also a dummy. Thus one RPC can complete the build and return the rows. The build work counts
+   * against the RPC size and time limits. If the build reaches a limit, the RPC ends after the
+   * first row and the RPC count does not change. When the build completes after the open, the
+   * scanner sizes the memory chunk to the cached rows.
+   */
+  @VisibleForTesting
+  static RegionScanner newTopNScanner(final RegionScanner s, final OrderedResultIterator iterator,
+    final Tuple firstTuple, final PhoenixScannerContext sc, final MemoryManager.MemoryChunk chunk,
+    final Region region) {
     return new BaseRegionScanner(s) {
       private Tuple tuple = firstTuple;
+      // The open sizes the chunk from the first tuple. A dummy first tuple shows that the build
+      // is not complete, so the chunk size is not yet correct.
+      private boolean isChunkSized = !isDummy(firstTuple);
       // scanner context used when we are opening the scanner and reading the topN rows
       // We copy this context to the hbase rpc context on the first next call
       private PhoenixScannerContext regionScannerContext = sc;
@@ -597,6 +616,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean isFilterDone() {
         return tuple == null;
+      }
+
+      // Get the next tuple. When the build becomes complete, size the chunk to the cached rows.
+      private void nextTuple() throws SQLException {
+        tuple = iterator.next();
+        if (!isChunkSized && !isDummy(tuple)) {
+          chunk.resize(iterator.getByteSize());
+          isChunkSized = true;
+        }
       }
 
       @Override
@@ -610,11 +638,28 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (isFilterDone()) {
             return false;
           }
-          if (regionScannerContext != null) {
+          boolean isFirstCall = regionScannerContext != null;
+          if (isFirstCall) {
             regionScannerContext.updateHBaseScannerContext(scannerContext, results);
             // we no longer need this context
             regionScannerContext = null;
             if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+              return true;
+            }
+          }
+          RegionScannerResultIterator delegate =
+            (RegionScannerResultIterator) (iterator.getDelegate());
+          // just use the scanner context passed to us from now on
+          delegate.setRegionScannerContext(scannerContext);
+          if (!isFirstCall && isDummy(tuple)) {
+            // A dummy tuple only tells the client that work remains. Do that work now in this RPC.
+            // Send a dummy only when the iterator pages out again.
+            nextTuple();
+            if (isFilterDone()) {
+              return false;
+            }
+            if (isDummy(tuple)) {
+              ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
               return true;
             }
           }
@@ -625,11 +670,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
               results.add(tuple.getValue(i));
             }
           }
-          RegionScannerResultIterator delegate =
-            (RegionScannerResultIterator) (iterator.getDelegate());
-          // just use the scanner context passed to us from now on
-          delegate.setRegionScannerContext(scannerContext);
-          tuple = iterator.next();
+          nextTuple();
           return !isFilterDone();
         } catch (Throwable t) {
           ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
