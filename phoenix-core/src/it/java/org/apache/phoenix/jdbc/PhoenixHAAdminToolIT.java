@@ -387,6 +387,20 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   }
 
   /**
+   * Assert that the output has the start and end failover time markers for the group, in order.
+   */
+  private void assertMarkerOrder(String output, String startMarker, String endMarker,
+    String haGroupName) {
+    String prefix = PhoenixHAAdminTool.FAILOVER_MARKER_PREFIX + " marker=";
+    String suffix = " group=" + haGroupName + " ts=";
+    int start = output.indexOf(prefix + startMarker + suffix);
+    int end = output.indexOf(prefix + endMarker + suffix);
+    assertTrue("Output should contain the " + startMarker + " marker", start >= 0);
+    assertTrue("Output should contain the " + endMarker + " marker", end >= 0);
+    assertTrue(startMarker + " marker should come before " + endMarker, start < end);
+  }
+
+  /**
    * Helper method to assert output contains all expected HAGroupStoreRecord fields.
    */
   private void assertOutputContainsHAGroupFields(String output) {
@@ -555,6 +569,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     assertTrue("Output should indicate failover completed successfully",
       output.contains("Failover completed successfully")
         || output.contains("Transition completed"));
+    assertMarkerOrder(output, "FAILOVER_START", "FAILOVER_COMPLETE", failoverHaGroupName);
 
     // === FINAL STATE VERIFICATION ===
     waitForHAGroupState(cluster1HAManager, failoverHaGroupName,
@@ -661,6 +676,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     assertTrue("Output should indicate abort completed successfully",
       output.contains("Failover abort completed successfully")
         || output.contains("Transition completed"));
+    assertMarkerOrder(output, "ABORT_START", "ABORT_COMPLETE", abortFailoverHaGroupName);
 
     // === FINAL VERIFICATION ===
     // Wait for both clusters to reach final state
@@ -767,6 +783,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       output.contains("Recovery") && output.contains("get-cluster-role-record"));
     assertTrue("Timeout output should suggest abort-failover on the standby",
       output.contains("abort-failover"));
+    assertMarkerOrder(output, "FAILOVER_START", "FAILOVER_TIMEOUT", timeoutFailoverHaGroupName);
 
     // === VERIFY INTERMEDIATE STATE ===
     // Cluster1 should be stuck in ACTIVE_IN_SYNC_TO_STANDBY (not reached STANDBY)
@@ -859,6 +876,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       output.contains("store-and-forward"));
     assertFalse("Output should not report a failover being initiated",
       output.contains("Failover initiated"));
+    assertMarkerOrder(output, "FAILOVER_START", "FAILOVER_FAILED", anisHaGroupName);
 
     // Neither cluster moved.
     assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
