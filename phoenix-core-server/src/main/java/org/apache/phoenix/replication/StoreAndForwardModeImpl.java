@@ -57,10 +57,17 @@ public class StoreAndForwardModeImpl extends ReplicationModeImpl {
     // create a log on the fallback cluster
     log = logGroup.createReplicationLog(logGroup.getLocalShardManager());
     log.init();
-    // Schedule task to periodically set the HAGroupStore state to ACTIVE_NOT_IN_SYNC
-    startHAGroupStoreUpdateTask();
-    // start the log forwarder
-    logGroup.getLogForwarder().start();
+    try {
+      // Schedule task to periodically set the HAGroupStore state to ACTIVE_NOT_IN_SYNC
+      startHAGroupStoreUpdateTask();
+      // start the log forwarder
+      logGroup.getLogForwarder().start();
+    } catch (Throwable t) {
+      // During init() the disruptor never starts, so its shutdown never exits this mode: undo the
+      // entry here. A later exit on shutdown is harmless.
+      onExit(false);
+      throw t;
+    }
   }
 
   private long getHAGroupStoreUpdateInterval() {

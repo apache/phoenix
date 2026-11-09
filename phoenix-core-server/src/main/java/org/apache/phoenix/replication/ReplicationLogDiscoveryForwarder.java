@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +75,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   private static ReplicationLogTracker createLogTracker(ReplicationLogGroup logGroup) {
     ReplicationShardDirectoryManager localShardManager = logGroup.getLocalShardManager();
     return new ReplicationLogTracker(logGroup.conf, logGroup.getHAGroupName(), localShardManager,
-      MetricsReplicationLogForwarderSourceFactory.getInstanceForTracker(logGroup.getHAGroupName()));
+      MetricsReplicationLogGroupSourceFactory.getInstanceForTracker(logGroup.getHAGroupName()));
   }
 
   public ReplicationLogDiscoveryForwarder(ReplicationLogGroup logGroup) {
@@ -230,7 +230,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
 
   @Override
   protected MetricsReplicationLogDiscovery createMetricsSource() {
-    return MetricsReplicationLogForwarderSourceFactory
+    return MetricsReplicationLogGroupSourceFactory
       .getInstanceForDiscovery(logGroup.getHAGroupName());
   }
 

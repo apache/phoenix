@@ -20,7 +20,9 @@ package org.apache.phoenix.replication.metrics;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Factory class for creating log forwarder metrics
+ * Factory class for the replication log group metrics: the group's own source and its log
+ * forwarder's tracker and discovery sources. Each is cached by HA group name, one instance per
+ * group, since metrics2 rejects registering a second source under the same name.
  */
 public class MetricsReplicationLogGroupSourceFactory {
 
@@ -28,12 +30,29 @@ public class MetricsReplicationLogGroupSourceFactory {
     // Utility class, no instantiation
   }
 
-  /** Cache of ReplicationLogTrackerForwarderImpl instances by HA Group ID */
   private static final ConcurrentHashMap<String,
     MetricsReplicationLogGroupSource> LOG_GROUP_INSTANCES = new ConcurrentHashMap<>();
+
+  private static final ConcurrentHashMap<String,
+    MetricsReplicationLogTrackerForwarderImpl> TRACKER_INSTANCES = new ConcurrentHashMap<>();
+
+  private static final ConcurrentHashMap<String,
+    MetricsReplicationLogDiscoveryForwarderImpl> DISCOVERY_INSTANCES = new ConcurrentHashMap<>();
 
   public static MetricsReplicationLogGroupSource getInstanceForLogGroup(String haGroupName) {
     return LOG_GROUP_INSTANCES.computeIfAbsent(haGroupName,
       k -> new MetricsReplicationLogGroupSourceImpl(haGroupName));
+  }
+
+  public static MetricsReplicationLogTrackerForwarderImpl
+    getInstanceForTracker(String haGroupName) {
+    return TRACKER_INSTANCES.computeIfAbsent(haGroupName,
+      k -> new MetricsReplicationLogTrackerForwarderImpl(haGroupName));
+  }
+
+  public static MetricsReplicationLogDiscoveryForwarderImpl
+    getInstanceForDiscovery(String haGroupName) {
+    return DISCOVERY_INSTANCES.computeIfAbsent(haGroupName,
+      k -> new MetricsReplicationLogDiscoveryForwarderImpl(haGroupName));
   }
 }
