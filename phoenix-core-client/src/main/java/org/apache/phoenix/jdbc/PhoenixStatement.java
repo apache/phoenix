@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_CDC_INDEX;
+import static org.apache.phoenix.jdbc.HighAvailabilityUtil.toFailoverInProgressIfStale;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -590,6 +591,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
         queryLogger.sync(null, null);
       }
+      if (e instanceof SQLException) {
+        throw toFailoverInProgressIfStale(connection, (SQLException) e);
+      }
       Throwables.propagateIfInstanceOf(e, SQLException.class);
       Throwables.propagate(e);
       throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
@@ -823,6 +827,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
         queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
         queryLogger.syncAudit();
+      }
+      if (e instanceof SQLException) {
+        // Autocommit DML commits through the raw PhoenixConnection, so FailoverPhoenixConnection
+        // never sees a stale-CRR rejection from this path.
+        throw toFailoverInProgressIfStale(connection, (SQLException) e);
       }
       Throwables.propagateIfInstanceOf(e, SQLException.class);
       Throwables.propagate(e);
@@ -2556,7 +2565,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
       // If original autoCommit was true, commit what we have buffered
       if (autoCommit) {
-        connection.commit();
+        try {
+          connection.commit();
+        } catch (SQLException e) {
+          throw toFailoverInProgressIfStale(connection, e);
+        }
       }
 
       // Trim the batch list to contain only unprocessed items (from index i to end)
@@ -2570,15 +2583,20 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       // Throw MutationLimitBatchException with checkpoint information
       throw new MutationLimitBatchException(returnCodes, limitEx, i);
     } catch (SQLException t) {
+      SQLException e = toFailoverInProgressIfStale(connection, t);
       if (i == returnCodes.length) {
         // Exception after for loop, perhaps in commit(), discard returnCodes.
-        throw new BatchUpdateException(t);
+        throw new BatchUpdateException(e);
       } else {
         returnCodes[i] = Statement.EXECUTE_FAILED;
-        throw new BatchUpdateException(returnCodes, t);
+        throw new BatchUpdateException(returnCodes, e);
       }
     } finally {
-      connection.setAutoCommit(autoCommit);
+      // A stale-CRR refresh above can close the connection; setAutoCommit would then throw and
+      // mask the BatchUpdateException.
+      if (!connection.isClosed()) {
+        connection.setAutoCommit(autoCommit);
+      }
     }
   }
 
