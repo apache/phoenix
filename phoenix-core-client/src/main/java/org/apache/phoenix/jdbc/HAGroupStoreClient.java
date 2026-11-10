@@ -1324,7 +1324,8 @@ public class HAGroupStoreClient implements Closeable {
     } else {
       metricsSource.incrementInvalidTransitionRejectedCount();
       throw new InvalidClusterRoleTransitionException(
-        "Cannot transition from " + currentHAGroupState + " to " + newHAGroupState);
+        "Cannot transition from " + currentHAGroupState + " to " + newHAGroupState,
+        currentHAGroupState, newHAGroupState);
     }
     long remainingTime = currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
     return Math.max(0, remainingTime);

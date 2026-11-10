@@ -18,6 +18,9 @@
 package org.apache.phoenix.replication;
 
 import java.io.IOException;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.ReplicationLogGroup.Record;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.slf4j.Logger;
@@ -96,6 +99,39 @@ public abstract class ReplicationModeImpl {
     logGroup.getMetrics().incrementSyncToSafTransitions();
     try {
       logGroup.setHAGroupStatusToStoreAndForward();
+    } catch (InvalidClusterRoleTransitionException ex) {
+      // The rejected transition's from-state decides: a failover in progress, being cancelled or
+      // committed fails the write and keeps the RS up; any other state fail-stops.
+      HAGroupState from = ex.getFromState();
+      String reason = null;
+      if (from == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY) {
+        reason = "the in-sync failover started";
+      } else if (from == HAGroupState.ABORT_TO_ACTIVE_IN_SYNC) {
+        reason = "the in-sync failover is being cancelled";
+      } else if (
+        from == HAGroupState.STANDBY || from == HAGroupState.DEGRADED_STANDBY
+          || from == HAGroupState.ABORT_TO_STANDBY
+      ) {
+        reason = "the local cluster was demoted";
+      }
+      if (reason != null) {
+        String message = String
+          .format("HAGroup %s %s write failed and cannot switch to STORE_AND_FORWARD from %s: %s; "
+            + "failing the write", logGroup, getMode(), from, reason);
+        LOG.error(message, ex);
+        throw new ReplicationFailoverInProgressException(message, ex);
+      }
+      if (from == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY) {
+        reason =
+          "the group is in unsupported state ACTIVE_NOT_IN_SYNC_TO_STANDBY; run abort-failover";
+      } else {
+        reason = "unexpected state " + from;
+      }
+      String message = String
+        .format("HAGroup %s %s write failed and cannot switch to STORE_AND_FORWARD from %s: %s; "
+          + "aborting region server", logGroup, getMode(), from, reason);
+      LOG.error(message, ex);
+      throw new IOException(message, ex);
     } catch (Exception ex) {
       String message =
         String.format("HAGroup %s could not update status to STORE_AND_FORWARD", logGroup);

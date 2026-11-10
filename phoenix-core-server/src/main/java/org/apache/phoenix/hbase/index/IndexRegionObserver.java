@@ -35,6 +35,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,12 +71,14 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Server;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -107,6 +110,8 @@ import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.Expression;
@@ -203,6 +208,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   // lifetime so a high-volume untagged writer cannot flood the log. Shared across all per-region
   // instances; bounded in practice by the finite set of tables on the RegionServer.
   private static final Set<String> BYPASS_WARNED_TABLES = ConcurrentHashMap.newKeySet();
+
+  // Fixed prefix of divergence records; operator tooling greps for it.
+  static final String DIVERGENCE_LOG_PREFIX = "PHOENIX_HA_DIVERGENCE";
   private static final OperationStatus IGNORE = new OperationStatus(SUCCESS);
   private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
   public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
@@ -730,6 +738,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   @VisibleForTesting
   IndexRegionObserver(String dataTableName) {
     this.dataTableName = dataTableName;
+    this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
   }
 
   @VisibleForTesting
@@ -1045,10 +1054,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     // origin == CLIENT_HA guarantees the HA group name is present.
     String haGroup = haGroupName.get();
-    ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-      env.getServerName(), haGroup, haGroupStoreManager, abortable);
-    if (logGroup.getStatus() != ReplicationLogGroup.Status.NOT_ACTIVE) {
-      return logGroup;
+    ReplicationLogGroup logGroup;
+    try {
+      logGroup = ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(), haGroup,
+        haGroupStoreManager, abortable);
+      if (logGroup.getStatus() != ReplicationLogGroup.Status.NOT_ACTIVE) {
+        // Refuse an unusable group before the batch commits locally, so nothing needs repair.
+        logGroup.checkUsable();
+        return logGroup;
+      }
+    } catch (ReplicationFailoverInProgressException e) {
+      // Nothing is written yet (creating the group failed, or a failover stopped it): blocked,
+      // not diverged. The failover exception is only for a batch that committed locally.
+      throw new MutationBlockedIOException(
+        String.format("HAGroup %s is blocked during a failover: %s", haGroup, e.getMessage()));
     }
     // This cluster is not active for a non-PARALLEL HA group. Under FAILOVER only the active
     // cluster takes writes, so this is a stray/stale sync-path write to a demoted cluster. Reject
@@ -3222,7 +3241,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // ignoreSyncReplicationForTesting suppresses only this synchronous ship, simulating an RS
         // crash after the WAL write but before the ship; the WAL-restore path re-ships on replay.
         if (isReplicatedBatch(context) && !ignoreSyncReplicationForTesting) {
-          replicateMutations(context.logGroup, miniBatchOp, context);
+          try {
+            replicateMutations(c.getEnvironment(), context.logGroup, miniBatchOp, context);
+          } catch (IOException e) {
+            // The RS may stay up, so still wait for the post-index updates. Log a failure there
+            // rather than attach it: e can be one exception instance shared by many batches.
+            try {
+              FutureUtils.get(postIndexFuture);
+            } catch (InterruptedIOException ie) {
+              Thread.currentThread().interrupt();
+            } catch (Exception postEx) {
+              LOG.warn("Post-index update failed for a batch whose replication failed", postEx);
+            }
+            throw e;
+          }
         }
         FutureUtils.get(postIndexFuture);
       }
@@ -3803,7 +3835,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       new ImmutableBytesPtr(c.getFamilyArray(), c.getFamilyOffset(), c.getFamilyLength()));
   }
 
-  private void replicateMutations(ReplicationLogGroup logGroup,
+  private void replicateMutations(RegionCoprocessorEnvironment env, ReplicationLogGroup logGroup,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
     // Replicated batches on the standby never re-replicate. Unreachable in practice — the only
@@ -3856,9 +3888,54 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     try {
       logGroup.append(dataTableName, commitId, flattened, replicationAttributes);
       logGroup.sync();
+    } catch (IOException e) {
+      // The batch is already in the local WAL and memstore. Recorded even when the RS aborts: an
+      // edit flushed before the abort is dropped by the WAL split, so no restore re-ships it.
+      long[] range = dataTimestampRange(flattened);
+      logDivergence("SYNC_FAILED", logGroup.getHAGroupName(), env.getRegionInfo(),
+        env.getServerName(), range[0], range[1], e);
+      throw e;
     } finally {
       metricSource.updateReplicationSyncTime(dataTableName,
         EnvironmentEdgeManager.currentTimeMillis() - start);
+    }
+  }
+
+  /**
+   * Min and max timestamps of the replicated data cells (no WAL metadata or local-index cells);
+   * {@code {Long.MAX_VALUE, Long.MIN_VALUE}} if there are none.
+   */
+  @VisibleForTesting
+  static long[] dataTimestampRange(List<Cell> cells) {
+    long[] range = { Long.MAX_VALUE, Long.MIN_VALUE };
+    for (Cell c : cells) {
+      if (isReplicableCell(c) && !CellUtil.matchingFamily(c, WALEdit.METAFAMILY)) {
+        range[0] = Math.min(range[0], c.getTimestamp());
+        range[1] = Math.max(range[1], c.getTimestamp());
+      }
+    }
+    return range;
+  }
+
+  /**
+   * Logs and counts a region-level record of edits that may exist only on this cluster, for repair
+   * with the sync tool. The timestamp window is "unknown" (repair the whole region range) when the
+   * edits had no data cells. Logged before counting, and the counter never throws to the caller, so
+   * the record line is written and the original failure propagates.
+   */
+  private void logDivergence(String reason, String haGroup, RegionInfo region, ServerName rs,
+    long minTs, long maxTs, Throwable cause) {
+    boolean known = minTs <= maxTs;
+    LOG.error(
+      "{} group={} table={} region={} start={} end={} minTs={} maxTs={} reason={} rs={}"
+        + " cause={}",
+      DIVERGENCE_LOG_PREFIX, haGroup, region.getTable().getNameAsString(), region.getEncodedName(),
+      Bytes.toHex(region.getStartKey()), Bytes.toHex(region.getEndKey()), known ? minTs : "unknown",
+      known ? maxTs : "unknown", reason, rs, cause == null ? "none" : cause.toString());
+    try {
+      metricSource.incrementReplicationDivergence(dataTableName);
+    } catch (RuntimeException e) {
+      LOG.warn("Failed to increment the replication divergence metric; continuing", e);
     }
   }
 

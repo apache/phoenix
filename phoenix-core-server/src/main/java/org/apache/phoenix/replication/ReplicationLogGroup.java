@@ -70,6 +70,8 @@ import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
+import org.apache.phoenix.exception.ReplicationLogGroupUnavailableException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.ClusterType;
@@ -320,12 +322,6 @@ public class ReplicationLogGroup {
   protected long syncTimeoutMs;
   protected long peerInitTimeoutMs;
   protected final AtomicBoolean closed = new AtomicBoolean(false);
-  // Set while the local cluster is in the in-sync cutover gate (ACTIVE_IN_SYNC_TO_STANDBY).
-  // Suspends
-  // log rotation (LogRotationTask.run() no-ops) so no new files are dropped into the peer's shard
-  // directory, and turns a SYNC-write failure into an RS abort instead of the illegal SYNC->SAF
-  // transition. Cleared when the state returns to ACTIVE_IN_SYNC (cutover abort).
-  private final AtomicBoolean failoverPending = new AtomicBoolean(false);
   protected final Abortable abortable;
   protected long shutdownTimeoutMs;
   // Undo actions for every LOCAL state subscription registered in init(), run on close() to remove
@@ -585,10 +581,10 @@ public class ReplicationLogGroup {
           // replaying its own formerly-ACTIVE edits after a crash while the peer is now ACTIVE.
           // Returning null keeps computeIfAbsent from caching, so the first call after this
           // cluster is promoted re-runs the check against the now-active role. The
-          // mutation-blocked role (ACTIVE_TO_STANDBY, the ACTIVE_IN_SYNC_TO_STANDBY cutover gate)
+          // mutation-blocked role (ACTIVE_TO_STANDBY, the ACTIVE_IN_SYNC_TO_STANDBY failover gate)
           // is active and deliberately allowed: it is reached from preWALRestore recovery on an RS
-          // restart during cutover, and the writer starts in SYNC with rotation suspended via
-          // failoverPending (see init()).
+          // restart during failover (and from live writes when the mutation block is off), and the
+          // writer starts in SYNC with rotation suspended (see isFailoverPending()).
           Optional<HAGroupStoreRecord> haRecord =
             haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
           if (!haRecord.isPresent()) {
@@ -743,8 +739,8 @@ public class ReplicationLogGroup {
     LOG.info("Initializing ReplicationLogGroup {}", haGroupName);
     // getOrCreate() reads the effective record for the role gate and seeds it via the constructor,
     // so by the time init() runs the record is present and the local role is known active (possibly
-    // the ACTIVE_TO_STANDBY cutover gate, which starts in SYNC with rotation suspended — see
-    // below).
+    // the ACTIVE_TO_STANDBY failover gate, which starts in SYNC with rotation suspended — see
+    // isFailoverPending()).
     // The record may be null only when init() is invoked directly (tests); fall back to a read
     // then.
     if (haGroupStoreRecord == null) {
@@ -771,17 +767,10 @@ public class ReplicationLogGroup {
     this.syncTimeoutMs = conf.getLong(REPLICATION_LOG_SYNC_TIMEOUT_KEY, calculateSyncTimeout());
     // Initialize the disruptor so that we start processing events
     initializeDisruptor();
-    // Register all LOCAL state listeners that react to this cluster's role changes (demotion,
-    // cutover suspend/resume, and mode flips). getOrCreate() builds a writer only on an active
+    // Register all LOCAL state listeners that react to this cluster's role changes (demotion and
+    // mode flips). getOrCreate() builds a writer only on an active
     // role, so these listeners drive it from there.
     subscribeToStateChanges();
-    // Restart-in-cutover: when init() runs (via preWALRestore recovery) while the persisted state
-    // is already ACTIVE_IN_SYNC_TO_STANDBY, the cutover listener won't fire — the state was read,
-    // not transitioned into — so seed failoverPending here. This keeps rotation suspended from the
-    // start so the fresh writer does not re-arm the standby's failover deadlock.
-    if (haGroupStoreRecord.getHAGroupState().equals(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY)) {
-      setFailoverPending(true);
-    }
     LOG.info("HAGroup {} started with mode={}", this, mode);
   }
 
@@ -791,46 +780,29 @@ public class ReplicationLogGroup {
    * {@code HAGroupStoreClient#notifySubscribers}), so each action fires only for its exact target
    * state on the local cluster — no in-listener guards needed.
    * <ul>
-   * <li>{@code ACTIVE_IN_SYNC_TO_STANDBY} — the in-sync cutover gate (role ACTIVE_TO_STANDBY,
-   * mutations blocked). Do <b>not</b> close here: a batch that captured this group before the
-   * mutation block, committed locally, and reaches append/sync after a close would hit
-   * IOException("Closed") — a committed mutation the peer never receives. Instead set
-   * {@code failoverPending}, which suspends rotation (no new files into the peer's shard directory,
-   * so the standby's failover-completion check can proceed) while keeping the writer open so those
-   * in-flight writes land. The terminal {@code STANDBY} demotion performs the actual close.</li>
    * <li>{@code STANDBY} and {@code DEGRADED_STANDBY} — the terminal demotion. When the peer is not
    * visible a demotion to STANDBY surfaces as DEGRADED_STANDBY (peer-blind), so listening only for
    * STANDBY would leave the writer alive through the degraded window. The listener contract forbids
    * blocking on the cache-event thread, so the (blocking) {@link #close()} is handed off to a
-   * short-lived daemon thread.</li>
-   * <li>{@code ACTIVE_IN_SYNC} — a cutover abort (ACTIVE_IN_SYNC_TO_STANDBY →
-   * ABORT_TO_ACTIVE_IN_SYNC → ACTIVE_IN_SYNC) clears {@code failoverPending} to resume rotation on
-   * the same live group, and flips any RS still in SYNC_AND_FORWARD back to SYNC.</li>
+   * short-lived daemon thread ({@link #closeAsync}).</li>
+   * <li>{@code ACTIVE_IN_SYNC} — flips any RS still in SYNC_AND_FORWARD back to SYNC. A group a
+   * cancelled failover left fatal is replaced by {@link #checkUsable()}, not here.</li>
    * <li>{@code ACTIVE_NOT_IN_SYNC} — when any RS drops to STORE_AND_FORWARD the others must leave
    * SYNC, so flip SYNC to SYNC_AND_FORWARD.</li>
    * </ul>
    * Idempotent: {@code close()} is CAS-guarded, and closing removes this instance from the cache so
-   * a later write re-runs {@link #init()} against the current role — which the tightened role gate
-   * rejects until this cluster returns to pure ACTIVE (promotion, or a cutover abort back to
-   * ACTIVE_IN_SYNC).
+   * a later write re-runs {@link #init()} against the current role — which the role gate rejects
+   * while this cluster is not active.
    */
   protected void subscribeToStateChanges() throws IOException {
-    subscribeLocal(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, () -> {
-      LOG.info("HAGroup {} entered cutover gate; suspending rotation", this);
-      setFailoverPending(true);
-    });
     Runnable closeOnDemotion = () -> {
       LOG.info("HAGroup {} demoted; closing replication log writer", this);
-      Thread t = new Thread(this::close, "ReplicationLogGroup-demote-" + getHAGroupName());
-      t.setDaemon(true);
-      t.start();
+      closeAsync("demote");
     };
     subscribeLocal(HAGroupState.STANDBY, closeOnDemotion);
     subscribeLocal(HAGroupState.DEGRADED_STANDBY, closeOnDemotion);
     subscribeLocal(HAGroupState.ACTIVE_IN_SYNC, () -> {
-      LOG.info("HAGroup {} returned to ACTIVE_IN_SYNC; resuming rotation and SYNC mode", this);
-      // A cutover abort resumes rotation on this live group.
-      setFailoverPending(false);
+      LOG.info("HAGroup {} returned to ACTIVE_IN_SYNC; resuming SYNC mode", this);
       // The group returned to in-sync: if this RS was recovering in SYNC_AND_FORWARD, drop the
       // forward leg and go back to pure SYNC.
       checkAndSetModeAndNotify(ReplicationMode.SYNC_AND_FORWARD, ReplicationMode.SYNC);
@@ -887,9 +859,10 @@ public class ReplicationLogGroup {
   /**
    * Initialize the replication mode based on the HAGroupStore state. {@link #getOrCreate} builds a
    * writer only on an active role, so this is only reached for active states: ACTIVE_IN_SYNC and
-   * the ACTIVE_IN_SYNC_TO_STANDBY cutover gate both start SYNC (the gate is reached via
-   * preWALRestore recovery on a restart-in-cutover); every other active state (ACTIVE_NOT_IN_SYNC,
-   * ACTIVE_WITH_OFFLINE_PEER, ACTIVE_NOT_IN_SYNC_TO_STANDBY, ...) starts STORE_AND_FORWARD.
+   * the ACTIVE_IN_SYNC_TO_STANDBY failover gate both start SYNC (the gate is reached via
+   * preWALRestore recovery on a restart-in-failover, or a live write when the mutation block is
+   * off); every other active state (ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER,
+   * ACTIVE_NOT_IN_SYNC_TO_STANDBY, ...) starts STORE_AND_FORWARD.
    */
   protected void initializeReplicationMode(HAGroupStoreRecord record) throws IOException {
     HAGroupState haGroupState = record.getHAGroupState();
@@ -939,8 +912,9 @@ public class ReplicationLogGroup {
    * log file writer is unable to make progress, due to a HDFS level disruption. Should we enter
    * that condition this method will block until the append can be inserted.
    * <p>
-   * An internal error may trigger fail-stop behavior. Subsequent to fail-stop, this method will
-   * throw an IOException("Closed"). No further appends are allowed.
+   * A group stopped by a failover throws its {@link ReplicationFailoverInProgressException}, closed
+   * or not; any other closed group throws "HAGroup &lt;name&gt; is closed". After any other
+   * fail-stop the append is accepted and dropped, and the following {@link #sync()} fails.
    * @param tableName The name of the HBase table the mutation applies to.
    * @param commitId  The commit identifier (e.g., SCN) associated with the mutation.
    * @param mutation  The HBase Mutation (Put or Delete) to be logged.
@@ -983,14 +957,23 @@ public class ReplicationLogGroup {
     publish(new Record(tableName, commitId, cells, attributes));
   }
 
-  private void publish(Record record) throws IOException {
+  /**
+   * Refuses an append or sync that must not reach the ring. A group stopped by a failover throws
+   * the failover exception, closed or not, and never touches a ring whose consumer may be halted.
+   * Any other fatal exception is left to the event handler, which ignores appends and fails syncs
+   * with it, so {@link #syncInternal()} decides whether to abort.
+   */
+  private void checkWritable() throws IOException {
+    if (isStoppedByFailover()) {
+      throw eventHandler.getFatalException();
+    }
     if (isClosed()) {
-      throw new IOException("Closed");
+      throw new IOException(String.format("HAGroup %s is closed", getHAGroupName()));
     }
-    IOException fatal = eventHandler.getFatalException();
-    if (fatal != null) {
-      throw fatal;
-    }
+  }
+
+  private void publish(Record record) throws IOException {
+    checkWritable();
     long startTime = System.nanoTime();
     try {
       // ringBuffer.next() claims the next sequence number. Because appends batch onto a bounded
@@ -1017,10 +1000,14 @@ public class ReplicationLogGroup {
    * retry. If the operation is still not successful and if we are in SYNC mode or in
    * SYNC_AND_FORWARD mode then we switch the mode to STORE_AND_FORWARD and try again. If the sync
    * operation still fails after switching to the STORE_AND_FORWARD mode then we treat this as a
-   * fatal error and abort the region server.
+   * fatal error and abort the region server. If the switch is rejected because a consistent
+   * failover is in progress, being cancelled or has committed, the write fails with
+   * {@link ReplicationFailoverInProgressException} instead and the region server stays up.
    * <p>
-   * An internal error may trigger fail-stop behavior. Subsequent to fail-stop, this method will
-   * throw an IOException("Closed"). No further syncs are allowed.
+   * A group stopped by a failover throws its {@link ReplicationFailoverInProgressException}, closed
+   * or not, and the region server stays up; any other closed group throws "HAGroup &lt;name&gt; is
+   * closed". After any other fail-stop the sync fails with the fatal exception and aborts the
+   * region server.
    * <p>
    * @throws IOException If the sync operation fails after retries, or if interrupted.
    */
@@ -1028,13 +1015,7 @@ public class ReplicationLogGroup {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Sync");
     }
-    if (isClosed()) {
-      throw new IOException("Closed");
-    }
-    IOException fatal = eventHandler.getFatalException();
-    if (fatal != null) {
-      abort("ReplicationLogGroup has a fatal exception", fatal);
-    }
+    checkWritable();
     long startTime = System.nanoTime();
     try {
       syncInternal();
@@ -1065,6 +1046,10 @@ public class ReplicationLogGroup {
       throw new InterruptedIOException("Interrupted while waiting for sync");
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
+      if (cause instanceof ReplicationFailoverInProgressException) {
+        // Failover in progress, cancelled or committed: fail the write, keep the RS up.
+        throw (ReplicationFailoverInProgressException) cause;
+      }
       String message = String.format("HAGroup %s sync operation failed", this);
       LOG.error(message, cause);
       abort(message, cause);
@@ -1143,17 +1128,78 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Set or clear the failover-pending flag. Set on entry to the in-sync cutover gate
-   * (ACTIVE_IN_SYNC_TO_STANDBY); cleared when the state returns to ACTIVE_IN_SYNC (cutover abort).
-   * While set, log rotation is suspended and a SYNC-write failure aborts the RS.
+   * True while the cached local HA state is the in-sync failover gate (ACTIVE_IN_SYNC_TO_STANDBY).
+   * Log rotation is suspended then, so no new files are dropped into the peer's shard directory.
+   * Read from the HA store cache on each call, so it follows the state without a listener and also
+   * holds for a group created during the gate. If the state cannot be read, rotation proceeds.
    */
-  public void setFailoverPending(boolean pending) {
-    failoverPending.set(pending);
+  public boolean isFailoverPending() {
+    return getLocalState() == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY;
   }
 
-  /** Returns true while the local cluster is in the in-sync cutover gate. */
-  public boolean isFailoverPending() {
-    return failoverPending.get();
+  /** The cached local HA state, or null if it cannot be read. */
+  private HAGroupState getLocalState() {
+    try {
+      Optional<HAGroupStoreRecord> record =
+        haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+      return record.isPresent() ? record.get().getHAGroupState() : null;
+    } catch (IOException e) {
+      LOG.warn("HAGroup {} could not read the HA state", this, e);
+      return null;
+    }
+  }
+
+  /**
+   * True when this group fail-stopped because a failover rejected its STORE_AND_FORWARD fallback.
+   */
+  boolean isStoppedByFailover() {
+    return eventHandler.getFatalException() instanceof ReplicationFailoverInProgressException;
+  }
+
+  /** The states in which a consistent failover is still in progress or being cancelled. */
+  private static boolean isFailoverState(HAGroupState state) {
+    return state == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
+      || state == HAGroupState.ABORT_TO_ACTIVE_IN_SYNC;
+  }
+
+  /**
+   * Throws if this group cannot take a new write; call it before the write is committed locally. A
+   * group stopped by a failover rethrows the failover exception while the failover is on (the
+   * caller, which knows nothing was written, reports it as blocked). Once it is over the group is
+   * closed, and writes get a retriable {@link ReplicationLogGroupUnavailableException} until a
+   * fresh group replaces it (the closed instance stays cached until its teardown finishes). Any
+   * other closed group (demotion, RegionServer stop, abort) refuses writes the same way; it is not
+   * replaced, and the retry is rejected by the non-active cluster or follows the region to its new
+   * server.
+   */
+  public void checkUsable() throws IOException {
+    if (isStoppedByFailover()) {
+      HAGroupState state = getLocalState();
+      if (state == null || isFailoverState(state)) {
+        throw eventHandler.getFatalException();
+      }
+      closeAsync("replace");
+      throw new ReplicationLogGroupUnavailableException(String
+        .format("HAGroup %s is being replaced after a failover (state %s)", haGroupName, state));
+    }
+    if (isClosed()) {
+      throw new ReplicationLogGroupUnavailableException(
+        String.format("HAGroup %s is closed", haGroupName));
+    }
+  }
+
+  /**
+   * Hands {@link #close()} off to a short-lived daemon thread, at most once. Used from the
+   * cache-event thread and from write paths, where the blocking close must not run.
+   */
+  private void closeAsync(String reason) {
+    // Claim the close here, so writes see the group closed at once and only one thread tears down.
+    if (!closed.compareAndSet(false, true)) {
+      return;
+    }
+    Thread t = new Thread(this::doClose, "ReplicationLogGroup-" + reason + "-" + haGroupName);
+    t.setDaemon(true);
+    t.start();
   }
 
   /**
@@ -1169,6 +1215,11 @@ public class ReplicationLogGroup {
     if (!closed.compareAndSet(false, true)) {
       return;
     }
+    doClose();
+  }
+
+  /** The teardown of {@link #close()}, run once by whichever caller set the closed flag. */
+  private void doClose() {
     LOG.info("Closing HAGroup {}", this);
     // Wait for the consumer thread to enter its run loop before shutting down. Otherwise a close()
     // that races init() can halt() before the consumer starts; run()'s opening clearAlert() then
@@ -1405,6 +1456,11 @@ public class ReplicationLogGroup {
 
     @Override
     protected void init() {
+    }
+
+    /** Never ships, so there is nothing to refuse. */
+    @Override
+    public void checkUsable() {
     }
 
     @Override
@@ -1880,8 +1936,10 @@ public class ReplicationLogGroup {
             LogEvent.typeName(event.type), sequence, currentModeImpl, e);
           onFailure(event, sequence, e);
         } catch (Exception fatalEx) {
-          IOException fatalIOE =
-            asIOException("Both SYNC and SAF replication writes failed", fatalEx);
+          IOException fatalIOE = asIOException(
+            String.format("HAGroup %s replication failed on mode %s and the fallback failed",
+              ReplicationLogGroup.this, currentModeImpl),
+            fatalEx);
           setFatalException(fatalIOE);
           failPendingSyncs(sequence, fatalIOE);
         }

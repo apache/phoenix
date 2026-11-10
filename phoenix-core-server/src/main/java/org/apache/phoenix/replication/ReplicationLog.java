@@ -271,18 +271,24 @@ public class ReplicationLog {
    * The enqueued {@link LogRotationTask} clears the gate in its {@code finally} regardless of which
    * caller set it.
    * <p>
-   * Suspends rotation during the in-sync cutover gate: while {@code failoverPending} is set we skip
-   * before touching the gate so a tick never engages it. Minting a new file each round would keep
-   * dropping .plog files into the peer's shard directory and deadlock the standby's failover check;
-   * the current writer stays open so in-flight writes still land.
+   * Suspends rotation during the in-sync failover gate: while
+   * {@link ReplicationLogGroup#isFailoverPending()} holds we skip before touching the gate so a
+   * tick never engages it. Minting a new file each round would keep dropping .plog files into the
+   * peer's shard directory and deadlock the standby's failover check; the current writer stays open
+   * so in-flight writes still land.
    * @return {@code true} if a rotation is now queued or already in flight (worth waiting for);
-   *         {@code false} if rotation is suppressed this call (failover pending, or the executor is
-   *         shutting down) so no task will run.
+   *         {@code false} if rotation is suppressed this call (failover pending, the group stopped
+   *         by a failover, or the executor is shutting down) so no task will run.
    */
   @VisibleForTesting
   boolean requestRotation(boolean scheduled) {
     if (logGroup.isFailoverPending()) {
       LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
+      return false;
+    }
+    if (logGroup.isStoppedByFailover()) {
+      // Refuses every write until checkUsable replaces it; a new file would stay empty.
+      LOG.info("HAGroup {} rotation suspended: stopped by a failover", logGroup);
       return false;
     }
     if (scheduled) {
@@ -403,7 +409,8 @@ public class ReplicationLog {
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       checkAndReplaceWriter(true);
       if (isClosed()) {
-        throw new IOException("Closed");
+        throw new IOException(
+          String.format("HAGroup %s replication log is closed", logGroup.getHAGroupName()));
       }
       try {
         if (currentWriter.getGeneration() > generation) {
@@ -486,8 +493,8 @@ public class ReplicationLog {
 
   /**
    * Closes the log with a bounded duration. Subsequent append() and sync() calls will throw
-   * IOException("Closed"). Safe to call multiple times — only the first invocation performs
-   * cleanup.
+   * IOException("HAGroup <name> replication log is closed"). Safe to call multiple times — only the
+   * first invocation performs cleanup.
    * @param graceful true for graceful shutdown, false for error/forced shutdown
    */
   public void close(boolean graceful) {
@@ -515,9 +522,9 @@ public class ReplicationLog {
   @VisibleForTesting
   protected void forceRotation() {
     // Model the same suspension policy as a scheduled tick: rotation is a no-op while the group is
-    // in the in-sync cutover gate (see requestRotation()).
-    if (logGroup.isFailoverPending()) {
-      LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
+    // in the in-sync failover gate (see requestRotation()).
+    if (logGroup.isFailoverPending() || logGroup.isStoppedByFailover()) {
+      LOG.info("HAGroup {} rotation suspended", logGroup);
       return;
     }
     new LogRotationTask().run();

@@ -17,17 +17,22 @@
  */
 package org.apache.phoenix.exception;
 
+import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+
 /**
  * Exception thrown when attempting an invalid cluster role transition.
  */
 public class InvalidClusterRoleTransitionException extends Exception {
   private static final long serialVersionUID = 1L;
 
+  private final HAGroupState fromState;
+  private final HAGroupState toState;
+
   /**
    * @param msg reason for the exception
    */
   public InvalidClusterRoleTransitionException(String msg) {
-    super(msg);
+    this(msg, null, null);
   }
 
   /**
@@ -36,6 +41,29 @@ public class InvalidClusterRoleTransitionException extends Exception {
    */
   public InvalidClusterRoleTransitionException(String msg, Throwable cause) {
     super(msg, cause);
+    this.fromState = null;
+    this.toState = null;
   }
 
+  /**
+   * @param msg       reason for the exception
+   * @param fromState the state the transition was rejected from
+   * @param toState   the requested target state
+   */
+  public InvalidClusterRoleTransitionException(String msg, HAGroupState fromState,
+    HAGroupState toState) {
+    super(msg);
+    this.fromState = fromState;
+    this.toState = toState;
+  }
+
+  /** Returns the state the transition was rejected from, or null if not known. */
+  public HAGroupState getFromState() {
+    return fromState;
+  }
+
+  /** Returns the requested target state, or null if not known. */
+  public HAGroupState getToState() {
+    return toState;
+  }
 }

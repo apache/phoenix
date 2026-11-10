@@ -96,6 +96,11 @@ public interface MetricsIndexerSource extends BaseSource {
   String REPLICATION_SYNC_TIME_DESC =
     "Histogram for the time in milliseconds to synchronously replicate a batch of mutations";
 
+  String REPLICATION_DIVERGENCE = "replicationDivergence";
+  String REPLICATION_DIVERGENCE_DESC =
+    "The number of PHOENIX_HA_DIVERGENCE records logged for edits that may not have reached the"
+      + " peer cluster";
+
   /**
    * Updates the index preparation time histogram (preBatchMutate).
    * @param dataTableName Physical data table name
@@ -234,4 +239,10 @@ public interface MetricsIndexerSource extends BaseSource {
    * @param t             time taken in milliseconds
    */
   void updateReplicationSyncTime(String dataTableName, long t);
+
+  /**
+   * Increments the number of replication divergence records.
+   * @param dataTableName Physical data table name
+   */
+  void incrementReplicationDivergence(String dataTableName);
 }

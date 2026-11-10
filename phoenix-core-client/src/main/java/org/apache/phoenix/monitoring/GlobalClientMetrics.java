@@ -59,6 +59,7 @@ import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL2_TASK_RE
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_TASK_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_ROLE_TRANSITION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_STALE_CRR_DETECTED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HCONNECTIONS_COUNTER;
@@ -182,6 +183,7 @@ public enum GlobalClientMetrics {
   GLOBAL_HA_CRR_TRANSITION_COUNT(CRR_TRANSITION_COUNT),
   GLOBAL_HA_CRR_TRANSITION_DURATION_MS(CRR_TRANSITION_DURATION_MS),
   GLOBAL_HA_MUTATION_BLOCKED_COUNT(HA_MUTATION_BLOCKED_COUNT),
+  GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT(HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT),
   GLOBAL_HA_STALE_CRR_DETECTED_COUNT(HA_STALE_CRR_DETECTED_COUNT),
   GLOBAL_HA_CRR_REFRESH_COUNT(HA_CRR_REFRESH_COUNT),
   // GAUGE: most-recent-sample. Use getMetric().set(ageMs) at the sampling site;

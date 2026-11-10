@@ -21,18 +21,23 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_C
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.replication.CrossClusterReplicationTestUtil.findLogFiles;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
@@ -43,8 +48,11 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.hadoop.fs.FileSystem;
@@ -54,25 +62,35 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.ipc.RpcClient;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.exception.MutationBlockedIOException;
+import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceFactory;
 import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceImpl;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceImpl;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -1282,9 +1300,9 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
   /**
    * A graceful RegionServer stop with a write already committed to the WAL but not yet replicated.
    * The write must still be shipped: if the log groups were closed in preStop (before the regions),
-   * it would fail replication with "Closed" and never be shipped. Closing rs2's groups after its
-   * last region closes also writes their log trailers, so the log check passes without closing them
-   * by hand.
+   * it would fail replication with the closed-group error and never be shipped. Closing rs2's
+   * groups after its last region closes also writes their log trailers, so the log check passes
+   * without closing them by hand.
    */
   @Test
   public void testGracefulRegionServerStopClosesLogGroups() throws Exception {
@@ -2120,17 +2138,17 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
   }
 
   /**
-   * The graceful-failover deadlock fix: while the local cluster sits in the in-sync cutover gate
+   * The graceful-failover deadlock fix: while the local cluster sits in the in-sync failover gate
    * (ACTIVE_IN_SYNC_TO_STANDBY), time-based log rotation must be suspended so no new .plog files
    * are dropped into the peer's shard directory — otherwise the standby's failover-completion check
    * (getNewFiles(...).isEmpty()) never holds and both clusters spin forever. This drives the real
    * ZK role change through the RS's HAGroupStoreClient (the delivery the unit tests mock) and
-   * asserts: (1) entering the cutover gate suspends rotation — the peer .plog count is unchanged
-   * across several rounds while the writer stays open; (2) aborting back to ACTIVE_IN_SYNC resumes
-   * rotation — new files appear again.
+   * asserts: (1) entering the failover gate suspends rotation — the peer .plog count is unchanged
+   * across several rounds while the writer stays open; (2) cancelling back to ACTIVE_IN_SYNC keeps
+   * the healthy group, which takes writes and rotates again — new files appear.
    */
   @Test
-  public void testCutoverSuspendsAndResumesRotation() throws Exception {
+  public void testFailoverSuspendsAndResumesRotation() throws Exception {
     final String tableName = "T_" + generateUniqueName();
     String createTableDdl = String.format(
       "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
@@ -2154,7 +2172,7 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     FileSystem peerFs = peerDir.getFileSystem(conf2);
     long roundMs = TimeUnit.SECONDS.toMillis(5); // PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY
 
-    // Enter the in-sync cutover gate (cluster 1 ACTIVE_TO_STANDBY -> ACTIVE_IN_SYNC_TO_STANDBY).
+    // Enter the in-sync failover gate (cluster 1 ACTIVE_TO_STANDBY -> ACTIVE_IN_SYNC_TO_STANDBY).
     CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
       ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE);
 
@@ -2163,38 +2181,276 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     while (!logGroup.isFailoverPending() && System.currentTimeMillis() < deadline) {
       Threads.sleep(200);
     }
-    assertTrue("Cutover must set failover-pending", logGroup.isFailoverPending());
-    assertFalse("Group must stay open during cutover", logGroup.isClosed());
+    assertTrue("Failover must set failover-pending", logGroup.isFailoverPending());
+    assertFalse("Group must stay open during failover", logGroup.isClosed());
 
     // Snapshot after suspension is active, then wait several rounds; the count must not grow. The
     // base class disables the replay reader on both clusters (PHOENIX_REPLICATION_REPLAY_ENABLED =
     // false); replay only runs via the explicit replayAndVerifyAcrossClusters helper, which this
     // test never calls. So nothing consumes or deletes files from the peer dir — the count only
     // ever grows via the active's rotation, making both assertions below deterministic.
-    int filesAtCutover = findLogFiles(peerDir, peerFs).size();
+    int filesAtFailover = findLogFiles(peerDir, peerFs).size();
     Threads.sleep(3 * roundMs);
-    assertEquals("Rotation must be suspended during cutover: no new peer .plog files",
-      filesAtCutover, findLogFiles(peerDir, peerFs).size());
+    assertEquals("Rotation must be suspended during failover: no new peer .plog files",
+      filesAtFailover, findLogFiles(peerDir, peerFs).size());
     assertFalse("Writer must stay open through the suspended window", logGroup.isClosed());
 
-    // Abort the failover back to ACTIVE_IN_SYNC; rotation must resume on the same live group.
+    // Cancel the failover back to ACTIVE_IN_SYNC. No write failed, so the group is healthy and is
+    // kept: rotation resumes once the cached state leaves the gate.
     CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE,
       ClusterRoleRecord.ClusterRole.STANDBY);
     deadline = System.currentTimeMillis() + 30000;
     while (logGroup.isFailoverPending() && System.currentTimeMillis() < deadline) {
       Threads.sleep(200);
     }
-    assertFalse("Cutover abort must clear failover-pending", logGroup.isFailoverPending());
+    assertFalse("The cancel must clear failover-pending", logGroup.isFailoverPending());
+    ServerName sn =
+      CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0).getServerName();
+    assertSame("A healthy group must be kept across the cancel", logGroup,
+      ReplicationLogGroup.get(conf1, sn, haGroupName));
+    assertFalse("The kept group must stay open", logGroup.isClosed());
 
-    // With rotation resumed, subsequent rounds mint new files again.
+    // Writes succeed after the cancel.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?)");
+      for (int i = 10; i < 20; i++) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "v" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+
+    // The group rotates normally again, so new files appear.
     deadline = System.currentTimeMillis() + 3 * roundMs + 10000;
     while (
-      findLogFiles(peerDir, peerFs).size() <= filesAtCutover
+      findLogFiles(peerDir, peerFs).size() <= filesAtFailover
         && System.currentTimeMillis() < deadline
     ) {
       Threads.sleep(200);
     }
-    assertTrue("Rotation must resume after the abort clears failover-pending",
-      findLogFiles(peerDir, peerFs).size() > filesAtCutover);
+    assertTrue("The group must rotate after the cancel",
+      findLogFiles(peerDir, peerFs).size() > filesAtFailover);
+  }
+
+  /**
+   * scenario: cancel a failover under sustained load after the standby recovered the lease on the
+   * active's open log file, which fences its writer (the standby does this when it processes
+   * R_last). A straggler, a write that passed the ACTIVE_TO_STANDBY block before the failover and
+   * ships after the fence, fails back to the client without aborting the RS; later writes are
+   * refused before they commit. After the cancel the next write replaces the fatal group with a
+   * fresh one, and every acknowledged write reaches the standby. Writes that failed may exist only
+   * on the active, so the clusters are compared on acknowledged rows only.
+   */
+  @Test
+  public void testFailoverCancelUnderLoadAfterWriterFenced() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+    try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      conn.commit();
+    }
+    // Keep the table on the region server whose group the test inspects; only that server writes
+    // through the fenced group, so it is the one that must not abort.
+    HRegionServer rs0 = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
+    ServerName sn = rs0.getServerName();
+    try (Admin admin = CLUSTERS.getHBaseCluster1().getConnection().getAdmin()) {
+      TableName table = TableName.valueOf(tableName);
+      admin.modifyTable(TableDescriptorBuilder.newBuilder(admin.getDescriptor(table))
+        .setCoprocessor(HoldAfterWalCommitObserver.class.getName()).build());
+    }
+    moveRegionToServer(TableName.valueOf(tableName), sn);
+    // The base class built this group with no Abortable, so it could never abort rs0. Close it so
+    // the region server's own write path recreates it with rs0 as its Abortable.
+    logGroup.close();
+
+    Set<Integer> acked = ConcurrentHashMap.newKeySet();
+    AtomicInteger nextId = new AtomicInteger();
+    AtomicBoolean stop = new AtomicBoolean();
+    Thread writer = new Thread(() -> {
+      Connection conn = null;
+      while (!stop.get()) {
+        int id = nextId.getAndIncrement();
+        try {
+          if (conn == null) {
+            conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProps);
+          }
+          conn.createStatement()
+            .execute("upsert into " + tableName + " VALUES(" + id + ", 'v" + id + "')");
+          conn.commit();
+          acked.add(id);
+        } catch (Exception e) {
+          LOG.info("Background write {} failed", id, e);
+          closeQuietly(conn);
+          conn = null;
+        }
+        Threads.sleep(20);
+      }
+      closeQuietly(conn);
+    }, "s34-writer");
+    writer.setDaemon(true);
+    writer.start();
+    try {
+      waitForAcked(acked, 10);
+      logGroup = ReplicationLogGroup.get(conf1, sn, haGroupName);
+      assertNotNull("The group must be the region server's, so an abort would abort rs0",
+        logGroup.abortable);
+
+      // The straggler: commits locally before the failover, then is held before its ship.
+      HoldAfterWalCommitObserver.held = new CountDownLatch(1);
+      HoldAfterWalCommitObserver.release = new CountDownLatch(1);
+      HoldAfterWalCommitObserver.holdRow = PInteger.INSTANCE.toBytes(-1);
+      // A principal of its own in the URL gives it its own CQSI, so the RPC timeout outlasts the
+      // hold (clientProps' 2 s would make the client retry into the ACTIVE_TO_STANDBY block).
+      Properties stragglerProps = new Properties();
+      stragglerProps.putAll(clientProps);
+      stragglerProps.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY, "120000");
+      stragglerProps.setProperty(RpcClient.SOCKET_TIMEOUT_READ, "120000");
+      stragglerProps.setProperty(RpcClient.SOCKET_TIMEOUT_WRITE, "120000");
+      AtomicReference<Throwable> stragglerError = new AtomicReference<>();
+      Thread straggler = new Thread(() -> {
+        try (Connection conn =
+          DriverManager.getConnection(CLUSTERS.getJdbcHAUrl("s34-straggler"), stragglerProps)) {
+          conn.createStatement().execute("upsert into " + tableName + " VALUES(-1, 'fenced')");
+          conn.commit();
+        } catch (Throwable t) {
+          stragglerError.set(t);
+        }
+      }, "s34-straggler");
+      straggler.start();
+      assertTrue("The straggler should be held after its WAL commit",
+        HoldAfterWalCommitObserver.held.await(60, TimeUnit.SECONDS));
+
+      // Enter the in-sync failover gate; rotation is suspended from here on.
+      CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+        ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE);
+      long deadline = System.currentTimeMillis() + 30000;
+      while (!logGroup.isFailoverPending() && System.currentTimeMillis() < deadline) {
+        Threads.sleep(200);
+      }
+      assertTrue("Failover must set failover-pending", logGroup.isFailoverPending());
+
+      // Fence the active's writers the way the standby does when it processes R_last. The role
+      // blocks the background writes before they commit; the straggler ships into the fence.
+      long divergenceBefore = divergenceCount(tableName);
+      long failoverFailuresBefore =
+        GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT.getMetric().getValue();
+      Path peerDir = logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();
+      DistributedFileSystem peerFs = (DistributedFileSystem) peerDir.getFileSystem(conf2);
+      for (Path file : findLogFiles(peerDir, peerFs)) {
+        long fenceDeadline = System.currentTimeMillis() + 30000;
+        while (!peerFs.recoverLease(file) && System.currentTimeMillis() < fenceDeadline) {
+          Threads.sleep(200);
+        }
+      }
+
+      // The straggler fails back to the client and is recorded; the RS stays up.
+      HoldAfterWalCommitObserver.holdRow = null;
+      HoldAfterWalCommitObserver.release.countDown();
+      straggler.join(60000);
+      assertTrue("Expected the failover failure, got " + stragglerError.get(),
+        hasCause(stragglerError.get(), ReplicationFailoverInProgressException.class));
+      assertTrue("The write that hit the fenced writer must be recorded as a divergence",
+        divergenceCount(tableName) > divergenceBefore);
+      assertTrue("The HA connection must count the write that diverged",
+        GLOBAL_HA_REPLICATION_FAILOVER_IN_PROGRESS_COUNT.getMetric().getValue()
+            > failoverFailuresBefore);
+      assertFalse("The region server hosting the table must not abort", rs0.isAborted());
+
+      // The role, and the group the failover left fatal, refuse a later write before it commits.
+      try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+        conn.createStatement().execute("upsert into " + tableName + " VALUES(-2, 'refused')");
+        conn.commit();
+        fail("A write on a group a failover left fatal must fail");
+      } catch (SQLException e) {
+        assertTrue("Expected a blocked write, got " + e,
+          hasCause(e, MutationBlockedIOException.class));
+      }
+      try (Connection conn1 = CLUSTERS.getCluster1Connection(haGroup); ResultSet rs =
+        conn1.createStatement().executeQuery("SELECT id FROM " + tableName + " WHERE id = -2")) {
+        assertFalse("A refused write must not be committed locally", rs.next());
+      }
+
+      // Cancel the failover: the next write after it replaces the fatal group with a fresh one.
+      CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE,
+        ClusterRoleRecord.ClusterRole.STANDBY);
+      long cancelledAt = System.currentTimeMillis();
+      int ackedAtCancel = acked.size();
+      // Wait for an acknowledged write first, so the region server (not this test) creates the
+      // fresh group.
+      waitForAcked(acked, ackedAtCancel + 1);
+      LOG.info("Writes resumed {} ms after the failover cancel",
+        System.currentTimeMillis() - cancelledAt);
+      ReplicationLogGroup fresh = ReplicationLogGroup.get(conf1, sn, haGroupName);
+      assertTrue("The fatal group must be closed after the cancel", logGroup.isClosed());
+      assertNotSame("The next write must get a fresh group", logGroup, fresh);
+      assertNotNull("The fresh group must be the region server's", fresh.abortable);
+      logGroup = fresh; // replay and afterTest() close the live group
+
+      waitForAcked(acked, ackedAtCancel + 20);
+      assertFalse("The region server hosting the table must not abort", rs0.isAborted());
+    } finally {
+      HoldAfterWalCommitObserver.holdRow = null;
+      HoldAfterWalCommitObserver.release.countDown();
+      stop.set(true);
+      writer.join(30000);
+    }
+
+    // Replay everything the active wrote to the standby, then check every acknowledged row.
+    replayAndVerifyAcrossClusters(Collections.singletonList(createTableDdl));
+    Set<Integer> onStandby = new HashSet<>();
+    try (Connection conn2 = CLUSTERS.getCluster2Connection(haGroup);
+      ResultSet rs = conn2.createStatement().executeQuery("SELECT id FROM " + tableName)) {
+      while (rs.next()) {
+        onStandby.add(rs.getInt(1));
+      }
+    }
+    Set<Integer> missing = new HashSet<>(acked);
+    missing.removeAll(onStandby);
+    assertTrue("Acknowledged rows missing on the standby: " + missing, missing.isEmpty());
+  }
+
+  private static void waitForAcked(Set<Integer> acked, int count) {
+    long deadline = System.currentTimeMillis() + 60000;
+    while (acked.size() < count && System.currentTimeMillis() < deadline) {
+      Threads.sleep(100);
+    }
+    assertTrue("Expected at least " + count + " acknowledged writes, got " + acked.size(),
+      acked.size() >= count);
+  }
+
+  private static long divergenceCount(String table) {
+    MetricsIndexerSource source = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
+    return ((MetricsIndexerSourceImpl) source).getMetricsRegistry()
+      .getCounter(MetricsIndexerSource.REPLICATION_DIVERGENCE + "." + table, 0).value();
+  }
+
+  private static boolean hasCause(Throwable t, Class<? extends Throwable> type) {
+    for (Throwable c = t; c != null; c = c.getCause()) {
+      if (type.isInstance(c)) {
+        return true;
+      }
+      // A multi-put reports each failed action's exception separately, outside the cause chain.
+      if (c instanceof RetriesExhaustedWithDetailsException) {
+        for (Throwable action : ((RetriesExhaustedWithDetailsException) c).getCauses()) {
+          if (hasCause(action, type)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  private static void closeQuietly(Connection conn) {
+    if (conn != null) {
+      try {
+        conn.close();
+      } catch (SQLException e) {
+        LOG.info("Ignoring close failure", e);
+      }
+    }
   }
 }

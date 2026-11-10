@@ -23,7 +23,9 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -32,11 +34,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -44,6 +50,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.hbase.index.IndexRegionObserver.BatchOrigin;
 import org.apache.phoenix.jdbc.ClusterType;
 import org.apache.phoenix.jdbc.HAGroupStateListener;
@@ -51,6 +59,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationLogGroup.Status;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -158,6 +167,35 @@ public class IndexRegionObserverReplicationLogGroupTest {
     }
   }
 
+  /**
+   * A group created during the failover gate whose peer writer cannot be created fails its init
+   * with the failover exception (its STORE_AND_FORWARD fallback is rejected). Nothing was written
+   * yet, so the live write path reports it as blocked, not as a divergence.
+   */
+  @Test
+  public void testGroupCreationFailingDuringFailoverIsBlocked() throws Exception {
+    // A regular file where the peer replication directory should be: the peer writer cannot start.
+    String peerUrl = new Path(peerFolder.newFile("not-a-dir").toString()).toUri().toString();
+    HAGroupStoreRecord record =
+      new HAGroupStoreRecord(null, haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0,
+        HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl",
+        new Path(localFolder.getRoot().toString()).toUri().toString(), peerUrl, 0L);
+    doReturn(Optional.of(record)).when(haGroupStoreManager)
+      .getEffectiveHAGroupStoreRecord(anyString());
+    doThrow(new InvalidClusterRoleTransitionException("Cannot transition",
+      HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, HAGroupState.ACTIVE_NOT_IN_SYNC))
+        .when(haGroupStoreManager).setHAGroupStatusToStoreAndForward(haGroupName);
+    try {
+      resolveClientHa();
+      fail("Creating the group during the failover must fail");
+    } catch (MutationBlockedIOException expected) {
+      assertTrue(expected.getMessage(),
+        expected.getMessage().contains("blocked during a failover"));
+    }
+    // The init failure took the STORE_AND_FORWARD fallback, which the failover rejected.
+    verify(haGroupStoreManager, atLeastOnce()).setHAGroupStatusToStoreAndForward(haGroupName);
+  }
+
   @Test
   public void testFailoverOnStandbyThrows() throws Exception {
     stubRecord(HAGroupState.STANDBY, HighAvailabilityPolicy.FAILOVER);
@@ -228,5 +266,28 @@ public class IndexRegionObserverReplicationLogGroupTest {
     } finally {
       logGroup.close();
     }
+  }
+
+  private static final byte[] ROW = Bytes.toBytes("r");
+  private static final byte[] CF = Bytes.toBytes("0");
+  private static final byte[] LOCAL_INDEX_CF =
+    Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + "0");
+
+  private static Cell cell(byte[] family, byte[] qualifier, long ts) {
+    return new KeyValue(ROW, family, qualifier, ts, Bytes.toBytes("v"));
+  }
+
+  private static Cell preImageCell(long ts) {
+    return cell(WALEdit.METAFAMILY, IndexRegionObserver.PRE_IMAGE_WAL_QUALIFIER, ts);
+  }
+
+  @Test
+  public void testDataTimestampRangeSkipsPreImageAndLocalIndexCells() {
+    List<Cell> cells = Arrays.asList(cell(CF, Bytes.toBytes("q"), 20), preImageCell(5),
+      cell(LOCAL_INDEX_CF, Bytes.toBytes("q"), 1), cell(CF, Bytes.toBytes("q2"), 30),
+      preImageCell(99));
+    long[] range = IndexRegionObserver.dataTimestampRange(cells);
+    assertEquals(20, range[0]);
+    assertEquals(30, range[1]);
   }
 }
