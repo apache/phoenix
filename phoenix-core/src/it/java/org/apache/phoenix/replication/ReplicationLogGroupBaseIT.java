@@ -47,13 +47,15 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.master.RegionState;
+import org.apache.hadoop.hbase.master.assignment.RegionStates;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.expression.function.PartitionIdFunction;
 import org.apache.phoenix.jdbc.HABaseIT;
@@ -227,16 +229,42 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
     }
   }
 
+  /**
+   * Moves the table's first region to {@code sn} and waits until it is open there. The master can
+   * drop a move to a server that only just started, so the move is re-issued while the region is
+   * open elsewhere; a move in progress is left alone.
+   */
   protected void moveRegionToServer(TableName tableName, ServerName sn) throws Exception {
     HBaseTestingUtility util = CLUSTERS.getHBaseCluster1();
-    try (RegionLocator locator = util.getConnection().getRegionLocator(tableName)) {
-      String regEN = locator.getAllRegionLocations().get(0).getRegionInfo().getEncodedName();
-      while (!sn.equals(locator.getAllRegionLocations().get(0).getServerName())) {
-        LOG.info("Moving region {} of table {} to server {}", regEN, tableName, sn);
-        util.getAdmin().move(Bytes.toBytes(regEN), sn);
-        Thread.sleep(100);
+    RegionInfo region = util.getAdmin().getRegions(tableName).get(0);
+    RegionStates states =
+      util.getHBaseCluster().getMaster().getAssignmentManager().getRegionStates();
+    util.waitFor(60000, 200, () -> {
+      RegionState state = states.getRegionState(region);
+      if (state.isOpenedOnServer(sn)) {
+        return true;
       }
-      LOG.info("Moved region {} of table {} to server {}", regEN, tableName, sn);
+      if (state.isOpened()) {
+        LOG.info("Moving region {} of table {} to server {}", region.getEncodedName(), tableName,
+          sn);
+        util.getAdmin().move(region.getEncodedNameAsBytes(), sn);
+      }
+      return false;
+    });
+    LOG.info("Moved region {} of table {} to server {}", region.getEncodedName(), tableName, sn);
+  }
+
+  /**
+   * Waits until each table's region is open on a live server other than {@code dead}. A region is
+   * online only after its open finished, so its WAL replay and postOpen have run.
+   */
+  protected void waitForRegionsReopenedAway(ServerName dead, TableName... tables) throws Exception {
+    HBaseTestingUtility util = CLUSTERS.getHBaseCluster1();
+    for (TableName table : tables) {
+      util.waitFor(60000, 100,
+        () -> util.getHBaseCluster().getLiveRegionServerThreads().stream()
+          .map(JVMClusterUtil.RegionServerThread::getRegionServer)
+          .anyMatch(rs -> !rs.getServerName().equals(dead) && !rs.getRegions(table).isEmpty()));
     }
   }
 

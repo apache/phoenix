@@ -35,12 +35,14 @@ import java.util.concurrent.Executors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.HasRegionServerServices;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.wal.WALSplitter;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
@@ -104,6 +106,38 @@ public class PhoenixRegionServerEndpoint extends
     }
     // Start replication log replay
     ReplicationLogReplayService.getInstance(conf).start();
+    warnIfRecoveryBypassesReplication(conf);
+  }
+
+  /**
+   * Region recovery re-ships unreplicated edits from IndexRegionObserver's WAL-restore hooks.
+   * Splitting the WAL straight to HFiles replays no recovered edits, so nothing is re-shipped; with
+   * replay errors skipped, a read error moves the recovered-edits file aside and the open
+   * continues, so the edits after the error are neither replayed nor re-shipped.
+   */
+  private static void warnIfRecoveryBypassesReplication(Configuration conf) {
+    if (
+      !conf.getBoolean(SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED)
+    ) {
+      return;
+    }
+    if (conf.getBoolean(WALSplitter.WAL_SPLIT_TO_HFILE, WALSplitter.DEFAULT_WAL_SPLIT_TO_HFILE)) {
+      LOGGER.warn(
+        "{}=true with synchronous replication enabled: region recovery replays no"
+          + " recovered edits, so edits unreplicated at a crash are not re-shipped to the standby",
+        WALSplitter.WAL_SPLIT_TO_HFILE);
+    }
+    // HRegion#handleException also honours the deprecated hbase.skip.errors.
+    if (
+      conf.getBoolean(HConstants.HREGION_EDITS_REPLAY_SKIP_ERRORS,
+        conf.getBoolean("hbase.skip.errors", HConstants.DEFAULT_HREGION_EDITS_REPLAY_SKIP_ERRORS))
+    ) {
+      LOGGER.warn(
+        "{}=true with synchronous replication enabled: a recovered-edits read error moves the file"
+          + " aside and the region opens, so the edits after the error are neither replayed nor"
+          + " re-shipped",
+        HConstants.HREGION_EDITS_REPLAY_SKIP_ERRORS);
+    }
   }
 
   @Override
