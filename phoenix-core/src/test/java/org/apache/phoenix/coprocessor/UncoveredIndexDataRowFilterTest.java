@@ -278,6 +278,40 @@ public class UncoveredIndexDataRowFilterTest extends BaseConnectionlessQueryTest
       UncoveredIndexDataRowFilter.create(compiled.scan, compiled.where, compiled.projector);
     assertNotNull(filter);
     assertTrue(filter.getExpression() instanceof ComparisonExpression);
+    // The filter holds only a prefix of the WHERE. FALSE rejects the row, but NULL keeps it.
+    assertTrue(filter.rejects(dataRow(compiled.dataTable, Collections.singletonMap("I", 6))));
+    assertFalse(filter.rejects(dataRow(compiled.dataTable, Collections.emptyMap())));
+    assertFalse(filter.rejects(dataRow(compiled.dataTable, Collections.singletonMap("I", 5))));
+  }
+
+  @Test
+  public void testClassifierStopsAtFirstUnrewritableConjunct() throws Exception {
+    // The post-join WHERE evaluates the division first and raises its error on each row. The
+    // filter must not reject a row before the WHERE sees it.
+    Compiled compiled = compile("10 / TO_NUMBER(IX) = 1 AND I = 5");
+    List<Expression> conjuncts = UncoveredIndexDataRowFilter.getConjuncts(compiled.where);
+    assertEquals(2, conjuncts.size());
+    assertNull(UncoveredIndexDataRowFilter.rewriteConjunct(conjuncts.get(0), compiled.projector));
+    assertNotNull(
+      UncoveredIndexDataRowFilter.rewriteConjunct(conjuncts.get(1), compiled.projector));
+    assertNull(
+      UncoveredIndexDataRowFilter.create(compiled.scan, compiled.where, compiled.projector));
+  }
+
+  @Test
+  public void testFilterKeepsNullPrefixBeforeUnrewritableConjunct() throws Exception {
+    // A FALSE prefix stops the post-join WHERE before the division. A NULL prefix does not, so
+    // the WHERE still evaluates the division and raises its error.
+    Compiled compiled = compile("I = 5 AND 10 / TO_NUMBER(IX) = 1");
+    List<Expression> conjuncts = UncoveredIndexDataRowFilter.getConjuncts(compiled.where);
+    assertEquals(2, conjuncts.size());
+    assertNull(UncoveredIndexDataRowFilter.rewriteConjunct(conjuncts.get(1), compiled.projector));
+    UncoveredIndexDataRowFilter filter =
+      UncoveredIndexDataRowFilter.create(compiled.scan, compiled.where, compiled.projector);
+    assertNotNull(filter);
+    assertTrue(filter.rejects(dataRow(compiled.dataTable, Collections.singletonMap("I", 6))));
+    assertFalse(filter.rejects(dataRow(compiled.dataTable, Collections.emptyMap())));
+    assertFalse(filter.rejects(dataRow(compiled.dataTable, Collections.singletonMap("I", 5))));
   }
 
   @Test

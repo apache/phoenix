@@ -67,10 +67,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 /**
  * An early filter for uncovered index scans. The scanner applies it to each data row before it
- * joins the data row to the index row. The filter holds the conjuncts of the post-join WHERE that
- * read only data columns. It reads those columns from the data row directly. A rejected row then
- * skips the join. The full post-join WHERE still runs on each accepted row, so the filter only
- * removes rows that the post-join WHERE also removes.
+ * joins the data row to the index row. The filter holds the leading conjuncts of the post-join
+ * WHERE that read only data columns. It reads those columns from the data row directly. A rejected
+ * row then skips the join. The full post-join WHERE still runs on each accepted row, so the filter
+ * only removes rows that the post-join WHERE also removes. The filter also does not hide an error
+ * that the post-join WHERE raises on a row.
  */
 public final class UncoveredIndexDataRowFilter {
   private static final Logger LOGGER = LoggerFactory.getLogger(UncoveredIndexDataRowFilter.class);
@@ -81,11 +82,21 @@ public final class UncoveredIndexDataRowFilter {
   private static final int MAX_SHORT_BIT_SET_FIELDS = 16;
 
   private final Expression expression;
+  private final boolean complete;
   private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
   @VisibleForTesting
   UncoveredIndexDataRowFilter(Expression expression) {
+    this(expression, true);
+  }
+
+  /**
+   * @param expression the conjuncts that the filter applies to the data row
+   * @param complete   true when the expression holds all conjuncts of the post-join WHERE
+   */
+  private UncoveredIndexDataRowFilter(Expression expression, boolean complete) {
     this.expression = expression;
+    this.complete = complete;
   }
 
   /**
@@ -105,25 +116,33 @@ public final class UncoveredIndexDataRowFilter {
     ) {
       return null;
     }
+    // The post-join AND evaluates its conjuncts in order and stops at the first FALSE. The filter
+    // takes only the leading conjuncts that it can rewrite. A FALSE in this prefix then means that
+    // the post-join WHERE stops before it evaluates a conjunct that the filter does not hold.
+    List<Expression> conjuncts = getConjuncts(extraWhere);
     List<Expression> pushed = new ArrayList<>();
-    for (Expression conjunct : getConjuncts(extraWhere)) {
+    for (Expression conjunct : conjuncts) {
       Expression rewritten = rewriteConjunct(conjunct, tupleProjector);
-      if (rewritten != null) {
-        pushed.add(rewritten);
+      if (rewritten == null) {
+        break;
       }
+      pushed.add(rewritten);
     }
     if (pushed.isEmpty()) {
       return null;
     }
     return new UncoveredIndexDataRowFilter(
-      pushed.size() == 1 ? pushed.get(0) : new AndExpression(pushed));
+      pushed.size() == 1 ? pushed.get(0) : new AndExpression(pushed),
+      pushed.size() == conjuncts.size());
   }
 
   /**
    * Tells if the data row fails the filter. The filter rejects a row only when the evaluation
-   * completes and the result is not TRUE. A conjunct of the WHERE that is FALSE or NULL makes the
-   * whole WHERE fail. An incomplete evaluation or a runtime error keeps the row. The post-join
-   * WHERE then decides, and it reports any error in the usual order.
+   * completes and the result is FALSE. When the filter holds all conjuncts of the WHERE, a NULL
+   * result also rejects the row. Otherwise a NULL result keeps the row, because the post-join AND
+   * continues after a NULL and a later conjunct can raise an error. An incomplete evaluation or a
+   * runtime error keeps the row. The post-join WHERE then decides, and it reports any error in the
+   * usual order.
    * @param dataRow the data row that the scanner joins to the index row
    * @return true if the scanner can skip the row
    */
@@ -134,7 +153,8 @@ public final class UncoveredIndexDataRowFilter {
       if (!expression.evaluate(new ResultTuple(dataRow), ptr)) {
         return false;
       }
-      return !Boolean.TRUE.equals(expression.getDataType().toObject(ptr));
+      Object result = expression.getDataType().toObject(ptr);
+      return complete ? !Boolean.TRUE.equals(result) : Boolean.FALSE.equals(result);
     } catch (RuntimeException e) {
       LOGGER.debug("Early filter failed on a data row, keeping the row", e);
       return false;
