@@ -49,14 +49,18 @@ import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -70,6 +74,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.exception.ReplicationFailoverInProgressException;
 import org.apache.phoenix.exception.ReplicationLogGroupUnavailableException;
@@ -87,6 +92,7 @@ import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
 import org.apache.phoenix.replication.metrics.ReplicationLogMetricValues;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Assume;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -1830,7 +1836,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
    * after teardown, so a get() during that window returns the same (closing) instance rather than
    * minting a new one -- avoiding the double-writer against the same shard.
    * <p>
-   * The window is made deterministic by blocking the last teardown step (metrics.close()) on a
+   * The window is made deterministic by blocking the last teardown step (logForwarder.stop()) on a
    * latch, so close() is provably parked inside teardown -- after the closed flag is set, before
    * the cache removal -- while the racing get() runs.
    */
@@ -1839,21 +1845,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     final String haGroupId = "testResurrectionGuard";
     final CountDownLatch closeInTeardown = new CountDownLatch(1);
     final CountDownLatch releaseClose = new CountDownLatch(1);
-    MetricsReplicationLogGroupSource blockingMetrics = mock(MetricsReplicationLogGroupSource.class);
+
+    ReplicationLogGroup group =
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation());
+    group.init();
+    group.logForwarder = spy(group.logForwarder);
     doAnswer(inv -> {
       closeInTeardown.countDown();
       releaseClose.await();
       return null;
-    }).when(blockingMetrics).close();
-
-    ReplicationLogGroup group =
-      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation()) {
-        @Override
-        protected MetricsReplicationLogGroupSource createMetricsSource() {
-          return blockingMetrics;
-        }
-      };
-    group.init();
+    }).when(group.logForwarder).stop();
     ReplicationLogGroup.cacheForTesting(group);
     try {
       Thread closer = new Thread(group::close, "closer");
@@ -1898,26 +1899,20 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   @Test
   public void testCloseRemovesFromCacheEvenWhenTeardownThrows() throws Exception {
     final String haGroupId = "testTeardownThrows";
-    // metrics.close() is the last teardown step in close(); make it throw.
-    MetricsReplicationLogGroupSource throwingMetrics = mock(MetricsReplicationLogGroupSource.class);
-    doThrow(new RuntimeException("simulated metrics.close() failure")).when(throwingMetrics)
-      .close();
-
     ReplicationLogGroup group =
-      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation()) {
-        @Override
-        protected MetricsReplicationLogGroupSource createMetricsSource() {
-          return throwingMetrics;
-        }
-      };
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation());
     group.init();
+    // logForwarder.stop() is the last teardown step in close(); make it throw.
+    group.logForwarder = spy(group.logForwarder);
+    doThrow(new RuntimeException("simulated logForwarder.stop() failure")).when(group.logForwarder)
+      .stop();
     ReplicationLogGroup.cacheForTesting(group);
 
     try {
       group.close();
       fail("close() should propagate the teardown failure");
     } catch (RuntimeException expected) {
-      assertEquals("simulated metrics.close() failure", expected.getMessage());
+      assertEquals("simulated logForwarder.stop() failure", expected.getMessage());
     }
 
     assertTrue("Group should still be marked closed", group.isClosed());
@@ -2731,6 +2726,221 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     } catch (IOException e) {
       assertTrue(e.getMessage().contains("Local namenode unavailable"));
     }
+    // Closed though almost nothing was built.
+    assertTrue(group.isClosed());
+  }
+
+  /**
+   * An init() that fails after the disruptor started (here, subscribing a state listener) closes
+   * the group: the consumer and writer, and the listeners already registered. The metrics source is
+   * a per-group singleton and stays registered.
+   */
+  @Test
+  public void testInitFailureAfterDisruptorStartClosesGroup() throws Exception {
+    doThrow(new IOException("subscribe failed")).when(haGroupStoreManager).subscribeToTargetState(
+      eq(haGroupName), eq(HAGroupState.ACTIVE_IN_SYNC), eq(ClusterType.LOCAL),
+      any(HAGroupStateListener.class));
+    ReplicationLogGroup group = new TestableLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation());
+    try {
+      group.init();
+      fail("init() should fail when a state subscription fails");
+    } catch (IOException e) {
+      assertEquals("subscribe failed", e.getMessage());
+    }
+    assertTrue(group.isClosed());
+    assertTrue(group.disruptorExecutor.isTerminated());
+    assertTrue(group.getActiveLog().isClosed());
+    verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupName),
+      eq(HAGroupState.STANDBY), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupName),
+      eq(HAGroupState.DEGRADED_STANDBY), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    verify(group.getMetrics(), never()).close();
+  }
+
+  /**
+   * Entering STORE_AND_FORWARD that fails after the mode opened its log and started its
+   * status-update task undoes both: the log is closed and the status-update thread stops, even
+   * though the disruptor, whose shutdown normally exits the mode, never started.
+   */
+  @Test(timeout = 60000)
+  public void testInitFailureEnteringStoreAndForwardExitsMode() throws Exception {
+    final String haGroupId = "testSafEntryFails";
+    initialState = HAGroupState.ACTIVE_NOT_IN_SYNC;
+    storeRecord = new HAGroupStoreRecord(null, haGroupId, initialState, 0,
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl",
+      localUri.toString(), peerUri.toString(), 0L);
+    ReplicationLogGroup group = spy(
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation()));
+    doAnswer(inv -> {
+      ReplicationLogDiscoveryForwarder forwarder =
+        spy((ReplicationLogDiscoveryForwarder) inv.callRealMethod());
+      doThrow(new IllegalStateException("forwarder start failed")).when(forwarder).start();
+      return forwarder;
+    }).when(group).getLogForwarder();
+    try {
+      group.init();
+      fail("init() should fail when the forwarder cannot start");
+    } catch (IllegalStateException e) {
+      assertEquals("forwarder start failed", e.getMessage());
+    }
+    assertTrue(group.isClosed());
+    assertEquals(STORE_AND_FORWARD, group.getMode());
+    assertTrue(group.getActiveLog().isClosed());
+    String statusThread = "StoreAndForwardStatusUpdate-" + haGroupId;
+    long deadline = System.currentTimeMillis() + 10000;
+    while (
+      Thread.getAllStackTraces().keySet().stream().anyMatch(
+        t -> t.getName().startsWith(statusThread)) && System.currentTimeMillis() < deadline
+    ) {
+      sleep(50);
+    }
+    assertFalse("The status-update thread should stop", Thread.getAllStackTraces().keySet().stream()
+      .anyMatch(t -> t.getName().startsWith(statusThread)));
+  }
+
+  /**
+   * Callers that find a group still initializing wait for it rather than starting a second init,
+   * and all of them get the same group.
+   */
+  @Test(timeout = 60000)
+  public void testConcurrentGetsShareSuccessfulInit() throws Exception {
+    final String haGroupId = "testSharedInitSuccess";
+    List<Object> results = getConcurrentlyDuringInit(haGroupId, null);
+    ReplicationLogGroup group = (ReplicationLogGroup) results.get(0);
+    try {
+      assertSame(group, results.get(1));
+      assertFalse(group.isClosed());
+      verify(haGroupStoreManager, times(1)).subscribeToTargetState(eq(haGroupId),
+        eq(HAGroupState.STANDBY), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    } finally {
+      group.close();
+    }
+  }
+
+  /**
+   * Callers that find a group still initializing wait for it rather than starting a second init,
+   * and all of them see its failure. A RuntimeException from init reaches them as an IOException,
+   * so it does not abort the RegionServer from a coprocessor hook. Once the failed group is closed,
+   * a later get() creates a fresh one.
+   */
+  @Test(timeout = 60000)
+  public void testConcurrentGetsShareFailedInit() throws Exception {
+    final String haGroupId = "testSharedInitFailure";
+    final IllegalStateException failure = new IllegalStateException("subscribe failed");
+    for (Object result : getConcurrentlyDuringInit(haGroupId, failure)) {
+      assertTrue("Expected an IOException, got " + result, result instanceof IOException);
+      assertSame(failure, ((IOException) result).getCause());
+    }
+    verify(haGroupStoreManager, times(1)).subscribeToTargetState(eq(haGroupId),
+      eq(HAGroupState.STANDBY), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+
+    doNothing().when(haGroupStoreManager).subscribeToTargetState(eq(haGroupId),
+      eq(HAGroupState.STANDBY), eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    ReplicationLogGroup recovered =
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager);
+    assertFalse(recovered.isClosed());
+    recovered.close();
+  }
+
+  /**
+   * A close() that finds the group still initializing (here closeAll on RegionServer stop) waits
+   * for init() to finish, then tears down everything it acquired, including the listeners
+   * subscribed after the close started. A later get() creates a fresh group.
+   */
+  @Test(timeout = 60000)
+  public void testCloseAllDuringInitWaitsAndTearsDown() throws Exception {
+    final String haGroupId = "testCloseAllDuringInit";
+    // A server of its own, so closeAll touches only the group being initialized.
+    final ServerName stoppingServer =
+      ServerName.valueOf("test", 60011, EnvironmentEdgeManager.currentTimeMillis());
+    List<Object> results = runDuringInit(haGroupId, stoppingServer, null, () -> {
+      ReplicationLogGroup.closeAll(stoppingServer);
+      return null;
+    });
+    ReplicationLogGroup group = (ReplicationLogGroup) results.get(0);
+    assertTrue(group.isClosed());
+    assertTrue(group.disruptorExecutor.isTerminated());
+    assertTrue(group.getActiveLog().isClosed());
+    for (HAGroupState state : new HAGroupState[] { HAGroupState.STANDBY,
+      HAGroupState.DEGRADED_STANDBY, HAGroupState.ACTIVE_IN_SYNC,
+      HAGroupState.ACTIVE_NOT_IN_SYNC }) {
+      verify(haGroupStoreManager).unsubscribeFromTargetState(eq(haGroupId), eq(state),
+        eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+    }
+    ReplicationLogGroup fresh =
+      ReplicationLogGroup.get(conf, stoppingServer, haGroupId, haGroupStoreManager);
+    try {
+      assertNotSame(group, fresh);
+      assertFalse(fresh.isClosed());
+    } finally {
+      fresh.close();
+    }
+  }
+
+  /** Runs two get() calls for a new group, the second while the first is inside its init(). */
+  private List<Object> getConcurrentlyDuringInit(String haGroupId, RuntimeException failure)
+    throws Exception {
+    return runDuringInit(haGroupId, serverName, failure,
+      () -> ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager));
+  }
+
+  /**
+   * Runs get() for a new group on {@code sn}, then {@code second} while that get() is inside its
+   * init(), and returns what each produced: its result, or the Throwable it threw. Init is held in
+   * the STANDBY subscription until {@code second} is parked waiting on it, then completes, or
+   * throws {@code failure} if non-null.
+   */
+  private List<Object> runDuringInit(String haGroupId, ServerName sn, RuntimeException failure,
+    Callable<Object> second) throws Exception {
+    final CountDownLatch inInit = new CountDownLatch(1);
+    final CountDownLatch releaseInit = new CountDownLatch(1);
+    doAnswer(inv -> {
+      inInit.countDown();
+      releaseInit.await();
+      if (failure != null) {
+        throw failure;
+      }
+      return null;
+    }).when(haGroupStoreManager).subscribeToTargetState(eq(haGroupId), eq(HAGroupState.STANDBY),
+      eq(ClusterType.LOCAL), any(HAGroupStateListener.class));
+
+    FutureTask<Object> first =
+      new FutureTask<>(() -> ReplicationLogGroup.get(conf, sn, haGroupId, haGroupStoreManager));
+    FutureTask<Object> next = new FutureTask<>(second);
+    Thread secondCaller = new Thread(next);
+    new Thread(first).start();
+    assertTrue(inInit.await(30, TimeUnit.SECONDS));
+    secondCaller.start();
+    // The second call parks on the reserved group's init.
+    Thread.State state;
+    while ((state = secondCaller.getState()) != Thread.State.WAITING) {
+      assertNotEquals("The second call should wait for init, not finish", Thread.State.TERMINATED,
+        state);
+      sleep(10);
+    }
+    releaseInit.countDown();
+    return Arrays.asList(outcome(first), outcome(next));
+  }
+
+  /** The task's result, or the Throwable it threw. */
+  private static Object outcome(FutureTask<Object> task) throws Exception {
+    try {
+      return task.get(30, TimeUnit.SECONDS);
+    } catch (ExecutionException e) {
+      return e.getCause();
+    }
+  }
+
+  /**
+   * close() leaves the group's metrics source registered: it is a per-group singleton that the
+   * group's next instance reuses, and metrics2 registers a source only when it is constructed.
+   */
+  @Test
+  public void testCloseLeavesMetricsRegistered() throws Exception {
+    String jmxContext = logGroup.getMetrics().getMetricsJmxContext();
+    logGroup.close();
+    assertNotNull(DefaultMetricsSystem.instance().getSource(jmxContext));
   }
 
   /**

@@ -60,7 +60,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Assert;
 import org.junit.Before;
@@ -296,9 +296,8 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
 
     ReplicationShardDirectoryManager peerShardManager = logGroup.getOrCreatePeerShardManager();
     FileSystem peerFs = installPeerFsSpy();
-    ReplicationLogTracker peerTracker =
-      new ReplicationLogTracker(conf, haGroupName, peerShardManager,
-        MetricsReplicationLogForwarderSourceFactory.getInstanceForTracker(haGroupName));
+    ReplicationLogTracker peerTracker = new ReplicationLogTracker(conf, haGroupName,
+      peerShardManager, MetricsReplicationLogGroupSourceFactory.getInstanceForTracker(haGroupName));
 
     final boolean[] invariantHeld = { false };
     doAnswer(new Answer<Boolean>() {
