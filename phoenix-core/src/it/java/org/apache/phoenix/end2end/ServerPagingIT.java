@@ -34,14 +34,20 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
+import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PagingRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -269,8 +275,11 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         long numRows = getMetricValue(metrics, MetricType.COUNT_ROWS_SCANNED);
         assertEquals(6, numRows);
         long numRpcs = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
-        // 3 regions * (2 rows per region + 1 scanner open with page timeout set to 0 ms)
-        assertEquals(9, numRpcs);
+        // The split keys are strings, so they do not match the encoded date keys. Thus all rows
+        // are in the first region, and the two empty regions use one RPC each. With a 0 ms page,
+        // the first region pages out many times during the topN build. The pull first removes
+        // the RPC that sends the last dummy before the first row.
+        assertEquals(8, numRpcs);
       }
     }
   }
@@ -681,6 +690,63 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testUncoveredQueryWithRejectedRows() throws Exception {
+    String dataTableName = generateUniqueName();
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + dataTableName
+          + " (id VARCHAR(10) NOT NULL PRIMARY KEY, val1 VARCHAR(10), val2 VARCHAR(10),"
+          + " val3 VARCHAR(10))");
+      conn.createStatement()
+        .execute("CREATE UNCOVERED INDEX " + indexTableName + " ON " + dataTableName + " (val1)");
+      PreparedStatement upsert =
+        conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES (?, ?, ?, ?)");
+      for (int i = 0; i < 60; i++) {
+        upsert.setString(1, String.format("r%02d", i));
+        upsert.setString(2, "k" + (i % 3));
+        upsert.setString(3, i % 10 == 0 ? "match" : (i % 7 == 0 ? null : "other"));
+        upsert.setString(4, i % 4 == 0 ? null : "v" + i);
+        upsert.executeUpdate();
+      }
+      conn.commit();
+      // Most rows fail the conditions on the uncovered columns. Some of these columns are NULL.
+      String[] wheres = { "val1 > 'a' AND val2 = 'match'",
+        "val1 > 'a' AND (val2 = 'match' OR val2 IS NULL)", "val1 > 'a' AND NOT (val2 = 'other')",
+        "val1 > 'a' AND COALESCE(val3, 'none') = 'none' AND val2 IS NOT NULL",
+        "val1 > 'a' AND val2 = 'none'" };
+      for (String where : wheres) {
+        String indexSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
+          + ") */ id, val2, val3 FROM " + dataTableName + " WHERE " + where;
+        String dataSql =
+          "SELECT /*+ NO_INDEX */ id, val2, val3 FROM " + dataTableName + " WHERE " + where;
+        assertPlan(conn, indexSql).tableContains(indexTableName);
+        assertEquals(where, sortedRows(conn, dataSql), sortedRows(conn, indexSql));
+      }
+      String countSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
+        + ") */ COUNT(*) FROM " + dataTableName + " WHERE val1 > 'a' AND val2 = 'match'";
+      assertPlan(conn, countSql).tableContains(indexTableName);
+      assertEquals(Collections.singletonList("6"), sortedRows(conn, countSql));
+    }
+  }
+
+  private static List<String> sortedRows(Connection conn, String sql) throws SQLException {
+    List<String> rows = new ArrayList<>();
+    try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+      int columnCount = rs.getMetaData().getColumnCount();
+      while (rs.next()) {
+        StringBuilder row = new StringBuilder();
+        for (int i = 1; i <= columnCount; i++) {
+          row.append(i > 1 ? "," : "").append(rs.getString(i));
+        }
+        rows.add(row.toString());
+      }
+    }
+    Collections.sort(rows);
+    return rows;
+  }
+
+  @Test
   public void testNumberOfRPCsWithPaging() throws SQLException {
     // insert 200 rows
     Connection conn = DriverManager.getConnection(getUrl());
@@ -747,6 +813,106 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       td = pconn.getQueryServices().getTableDescriptor(Bytes.toBytes(dataTableName));
       assertTrue(PagingRegionScanner.useBloomFilterForMultiKeyPointLookup(td));
     }
+  }
+
+  private static final int TOPN_ROW_COUNT = 1000;
+  private static final int TOPN_PREAD_MAX_BYTES = 4096;
+
+  private static int topNSortValue(int id) {
+    // 37 and the row count have no common factor, so each row gets a different value.
+    return (id * 37) % TOPN_ROW_COUNT;
+  }
+
+  private static List<Integer> expectedTopNIds(int offset, int limit) {
+    Integer[] idsBySortValue = new Integer[TOPN_ROW_COUNT];
+    for (int id = 0; id < TOPN_ROW_COUNT; id++) {
+      idsBySortValue[topNSortValue(id)] = id;
+    }
+    return Arrays.asList(idsBySortValue).subList(offset, offset + limit);
+  }
+
+  /**
+   * Run a topN query on a global index. The index table has a small pread limit for its store
+   * scanners. The index scan goes above this limit while the server builds the topN rows at open.
+   * Thus the open RPC is a heartbeat. The method checks the rows and the RPC count for each region.
+   */
+  private void assertTopNOnIndexWithPreadLimit(boolean uncovered, String indexSplitPoint,
+    int offset, int expectedRpcsPerRegion) throws Exception {
+    String dataTableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    // A long page keeps the time limit out of the test. Only the pread limit pages the scan.
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(TimeUnit.HOURS.toMillis(1)));
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute("CREATE TABLE " + dataTableName
+        + " (ID INTEGER NOT NULL PRIMARY KEY, V1 VARCHAR, V2 VARCHAR, V3 INTEGER)");
+      conn.createStatement()
+        .execute("CREATE " + (uncovered ? "UNCOVERED " : "") + "INDEX " + indexName + " ON "
+          + dataTableName + " (V1)" + (uncovered ? "" : " INCLUDE (V2, V3)") + " \""
+          + StoreScanner.STORESCANNER_PREAD_MAX_BYTES + "\"=" + TOPN_PREAD_MAX_BYTES
+          + (indexSplitPoint == null ? "" : " SPLIT ON ('" + indexSplitPoint + "')"));
+      TableDescriptor td = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getTableDescriptor(Bytes.toBytes(indexName));
+      assertEquals(Integer.toString(TOPN_PREAD_MAX_BYTES),
+        td.getValue(StoreScanner.STORESCANNER_PREAD_MAX_BYTES));
+      PreparedStatement upsert =
+        conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES (?, ?, ?, ?)");
+      for (int id = 0; id < TOPN_ROW_COUNT; id++) {
+        upsert.setInt(1, id);
+        upsert.setString(2, String.format("v%04d", id));
+        upsert.setString(3, "x" + id);
+        upsert.setInt(4, topNSortValue(id));
+        upsert.executeUpdate();
+        if (id % 100 == 99) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      getUtility().flush(TableName.valueOf(indexName));
+
+      int limit = 5;
+      String sql =
+        "SELECT /*+ INDEX(" + dataTableName + " " + indexName + ") */ ID, V3 FROM " + dataTableName
+          + " WHERE V1 >= 'v' ORDER BY V3 LIMIT " + limit + (offset > 0 ? " OFFSET " + offset : "");
+      assertNotNull(
+        assertPlan(conn, sql).tableContains(indexName).attributes().getServerSortedBy());
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        for (int id : expectedTopNIds(offset, limit)) {
+          assertTrue(rs.next());
+          assertEquals(id, rs.getInt(1));
+          assertEquals(topNSortValue(id), rs.getInt(2));
+        }
+        assertFalse(rs.next());
+        // With an offset, the client does not read all rows from each region. A scanner reports
+        // its metrics only at the end or at close, so close the result set first.
+        rs.close();
+        long numRpcs =
+          getMetricValue(PhoenixRuntime.getRequestReadMetricInfo(rs), MetricType.COUNT_RPC_CALLS);
+        int numRegions = getUtility().getAdmin().getRegions(TableName.valueOf(indexName)).size();
+        assertEquals(indexSplitPoint == null ? 1 : 2, numRegions);
+        assertEquals(expectedRpcsPerRegion * numRegions, numRpcs);
+      }
+    }
+  }
+
+  @Test
+  public void testTopNOnUncoveredIndexWithPreadLimit() throws Exception {
+    // The open RPC is a heartbeat. The next RPC completes the build and returns the rows.
+    assertTopNOnIndexWithPreadLimit(true, null, 0, 2);
+  }
+
+  @Test
+  public void testTopNOnCoveredIndexWithPreadLimit() throws Exception {
+    // The build completes at open, but the open RPC is still a heartbeat. The next RPC returns
+    // the rows. The scanner holds no dummy, so this count is the same without the pull first.
+    // The test guards the pread trigger and the open heartbeat.
+    assertTopNOnIndexWithPreadLimit(false, null, 0, 2);
+  }
+
+  @Test
+  public void testTopNWithOffsetAcrossRegionsOnUncoveredIndexWithPreadLimit() throws Exception {
+    // The offset is larger than the limit, so the client skips rows from both index regions.
+    assertTopNOnIndexWithPreadLimit(true, "v0500", 7, 2);
   }
 
   private void populateTable(String tableName) throws Exception {

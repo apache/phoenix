@@ -919,6 +919,76 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
   }
 
+  /**
+   * A row that gives NULL for the conditions on uncovered columns does not change the result of the
+   * next rows in the same region scan.
+   */
+  @Test
+  public void testUncoveredConditionsAfterNullRow() throws Exception {
+    String dataTableName = generateUniqueName();
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl());
+      Statement stmt = conn.createStatement()) {
+      stmt.execute("create table " + dataTableName
+        + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10),"
+        + " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
+      // The first row in index order has a NULL val2. The other rows match all conditions.
+      stmt.execute("upsert into " + dataTableName + " values ('a', 'x', null, 'z')");
+      for (char id = 'b'; id <= 'h'; id++) {
+        stmt.execute("upsert into " + dataTableName + " values ('" + id + "', 'x', 'y', 'z')");
+      }
+      conn.commit();
+      stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : "") + "INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)");
+      String sql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ id from "
+        + dataTableName + " WHERE val1 = 'x' AND val2 = 'y' AND val3 = 'z'";
+      assertTrue(TestUtil.getExplainPlan(conn, sql).contains(indexTableName));
+      int rows = 0;
+      try (ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+          assertFalse("a".equals(rs.getString(1)));
+          rows++;
+        }
+      }
+      assertEquals(7, rows);
+    }
+  }
+
+  /**
+   * The early filter does not apply a condition that has a function such as UPPER. Thus the NULL
+   * row reaches the conditions after the join. The next rows in the region scan must still match.
+   */
+  @Test
+  public void testUncoveredConditionsAfterNullRowInJoinedRow() throws Exception {
+    String dataTableName = generateUniqueName();
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl());
+      Statement stmt = conn.createStatement()) {
+      stmt.execute("create table " + dataTableName
+        + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10),"
+        + " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
+      // The first row in index order has a NULL val2. The other rows match all conditions.
+      stmt.execute("upsert into " + dataTableName + " values ('a', 'x', null, 'z')");
+      for (char id = 'b'; id <= 'h'; id++) {
+        stmt.execute("upsert into " + dataTableName + " values ('" + id + "', 'x', 'y', 'z')");
+      }
+      conn.commit();
+      stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : "") + "INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)");
+      String sql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ id from "
+        + dataTableName + " WHERE val1 = 'x' AND UPPER(val2) = 'Y' AND val3 = 'z'";
+      assertTrue(TestUtil.getExplainPlan(conn, sql).contains(indexTableName));
+      int rows = 0;
+      try (ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+          assertFalse("a".equals(rs.getString(1)));
+          rows++;
+        }
+      }
+      assertEquals(7, rows);
+    }
+  }
+
   @Test
   public void testUncoveredIndexLimitSkipsStaleRows() throws Exception {
     assumeTrue(uncovered);

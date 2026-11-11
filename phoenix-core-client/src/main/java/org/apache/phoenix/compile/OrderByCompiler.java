@@ -29,6 +29,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.OrderByNode;
@@ -174,7 +175,11 @@ public class OrderByCompiler {
       }
       if (!expression.isStateless()) {
         boolean isAscending = node.isAscending();
-        boolean isNullsLast = node.isNullsLast();
+        // An ascending distance without a NULLS clause sorts nulls last. OrderByNode#isNullsLast
+        // applies this rule to a distance parse node. This check applies it to an ordinal after a
+        // wildcard, which resolves to a distance only at compilation.
+        boolean isNullsLast = node.isNullsLast()
+          || node.isNullsDefault() && isAscending && expression instanceof DistanceFunction;
         if (tracker != null) {
           tracker.track(expression, isAscending, isNullsLast);
         }

@@ -108,7 +108,8 @@ public interface PTable extends PMetaDataEntity {
   public enum IndexType {
     GLOBAL((byte) 1), // Covered Global
     LOCAL((byte) 2), // Covered Local
-    UNCOVERED_GLOBAL((byte) 3); // Uncovered Global
+    UNCOVERED_GLOBAL((byte) 3), // Uncovered Global
+    VECTOR_GLOBAL((byte) 4);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -136,7 +137,8 @@ public interface PTable extends PMetaDataEntity {
 
     public static IndexType fromSerializedValue(byte serializedValue) {
       if (serializedValue < 1 || serializedValue > IndexType.values().length) {
-        throw new IllegalArgumentException("Invalid IndexType " + serializedValue);
+        throw new IllegalArgumentException("Unsupported IndexType " + serializedValue
+          + ": the index was created by a newer Phoenix version. Upgrade this client to read it.");
       }
       return IndexType.values()[serializedValue - 1];
     }
@@ -207,7 +209,9 @@ public interface PTable extends PMetaDataEntity {
     DROP_CHILD_VIEWS((byte) 1),
     INDEX_REBUILD((byte) 2),
     TRANSFORM_MONITOR((byte) 3),
-    CDC_STREAM_PARTITION((byte) 4);
+    CDC_STREAM_PARTITION((byte) 4),
+    VECTOR_SCORECARD_RECONCILE((byte) 5),
+    VECTOR_INDEX_REBUILD((byte) 6);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -1061,6 +1065,46 @@ public interface PTable extends PMetaDataEntity {
    *         words this will be one-to-one mapping between view and PREFIXED KeyRange that'll exist.
    */
   byte[] getRowKeyMatcher();
+
+  /** Returns the vector index algorithm (for example IVF), or null if not a vector index. */
+  String getVectorIndexAlgorithm();
+
+  /** Returns the distance metric of the vector index, or null if not a vector index. */
+  String getVectorDistanceMetric();
+
+  /** Returns the dimension of the indexed vectors, or null if not a vector index. */
+  Integer getVectorDimension();
+
+  /** Returns the number of IVF lists (partitions), or null if not a vector index. */
+  Integer getVectorIvfLists();
+
+  /** Returns the number of sample vectors for IVF training, or null if not a vector index. */
+  Integer getVectorIvfSampleSize();
+
+  /**
+   * Returns the ID of the active centroid generation. Returns null if this is not a vector index,
+   * or if the index does not have an active generation yet.
+   */
+  Long getVectorCentroidGeneration();
+
+  /**
+   * Returns the centroid generation of the last rebuild migration, or null if the index had no
+   * migration. A migration is in progress only while this generation is newer than the active
+   * generation.
+   */
+  Long getVectorBuildingGeneration();
+
+  /** Returns true if a building generation is newer than the active generation. */
+  default boolean isVectorRebuildInProgress() {
+    Long building = getVectorBuildingGeneration();
+    Long active = getVectorCentroidGeneration();
+    return building != null && (active == null || building > active);
+  }
+
+  /** Returns true if this table is a vector index. */
+  default boolean isVectorIndex() {
+    return getIndexType() == IndexType.VECTOR_GLOBAL;
+  }
 
   /**
    * Class to help track encoded column qualifier counters per column family.
