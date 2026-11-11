@@ -88,9 +88,11 @@ public class UncoveredGlobalIndexRegionScannerTest {
   }
 
   @Test
-  public void testRegionLookupFailureClosesReplacementAndTable() throws Exception {
-    IOException failure = new IOException("region lookup failed");
-    when(locator.getEndKeys()).thenThrow(failure);
+  public void testFailureAfterTableOpenClosesReplacementAndTable() throws Exception {
+    // The constructor does not look up the data table regions. The empty column lookup is its
+    // last step after the table opens.
+    RuntimeException failure = new IllegalStateException("empty column lookup failed");
+    when(maintainer.getDataEmptyKeyValueCF()).thenThrow(failure);
     assertConstructionFails(original, failure);
     verify(replacement).close();
     verify(table).close();
@@ -98,10 +100,10 @@ public class UncoveredGlobalIndexRegionScannerTest {
 
   @Test
   public void testCleanupFailuresPreserveInitializationFailure() throws Exception {
-    IOException failure = new IOException("region lookup failed");
+    RuntimeException failure = new IllegalStateException("empty column lookup failed");
     IOException scannerCloseFailure = new IOException("scanner close failed");
     IOException tableCloseFailure = new IOException("table close failed");
-    when(locator.getEndKeys()).thenThrow(failure);
+    when(maintainer.getDataEmptyKeyValueCF()).thenThrow(failure);
     doThrow(scannerCloseFailure).when(replacement).close();
     doThrow(tableCloseFailure).when(table).close();
     assertConstructionFails(original, failure);
@@ -128,8 +130,8 @@ public class UncoveredGlobalIndexRegionScannerTest {
   @Test
   public void testFailureWithoutPageFilterLeavesOriginalOwnedByCaller() throws Exception {
     scan.setFilter(null);
-    IOException failure = new IOException("region lookup failed");
-    when(locator.getEndKeys()).thenThrow(failure);
+    RuntimeException failure = new IllegalStateException("empty column lookup failed");
+    when(maintainer.getDataEmptyKeyValueCF()).thenThrow(failure);
     assertConstructionFails(original, failure);
     verify(original, never()).close();
     verify(original, never()).getNewRegionScanner(any(Scan.class));
@@ -148,12 +150,11 @@ public class UncoveredGlobalIndexRegionScannerTest {
     verify(unsupported, never()).close();
   }
 
-  private void assertConstructionFails(RegionScanner scanner, IOException expected)
-    throws Exception {
+  private void assertConstructionFails(RegionScanner scanner, Exception expected) throws Exception {
     try {
       construct(scanner);
       fail("Expected scanner initialization to fail");
-    } catch (IOException actual) {
+    } catch (IOException | RuntimeException actual) {
       assertSame(expected, actual);
     }
   }

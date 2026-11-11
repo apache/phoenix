@@ -30,6 +30,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -73,7 +74,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     "phoenix.index.row.count.per.task";
   public static final int DEFAULT_INDEX_ROW_COUNTS_PER_TASK = 2048;
 
-  protected byte[][] regionEndKeys;
   protected final Table dataHTable;
   protected final int rowCountPerTask;
   protected String exceptionMessage;
@@ -129,7 +129,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
         config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY, DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
       byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
       table = tableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-      regionEndKeys = tableFactory.getConnection().getRegionLocator(table.getName()).getEndKeys();
       // Include the empty column to verify the index row against its data row and repair it.
       ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
         indexMaintainer.getEmptyKeyValueQualifierForDataTable());
@@ -301,8 +300,8 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     for (byte[] dataRowKey : indexToDataRowKeyMap.values()) {
       dataRowKeys.add(dataRowKey);
     }
-    List<Set<byte[]>> setList =
-      IndexRepairRegionScanner.getPerTaskDataRowKeys(dataRowKeys, regionEndKeys, rowCountPerTask);
+    List<Set<byte[]>> setList = IndexRepairRegionScanner.getPerTaskDataRowKeys(dataRowKeys,
+      getRegionEndKeys(dataRowKeys), rowCountPerTask);
     int taskCount = setList.size();
     TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
     for (int i = 0; i < taskCount; i++) {
@@ -330,6 +329,29 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     } else {
       state = State.READY;
     }
+  }
+
+  // Returns the end keys of the data table regions that hold the given row keys, in key order. The
+  // locations come from the location cache of the connection. A cache miss reads only the meta row
+  // of that region, not the meta rows of all the regions of the table. A stale location changes
+  // only how the row keys go into tasks. Each task scans through the client, so its scan is correct
+  // across region boundaries
+  private byte[][] getRegionEndKeys(TreeSet<byte[]> dataRowKeys) throws IOException {
+    List<byte[]> endKeys = new ArrayList<>();
+    try (RegionLocator locator =
+      hTableFactory.getConnection().getRegionLocator(dataHTable.getName())) {
+      byte[] rowKey = dataRowKeys.first();
+      while (rowKey != null) {
+        byte[] endKey = locator.getRegionLocation(rowKey).getRegion().getEndKey();
+        endKeys.add(endKey);
+        // A location holds its row key, so its end key is after the row key. The check stops the
+        // walk at a location that does not hold its row key. Then one task set holds the rest
+        rowKey = endKey.length == 0 || Bytes.compareTo(endKey, rowKey) <= 0
+          ? null
+          : dataRowKeys.ceiling(endKey);
+      }
+    }
+    return endKeys.toArray(new byte[endKeys.size()][]);
   }
 
   private static DataTableScanMetricsWithScanTime buildDataTableScanMetrics(ScanMetrics scanMetrics,
