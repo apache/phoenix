@@ -25,9 +25,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.jbellis.jvector.disk.ByteBufferIndexWriter;
@@ -48,7 +46,9 @@ import io.github.jbellis.jvector.vector.VectorSimilarityFunction;
 import io.github.jbellis.jvector.vector.VectorizationProvider;
 import io.github.jbellis.jvector.vector.types.VectorFloat;
 import io.github.jbellis.jvector.vector.types.VectorTypeSupport;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -59,9 +59,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.IntFunction;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
@@ -71,7 +75,8 @@ import org.junit.Test;
 /**
  * Verifies the range coverage of {@link HnswSegment} descriptors and the cell layout: anchor rows,
  * qualifiers, identities, definition digests and the listing. The tests also verify the row key
- * order of ordinals, ordinal lookup, payload serialization and the off-heap load.
+ * order of ordinals, ordinal lookup, payload serialization, the chunked reads and the off-heap
+ * load.
  */
 public class HnswSegmentTest {
   private static final VectorTypeSupport VTS =
@@ -204,18 +209,98 @@ public class HnswSegmentTest {
         for (long time : times) {
           byte[] identity = HnswSegment.identity(indexKey, startKey, time);
           assertTrue(Bytes.startsWith(identity, HnswSegment.prefix(indexKey)));
-          for (byte tag : HnswSegment.TAGS) {
-            byte[] qualifier = HnswSegment.qualifier(identity, tag);
-            byte[] padded = Bytes.add(Bytes.toBytes("xx"), qualifier, Bytes.toBytes("yy"));
-            HnswSegment.Qualifier q = HnswSegment.parseQualifier(padded, 2, qualifier.length);
-            assertNotNull(Bytes.toStringBinary(qualifier), q);
-            assertArrayEquals(indexKey, q.indexKey);
-            assertArrayEquals(startKey, q.startKey);
-            assertEquals(time, q.time);
-            assertEquals(tag, q.tag);
-            assertArrayEquals(identity, q.identity());
+          for (byte tag : HnswSegment.SMALL_TAGS) {
+            assertParses(HnswSegment.qualifier(identity, tag), indexKey, startKey, time, -1, tag);
+          }
+          for (byte tag : HnswSegment.CHUNK_TAGS) {
+            for (int chunk : new int[] { 0, 1, 255, 256, HnswSegment.MAX_CHUNKS - 1 }) {
+              assertParses(HnswSegment.qualifier(identity, chunk, tag), indexKey, startKey, time,
+                chunk, tag);
+            }
           }
         }
+      }
+    }
+  }
+
+  // Asserts that a qualifier decodes to the given parts, also inside a larger array
+  private static void assertParses(byte[] qualifier, byte[] indexKey, byte[] startKey, long time,
+    int chunk, byte tag) {
+    byte[] padded = Bytes.add(Bytes.toBytes("xx"), qualifier, Bytes.toBytes("yy"));
+    HnswSegment.Qualifier q = HnswSegment.parseQualifier(padded, 2, qualifier.length);
+    assertNotNull(Bytes.toStringBinary(qualifier), q);
+    assertArrayEquals(indexKey, q.indexKey);
+    assertArrayEquals(startKey, q.startKey);
+    assertEquals(time, q.time);
+    assertEquals(chunk, q.chunk);
+    assertEquals(tag, q.tag);
+    assertArrayEquals(HnswSegment.identity(indexKey, startKey, time), q.identity());
+  }
+
+  /**
+   * The tag decides the form of a qualifier. A chunk tag always has a chunk index before it, and a
+   * small tag never has one. A chunk qualifier with a negative index does not decode, and the
+   * qualifier of a small cell cannot have a chunk tag.
+   */
+  @Test
+  public void testParseChunkQualifier() {
+    byte[] identity = HnswSegment.identity(KEY, Bytes.toBytes("start"), 7L);
+    byte[] chunk = HnswSegment.qualifier(identity, 3, HnswSegment.PAYLOAD_TAG);
+    assertEquals(identity.length + Bytes.SIZEOF_INT + 1, chunk.length);
+    assertEquals(3, Bytes.toInt(chunk, identity.length));
+    byte[] negative = chunk.clone();
+    Bytes.putInt(negative, identity.length, -1);
+    byte[] withoutIndex = Bytes.add(identity, new byte[] { HnswSegment.TOMBSTONES_TAG });
+    byte[] smallWithIndex = HnswSegment.qualifier(identity, 3, HnswSegment.PAYLOAD_TAG);
+    smallWithIndex[smallWithIndex.length - 1] = HnswSegment.COUNT_TAG;
+    for (byte[] q : new byte[][] { negative, withoutIndex, smallWithIndex }) {
+      assertNull(Bytes.toStringBinary(q), HnswSegment.parseQualifier(q, 0, q.length));
+    }
+    for (byte tag : HnswSegment.CHUNK_TAGS) {
+      try {
+        HnswSegment.qualifier(identity, tag);
+        fail("a chunk tag needs a chunk index");
+      } catch (IllegalArgumentException expected) {
+      }
+    }
+    for (byte tag : HnswSegment.SMALL_TAGS) {
+      try {
+        HnswSegment.qualifier(identity, 0, tag);
+        fail("a small tag has no chunk index");
+      } catch (IllegalArgumentException expected) {
+      }
+    }
+    try {
+      HnswSegment.qualifier(identity, -1, HnswSegment.PAYLOAD_TAG);
+      fail("a chunk index is not negative");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  /**
+   * A layout accepts each chunk size up to the largest chunk size, also above the chunk size of new
+   * segments. A larger chunk size or a chunk size that is not positive does not decode.
+   */
+  @Test
+  public void testLayoutChunkSizeBound() {
+    for (int chunkSize : new int[] { 1, HnswSegment.CHUNK_SIZE, HnswSegment.CHUNK_SIZE + 1,
+      HnswSegment.MAX_CHUNK_SIZE }) {
+      long payloadLength = 2L * chunkSize + 8;
+      HnswSegment.Layout layout = new HnswSegment.Layout(chunkSize, payloadLength, chunkSize, 0);
+      HnswSegment.Layout decoded = HnswSegment.Layout.decode(layout.encode());
+      assertNotNull("chunk size " + chunkSize, decoded);
+      assertEquals(chunkSize, decoded.chunkSize);
+      assertEquals(payloadLength, decoded.payloadLength);
+      assertEquals(chunkSize, decoded.graphLength);
+    }
+    byte[] encoded = new HnswSegment.Layout(HnswSegment.MAX_CHUNK_SIZE, 16, 8, 0).encode();
+    for (int chunkSize : new int[] { HnswSegment.MAX_CHUNK_SIZE + 1, 0, -1 }) {
+      Bytes.putInt(encoded, 1, chunkSize);
+      assertNull("chunk size " + chunkSize, HnswSegment.Layout.decode(encoded));
+      try {
+        new HnswSegment.Layout(chunkSize, 16, 8, 0);
+        fail("chunk size " + chunkSize + " must not make a layout");
+      } catch (IllegalArgumentException expected) {
       }
     }
   }
@@ -279,10 +364,11 @@ public class HnswSegmentTest {
 
   /**
    * A listing returns the well-formed segments at their anchor rows, with the region that wrote
-   * them, and never reads a payload cell or a tombstones cell. It tells deltas from bases by their
-   * base time. It skips cells whose qualifiers do not decode. It also skips a segment with a
-   * missing cell or a cell of the wrong length. A segment without its writer is malformed. It skips
-   * a segment whose row is not the anchor of its range.
+   * them, and never reads a chunk cell. It tells deltas from bases by their base time. It skips
+   * cells whose qualifiers do not decode. It also skips a segment with a missing cell or a cell of
+   * the wrong length. A segment without its writer is malformed. It skips a segment whose row is
+   * not the anchor of its range. The L cell must hold a valid layout that agrees with the count,
+   * and only a delta has tombstones.
    */
   @Test
   public void testListing() {
@@ -300,7 +386,14 @@ public class HnswSegmentTest {
     cells.addAll(cells(anchor, empty, false));
     cells.addAll(cells(anchor, delta, true));
     cells.add(new KeyValue(anchor, FAMILY,
-      HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG), new byte[0]));
+      HnswSegment.qualifier(delta.identity, 0, HnswSegment.TOMBSTONES_TAG), new byte[0]));
+    // Segments without an L cell, with an L cell that does not decode, with vectors but no
+    // payload, and a base with tombstones
+    cells.addAll(withLayout(anchor, segment(start, 19L, end), null));
+    cells.addAll(withLayout(anchor, segment(start, 20L, end), new byte[3]));
+    cells.addAll(withLayout(anchor, segment(start, 21L, end), HnswSegment.Layout.EMPTY.encode()));
+    cells.addAll(withLayout(anchor, segment(start, 22L, end),
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 16, 8, 10).encode()));
     // A delta with a base time of the wrong length
     HnswSegment.Descriptor shortBase = delta(start, 17L, end, 10L);
     for (KeyValue kv : cells(anchor, shortBase, true)) {
@@ -355,8 +448,32 @@ public class HnswSegmentTest {
     }
   }
 
-  // The cells that a region store writes for a segment. The payload cell holds an empty value, and
-  // the W cell holds WRITER.
+  // The cells of a segment, with the given L cell value in place of the layout of the segment. A
+  // null value leaves out the L cell
+  private static List<KeyValue> withLayout(byte[] row, HnswSegment.Descriptor d, byte[] layout) {
+    List<KeyValue> cells = cells(row, d, true);
+    cells
+      .removeIf(kv -> kv.getQualifierArray()[kv.getQualifierOffset() + kv.getQualifierLength() - 1]
+          == HnswSegment.LAYOUT_TAG);
+    if (layout != null) {
+      cells.add(new KeyValue(row, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+        layout));
+    }
+    return cells;
+  }
+
+  /**
+   * Returns the layout that the listing cells of a segment hold. A segment with vectors needs a
+   * payload, so a descriptor with vectors but no layout gets a small layout.
+   */
+  static HnswSegment.Layout layout(HnswSegment.Descriptor d) {
+    return d.count > 0 && d.layout.payloadLength == 0
+      ? new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 16, 8, 0)
+      : d.layout;
+  }
+
+  // The small cells that a region store writes for a segment, with the layout of layout(d). The
+  // first payload chunk holds an empty value, and the W cell holds WRITER.
   static List<KeyValue> cells(byte[] row, HnswSegment.Descriptor d, boolean payload) {
     List<KeyValue> cells = new ArrayList<>();
     cells.add(new KeyValue(row, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG),
@@ -373,9 +490,11 @@ public class HnswSegmentTest {
       cells.add(new KeyValue(row, FAMILY,
         HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG), Bytes.toBytes(d.baseTime)));
     }
+    cells.add(new KeyValue(row, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+      layout(d).encode()));
     if (payload) {
       cells.add(new KeyValue(row, FAMILY,
-        HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), new byte[0]));
+        HnswSegment.qualifier(d.identity, 0, HnswSegment.PAYLOAD_TAG), new byte[0]));
     }
     return cells;
   }
@@ -391,6 +510,7 @@ public class HnswSegmentTest {
     assertEquals(expected.replayFrom, actual.replayFrom);
     assertArrayEquals(expected.anchor, actual.anchor);
     assertArrayEquals(expected.definition, actual.definition);
+    assertEquals(layout(expected), actual.layout);
   }
 
   /** HNSW maps L2 and COSINE. It refuses INNER_PRODUCT, because DOT_PRODUCT cannot serve it. */
@@ -477,14 +597,17 @@ public class HnswSegmentTest {
   public void testSearchForMoreRowsThanBeamWidth() throws Exception {
     RandomAccessVectorValues vectors = vectors();
     for (String quantization : new String[] { "NONE", "SQ8", "PQ" }) {
-      HnswSegment segment =
-        HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE",
-          HnswSegment.build(index(quantization), vectors, keys()), new byte[0][]);
-      try {
-        assertEquals(quantization, 100,
-          segment.search(vectors.getVector(0), 100, 16, Bits.ALL).getNodes().length);
-      } finally {
-        segment.close();
+      HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
+      try (HnswSegment.Built built =
+        HnswSegment.build(index(quantization), vectors, keys(), allocator)) {
+        HnswSegment segment =
+          HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", built, new byte[0][]);
+        try {
+          assertEquals(quantization, 100,
+            segment.search(vectors.getVector(0), 100, 16, Bits.ALL).getNodes().length);
+        } finally {
+          segment.close();
+        }
       }
     }
   }
@@ -511,6 +634,32 @@ public class HnswSegmentTest {
     return keys;
   }
 
+  // Builds a segment of the test vectors, and returns the bytes of its payload stream
+  private static byte[] buildPayload(String quantization, byte[][] keys) throws IOException {
+    try (HnswSegment.Built built = HnswSegment.build(index(quantization), vectors(), keys,
+      new HnswOffheapAllocator(Long.MAX_VALUE))) {
+      return payload(built);
+    }
+  }
+
+  // Reads the payload stream of a build result
+  static byte[] payload(HnswSegment.Built built) throws IOException {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (InputStream in = built.payload()) {
+      byte[] buffer = new byte[4096];
+      for (int n; (n = in.read(buffer)) >= 0;) {
+        out.write(buffer, 0, n);
+      }
+    }
+    return out.toByteArray();
+  }
+
+  // Returns the descriptor of a base segment of the test vectors with the layout of the payload
+  private static HnswSegment.Descriptor descriptor(byte[] payload, int chunkSize) {
+    return new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], COUNT, null, 100L,
+      DEFINITION, SegmentCells.layoutOf(payload, chunkSize));
+  }
+
   // Decodes the ordinal-to-row-key mapping from the segment trailer
   private static byte[][] mapping(byte[] payload) {
     ByteBuffer trailer = ByteBuffer.wrap(payload);
@@ -528,7 +677,7 @@ public class HnswSegmentTest {
   @Test
   public void testOrdinalsFollowKeyOrder() throws Exception {
     byte[][] keys = keys();
-    byte[][] mapped = mapping(HnswSegment.build(index("NONE"), vectors(), keys));
+    byte[][] mapped = mapping(buildPayload("NONE", keys));
     assertEquals(COUNT, mapped.length);
     Set<String> expected = new HashSet<>();
     Set<String> actual = new HashSet<>();
@@ -543,21 +692,32 @@ public class HnswSegmentTest {
   }
 
   /**
-   * For each codec, the payload array ends with the trailer, so it holds no unused bytes. A segment
-   * loads from this array.
+   * For each codec, the payload stream has the length of the build result and ends with the
+   * trailer, so it holds no unused bytes. The graph is the first part of the payload. A segment
+   * loads from the build result and shares its graph block. The block stays in the budget until the
+   * result and the segment both release it.
    */
   @Test
   public void testPayloadIsExact() throws Exception {
     RandomAccessVectorValues vectors = vectors();
     byte[][] keys = keys();
     for (String quantization : new String[] { "NONE", "SQ8", "PQ" }) {
-      byte[] payload = HnswSegment.build(index(quantization), vectors, keys);
-      assertEquals(quantization, 0x484E5357,
-        Bytes.toInt(payload, payload.length - Bytes.SIZEOF_INT));
       HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
-      HnswSegment segment =
-        HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", payload, new byte[0][]);
+      HnswSegment segment;
+      try (HnswSegment.Built built =
+        HnswSegment.build(index(quantization), vectors, keys, allocator)) {
+        byte[] payload = payload(built);
+        assertEquals(quantization, built.length(), payload.length);
+        assertEquals(quantization, COUNT, built.size());
+        assertEquals(quantization, 0x484E5357,
+          Bytes.toInt(payload, payload.length - Bytes.SIZEOF_INT));
+        assertEquals(quantization, built.graphLength(),
+          SegmentCells.layoutOf(payload, HnswSegment.CHUNK_SIZE).graphLength);
+        assertEquals(quantization, built.graphLength(), allocator.getAllocatedBytes());
+        segment = HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", built, new byte[0][]);
+      }
       assertEquals(COUNT, segment.size());
+      assertTrue(allocator.getAllocatedBytes() > 0);
       assertEquals(quantization, segment.ordinalOf(new ImmutableBytesPtr(keys[0])),
         segment.search(vectors.getVector(0), 1, 32, Bits.ALL).getNodes()[0].node);
       segment.close();
@@ -609,6 +769,22 @@ public class HnswSegmentTest {
     return Arrays.copyOf(buffer.array(), (int) out.position());
   }
 
+  /** A closed build result cannot give a segment. */
+  @Test
+  public void testClosedBuildRefused() throws Exception {
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
+    HnswSegment.Built built = HnswSegment.build(index("NONE"), vectors(), keys(), allocator);
+    built.close();
+    built.close();
+    assertEquals(0, allocator.getAllocatedBytes());
+    try {
+      HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", built, new byte[0][]);
+      fail("a closed build result must not give a segment");
+    } catch (IllegalStateException expected) {
+    }
+    assertEquals(0, allocator.getAllocatedBytes());
+  }
+
   /**
    * Only an L2 index centers its PQ codebooks. JVector scores a COSINE query against the centered
    * vectors, which changes the order of cosine similarities.
@@ -625,9 +801,11 @@ public class HnswSegmentTest {
   /** Ordinal lookup finds each key, and reads only the offset and length of the pointer. */
   @Test
   public void testOrdinalOf() throws Exception {
-    byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys());
-    HnswSegment segment = HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE),
-      "COSINE", payload, new byte[0][]);
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
+    HnswSegment segment;
+    try (HnswSegment.Built built = HnswSegment.build(index("NONE"), vectors(), keys(), allocator)) {
+      segment = HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", built, new byte[0][]);
+    }
     for (int i = 0; i < segment.size(); i++) {
       byte[] key = segment.getKey(i);
       byte[] padded = new byte[key.length + 4];
@@ -643,19 +821,142 @@ public class HnswSegmentTest {
   }
 
   /**
-   * A segment that the server writes loads from the payload in memory. After eviction, a search
-   * reads the payload again from the segment store. After close, a search fails and the budget
-   * counts no memory.
+   * A segment opens from the chunks of its payload and gives the same keys and search results as
+   * the segment of the build result. The test uses chunk sizes where the graph ends on a chunk
+   * boundary, inside a chunk, and inside a payload of one chunk. Each open reads each chunk once,
+   * in order.
    */
   @Test
-  public void testMaterializeReloadAndClose() throws Exception {
+  public void testChunkedRoundTrip() throws Exception {
     byte[][] keys = keys();
-    byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys);
-    HnswSegmentStore store = store(payload);
     HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
-    HnswSegment segment =
-      HnswSegment.of(store, DESCRIPTOR, allocator, "COSINE", payload, new byte[0][]);
-    verifyNoInteractions(store);
+    VectorFloat<?> query = vectors().getVector(0);
+    try (HnswSegment.Built built = HnswSegment.build(index("NONE"), vectors(), keys, allocator)) {
+      byte[] payload = payload(built);
+      int graph = built.graphLength();
+      HnswSegment expected =
+        HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", built, new byte[0][]);
+      int inside = graph % 1000 == 0 ? 999 : 1000;
+      for (int chunkSize : new int[] { graph, graph % 2 == 0 ? graph / 2 : graph, inside,
+        HnswSegment.CHUNK_SIZE }) {
+        HnswSegment.Descriptor d = descriptor(payload, chunkSize);
+        CellStore store = new CellStore(d, payload);
+        HnswSegment segment = HnswSegment.open(store, d, allocator, "COSINE");
+        assertEquals(chunks(HnswSegment.PAYLOAD_TAG, 0, d.layout.chunks(HnswSegment.PAYLOAD_TAG)),
+          store.reads);
+        assertEquals(COUNT, segment.size());
+        for (int i = 0; i < COUNT; i++) {
+          assertArrayEquals(expected.getKey(i), segment.getKey(i));
+        }
+        assertEquals(expected.search(query, 5, 16, Bits.ALL).getNodes()[0].node,
+          segment.search(query, 5, 16, Bits.ALL).getNodes()[0].node);
+        segment.close();
+      }
+      expected.close();
+    }
+    assertEquals(0, allocator.getAllocatedBytes());
+  }
+
+  // Returns the names of the chunks [first, last) of a stream, as CellStore records them
+  private static List<String> chunks(byte tag, int first, int last) {
+    List<String> chunks = new ArrayList<>();
+    for (int i = first; i < last; i++) {
+      chunks.add((char) tag + Integer.toString(i));
+    }
+    return chunks;
+  }
+
+  /**
+   * An open reads the payload and the tombstones in groups of consecutive chunks, one get for each
+   * group. It reads the chunks in order. An open of only the key mapping starts its groups at the
+   * first mapping chunk. A bad chunk in a later group fails the open with the index of that chunk,
+   * and the failed open holds no memory.
+   */
+  @Test
+  public void testOpenReadsChunksInGroups() throws Exception {
+    byte[][] keys = keys();
+    byte[] payload = buildPayload("NONE", keys);
+    HnswSegment.Descriptor d = descriptor(payload, 1024);
+    int n = d.layout.chunks(HnswSegment.PAYLOAD_TAG);
+    assertTrue(n > 6);
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
+    CellStore store = new CellStore(d, payload, 3 * 1024);
+    HnswSegment segment = HnswSegment.open(store, d, allocator, "COSINE");
+    assertEquals(keys.length, segment.size());
+    assertEquals(chunks(HnswSegment.PAYLOAD_TAG, 0, n), store.reads);
+    assertEquals(groupSizes(n, 3), store.groups);
+    VectorFloat<?> query = vectors().getVector(0);
+    assertEquals(segment.ordinalOf(new ImmutableBytesPtr(keys[0])),
+      segment.search(query, 1, 16, Bits.ALL).getNodes()[0].node);
+    segment.close();
+
+    int first = (int) (d.layout.graphLength / 1024);
+    store = new CellStore(d, payload, 3 * 1024);
+    segment = HnswSegment.open(store, d, new HnswOffheapAllocator(64), "COSINE");
+    assertEquals(chunks(HnswSegment.PAYLOAD_TAG, first, n), store.reads);
+    assertEquals(groupSizes(n - first, 3), store.groups);
+    segment.close();
+
+    store = new CellStore(d, payload, 3 * 1024);
+    store.cells.remove(d.anchor, HnswSegment.qualifier(d.identity, n - 2, HnswSegment.PAYLOAD_TAG));
+    try {
+      HnswSegment.open(store, d, allocator, "COSINE");
+      fail("a segment with a missing chunk must not load");
+    } catch (HnswSegment.CorruptSegmentException e) {
+      assertEquals(HnswSegment.CorruptSegmentException.Kind.MISSING, e.getKind());
+      assertEquals(n - 2, e.getChunk());
+    }
+    assertEquals(0, allocator.getAllocatedBytes());
+
+    byte[][] tombstones = { Bytes.toBytes("a"), Bytes.toBytes("bb"), Bytes.toBytes("") };
+    byte[] encoded = HnswSegment.encodeKeys(tombstones);
+    HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0],
+      0, 100L, 200L, DEFINITION, new HnswSegment.Layout(5, 0, 0, encoded.length));
+    int t = delta.layout.chunks(HnswSegment.TOMBSTONES_TAG);
+    assertTrue(t > 2);
+    store = new CellStore(delta, null, 10);
+    store.cells.putChunks(delta.anchor, delta.identity, HnswSegment.TOMBSTONES_TAG, delta.time,
+      encoded, 5);
+    segment = HnswSegment.open(store, delta, allocator, "COSINE");
+    assertEquals(tombstones.length, segment.getTombstones().length);
+    for (int i = 0; i < tombstones.length; i++) {
+      assertArrayEquals(tombstones[i], segment.getTombstones()[i]);
+    }
+    assertEquals(chunks(HnswSegment.TOMBSTONES_TAG, 0, t), store.reads);
+    assertEquals(groupSizes(t, 2), store.groups);
+    segment.close();
+  }
+
+  // Returns the sizes of the groups of a read of the given chunks in groups of the given size
+  private static List<Integer> groupSizes(int chunks, int group) {
+    List<Integer> sizes = new ArrayList<>();
+    for (int i = 0; i < chunks; i += group) {
+      sizes.add(Math.min(group, chunks - i));
+    }
+    return sizes;
+  }
+
+  /**
+   * A segment that the server writes loads from the build result, without a read. After eviction, a
+   * search reads again only the chunks of the graph, not the key mapping. After close, a search
+   * fails and the budget counts no memory.
+   */
+  @Test
+  public void testReloadReadsOnlyGraphChunks() throws Exception {
+    byte[][] keys = keys();
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
+    HnswSegment segment;
+    CellStore store;
+    int graphChunks;
+    try (HnswSegment.Built built = HnswSegment.build(index("NONE"), vectors(), keys, allocator)) {
+      byte[] payload = payload(built);
+      HnswSegment.Descriptor d = descriptor(payload, 1024);
+      store = new CellStore(d, payload);
+      graphChunks = (int) HnswSegment.Layout.chunks(built.graphLength(), 1024);
+      assertTrue(graphChunks < d.layout.chunks(HnswSegment.PAYLOAD_TAG));
+      segment = HnswSegment.of(store, d, allocator, "COSINE", built, new byte[0][]);
+    }
+    assertTrue(store.reads.isEmpty());
     long charge = allocator.getAllocatedBytes();
     assertTrue(charge > 0);
     VectorFloat<?> query = vectors().getVector(0);
@@ -665,7 +966,7 @@ public class HnswSegmentTest {
     allocator.evictAll();
     assertEquals(0, allocator.getAllocatedBytes());
     assertEquals(nearest, segment.search(query, 1, 16, Bits.ALL).getNodes()[0].node);
-    verify(store).readPayload(DESCRIPTOR);
+    assertEquals(chunks(HnswSegment.PAYLOAD_TAG, 0, graphChunks), store.reads);
     assertEquals(charge, allocator.getAllocatedBytes());
 
     segment.close();
@@ -680,17 +981,23 @@ public class HnswSegmentTest {
 
   /**
    * A graph larger than the off-heap budget does not stop the open of its segment, because writes
-   * need only the row keys. A search fails. A later search also fails, and does not read the
-   * payload again.
+   * need only the row keys. The open reads only the chunks of the key mapping and the trailer. A
+   * search fails. A later search also fails, and does not read the payload again.
    */
   @Test
-  public void testOverBudgetGraphIsReadOnce() throws Exception {
+  public void testTooLargeReadsOnlyMapping() throws Exception {
     byte[][] keys = keys();
-    byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys);
-    HnswSegmentStore store = store(payload);
-    HnswSegment segment =
-      HnswSegment.open(store, DESCRIPTOR, new HnswOffheapAllocator(64), "COSINE");
+    byte[] payload = buildPayload("NONE", keys);
+    HnswSegment.Descriptor d = descriptor(payload, 1024);
+    CellStore store = new CellStore(d, payload);
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(64);
+    HnswSegment segment = HnswSegment.open(store, d, allocator, "COSINE");
     assertEquals(keys.length, segment.size());
+    int first = (int) (d.layout.graphLength / 1024);
+    assertTrue(first > 0);
+    List<String> mapping =
+      chunks(HnswSegment.PAYLOAD_TAG, first, d.layout.chunks(HnswSegment.PAYLOAD_TAG));
+    assertEquals(mapping, store.reads);
     VectorFloat<?> query = vectors().getVector(0);
     for (int i = 0; i < 2; i++) {
       try {
@@ -699,7 +1006,8 @@ public class HnswSegmentTest {
       } catch (HnswSegment.TooLargeException expected) {
       }
     }
-    verify(store).readPayload(DESCRIPTOR);
+    assertEquals(mapping, store.reads);
+    assertEquals(0, allocator.getAllocatedBytes());
     segment.close();
   }
 
@@ -709,37 +1017,84 @@ public class HnswSegmentTest {
    */
   @Test
   public void testCorruptGraph() throws Exception {
-    byte[] payload = HnswSegment.build(index("NONE"), vectors(), keys());
+    byte[] payload = buildPayload("NONE", keys());
     // The graph is at the start of the payload. Its header holds the format version after the
     // JVector magic.
     Bytes.putInt(payload, Bytes.SIZEOF_INT, Integer.MAX_VALUE);
+    HnswSegment.Descriptor d = descriptor(payload, 1024);
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
     try {
-      HnswSegment.of(null, DESCRIPTOR, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE", payload,
-        new byte[0][]);
+      HnswSegment.open(new CellStore(d, payload), d, allocator, "COSINE");
       fail("a segment with a corrupt graph must not load");
-    } catch (DoNotRetryIOException e) {
+    } catch (HnswSegment.CorruptSegmentException e) {
       assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+      assertEquals(HnswSegment.CorruptSegmentException.Kind.INVALID, e.getKind());
     }
+    assertEquals(0, allocator.getAllocatedBytes());
   }
 
   /**
-   * HBase returns an empty payload for a MOB reference whose file is lost. The payload framing
-   * check rejects it, so an empty payload never loads as a graph.
+   * An open fails as for a corrupt segment in three cases. A chunk is absent, HBase gives the empty
+   * value of a lost MOB file, or a chunk has the wrong length. The failure names the chunk. The
+   * open also fails if the L cell changed or the trailer does not agree with the layout. An absent
+   * L cell means a retired segment. Thus an open never loads a partial payload as a graph, and a
+   * failed open holds no memory.
    */
   @Test
-  public void testEmptyPayloadRejected() throws Exception {
+  public void testOpenRejectsBadChunk() throws Exception {
+    byte[] payload = buildPayload("NONE", keys());
+    HnswSegment.Descriptor d = descriptor(payload, 1024);
+    byte[] second = HnswSegment.qualifier(d.identity, 1, HnswSegment.PAYLOAD_TAG);
+    byte[] layout = HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG);
     HnswOffheapAllocator allocator = new HnswOffheapAllocator(Long.MAX_VALUE);
-    try {
-      HnswSegment.of(null, DESCRIPTOR, allocator, "COSINE", new byte[0], new byte[0][]);
-      fail("an empty payload must not load");
-    } catch (DoNotRetryIOException e) {
-      assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+    for (HnswSegment.CorruptSegmentException.Kind kind : HnswSegment.CorruptSegmentException.Kind
+      .values()) {
+      CellStore store = new CellStore(d, payload);
+      switch (kind) {
+        case MISSING:
+          store.cells.remove(d.anchor, second);
+          break;
+        case UNRESOLVED:
+          store.cells.put(d.anchor, second, d.time, new byte[0]);
+          break;
+        case SHORT:
+          store.cells.put(d.anchor, second, d.time, new byte[1023]);
+          break;
+        default:
+          store.cells.put(d.anchor, layout, d.time,
+            new HnswSegment.Layout(1024, payload.length, d.layout.graphLength - 1, 0).encode());
+          break;
+      }
+      try {
+        HnswSegment.open(store, d, allocator, "COSINE");
+        fail(kind + " must not load");
+      } catch (HnswSegment.CorruptSegmentException e) {
+        assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+        assertEquals(kind, e.getKind());
+        assertEquals(HnswSegment.PAYLOAD_TAG, e.getTag());
+        if (kind != HnswSegment.CorruptSegmentException.Kind.INVALID) {
+          assertEquals(1, e.getChunk());
+        }
+      }
+      assertEquals(kind.toString(), 0, allocator.getAllocatedBytes());
     }
+    // The trailer gives another mapping length than the layout
+    HnswSegment.Descriptor shifted =
+      new HnswSegment.Descriptor(KEY, new byte[0], 100L, new byte[0], COUNT, null, 100L, DEFINITION,
+        new HnswSegment.Layout(1024, payload.length, d.layout.graphLength - 1, 0));
     try {
-      HnswSegment.open(store(new byte[0]), DESCRIPTOR, allocator, "COSINE");
-      fail("an empty payload must not load");
-    } catch (DoNotRetryIOException e) {
-      assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+      HnswSegment.open(new CellStore(shifted, payload), shifted, allocator, "COSINE");
+      fail("a payload whose trailer does not agree with the layout must not load");
+    } catch (HnswSegment.CorruptSegmentException e) {
+      assertEquals(HnswSegment.CorruptSegmentException.Kind.INVALID, e.getKind());
+    }
+    assertEquals(0, allocator.getAllocatedBytes());
+    CellStore retired = new CellStore(d, payload);
+    retired.cells.clear();
+    try {
+      HnswSegment.open(retired, d, allocator, "COSINE");
+      fail("a retired segment must not load");
+    } catch (HnswSegment.NotFoundException expected) {
     }
     assertEquals(0, allocator.getAllocatedBytes());
   }
@@ -759,58 +1114,93 @@ public class HnswSegmentTest {
   }
 
   /**
-   * A delta segment that holds only deletes has no payload. Its open reads only its tombstones.
+   * A delta segment that holds only deletes has no payload. Its open reads only the chunks of its
+   * tombstones, in order.
    */
   @Test
   public void testOpenDeleteOnlyDelta() throws Exception {
-    HnswSegment.Descriptor d =
-      new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 0, 100L, 200L, DEFINITION);
-    byte[][] tombstones = { Bytes.toBytes("a"), Bytes.toBytes("b") };
-    HnswSegmentStore store = mock(HnswSegmentStore.class);
-    when(store.readTombstones(d)).thenReturn(
-      new KeyValue(d.anchor, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG),
-        HnswSegment.encodeKeys(tombstones)));
+    byte[][] tombstones = { Bytes.toBytes("a"), Bytes.toBytes("bb"), Bytes.toBytes("") };
+    byte[] encoded = HnswSegment.encodeKeys(tombstones);
+    HnswSegment.Descriptor d = new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 0,
+      100L, 200L, DEFINITION, new HnswSegment.Layout(5, 0, 0, encoded.length));
+    CellStore store = new CellStore(d, null);
+    store.cells.putChunks(d.anchor, d.identity, HnswSegment.TOMBSTONES_TAG, d.time, encoded, 5);
     HnswSegment segment =
       HnswSegment.open(store, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
     assertEquals(0, segment.size());
-    assertEquals(2, segment.getTombstones().length);
-    assertArrayEquals(tombstones[0], segment.getTombstones()[0]);
-    assertArrayEquals(tombstones[1], segment.getTombstones()[1]);
-    verify(store).readTombstones(d);
-    verifyNoMoreInteractions(store);
+    assertEquals(3, segment.getTombstones().length);
+    for (int i = 0; i < tombstones.length; i++) {
+      assertArrayEquals(tombstones[i], segment.getTombstones()[i]);
+    }
+    assertEquals(chunks(HnswSegment.TOMBSTONES_TAG, 0, d.layout.chunks(HnswSegment.TOMBSTONES_TAG)),
+      store.reads);
     segment.close();
   }
 
   /**
    * A delta segment with corrupt tombstones fails to open with a corrupt segment error. Thus the
-   * region rebuilds its segments. HBase returns an empty value for a tombstones cell whose MOB file
-   * is lost, and this value is also corrupt. The open does not read the payload.
+   * region rebuilds its segments. HBase returns an empty value for a tombstones chunk whose MOB
+   * file is lost, and this value is also corrupt. The open does not read the payload.
    */
   @Test
   public void testCorruptTombstones() throws Exception {
-    HnswSegment.Descriptor d =
-      new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 3, 100L, 200L, DEFINITION);
-    byte[] qualifier = HnswSegment.qualifier(d.identity, HnswSegment.TOMBSTONES_TAG);
     // Two corrupt values: a count of five with no keys, and the empty value of a lost MOB file
     for (byte[] value : new byte[][] { Bytes.toBytes(5), new byte[0] }) {
-      HnswSegmentStore store = mock(HnswSegmentStore.class);
-      when(store.readTombstones(d)).thenReturn(new KeyValue(d.anchor, FAMILY, qualifier, value));
+      HnswSegment.Descriptor d = new HnswSegment.Descriptor(KEY, new byte[0], 200L, new byte[0], 3,
+        100L, 200L, DEFINITION, new HnswSegment.Layout(16, 16, 8, 4));
+      CellStore store = new CellStore(d, new byte[16]);
+      store.cells.put(d.anchor, HnswSegment.qualifier(d.identity, 0, HnswSegment.TOMBSTONES_TAG),
+        d.time, value);
       try {
         HnswSegment.open(store, d, new HnswOffheapAllocator(Long.MAX_VALUE), "COSINE");
         fail("a segment with corrupt tombstones must not open");
-      } catch (DoNotRetryIOException e) {
+      } catch (HnswSegment.CorruptSegmentException e) {
         assertTrue(e.getMessage(), e.getMessage().startsWith("Corrupt HNSW segment"));
+        assertEquals(HnswSegment.TOMBSTONES_TAG, e.getTag());
       }
-      verify(store).readTombstones(d);
-      verifyNoMoreInteractions(store);
+      assertEquals(chunks(HnswSegment.TOMBSTONES_TAG, 0, 1), store.reads);
     }
   }
 
-  // A mock segment store whose payload cell for DESCRIPTOR holds the given value
-  private static HnswSegmentStore store(byte[] payload) throws Exception {
-    HnswSegmentStore store = mock(HnswSegmentStore.class);
-    when(store.readPayload(DESCRIPTOR)).thenReturn(new KeyValue(DESCRIPTOR.anchor, FAMILY,
-      HnswSegment.qualifier(DESCRIPTOR.identity, HnswSegment.PAYLOAD_TAG), payload));
-    return store;
+  /**
+   * A segment store that reads the cells of one segment from segment cells. It records each chunk
+   * that it reads, as the tag and the chunk index. It also records the number of chunks of each
+   * get.
+   */
+  static final class CellStore extends HnswSegmentStore {
+    final SegmentCells cells = new SegmentCells();
+    final List<String> reads = new ArrayList<>();
+    final List<Integer> groups = new ArrayList<>();
+
+    // Holds the small cells of the segment and the payload in chunks of the chunk size of its
+    // layout. A null payload has no chunks
+    CellStore(HnswSegment.Descriptor d, byte[] payload) {
+      this(d, payload, BATCH_BYTES);
+    }
+
+    // Holds the cells as above, and reads groups of up to the given bytes
+    CellStore(HnswSegment.Descriptor d, byte[] payload, int batchBytes) {
+      super(batchBytes);
+      cells.put(d, payload, WRITER);
+    }
+
+    @Override
+    void scan(Scan scan, Consumer<Cell> consumer) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    Result get(Get get) {
+      int chunks = 0;
+      for (byte[] qualifier : get.getFamilyMap().get(FAMILY)) {
+        HnswSegment.Qualifier q = HnswSegment.parseQualifier(qualifier, 0, qualifier.length);
+        if (q != null && q.chunk >= 0) {
+          reads.add((char) q.tag + Integer.toString(q.chunk));
+          chunks++;
+        }
+      }
+      groups.add(chunks);
+      return cells.get(get);
+    }
   }
 }

@@ -745,8 +745,9 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       // The load wrote nothing to V#. V# holds only the cells of the segments of the regions
       List<HnswSegment.Descriptor> segments = segments(conn, index);
       assertEquals(regions(table).size(), segments.size());
+      // A small base has six small cells and one payload chunk
       List<String> cells = hiddenCells(conn, table);
-      assertEquals(segments.size() * 6, cells.size());
+      assertEquals(segments.size() * 7, cells.size());
       for (String qualifier : cells) {
         byte[] bytes = Bytes.toBytesBinary(qualifier);
         assertNotNull(qualifier, HnswSegment.parseQualifier(bytes, 0, bytes.length));
@@ -1015,8 +1016,8 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       assertEquals(0, delta.count);
 
       try (Table t = dataTable(conn, index)) {
-        byte[] payload = HnswSegment.qualifier(delta.identity, HnswSegment.PAYLOAD_TAG);
-        byte[] tombstones = HnswSegment.qualifier(delta.identity, HnswSegment.TOMBSTONES_TAG);
+        byte[] payload = HnswSegment.qualifier(delta.identity, 0, HnswSegment.PAYLOAD_TAG);
+        byte[] tombstones = HnswSegment.qualifier(delta.identity, 0, HnswSegment.TOMBSTONES_TAG);
         byte[] base = HnswSegment.qualifier(delta.identity, HnswSegment.BASE_TIME_TAG);
         Result r = t.get(new Get(delta.anchor).addColumn(FAMILY, payload)
           .addColumn(FAMILY, tombstones).addColumn(FAMILY, base));
@@ -1897,9 +1898,12 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       // Delete the cells of the segment with a plain HBase client, as for a lost segment
       long lost = EnvironmentEdgeManager.currentTimeMillis();
       Delete delete = new Delete(own.anchor);
-      for (byte tag : new byte[] { HnswSegment.PAYLOAD_TAG, HnswSegment.END_KEY_TAG,
+      for (byte tag : new byte[] { HnswSegment.LAYOUT_TAG, HnswSegment.END_KEY_TAG,
         HnswSegment.COUNT_TAG, HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG }) {
         delete.addColumns(FAMILY, HnswSegment.qualifier(own.identity, tag));
+      }
+      for (int i = 0; i < own.layout.chunks(HnswSegment.PAYLOAD_TAG); i++) {
+        delete.addColumns(FAMILY, HnswSegment.qualifier(own.identity, i, HnswSegment.PAYLOAD_TAG));
       }
       try (Table t = dataTable(conn, index)) {
         t.delete(delete);
@@ -1934,9 +1938,9 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests a segment larger than the default 10 MB cell size limit. The build writes it as one cell
-   * of V#, and loads the graph from the payload in memory. After an eviction, a search loads the
-   * segment again from its MOB file.
+   * Tests a segment larger than the default 10 MB cell size limit. The build streams the payload
+   * into chunk cells of V#, and loads the graph from the build result. After an eviction, a search
+   * loads the graph again from the MOB files of its chunks.
    */
   @Test
   public void testLargeSegment() throws Exception {
@@ -1976,11 +1980,10 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       List<HnswSegment.Descriptor> segments = segments(conn, index);
       assertEquals(1, segments.size());
       assertEquals(count, segments.get(0).count);
-      try (Table t = dataTable(conn, index)) {
-        Cell payload = new HnswSegmentStore.TableStore(t).readPayload(segments.get(0));
-        assertTrue("payload of " + payload.getValueLength() + " bytes",
-          payload.getValueLength() > 10 * 1024 * 1024);
-      }
+      HnswSegment.Layout layout = segments.get(0).layout;
+      assertTrue("payload of " + layout.payloadLength + " bytes",
+        layout.payloadLength > 10 * 1024 * 1024);
+      assertTrue(layout.chunks(HnswSegment.PAYLOAD_TAG) > 1);
 
       HRegion region = regions(table).get(0);
       assertEquals("r7",
@@ -2154,7 +2157,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
         copyRow(table, "a0", "a0-copy");
         // The lower daughter holds the parent segment. Delete the MOB file of its payload
         Scan raw = new Scan().withStartRow(parent.anchor).withStopRow(parent.anchor, true)
-          .addColumn(FAMILY, HnswSegment.qualifier(parent.identity, HnswSegment.PAYLOAD_TAG));
+          .addColumn(FAMILY, HnswSegment.qualifier(parent.identity, 0, HnswSegment.PAYLOAD_TAG));
         raw.setAttribute(MobConstants.MOB_SCAN_RAW, Bytes.toBytes(true));
         Cell reference;
         try (Table t = dataTable(conn, index); ResultScanner scanner = t.getScanner(raw)) {
@@ -2335,9 +2338,10 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE VECTOR INDEX " + other + " ON " + table
         + " (V) WITH (algorithm='HNSW', metric='COSINE') ASYNC");
       buildIndex(table, other);
-      assertEquals(12, cellsOf(conn, table, index).size());
+      // Each region has a base of six small cells and one payload chunk
+      assertEquals(14, cellsOf(conn, table, index).size());
       List<String> kept = cellsOf(conn, table, other);
-      assertEquals(12, kept.size());
+      assertEquals(14, kept.size());
 
       conn.createStatement().execute("DROP INDEX " + index + " ON " + table);
       assertTrue(cellsOf(conn, table, index).isEmpty());
@@ -2433,7 +2437,7 @@ public class HnswIndexIT extends ParallelStatsDisabledIT {
       } finally {
         SegmentFaults.failPurges = false;
       }
-      assertEquals(12, cellsOf(conn, table, index).size());
+      assertEquals(14, cellsOf(conn, table, index).size());
 
       conn.createStatement().execute("CREATE VECTOR INDEX " + index + " ON " + table
         + " (V) WITH (algorithm='HNSW', metric='L2', M=8) ASYNC");

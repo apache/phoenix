@@ -215,6 +215,20 @@ public class HnswIndexManagerFlushTest {
       cell.getQualifierLength()).time;
   }
 
+  // Returns true if a Put is the commit Put of a segment write, which holds the L cell
+  private static boolean isCommit(Put put) {
+    for (List<Cell> cells : put.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        HnswSegment.Qualifier q = HnswSegment.parseQualifier(cell.getQualifierArray(),
+          cell.getQualifierOffset(), cell.getQualifierLength());
+        if (q != null && q.tag == HnswSegment.LAYOUT_TAG) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // Returns true if a segment write writes a delta segment, which has a base time cell
   private static boolean isDelta(Put put) {
     for (List<Cell> cells : put.getFamilyCellMap().values()) {
@@ -741,7 +755,10 @@ public class HnswIndexManagerFlushTest {
     assertTrue(rebuilt.time > segments.get(0).time);
     for (byte tag : new byte[] { HnswSegment.BASE_TIME_TAG, HnswSegment.TOMBSTONES_TAG }) {
       assertTrue(CELLS.get(new Get(rebuilt.anchor).addColumn(SEGMENT_FAMILY,
-        HnswSegment.qualifier(rebuilt.identity, tag))).isEmpty());
+        HnswSegment.isChunkTag(tag)
+          ? HnswSegment.qualifier(rebuilt.identity, 0, tag)
+          : HnswSegment.qualifier(rebuilt.identity, tag)))
+        .isEmpty());
     }
     assertEquals(29, rebuilt.count);
   }
@@ -861,7 +878,8 @@ public class HnswIndexManagerFlushTest {
         }
       }
       for (Harness r : Arrays.asList(covered, h)) {
-        if (r.isRow(put) && !isDelta(put)) {
+        // A large delta streams chunk Puts before its commit, so count only the commit of a base
+        if (r.isRow(put) && isCommit(put) && !isDelta(put)) {
           order.add(Bytes.toString(r.start));
         }
       }
@@ -1760,10 +1778,10 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * A search that finds the payload cell of its base missing fails with a plain retryable
-   * exception, so a client can retry the scan. The region leaves the base out and rebuilds. Until
-   * the rebuild lands, the region is not covered, so the retry of the scan reads the range without
-   * candidate restriction.
+   * A search that finds the cells of its base missing fails with a plain retryable exception, so a
+   * client can retry the scan. The region leaves the base out and rebuilds. Until the rebuild
+   * lands, the region is not covered, so the retry of the scan reads the range without candidate
+   * restriction.
    */
   @Test
   public void testLostBaseIsRebuilt() throws Exception {
@@ -1785,6 +1803,7 @@ public class HnswIndexManagerFlushTest {
     };
     long lost = EnvironmentEdgeManager.currentTimeMillis();
     try {
+      CELLS.remove(base, HnswSegment.LAYOUT_TAG);
       CELLS.remove(base, HnswSegment.PAYLOAD_TAG);
       HnswOffheapAllocator.get(h.env.getConfiguration()).evictAll();
       try {
@@ -1817,8 +1836,8 @@ public class HnswIndexManagerFlushTest {
     long since = EnvironmentEdgeManager.currentTimeMillis();
     HnswIndexManager manager = h.open(true);
     HnswSegment.Descriptor base = h.awaitBase(manager, since);
-    CELLS.put(base.anchor, HnswSegment.qualifier(base.identity, HnswSegment.PAYLOAD_TAG), base.time,
-      new byte[0]);
+    CELLS.put(base.anchor, HnswSegment.qualifier(base.identity, 0, HnswSegment.PAYLOAD_TAG),
+      base.time, new byte[0]);
     HnswOffheapAllocator.get(h.env.getConfiguration()).evictAll();
     long lost = EnvironmentEdgeManager.currentTimeMillis();
     try {
@@ -1833,7 +1852,7 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * A segment whose payload cell is missing when its region opens is not readable. A new listing
+   * A segment whose payload chunks are missing when its region opens is not readable. A new listing
    * still returns the segment, so the region does not list again without end. It opens without the
    * segment, and rebuilds.
    */
@@ -1853,8 +1872,8 @@ public class HnswIndexManagerFlushTest {
   }
 
   /**
-   * HBase returns an empty value for a payload or a tombstones cell whose MOB file is gone. The
-   * region of a delta with such a cell cannot read the delta at open. The region opens without the
+   * HBase returns an empty value for a payload or a tombstones chunk whose MOB file is gone. The
+   * region of a delta with such a chunk cannot read the delta at open. The region opens without the
    * delta, and rebuilds. The replay starts after the changes of the lost delta, so the base of its
    * stack does not hold them. Thus the region is not covered until the rebuild lands, and an HNSW
    * scan reads the range without candidate restriction.
@@ -1880,7 +1899,8 @@ public class HnswIndexManagerFlushTest {
       });
       HnswSegment.Descriptor delta = h.segments().get(0);
       first.close();
-      CELLS.put(delta.anchor, HnswSegment.qualifier(delta.identity, tag), delta.time, new byte[0]);
+      CELLS.put(delta.anchor, HnswSegment.qualifier(delta.identity, 0, tag), delta.time,
+        new byte[0]);
 
       // The rebuild waits, so the test sees the uncovered region
       CountDownLatch release = new CountDownLatch(1);
@@ -1974,7 +1994,7 @@ public class HnswIndexManagerFlushTest {
     HnswIndexManager first = h.open(true);
     HnswSegment.Descriptor base = h.awaitBase(first, since);
     first.close();
-    byte[] qualifier = HnswSegment.qualifier(base.identity, HnswSegment.PAYLOAD_TAG);
+    byte[] qualifier = HnswSegment.qualifier(base.identity, 0, HnswSegment.PAYLOAD_TAG);
     byte[] payload =
       CellUtil
         .cloneValue(
@@ -2258,6 +2278,7 @@ public class HnswIndexManagerFlushTest {
       }
     };
     try {
+      CELLS.remove(base, HnswSegment.LAYOUT_TAG);
       CELLS.remove(base, HnswSegment.PAYLOAD_TAG);
       HnswOffheapAllocator.get(h.env.getConfiguration()).evictAll();
       try {
@@ -2437,7 +2458,7 @@ public class HnswIndexManagerFlushTest {
       assertTrue(blocker.scanEntered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
       routine.rebuild(Long.MAX_VALUE);
       lost.rebuild(Long.MAX_VALUE);
-      CELLS.put(base.anchor, HnswSegment.qualifier(base.identity, HnswSegment.PAYLOAD_TAG),
+      CELLS.put(base.anchor, HnswSegment.qualifier(base.identity, 0, HnswSegment.PAYLOAD_TAG),
         base.time, new byte[0]);
       HnswOffheapAllocator.get(losing.env.getConfiguration()).evictAll();
       try {
@@ -2521,7 +2542,7 @@ public class HnswIndexManagerFlushTest {
       assertTrue(manager.covered());
       assertEquals(merged.rows.size(),
         manager.count(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
-      CELLS.put(lost.anchor, HnswSegment.qualifier(lost.identity, HnswSegment.PAYLOAD_TAG),
+      CELLS.put(lost.anchor, HnswSegment.qualifier(lost.identity, 0, HnswSegment.PAYLOAD_TAG),
         lost.time, new byte[0]);
       HnswOffheapAllocator.get(merged.env.getConfiguration()).evictAll();
       float[] query = upper.rows.get(upper.key("z00"));
@@ -2579,7 +2600,7 @@ public class HnswIndexManagerFlushTest {
         assertTrue(entered.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         // The purge closes the manager, and deletes the cells before the flush writes its segment
         manager.close();
-        assertEquals(6, HnswIndexManager.purge(h.env, h.index));
+        assertEquals(7, HnswIndexManager.purge(h.env, h.index));
         assertTrue(CELLS.list(Bytes.toBytes(h.index)).isEmpty());
       } finally {
         release.countDown();
@@ -2666,7 +2687,7 @@ public class HnswIndexManagerFlushTest {
     CELLS.put(noWriter, Bytes.toBytes("payload"), Bytes.toBytes("writer"));
     CELLS.remove(noWriter, HnswSegment.WRITER_TAG);
     byte[] payloadOnly = HnswSegment.qualifier(HnswSegment.identity(key, h.start, base.time - 20),
-      HnswSegment.PAYLOAD_TAG);
+      0, HnswSegment.PAYLOAD_TAG);
     CELLS.put(base.anchor, payloadOnly, base.time - 20, Bytes.toBytes("payload"));
     byte[] junk = Bytes.add(HnswSegment.prefix(key), Bytes.toBytes("junk"));
     CELLS.put(base.anchor, junk, 5L, Bytes.toBytes(1));
@@ -2676,10 +2697,12 @@ public class HnswIndexManagerFlushTest {
     byte[] family = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
     Get malformed = new Get(base.anchor).addColumn(family, payloadOnly).addColumn(family, junk);
     for (byte tag : new byte[] { HnswSegment.END_KEY_TAG, HnswSegment.COUNT_TAG,
-      HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG, HnswSegment.PAYLOAD_TAG }) {
+      HnswSegment.REPLAY_FROM_TAG, HnswSegment.DEFINITION_TAG, HnswSegment.LAYOUT_TAG }) {
       malformed.addColumn(family, HnswSegment.qualifier(noWriter.identity, tag));
     }
-    assertEquals(7, CELLS.get(malformed).size());
+    malformed.addColumn(family,
+      HnswSegment.qualifier(noWriter.identity, 0, HnswSegment.PAYLOAD_TAG));
+    assertEquals(8, CELLS.get(malformed).size());
 
     HnswSegment.Descriptor rebuilt = h.rebuild(manager);
     await("the malformed cells deleted", () -> CELLS.get(malformed).isEmpty());

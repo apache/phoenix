@@ -21,13 +21,16 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,6 +44,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -51,6 +55,7 @@ import org.apache.hadoop.hbase.mob.MobUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
+import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -72,6 +77,8 @@ public class HnswIndexReaderTest {
   private static final byte[] FAMILY = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
   private static final byte[] KEY = Bytes.toBytes("IDX");
   private static final byte[] DEFINITION = HnswSegment.definitionDigest("definition");
+  // The length of the payload trailer: the mapping length and the magic
+  private static final int TRAILER = 2 * Bytes.SIZEOF_INT;
   private static final byte[] WRITER = Bytes.toBytes("0123456789abcdef0123456789abcdef");
   private static final HnswSegment.Descriptor SEGMENT = new HnswSegment.Descriptor(KEY,
     Bytes.toBytes("m"), 100L, HConstants.EMPTY_END_ROW, 10, null, 100L, DEFINITION);
@@ -156,8 +163,10 @@ public class HnswIndexReaderTest {
       cells.add(cell(row, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG),
         Bytes.toBytes(d.baseTime)));
     }
-    cells
-      .add(cell(row, HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), new byte[2000]));
+    cells.add(cell(row, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 2000, 1992, 0).encode()));
+    cells.add(
+      cell(row, HnswSegment.qualifier(d.identity, 0, HnswSegment.PAYLOAD_TAG), new byte[2000]));
     return cells;
   }
 
@@ -175,10 +184,13 @@ public class HnswIndexReaderTest {
 
   /**
    * One listing of the index and one later scan of all keys classify the cells. A segment that the
-   * server writes between the two scans is not malformed. A segment without a W cell, a payload
-   * without small cells, and a qualifier of the index that does not decode are malformed. The
-   * reader reports two other groups: cells that name no index key, and cells of an index key that
-   * the catalog does not have. Neither scan returns a payload.
+   * server writes between the two scans is not malformed. Chunks without small cells can be newer
+   * than each listed segment of their row. Such chunks belong to a write in progress, so they are
+   * not malformed either. A segment without a W cell is malformed. Chunks without small cells that
+   * are older than a listed segment of their row are malformed. A chunk that the layout of its
+   * segment does not count is malformed, and so is a qualifier of the index that does not decode.
+   * The reader reports two other groups: cells that name no index key, and cells of an index key
+   * that the catalog does not have. Neither scan returns a chunk.
    */
   @Test
   public void testSegmentWrittenDuringCheckIsNotMalformed() throws Exception {
@@ -186,14 +198,25 @@ public class HnswIndexReaderTest {
       HConstants.EMPTY_END_ROW, 10, null, 200L, DEFINITION);
     HnswSegment.Descriptor noWriter = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 300L,
       HConstants.EMPTY_END_ROW, 10, null, 300L, DEFINITION);
-    HnswSegment.Descriptor payloadOnly = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 400L,
+    HnswSegment.Descriptor failed = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 50L,
+      HConstants.EMPTY_END_ROW, 10, null, 50L, DEFINITION);
+    HnswSegment.Descriptor inProgress = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 400L,
       HConstants.EMPTY_END_ROW, 10, null, 400L, DEFINITION);
+    // A row without a listed segment, as for the first base of a region
+    HnswSegment.Descriptor first = new HnswSegment.Descriptor(KEY, Bytes.toBytes("x"), 10L,
+      HConstants.EMPTY_END_ROW, 10, null, 10L, DEFINITION);
     byte[] junk = Bytes.add(HnswSegment.prefix(KEY), Bytes.toBytes("junk"));
     byte[] gone = Bytes.add(Bytes.toBytes("GONE"), new byte[] { 0 }, Bytes.toBytes("x"));
+    byte[] extra = HnswSegment.qualifier(SEGMENT.identity, 1, HnswSegment.PAYLOAD_TAG);
     listed = new ArrayList<>(cells(SEGMENT, SEGMENT.anchor, true));
     listed.addAll(cells(noWriter, noWriter.anchor, false));
-    listed.add(cell(payloadOnly.anchor,
-      HnswSegment.qualifier(payloadOnly.identity, HnswSegment.PAYLOAD_TAG), new byte[2000]));
+    for (HnswSegment.Descriptor d : new HnswSegment.Descriptor[] { failed, inProgress, first }) {
+      listed.add(cell(d.anchor, HnswSegment.qualifier(d.identity, 0, HnswSegment.PAYLOAD_TAG),
+        new byte[2000]));
+      listed.add(cell(d.anchor, HnswSegment.qualifier(d.identity, 0, HnswSegment.TOMBSTONES_TAG),
+        new byte[20]));
+    }
+    listed.add(cell(SEGMENT.anchor, extra, new byte[10]));
     listed.add(cell(SEGMENT.anchor, junk, Bytes.toBytes(1)));
     listed.add(cell(Bytes.toBytes("a"), Bytes.toBytes("stray"), Bytes.toBytes(1)));
     listed.add(cell(Bytes.toBytes("a"), gone, Bytes.toBytes(1)));
@@ -203,10 +226,11 @@ public class HnswIndexReaderTest {
     HnswIndexReader.Catalog catalog = reader.readCatalog();
     assertEquals(1, catalog.segments.size());
     assertArrayEquals(SEGMENT.identity, catalog.segments.get(0).identity);
-    assertEquals(
-      new HashSet<>(Arrays.asList(Bytes.toStringBinary(noWriter.identity),
-        Bytes.toStringBinary(payloadOnly.identity), Bytes.toStringBinary(junk))),
+    assertEquals(new HashSet<>(
+      Arrays.asList(Bytes.toStringBinary(noWriter.identity), Bytes.toStringBinary(failed.identity),
+        Bytes.toStringBinary(extra), Bytes.toStringBinary(junk))),
       names(catalog.malformed, 1));
+    assertEquals(4, catalog.malformed.size());
     assertEquals(Collections.singleton(Bytes.toStringBinary(SEGMENT.anchor)),
       names(catalog.malformed, 0));
     assertEquals(Collections.singleton("GONE"), catalog.strayKeys.keySet());
@@ -220,6 +244,95 @@ public class HnswIndexReaderTest {
       assertEquals(Collections.singleton(new ImmutableBytesPtr(FAMILY)),
         toPtrs(scan.getFamilyMap().keySet()));
     }
+  }
+
+  /**
+   * The reader takes the payload size from the layout and reads no cell for it. A copy of the
+   * payload reads each chunk once, and a range read reads only the chunks that hold the range.
+   */
+  @Test
+  public void testPayloadFromChunks() throws Exception {
+    byte[] payload = new byte[40];
+    for (int i = 0; i < payload.length; i++) {
+      payload[i] = (byte) i;
+    }
+    HnswSegment.Layout layout = new HnswSegment.Layout(16, payload.length, 24, 0);
+    HnswSegment.Descriptor d = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 100L,
+      HConstants.EMPTY_END_ROW, 10, null, 100L, DEFINITION, layout);
+    SegmentCells cells = new SegmentCells();
+    cells.put(d, payload, WRITER);
+    List<Integer> chunks = new ArrayList<>();
+    when(dataTable.get(any(Get.class))).thenAnswer(invocation -> {
+      Get get = invocation.getArgument(0);
+      for (byte[] qualifier : get.getFamilyMap().get(FAMILY)) {
+        HnswSegment.Qualifier q = HnswSegment.parseQualifier(qualifier, 0, qualifier.length);
+        if (q.chunk >= 0) {
+          chunks.add(q.chunk);
+        }
+      }
+      return cells.get(get);
+    });
+
+    assertEquals(payload.length, reader.payloadSize(d));
+    verify(dataTable, never()).get(any(Get.class));
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    reader.copyPayload(d, out);
+    assertArrayEquals(payload, out.toByteArray());
+    assertEquals(Arrays.asList(0, 1, 2), chunks);
+
+    chunks.clear();
+    assertArrayEquals(Arrays.copyOfRange(payload, 14, 18),
+      reader.readRange(d, HnswSegment.PAYLOAD_TAG, 14, 4));
+    assertEquals(Arrays.asList(0, 1), chunks);
+    chunks.clear();
+    assertArrayEquals(Arrays.copyOfRange(payload, 36, 40),
+      reader.readRange(d, HnswSegment.PAYLOAD_TAG, 36, 4));
+    assertEquals(Collections.singletonList(2), chunks);
+    try {
+      reader.readRange(d, HnswSegment.PAYLOAD_TAG, 38, 4);
+      fail("a range past the end of the stream must not read");
+    } catch (IllegalArgumentException expected) {
+    }
+
+    // An absent chunk fails the copy
+    cells.remove(d.anchor, HnswSegment.qualifier(d.identity, 1, HnswSegment.PAYLOAD_TAG));
+    try {
+      reader.copyPayload(d, new ByteArrayOutputStream());
+      fail("a payload with an absent chunk must not copy");
+    } catch (HnswSegment.CorruptSegmentException e) {
+      assertEquals(HnswSegment.CorruptSegmentException.Kind.MISSING, e.getKind());
+      assertEquals(1, e.getChunk());
+    }
+  }
+
+  /**
+   * The size check of an open bounds only the parts of a segment that the heap holds: the key
+   * mapping and the tombstones. The graph goes off-heap, so a large graph does not fail the check.
+   */
+  @Test
+  public void testCheckSizeBoundsHeapPart() throws Exception {
+    long limit = Runtime.getRuntime().maxMemory() / 4;
+    long graph = HnswSegment.MAX_GRAPH_BYTES;
+    HnswIndexReader.checkSize(
+      descriptor(new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, graph + 1000 + TRAILER, graph, 0)));
+    HnswIndexReader.checkSize(descriptor(
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, limit / 2 + TRAILER, 0, limit / 2)));
+    for (HnswSegment.Layout layout : new HnswSegment.Layout[] {
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 1000 + limit + 1 + TRAILER, 1000, 0),
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 0, 0, limit + 1),
+      new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, limit / 2 + 1 + TRAILER, 0, limit / 2 + 1) }) {
+      try {
+        HnswIndexReader.checkSize(descriptor(layout));
+        fail("the heap part of " + layout + " exceeds the limit");
+      } catch (HnswIndexReader.PayloadTooLargeException expected) {
+      }
+    }
+  }
+
+  private static HnswSegment.Descriptor descriptor(HnswSegment.Layout layout) {
+    return new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 100L, HConstants.EMPTY_END_ROW,
+      layout.payloadLength > 0 ? 10 : 0, null, 100L, DEFINITION, layout);
   }
 
   private static Set<ImmutableBytesPtr> toPtrs(Set<byte[]> families) {

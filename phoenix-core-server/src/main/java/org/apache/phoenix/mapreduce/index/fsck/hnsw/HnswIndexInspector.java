@@ -27,7 +27,9 @@ import io.github.jbellis.jvector.vector.VectorSimilarityFunction;
 import io.github.jbellis.jvector.vector.VectorizationProvider;
 import io.github.jbellis.jvector.vector.types.VectorFloat;
 import io.github.jbellis.jvector.vector.types.VectorTypeSupport;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,8 +63,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
  * segment cells in the hidden family {@code V#} of the data table, the segment payloads and the
  * data rows. They put the result in the report:
  * <ul>
- * <li>{@code list}: The descriptor and the payload size of each segment. Also the region that holds
- * the segment, its anchor row, the region that wrote it, and if it has the current definition.</li>
+ * <li>{@code list}: The descriptor and the layout of each segment: the stream sizes and the chunk
+ * counts. Also the region that holds the segment, its anchor row, the region that wrote it, and if
+ * it has the current definition.</li>
  * <li>{@code coverage}: For each data region, the current segments, and the current base segments
  * that are wider than the region. Also if the only current base segment is exact, and if base
  * segments cover the key range. A region uses only the segments that it holds, so the upper
@@ -72,7 +75,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
  * with time T. The {@code nodes} flag adds the neighbors of each node, and the {@code dot} flag
  * adds the level 0 edges in Graphviz format.</li>
  * <li>{@code export <directory> [time=T]}: Writes the payload of each segment to a file, with a
- * JSON file of the segment metadata and the index parameters.</li>
+ * JSON file of the segment metadata and the index parameters. The export streams the payload in
+ * groups of chunks, so the heap does not limit the payload size.</li>
  * <li>{@code search <[v1,...] | @file | key values> [k=K] [ef=EF]}: The tool searches the live
  * entries of the current segments of all regions. It gives the recall against a brute force search
  * of the same entries. It does not search the in-memory graphs of the region servers.</li>
@@ -191,8 +195,7 @@ public class HnswIndexInspector {
     List<Map<String, Object>> segments = new ArrayList<>();
     for (HnswSegment.Descriptor d : reader.listSegments()) {
       Map<String, Object> s = describe(d);
-      long size = reader.payloadSize(d);
-      s.put("payloadBytes", size < 0 ? null : size);
+      layout(d, s);
       RegionInfo region = HnswIndexReader.regionOf(regions, d.anchor);
       s.put("region", region == null ? null : region.getEncodedName());
       s.put("anchor", Bytes.toStringBinary(d.anchor));
@@ -215,6 +218,18 @@ public class HnswIndexInspector {
     }
     s.put("rows", d.count);
     return s;
+  }
+
+  // Adds the sizes and the chunk counts of the segment streams. They come from the layout cell, so
+  // the method reads no chunk
+  private void layout(HnswSegment.Descriptor d, Map<String, Object> s) {
+    HnswSegment.Layout layout = d.layout;
+    s.put("payloadBytes", reader.payloadSize(d));
+    s.put("graphBytes", layout.graphLength);
+    s.put("tombstoneBytes", layout.tombstonesLength);
+    s.put("chunkSize", layout.chunkSize);
+    s.put("payloadChunks", layout.chunks(HnswSegment.PAYLOAD_TAG));
+    s.put("tombstoneChunks", layout.chunks(HnswSegment.TOMBSTONES_TAG));
   }
 
   private String key(byte[] key) {
@@ -296,18 +311,31 @@ public class HnswIndexInspector {
     List<Map<String, Object>> segments = new ArrayList<>();
     for (HnswSegment.Descriptor d : select(args.getLong("time"))) {
       Map<String, Object> s = describe(d);
-      byte[] payload = reader.readPayload(d);
-      s.put("payloadBytes", payload == null ? null : payload.length);
-      if (payload != null && payload.length >= 2 * Bytes.SIZEOF_INT) {
-        s.put("graphMagic", String.format("%08x", Bytes.toInt(payload, 0)));
-        s.put("graphFormatVersion", Bytes.toInt(payload, Bytes.SIZEOF_INT));
-        s.put("trailerMagic",
-          String.format("%08x", Bytes.toInt(payload, payload.length - Bytes.SIZEOF_INT)));
+      layout(d, s);
+      // The graph header is in the first chunk, and the trailer is in the last chunk. The dump
+      // reads only these chunks for them
+      HnswSegment.Layout layout = d.layout;
+      if (layout.graphLength >= 2 * Bytes.SIZEOF_INT) {
+        byte[] header = reader.readRange(d, HnswSegment.PAYLOAD_TAG, 0, 2 * Bytes.SIZEOF_INT);
+        s.put("graphMagic", String.format("%08x", Bytes.toInt(header, 0)));
+        s.put("graphFormatVersion", Bytes.toInt(header, Bytes.SIZEOF_INT));
+      }
+      if (layout.payloadLength > 0) {
+        byte[] magic = reader.readRange(d, HnswSegment.PAYLOAD_TAG,
+          layout.payloadLength - Bytes.SIZEOF_INT, Bytes.SIZEOF_INT);
+        s.put("trailerMagic", String.format("%08x", Bytes.toInt(magic, 0)));
       }
       HnswSegment segment = reader.open(d);
       try {
         s.put("tombstones", segment.getTombstones().length);
-        OnDiskGraphIndex graph = segment.graph();
+        OnDiskGraphIndex graph;
+        try {
+          graph = segment.graph();
+        } catch (HnswSegment.TooLargeException e) {
+          // The graph is larger than the off-heap budget of this JVM
+          s.put("graphUnavailable", e.getMessage());
+          graph = null;
+        }
         if (graph != null) {
           dumpGraph(segment, graph, args, s);
         }
@@ -402,10 +430,10 @@ public class HnswIndexInspector {
       metadata.put("baseTime", d.baseTime);
       metadata.put("rows", d.count);
       metadata.put("writer", Bytes.toString(d.writer));
-      byte[] payload = reader.readPayload(d);
-      if (payload != null) {
+      layout(d, metadata);
+      if (d.layout.payloadLength > 0) {
         Path file = directory.resolve(name + ".hnsw");
-        Files.write(file, payload);
+        writePayload(d, file);
         files.add(file.toString());
         metadata.put("payload", file.getFileName().toString());
       }
@@ -427,6 +455,20 @@ public class HnswIndexInspector {
       files.add(sidecar.toString());
     }
     report.putInspection("files", files);
+  }
+
+  // Streams the payload into the file in groups of chunks. A failure deletes the partial file
+  private void writePayload(HnswSegment.Descriptor d, Path file) throws IOException {
+    try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file))) {
+      reader.copyPayload(d, out);
+    } catch (IOException | RuntimeException e) {
+      try {
+        Files.deleteIfExists(file);
+      } catch (IOException suppressed) {
+        e.addSuppressed(suppressed);
+      }
+      throw e;
+    }
   }
 
   /**

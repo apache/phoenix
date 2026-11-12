@@ -108,6 +108,11 @@ public class HnswIndexInspectIT extends ParallelStatsDisabledIT {
         assertEquals(50, s.get("rows"));
         assertEquals("base", s.get("kind"));
         assertTrue(s.toString(), ((Number) s.get("payloadBytes")).longValue() > 1024);
+        // The layout gives the stream sizes and the chunk counts
+        assertEquals(HnswSegment.CHUNK_SIZE, ((Number) s.get("chunkSize")).intValue());
+        assertEquals(1, ((Number) s.get("payloadChunks")).intValue());
+        assertEquals(0, ((Number) s.get("tombstoneChunks")).intValue());
+        assertTrue(s.toString(), ((Number) s.get("graphBytes")).longValue() > 0);
         // Each region holds its own segment in its anchor row, and is the writer of that segment
         RegionInfo region = regions.get(i).getRegionInfo();
         assertEquals(region.getEncodedName(), s.get("region"));
@@ -157,6 +162,7 @@ public class HnswIndexInspectIT extends ParallelStatsDisabledIT {
           assertEquals("L2", metadata.get("index").get("metric").asText());
           byte[] payload = Files.readAllBytes(directory.resolve(metadata.get("payload").asText()));
           assertEquals(0x484E5357, Bytes.toInt(payload, payload.length - 4));
+          assertEquals(metadata.get("payloadBytes").asLong(), payload.length);
           // The file name is the segment time and the MD5 of the identity and the anchor row. The
           // JSON holds both
           String base = metadata.get("payload").asText().replace(".hnsw", "");

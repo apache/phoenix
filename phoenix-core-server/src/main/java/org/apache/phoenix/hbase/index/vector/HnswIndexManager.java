@@ -28,6 +28,7 @@ import io.github.jbellis.jvector.vector.VectorizationProvider;
 import io.github.jbellis.jvector.vector.types.VectorFloat;
 import io.github.jbellis.jvector.vector.types.VectorTypeSupport;
 import java.io.IOException;
+import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -143,11 +144,12 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * <p>
  * <b>Segments of the region.</b> The segments are cells of the hidden family {@code V#} of the
  * region. The manager reads and writes them through {@link HnswSegmentStore.RegionStore}, with
- * region-local operations and no RPC. Discovery reads all the segments of the index in the family
- * of the region, in all anchor rows. It ignores the segments of another index definition. The
- * region searches the newest bases that cover its range, clipped to the range, and their deltas. A
- * region retires only the segments that its own family holds. It retires a base when newer bases
- * cover the part of its range that is in the region. A delta follows its base.
+ * region-local operations and no RPC. A payload is a sequence of chunk cells, so no heap array
+ * holds a full payload. Discovery reads all the segments of the index in the family of the region,
+ * in all anchor rows. It ignores the segments of another index definition. The region searches the
+ * newest bases that cover its range, clipped to the range, and their deltas. A region retires only
+ * the segments that its own family holds. It retires a base when newer bases cover the part of its
+ * range that is in the region. A delta follows its base.
  * <p>
  * <b>Uncovered regions.</b> The bases of a region can leave a part of its range without coverage.
  * This occurs in the upper daughter of a split, in a region of an active index after a TRUNCATE,
@@ -1016,8 +1018,8 @@ public final class HnswIndexManager implements VectorIndexManager {
    * segment after the listing. The caller then lists again. The method leaves out a segment whose
    * payload or tombstones are lost or corrupt, and adds it to {@code unreadable}. A full rebuild
    * then replaces it. A segment is also unreadable if a new listing still returns it after a load
-   * found no payload cell. Thus the caller does not list again without end.
-   * @param missing the identities of the segments that a load found without a payload cell. The
+   * found no layout cell. Thus the caller does not list again without end.
+   * @param missing the identities of the segments that a load found without a layout cell. The
    *                caller keeps this set across listings.
    */
   private List<Source> openSources(List<HnswSegment.Descriptor> current,
@@ -1031,7 +1033,7 @@ public final class HnswIndexManager implements VectorIndexManager {
         Source source = open.get(identity);
         if (source == null && (d.count > 0 || d.isDelta())) {
           if (missing.contains(identity)) {
-            LOG.error("HNSW segment {} of index {} for region {} has no payload; rebuilding", d,
+            LOG.error("HNSW segment {} of index {} for region {} has no layout cell; rebuilding", d,
               indexName, region.getRegionInfo().getEncodedName());
             unreadable.add(d);
             continue;
@@ -1070,7 +1072,7 @@ public final class HnswIndexManager implements VectorIndexManager {
   /**
    * Decides how a search continues if it does not find a segment that it reads. A cutover of the
    * region installs its new sources before it closes and retires the old ones, so the search runs
-   * again on the new sources. Otherwise the payload cell of the segment is missing, and the region
+   * again on the new sources. Otherwise the layout cell of the segment is missing, and the region
    * leaves the segment out and rebuilds. Returns true if the search can run again. Returns false if
    * the manager closed, or if the search must fail.
    */
@@ -1733,42 +1735,28 @@ public final class HnswIndexManager implements VectorIndexManager {
   // that the graphs held at the swap. The manager does not hold its monitor during the write,
   // because the write waits for region row locks
   private void writeFull(State s, Scan scan, long started) throws IOException {
-    Map<ImmutableBytesPtr, float[]> vectors = scanRegion(scan);
-    if (vectors == null || closed) {
-      return;
-    }
-    List<VectorFloat<?>> values = new ArrayList<>(vectors.size());
-    byte[][] keys = new byte[vectors.size()][];
-    int i = 0;
-    for (Map.Entry<ImmutableBytesPtr, float[]> e : vectors.entrySet()) {
-      keys[i++] = e.getKey().copyBytesIfNecessary();
-      values.add(VTS.createFloatVector(e.getValue()));
-    }
-    byte[] payload = keys.length > 0
-      ? HnswSegment.build(vectorIndex,
-        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
-      : null;
-    // A closed manager writes no segment, because its region can now be open on a different server
-    if (closed) {
-      return;
-    }
-    HnswSegment.Descriptor written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime,
-      endKey, keys.length, null, s.replayFrom, definition);
-    // Load the segment into off-heap memory before the write. Thus the region never writes a
-    // segment that this server cannot load
-    HnswSegment segment = payload != null
-      ? HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(), payload,
-        new byte[0][])
-      : null;
-    try {
-      long flushWait = store.write(written, payload, new byte[0][]);
-      metrics.update(HnswMetric.STORE_FLUSH_WAIT_TIME, flushWait);
-      metrics.update(HnswMetric.SEGMENT_BYTES_WRITTEN, payload != null ? payload.length : 0);
-    } catch (IOException | RuntimeException e) {
-      if (segment != null) {
-        segment.close();
+    HnswSegment.Descriptor written;
+    HnswSegment segment;
+    try (HnswSegment.Built built = buildBase(scan)) {
+      // A closed manager writes no segment, because its region can now be open on a different
+      // server
+      if (closed) {
+        return;
       }
-      throw e;
+      HnswSegment.Layout layout = built != null
+        ? store.layout(built.length(), built.graphLength(), 0)
+        : HnswSegment.Layout.EMPTY;
+      written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime, endKey,
+        built != null ? built.size() : 0, null, s.replayFrom, definition, layout);
+      // Load the segment into off-heap memory before the write. Thus the region never writes a
+      // segment that this server cannot load
+      segment = built != null
+        ? HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(), built,
+          new byte[0][])
+        : null;
+      if (!writeSegment(segment, written, built != null ? built.payload() : null, null)) {
+        return;
+      }
     }
     if (!cutover(segment, written)) {
       retireAfterClose(written);
@@ -1777,14 +1765,67 @@ public final class HnswIndexManager implements VectorIndexManager {
     metrics.update(HnswMetric.REBUILDS, 1);
     metrics.update(HnswMetric.REBUILD_TIME, EnvironmentEdgeManager.currentTimeMillis() - started);
     LOG.info("Rebuilt HNSW index {} for region {} with {} vectors", indexName,
-      region.getRegionInfo().getEncodedName(), keys.length);
+      region.getRegionInfo().getEncodedName(), written.count);
     // Report the base only now. V# shows it since the write, but the region searches it only
     // after the cutover. A build that ends when each region reports its base then finds each
     // region covered and its rebuild counted
     synchronized (this) {
       installedBase = written.time;
     }
-    retireSupersededSegments();
+    retireSupersededSegments(written.time);
+  }
+
+  // Scans the region and builds the graph of a base segment. Returns null if the region has no
+  // vectors or if the manager closes during the scan. The vectors and the row keys of the scan are
+  // not reachable after the return, so the heap does not hold them during the write
+  private HnswSegment.Built buildBase(Scan scan) throws IOException {
+    Map<ImmutableBytesPtr, float[]> vectors = scanRegion(scan);
+    if (vectors == null || vectors.isEmpty() || closed) {
+      return null;
+    }
+    List<VectorFloat<?>> values = new ArrayList<>(vectors.size());
+    byte[][] keys = new byte[vectors.size()][];
+    int i = 0;
+    for (Map.Entry<ImmutableBytesPtr, float[]> e : vectors.entrySet()) {
+      keys[i++] = e.getKey().copyBytesIfNecessary();
+      values.add(VTS.createFloatVector(e.getValue()));
+    }
+    // The build needs only the lists
+    vectors = null;
+    return HnswSegment.build(vectorIndex,
+      new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys, allocator);
+  }
+
+  // Writes the cells of a segment that the manager installed in memory, and records the write
+  // metrics. Returns false if the manager or the region closed during the write. The write then
+  // stops before its commit, and the manager deletes the cells that the write left. A close is not
+  // a failure, so it adds no failure metric and no retry. The region closes before the manager,
+  // so the write also stops when the region closes. On a failure, the method closes the segment
+  private boolean writeSegment(HnswSegment segment, HnswSegment.Descriptor written,
+    InputStream payload, InputStream tombstones) throws IOException {
+    try {
+      long flushWait = store.write(written, payload, tombstones,
+        () -> closed || region.isClosing() || region.isClosed());
+      if (!written.isDelta()) {
+        metrics.update(HnswMetric.STORE_FLUSH_WAIT_TIME, flushWait);
+      }
+      metrics.update(HnswMetric.SEGMENT_BYTES_WRITTEN,
+        written.layout.payloadLength + written.layout.tombstonesLength);
+      return true;
+    } catch (HnswSegmentStore.AbortedWriteException e) {
+      if (segment != null) {
+        segment.close();
+      }
+      LOG.info("HNSW index {} region {} stopped the write of segment {} because the manager or the"
+        + " region closed", indexName, region.getRegionInfo().getEncodedName(), written.time);
+      retireAfterClose(written);
+      return false;
+    } catch (IOException | RuntimeException | Error e) {
+      if (segment != null) {
+        segment.close();
+      }
+      throw e;
+    }
   }
 
   // Writes the changes in the graph of the flush as a delta segment on the given base. Then it
@@ -1799,36 +1840,36 @@ public final class HnswIndexManager implements VectorIndexManager {
       keys[i++] = e.getKey().copyBytesIfNecessary();
       values.add(VTS.createFloatVector(e.getValue()));
     }
-    byte[] payload = keys.length > 0
-      ? HnswSegment.build(vectorIndex,
-        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys)
-      : null;
-
     Set<ImmutableBytesPtr> deleted = s.flushing.deleted();
     byte[][] deletedKeys = new byte[deleted.size()][];
-    // The size of the tombstones cell: the key count, and each key with its length
-    long bytes = payload != null ? payload.length : 0;
-    bytes += deleted.isEmpty() ? 0 : Bytes.SIZEOF_INT;
     int d = 0;
     for (ImmutableBytesPtr del : deleted) {
       deletedKeys[d++] = del.copyBytesIfNecessary();
-      bytes += Bytes.SIZEOF_INT + del.getLength();
     }
-    if (closed) {
-      return;
-    }
-    HnswSegment.Descriptor written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime,
-      endKey, keys.length, baseTime, s.replayFrom, definition);
-    // Load the segment before the write, as for a base. Thus the region never writes a delta that
-    // this server cannot load
-    HnswSegment segment = HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(),
-      payload, deletedKeys);
-    try {
-      store.write(written, payload, deletedKeys);
-      metrics.update(HnswMetric.SEGMENT_BYTES_WRITTEN, bytes);
-    } catch (IOException | RuntimeException e) {
-      segment.close();
-      throw e;
+    HnswSegment.Descriptor written;
+    HnswSegment segment;
+    try (HnswSegment.Built built = keys.length > 0
+      ? HnswSegment.build(vectorIndex,
+        new ListRandomAccessVectorValues(values, vectorIndex.getDimension()), keys, allocator)
+      : null) {
+      if (closed) {
+        return;
+      }
+      HnswSegment.Layout layout =
+        store.layout(built != null ? built.length() : 0, built != null ? built.graphLength() : 0,
+          deletedKeys.length > 0 ? HnswSegment.KeyStream.length(deletedKeys) : 0);
+      written = new HnswSegment.Descriptor(indexKey, startKey, s.swapTime, endKey,
+        built != null ? built.size() : 0, baseTime, s.replayFrom, definition, layout);
+      // Load the segment before the write, as for a base. Thus the region never writes a delta
+      // that this server cannot load
+      segment = HnswSegment.of(store, written, allocator, vectorIndex.getDistanceMetric(), built,
+        deletedKeys);
+      if (
+        !writeSegment(segment, written, built != null ? built.payload() : null,
+          deletedKeys.length > 0 ? new HnswSegment.KeyStream(deletedKeys) : null)
+      ) {
+        return;
+      }
     }
     if (!cutover(segment, written)) {
       retireAfterClose(written);
@@ -1995,10 +2036,12 @@ public final class HnswIndexManager implements VectorIndexManager {
    * cells. Thus the lower daughter of a split retires the parent segments that it holds. A merged
    * region retires the segments of its predecessors. First, the region deletes the cells of the
    * index that are in no well-formed segment, which no listing names. Thus a tool that sees the
-   * superseded segments retired also sees these cells deleted.
+   * superseded segments retired also sees these cells deleted. A segment that is not well-formed
+   * and is newer than the given base can be a write in progress, so the region keeps its cells.
+   * @param keepAfter the time of the new base
    */
-  private void retireSupersededSegments() throws IOException {
-    int malformed = store.retireMalformed(indexKey);
+  private void retireSupersededSegments(long keepAfter) throws IOException {
+    int malformed = store.retireMalformed(indexKey, keepAfter);
     if (malformed > 0) {
       LOG.info("HNSW index {} region {} deleted {} cells of malformed segments", indexName,
         region.getRegionInfo().getEncodedName(), malformed);

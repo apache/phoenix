@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.index.fsck.hnsw;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -190,12 +191,15 @@ public class HnswIndexReader implements AutoCloseable {
   /**
    * Reads the cells of {@code V#} for the checks of the index. First, the listing of the index
    * reads the segments. Then a key-only scan of all cells finds the cells that the listing did not
-   * decode. A segment write is atomic, and a retirement is atomic too. Thus, if the later scan
-   * finds small cells of a segment that the listing did not see, a write added the segment after
-   * the listing. The method does not classify such a segment. A segment without small cells is not
-   * well-formed. The scans never read a MOB file. They never transfer a payload, also when the
-   * payload is in the memstore. The method classifies each cell when the scan gives it, and keeps
-   * only the cells that the checks report.
+   * decode. A segment write puts its chunks first, and then one commit Put adds the small cells. A
+   * retirement is atomic. Thus, if the later scan finds small cells of a segment that the listing
+   * did not see, a write added the segment after the listing. The method does not classify such a
+   * segment. An identity with only chunk cells is a write in progress if it is newer than each
+   * listed segment of its anchor row. The method does not classify it either. An older identity
+   * with only chunk cells is a failed write, so it is malformed. A chunk of a listed segment that
+   * its layout does not count is malformed too. The scans never read a MOB file. They never
+   * transfer a chunk, even when the chunk is in the memstore. The method classifies each cell when
+   * the scan gives it, and keeps only the cells that the checks report.
    */
   public Catalog readCatalog() throws IOException, SQLException {
     byte[] indexKey = context.getIndexKey();
@@ -203,15 +207,21 @@ public class HnswIndexReader implements AutoCloseable {
     List<byte[][]> rejected = new ArrayList<>();
     catalog.segments.addAll(sort(store.list(indexKey, rejected)));
     catalog.malformed.addAll(rejected);
-    Set<ImmutableBytesPtr> listed = new HashSet<>();
+    // The layout of each well-formed segment, and the newest well-formed segment of each row
+    Map<ImmutableBytesPtr, HnswSegment.Layout> layouts = new HashMap<>();
+    Map<ImmutableBytesPtr, Long> newest = new HashMap<>();
     for (HnswSegment.Descriptor d : catalog.segments) {
-      listed.add(HnswSegment.Listing.key(d.anchor, d.identity));
+      layouts.put(HnswSegment.Listing.key(d.anchor, d.identity), d.layout);
+      newest.merge(new ImmutableBytesPtr(d.anchor), d.time, Math::max);
     }
+    Set<ImmutableBytesPtr> listed = new HashSet<>(layouts.keySet());
     for (byte[][] r : rejected) {
       listed.add(HnswSegment.Listing.key(r[0], r[1]));
     }
-    // The segments of the index that the listing did not see, and the subset with small cells
+    // The segments of the index that the listing did not see, with the time of the identity. A
+    // write added the subset with small cells after the listing
     Map<ImmutableBytesPtr, byte[][]> unlisted = new LinkedHashMap<>();
+    Map<ImmutableBytesPtr, Long> unlistedTimes = new HashMap<>();
     Set<ImmutableBytesPtr> small = new HashSet<>();
     Map<String, Boolean> live = new HashMap<>();
     try {
@@ -254,10 +264,15 @@ public class HnswIndexReader implements AutoCloseable {
         }
         ImmutableBytesPtr segment = HnswSegment.Listing.key(row, q.identity());
         if (listed.contains(segment)) {
+          HnswSegment.Layout layout = layouts.get(segment);
+          if (layout != null && q.chunk >= 0 && q.chunk >= layout.chunks(q.tag)) {
+            catalog.malformed.add(new byte[][] { row, qualifier });
+          }
           return;
         }
         unlisted.putIfAbsent(segment, new byte[][] { row, q.identity() });
-        if (q.tag != HnswSegment.PAYLOAD_TAG && q.tag != HnswSegment.TOMBSTONES_TAG) {
+        unlistedTimes.putIfAbsent(segment, q.time);
+        if (q.chunk < 0) {
           small.add(segment);
         }
       });
@@ -265,9 +280,15 @@ public class HnswIndexReader implements AutoCloseable {
       throw e.getCause();
     }
     for (Map.Entry<ImmutableBytesPtr, byte[][]> e : unlisted.entrySet()) {
-      if (!small.contains(e.getKey())) {
-        catalog.malformed.add(e.getValue());
+      if (small.contains(e.getKey())) {
+        continue;
       }
+      Long rowNewest = newest.get(new ImmutableBytesPtr(e.getValue()[0]));
+      if (rowNewest == null || unlistedTimes.get(e.getKey()) > rowNewest) {
+        // The identity belongs to a write in progress
+        continue;
+      }
+      catalog.malformed.add(e.getValue());
     }
     return catalog;
   }
@@ -286,33 +307,63 @@ public class HnswIndexReader implements AutoCloseable {
   }
 
   /**
-   * Returns the size of the payload of a segment, or -1 if the payload cell is absent. The method
-   * never reads a MOB file, and never transfers a long payload.
+   * Returns the size of the payload of a segment, from its layout. The method reads nothing.
    */
-  public long payloadSize(HnswSegment.Descriptor d) throws IOException {
+  public long payloadSize(HnswSegment.Descriptor d) {
     return store.payloadSize(d);
   }
 
   /**
-   * Reads the payload of a segment. Returns null if the segment has no payload cell. Returns an
-   * empty array if the payload cell refers to a MOB file that does not exist.
-   * @throws IOException if the read fails, or if the payload is too large for the heap of this JVM
+   * Writes the payload of a segment to the stream, one group of chunks at a time. The heap holds
+   * the chunks of at most one group, so the size of the payload has no limit.
+   * @throws HnswSegment.NotFoundException       if a region retired the segment
+   * @throws HnswSegment.CorruptSegmentException if a chunk is absent, unresolved or of the wrong
+   *                                             length
    */
-  public byte[] readPayload(HnswSegment.Descriptor d) throws IOException {
-    checkSize(d);
-    try {
-      return CellUtil.cloneValue(store.readPayload(d));
-    } catch (HnswSegment.NotFoundException e) {
-      return null;
+  public void copyPayload(HnswSegment.Descriptor d, OutputStream out) throws IOException {
+    store.copyPayload(d, out);
+  }
+
+  /**
+   * Reads a range of the stream with the given chunk tag. The method reads only the chunks that
+   * hold the range, in groups of consecutive chunks.
+   * @throws IllegalArgumentException            if the range is not in the stream
+   * @throws HnswSegment.NotFoundException       if a region retired the segment
+   * @throws HnswSegment.CorruptSegmentException if a chunk is absent, unresolved or of the wrong
+   *                                             length
+   */
+  public byte[] readRange(HnswSegment.Descriptor d, byte tag, long offset, int length)
+    throws IOException {
+    HnswSegment.Layout layout = d.layout;
+    if (offset < 0 || length < 0 || offset + length > layout.length(tag)) {
+      throw new IllegalArgumentException(
+        "Range " + offset + "+" + length + " of a stream of " + layout.length(tag) + " bytes");
     }
+    byte[] range = new byte[length];
+    if (length == 0) {
+      return range;
+    }
+    int first = (int) (offset / layout.chunkSize);
+    int last = (int) ((offset + length - 1) / layout.chunkSize);
+    store.readChunks(d, tag, first, last + 1, (chunk, cell) -> {
+      // The overlap of this chunk with the range, as offsets in the stream
+      long start = Math.max(offset, (long) chunk * layout.chunkSize);
+      long end = Math.min(offset + length, (long) chunk * layout.chunkSize + cell.getValueLength());
+      int within = (int) (start - (long) chunk * layout.chunkSize);
+      System.arraycopy(cell.getValueArray(), cell.getValueOffset() + within, range,
+        (int) (start - offset), (int) (end - start));
+    });
+    return range;
   }
 
   /**
    * Opens a segment with the client off-heap allocator of this JVM. The caller closes the segment.
-   * @throws HnswSegment.NotFoundException if the payload cell or, for a delta, the count cell is
-   *                                       absent, as after the retirement of the segment
-   * @throws PayloadTooLargeException      if the payload exceeds the heap limit of this JVM
-   * @throws IOException                   if the payload cannot be read or decoded
+   * A graph larger than the off-heap budget does not fail the open. The open then reads only the
+   * key mapping, and {@link HnswSegment#graph()} throws {@link HnswSegment.TooLargeException}.
+   * @throws HnswSegment.NotFoundException       if a region retired the segment
+   * @throws HnswSegment.CorruptSegmentException if a chunk is bad or the bytes do not decode
+   * @throws PayloadTooLargeException            if the heap part exceeds the limit of this JVM
+   * @throws IOException                         if the read fails
    */
   public HnswSegment open(HnswSegment.Descriptor d) throws IOException {
     checkSize(d);
@@ -320,21 +371,22 @@ public class HnswIndexReader implements AutoCloseable {
       HnswOffheapAllocator.getForClient(connection.getConfiguration()), context.getMetric());
   }
 
-  // Refuses a payload larger than a quarter of the maximum heap, because an open reads the full
-  // payload into the heap. The check does not transfer a long payload
-  private void checkSize(HnswSegment.Descriptor d) throws IOException {
-    long size = store.payloadSize(d);
+  // Refuses a segment if its heap part is more than a quarter of the maximum heap. An open decodes
+  // the key mapping and the tombstones into the heap. The graph goes off-heap, so the check does
+  // not count it. The check reads no cell
+  static void checkSize(HnswSegment.Descriptor d) throws IOException {
+    long size = d.layout.mappingLength() + d.layout.tombstonesLength;
     long limit = Runtime.getRuntime().maxMemory() / 4;
     if (size > limit) {
       throw new PayloadTooLargeException(
-        "The payload of segment " + Bytes.toStringBinary(d.identity) + " has " + size
-          + " bytes, more than the " + limit + " this JVM reads");
+        "The key mapping and tombstones of segment " + Bytes.toStringBinary(d.identity) + " have "
+          + size + " bytes, more than the " + limit + " this JVM reads");
     }
   }
 
   /**
-   * Thrown when a segment payload is too large to read into the heap of this JVM. It shows a limit
-   * of the tool, not a fault of the segment.
+   * Signals that the key mapping and the tombstones of a segment are too large for the heap of this
+   * JVM. It shows a limit of the tool, not a fault of the segment.
    */
   public static final class PayloadTooLargeException extends IOException {
     private static final long serialVersionUID = 1L;

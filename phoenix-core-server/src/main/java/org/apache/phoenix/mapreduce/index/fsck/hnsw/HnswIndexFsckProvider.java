@@ -109,9 +109,10 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  * <li>{@code CATALOG}: Checks the segment cells and does not decode the payloads. It finds stray
  * and malformed cells, and an ACTIVE index with no segments. It also finds regions that no base
  * segment covers, stacks that another region wrote, and superseded segments.</li>
- * <li>{@code SEGMENTS}: Opens and checks each segment. It finds payloads that refer to a missing
- * MOB file, payloads that do not decode, and faults in the mapping and the graph structure. It also
- * finds nodes that a search cannot reach, and low recall against a brute force search.</li>
+ * <li>{@code SEGMENTS}: Opens and checks each segment. It finds a payload with an absent chunk, or
+ * with a chunk that refers to a missing MOB file. It finds payloads that do not decode, and faults
+ * in the mapping and the graph structure. It also finds nodes that a search cannot reach, and low
+ * recall against a brute force search.</li>
  * </ul>
  * </li>
  * <li>{@code repair}: Never writes {@code V#}. It asks the regions to purge the cells of index keys
@@ -771,6 +772,12 @@ public class HnswIndexFsckProvider extends GlobalIndexFsckProvider {
       List<String> problems = new ArrayList<>();
       try {
         checkStructure(reader.getContext(), d, segment, problems);
+      } catch (HnswSegment.TooLargeException e) {
+        // The graph is larger than the off-heap budget of this JVM. The mapping checks still apply
+        if (problems.isEmpty()) {
+          unchecked(d, e, findings);
+          return;
+        }
       } catch (RuntimeException e) {
         problems.add("the graph cannot be traversed: " + e);
       }
@@ -792,58 +799,59 @@ public class HnswIndexFsckProvider extends GlobalIndexFsckProvider {
   /**
    * Opens a segment for a check. Returns null if the segment cannot be checked, and records a
    * finding where one applies. A segment that a server retired after the listing gets no finding. A
-   * payload too large for this JVM gets a warning that repair does not act on. A payload that
-   * refers to a missing MOB file is an error. A segment is corrupt only when its payload, if it has
-   * one, reads and a second open still fails. A read failure is retried and then thrown, because it
-   * does not show corruption.
+   * heap part too large for this JVM gets a warning that repair does not act on. An absent chunk,
+   * or a chunk that refers to a missing MOB file, is an unresolved payload. A chunk of the wrong
+   * length or bytes that do not decode make a corrupt segment. Any other read failure does not show
+   * corruption. The method then opens the segment a second time with retries, and throws the
+   * failure if the retries do not succeed.
    */
   private static HnswSegment openForCheck(HnswIndexReader reader, HnswSegment.Descriptor d,
     List<Finding> findings) throws Exception {
-    Exception failure;
+    Opened opened;
     try {
-      return reader.open(d);
-    } catch (HnswSegment.NotFoundException missing) {
-      return missingCell(reader, d, findings);
-    } catch (HnswIndexReader.PayloadTooLargeException e) {
-      Map<String, Object> details = segmentDetails(d);
-      details.put("error", e.getMessage());
-      findings.add(new Finding(Severity.WARN, SCOPE_SEGMENTS, SEGMENT_UNCHECKED,
-        "Segment " + Bytes.toStringBinary(d.identity) + " is not checked: " + e.getMessage(),
-        details));
-      return null;
-    } catch (IOException | RuntimeException e) {
-      failure = e;
-    }
-    if (Retry.isInterrupt(failure)) {
-      // An interrupt does not show that the segment is corrupt
-      Thread.currentThread().interrupt();
-      throw failure;
-    }
-    byte[] payload = Retry.call("Read HNSW segment payload", () -> reader.readPayload(d));
-    if (payload != null && payload.length == 0) {
-      Map<String, Object> details = segmentDetails(d);
-      details.put("error", String.valueOf(failure.getMessage()));
-      findings.add(new Finding(
-        Severity.ERROR, SCOPE_SEGMENTS, PAYLOAD_UNRESOLVED, "The payload of segment "
-          + Bytes.toStringBinary(d.identity) + " references a MOB " + "file that does not exist",
-        details));
-      return null;
-    }
-    // The payload reads now, or the segment has none, so a failure of the second open is a failure
-    // to decode the segment
-    try {
-      return reader.open(d);
-    } catch (HnswSegment.NotFoundException missing) {
-      return missingCell(reader, d, findings);
-    } catch (IOException | RuntimeException e) {
+      opened = Opened.of(reader, d);
+    } catch (IOException e) {
       if (Retry.isInterrupt(e)) {
+        // An interrupt does not show that the segment is corrupt
         Thread.currentThread().interrupt();
         throw e;
       }
-      failure = e;
+      opened = Retry.call("Open HNSW segment", () -> Opened.of(reader, d));
+    }
+    if (opened.segment != null) {
+      return opened.segment;
+    }
+    Exception failure = opened.failure;
+    if (failure instanceof HnswSegment.NotFoundException) {
+      return retired(reader, d, findings);
+    }
+    if (failure instanceof HnswIndexReader.PayloadTooLargeException) {
+      unchecked(d, failure, findings);
+      return null;
     }
     Map<String, Object> details = segmentDetails(d);
     details.put("error", String.valueOf(failure.getMessage()));
+    if (failure instanceof HnswSegment.CorruptSegmentException) {
+      HnswSegment.CorruptSegmentException corrupt = (HnswSegment.CorruptSegmentException) failure;
+      details.put("kind", corrupt.getKind().name());
+      details.put("chunk", corrupt.getChunk());
+      switch (corrupt.getKind()) {
+        case MISSING:
+          findings.add(new Finding(Severity.ERROR, SCOPE_SEGMENTS, PAYLOAD_UNRESOLVED,
+            "Segment " + Bytes.toStringBinary(d.identity) + " has no chunk " + corrupt.getChunk()
+              + " of " + (char) corrupt.getTag(),
+            details));
+          return null;
+        case UNRESOLVED:
+          findings.add(new Finding(
+            Severity.ERROR, SCOPE_SEGMENTS, PAYLOAD_UNRESOLVED, "The payload of segment "
+              + Bytes.toStringBinary(d.identity) + " references a MOB file that does not exist",
+            details));
+          return null;
+        default:
+          break;
+      }
+    }
     findings.add(new Finding(Severity.ERROR, SCOPE_SEGMENTS, SEGMENT_CORRUPT,
       "Segment " + Bytes.toStringBinary(d.identity) + " cannot be decoded: " + failure.getMessage(),
       details));
@@ -851,16 +859,52 @@ public class HnswIndexFsckProvider extends GlobalIndexFsckProvider {
   }
 
   /**
-   * Handles a segment without its payload cell, or a delta without its count cell. If a new listing
-   * still returns the segment, no server retired it. The cell is then missing, and the method
-   * records PAYLOAD_UNRESOLVED. The region leaves such a segment out and rebuilds. Returns null.
+   * The result of one open of a segment for a check. It holds the open segment, or the failure that
+   * shows the state of the segment. The method throws a read failure that does not show the state,
+   * so that a retry can repeat the open.
    */
-  private static HnswSegment missingCell(HnswIndexReader reader, HnswSegment.Descriptor d,
+  private static final class Opened {
+    final HnswSegment segment;
+    final Exception failure;
+
+    private Opened(HnswSegment segment, Exception failure) {
+      this.segment = segment;
+      this.failure = failure;
+    }
+
+    static Opened of(HnswIndexReader reader, HnswSegment.Descriptor d) throws IOException {
+      try {
+        return new Opened(reader.open(d), null);
+      } catch (HnswSegment.NotFoundException | HnswSegment.CorruptSegmentException
+        | HnswIndexReader.PayloadTooLargeException e) {
+        return new Opened(null, e);
+      } catch (RuntimeException e) {
+        // JVector reports an undecodable graph as a RuntimeException
+        return new Opened(null, e);
+      }
+    }
+  }
+
+  // Records that this JVM cannot check the segment. Repair does not act on the warning
+  private static void unchecked(HnswSegment.Descriptor d, Exception e, List<Finding> findings) {
+    Map<String, Object> details = segmentDetails(d);
+    details.put("error", e.getMessage());
+    findings.add(new Finding(Severity.WARN, SCOPE_SEGMENTS, SEGMENT_UNCHECKED,
+      "Segment " + Bytes.toStringBinary(d.identity) + " is not checked: " + e.getMessage(),
+      details));
+  }
+
+  /**
+   * Handles a segment without a layout cell. A retirement deletes the layout cell. If a new listing
+   * still returns the segment, no server retired it. The method then records PAYLOAD_UNRESOLVED.
+   * The region leaves such a segment out and rebuilds. Returns null.
+   */
+  private static HnswSegment retired(HnswIndexReader reader, HnswSegment.Descriptor d,
     List<Finding> findings) throws IOException {
     for (HnswSegment.Descriptor listed : reader.listSegments()) {
       if (Bytes.equals(listed.identity, d.identity) && Bytes.equals(listed.anchor, d.anchor)) {
         findings.add(new Finding(Severity.ERROR, SCOPE_SEGMENTS, PAYLOAD_UNRESOLVED,
-          "Segment " + Bytes.toStringBinary(d.identity) + " has no payload cell",
+          "Segment " + Bytes.toStringBinary(d.identity) + " has no layout cell",
           segmentDetails(d)));
         break;
       }

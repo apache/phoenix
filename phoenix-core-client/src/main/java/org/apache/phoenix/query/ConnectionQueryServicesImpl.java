@@ -160,6 +160,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.MemoryCompactionPolicy;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.ServerName;
@@ -1273,13 +1274,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   // The hidden family of VECTOR_LOCAL indexes contains the HNSW segments. MOB keeps the large
   // segment payloads out of store file rewrites. Segments are region-local derived state, so the
-  // family never follows the TTL, KEEP_DELETED_CELLS or REPLICATION_SCOPE of the data table.
+  // family never follows the TTL, KEEP_DELETED_CELLS or REPLICATION_SCOPE of the data table. The
+  // family has no in-memory compaction. A payload chunk is a large cell, and an in-memory
+  // compaction pipeline adds copies of it to the heap.
   private static ColumnFamilyDescriptor generateVectorLocalIndexColumnFamilyDescriptor() {
     return ColumnFamilyDescriptorBuilder
       .newBuilder(QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES).setMobEnabled(true)
       .setMobThreshold(HNSW_MOB_THRESHOLD_BYTES).setMaxVersions(1).setTimeToLive(HConstants.FOREVER)
       .setKeepDeletedCells(KeepDeletedCells.FALSE).setScope(HConstants.REPLICATION_SCOPE_LOCAL)
-      .setBloomFilterType(BloomType.ROW).build();
+      .setBloomFilterType(BloomType.ROW).setInMemoryCompaction(MemoryCompactionPolicy.NONE).build();
   }
 
   // Workaround HBASE-14737

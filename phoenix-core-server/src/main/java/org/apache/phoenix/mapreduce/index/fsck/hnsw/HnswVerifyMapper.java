@@ -158,8 +158,8 @@ public class HnswVerifyMapper extends TableMapper<NullWritable, NullWritable> {
       reader = new HnswIndexReader(new HnswIndexContext(pconn, data, index));
       try {
         region = HnswRegionSegments.open(reader, split.getStartRow(), split.getEndRow());
-      } catch (HnswIndexReader.PayloadTooLargeException e) {
-        // The size guard of this JVM does not show that the segments are bad
+      } catch (HnswIndexReader.PayloadTooLargeException | HnswSegment.TooLargeException e) {
+        // The size guards of this JVM do not show that the segments are bad
         LOGGER.warn("Cannot check the HNSW segments of region {}", split.getEncodedRegionName(), e);
         context.getCounter(Counters.UNCHECKED).increment(1);
       } catch (IOException | RuntimeException e) {

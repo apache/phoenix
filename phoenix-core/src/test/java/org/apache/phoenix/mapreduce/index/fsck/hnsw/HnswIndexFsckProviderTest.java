@@ -40,6 +40,7 @@ import io.github.jbellis.jvector.vector.VectorizationProvider;
 import io.github.jbellis.jvector.vector.types.VectorFloat;
 import io.github.jbellis.jvector.vector.types.VectorTypeSupport;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -59,6 +60,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Result;
@@ -71,6 +73,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.hbase.index.hnsw.HnswOffheapAllocator;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
+import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.mapreduce.index.fsck.Finding;
@@ -83,6 +86,8 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.junit.Test;
+
+import org.apache.phoenix.thirdparty.com.google.common.io.ByteStreams;
 
 /**
  * Unit tests for the helpers of the HNSW verify, fsck, repair and inspect tools, with mocked tables
@@ -109,6 +114,20 @@ public class HnswIndexFsckProviderTest {
     return -1;
   }
 
+  // Builds the payload of a segment with the given vectors and row keys
+  private static byte[] build(List<VectorFloat<?>> vectors, byte[][] keys) throws IOException {
+    PTable.VectorIndex vi = new PTable.VectorIndex.Builder().setAlgorithm("HNSW")
+      .setDistanceMetric("L2").setDimension(DIM).setHnswM(8).setHnswEfConstruction(64)
+      .setHnswAlpha(1.2).setQuantizationType("NONE").build();
+    try (
+      HnswSegment.Built result =
+        HnswSegment.build(vi, new ListRandomAccessVectorValues(vectors, DIM), keys,
+          HnswOffheapAllocator.getForClient(new Configuration()));
+      InputStream in = result.payload()) {
+      return ByteStreams.toByteArray(in);
+    }
+  }
+
   /**
    * The reachability check finds the nodes that the edges of the graph connect to the entry node.
    * When the test removes the level-0 edges, only the nodes of the upper levels can stay reachable.
@@ -126,10 +145,7 @@ public class HnswIndexFsckProviderTest {
       vectors.add(VTS.createFloatVector(v));
       keys[i] = Bytes.toBytes(String.format("k%04d", i));
     }
-    PTable.VectorIndex vi = new PTable.VectorIndex.Builder().setAlgorithm("HNSW")
-      .setDistanceMetric("L2").setDimension(DIM).setHnswM(8).setHnswEfConstruction(64)
-      .setHnswAlpha(1.2).setQuantizationType("NONE").build();
-    byte[] payload = HnswSegment.build(vi, new ListRandomAccessVectorValues(vectors, DIM), keys);
+    byte[] payload = build(vectors, keys);
     OnDiskGraphIndex graph = load(payload);
     // A parallel graph build can leave a small number of nodes without inbound edges
     int built = HnswIndexFsckProvider.reachable(graph).cardinality();
@@ -191,34 +207,83 @@ public class HnswIndexFsckProviderTest {
     return notFound.newInstance(d.identity, "table T");
   }
 
+  private static HnswSegment.CorruptSegmentException corrupt(HnswSegment.Descriptor d,
+    HnswSegment.CorruptSegmentException.Kind kind) throws Exception {
+    Constructor<HnswSegment.CorruptSegmentException> corrupt =
+      HnswSegment.CorruptSegmentException.class.getDeclaredConstructor(byte[].class,
+        HnswSegment.CorruptSegmentException.Kind.class, byte.class, int.class, String.class,
+        Throwable.class);
+    corrupt.setAccessible(true);
+    return corrupt.newInstance(d.identity, kind, HnswSegment.PAYLOAD_TAG, 1, kind.name(), null);
+  }
+
   private static List<Finding> checkSegment(HnswIndexReader reader) throws Exception {
     List<Finding> findings = new ArrayList<>();
     new HnswIndexFsckProvider().checkSegment(null, reader, SEGMENT, findings);
     return findings;
   }
 
-  /** A payload that is too large for the heap of the tool gets a warning, not a corrupt finding. */
+  /**
+   * A key mapping that is too large for the heap of the tool gets a warning, not a corrupt finding.
+   */
   @Test
   public void testOversizedSegmentIsNotCorrupt() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
     when(reader.open(SEGMENT))
       .thenThrow(new HnswIndexReader.PayloadTooLargeException("payload too large"));
-    when(reader.readPayload(SEGMENT)).thenReturn(new byte[100]);
     List<Finding> findings = checkSegment(reader);
+    assertEquals(findings.toString(), 1, findings.size());
+    assertEquals(HnswIndexFsckProvider.SEGMENT_UNCHECKED, findings.get(0).getRule());
+    assertEquals(Severity.WARN, findings.get(0).getSeverity());
+    verify(reader, times(1)).open(SEGMENT);
+  }
+
+  /**
+   * A graph that is too large for the off-heap budget of the tool gets a warning. The open gives
+   * the key mapping, so the mapping checks still run before the graph check.
+   */
+  @Test
+  public void testOffheapTooLargeSegmentIsNotCorrupt() throws Exception {
+    Random random = new Random(5);
+    List<VectorFloat<?>> vectors = new ArrayList<>();
+    byte[][] keys = new byte[COUNT][];
+    for (int i = 0; i < COUNT; i++) {
+      float[] v = new float[DIM];
+      for (int d = 0; d < DIM; d++) {
+        v[d] = (float) random.nextGaussian();
+      }
+      vectors.add(VTS.createFloatVector(v));
+      keys[i] = Bytes.toBytes(String.format("k%04d", i));
+    }
+    byte[] payload = build(vectors, keys);
+    HnswSegment.Descriptor d =
+      new HnswSegment.Descriptor(KEY, HConstants.EMPTY_START_ROW, 100L, HConstants.EMPTY_END_ROW,
+        COUNT, null, 100L, DEFINITION, SegmentCells.layoutOf(payload, 1024));
+    SegmentCells cells = new SegmentCells();
+    cells.put(d, payload, Bytes.toBytes("writer"));
+    Table table = mock(Table.class);
+    when(table.get(any(Get.class))).thenAnswer(invocation -> cells.get(invocation.getArgument(0)));
+    HnswOffheapAllocator allocator = new HnswOffheapAllocator(64);
+    HnswSegment segment =
+      HnswSegment.open(new HnswSegmentStore.TableStore(table), d, allocator, "L2");
+    HnswIndexReader reader = mock(HnswIndexReader.class);
+    when(reader.open(d)).thenReturn(segment);
+    List<Finding> findings = new ArrayList<>();
+    new HnswIndexFsckProvider().checkSegment(null, reader, d, findings);
     assertEquals(findings.toString(), 1, findings.size());
     assertEquals(HnswIndexFsckProvider.SEGMENT_UNCHECKED, findings.get(0).getRule());
     assertEquals(Severity.WARN, findings.get(0).getSeverity());
   }
 
   /**
-   * A read failure does not show that a payload is corrupt. Thus the check fails, and it records no
-   * finding.
+   * A read failure does not show that a payload is corrupt. The check opens the segment again. If
+   * that open also fails, the check fails, and it records no finding.
    */
   @Test
   public void testUnreadableSegmentIsNotCorrupt() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
-    when(reader.open(SEGMENT)).thenThrow(new IOException("read timed out"));
-    when(reader.readPayload(SEGMENT)).thenThrow(new DoNotRetryIOException("read failed"));
+    when(reader.open(SEGMENT)).thenThrow(new IOException("read timed out"))
+      .thenThrow(new DoNotRetryIOException("read failed"));
     List<Finding> findings = new ArrayList<>();
     try {
       new HnswIndexFsckProvider().checkSegment(null, reader, SEGMENT, findings);
@@ -226,6 +291,7 @@ public class HnswIndexFsckProviderTest {
     } catch (DoNotRetryIOException expected) {
       assertTrue(findings.toString(), findings.isEmpty());
     }
+    verify(reader, times(2)).open(SEGMENT);
   }
 
   /** A payload that the tool can read but cannot decode is corrupt. */
@@ -233,21 +299,63 @@ public class HnswIndexFsckProviderTest {
   public void testUndecodableSegmentIsCorrupt() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
     when(reader.open(SEGMENT)).thenThrow(new RuntimeException("bad graph"));
-    when(reader.readPayload(SEGMENT)).thenReturn(new byte[100]);
     List<Finding> findings = checkSegment(reader);
     assertEquals(findings.toString(), 1, findings.size());
     assertEquals(HnswIndexFsckProvider.SEGMENT_CORRUPT, findings.get(0).getRule());
+    verify(reader, times(1)).open(SEGMENT);
   }
 
-  /** A payload that refers to a MOB file that does not exist is unresolved. */
+  /**
+   * An absent chunk and a chunk that refers to a MOB file that does not exist make an unresolved
+   * payload. The check does not open the segment again, and does not list again.
+   */
   @Test
   public void testUnresolvedPayload() throws Exception {
+    for (HnswSegment.CorruptSegmentException.Kind kind : new HnswSegment.CorruptSegmentException.Kind[] {
+      HnswSegment.CorruptSegmentException.Kind.MISSING,
+      HnswSegment.CorruptSegmentException.Kind.UNRESOLVED }) {
+      HnswIndexReader reader = mock(HnswIndexReader.class);
+      when(reader.open(SEGMENT)).thenThrow(corrupt(SEGMENT, kind));
+      List<Finding> findings = checkSegment(reader);
+      assertEquals(findings.toString(), 1, findings.size());
+      assertEquals(kind.name(), HnswIndexFsckProvider.PAYLOAD_UNRESOLVED,
+        findings.get(0).getRule());
+      assertEquals(kind.name(), findings.get(0).getDetails().get("kind"));
+      assertEquals(1, findings.get(0).getDetails().get("chunk"));
+      verify(reader, times(1)).open(SEGMENT);
+      verify(reader, never()).listSegments();
+    }
+  }
+
+  /** A chunk of the wrong length, or bytes that do not decode, make a corrupt segment. */
+  @Test
+  public void testBadChunkIsCorrupt() throws Exception {
+    for (HnswSegment.CorruptSegmentException.Kind kind : new HnswSegment.CorruptSegmentException.Kind[] {
+      HnswSegment.CorruptSegmentException.Kind.SHORT,
+      HnswSegment.CorruptSegmentException.Kind.INVALID }) {
+      HnswIndexReader reader = mock(HnswIndexReader.class);
+      when(reader.open(SEGMENT)).thenThrow(corrupt(SEGMENT, kind));
+      List<Finding> findings = checkSegment(reader);
+      assertEquals(findings.toString(), 1, findings.size());
+      assertEquals(kind.name(), HnswIndexFsckProvider.SEGMENT_CORRUPT, findings.get(0).getRule());
+      assertEquals(Severity.ERROR, findings.get(0).getSeverity());
+      verify(reader, times(1)).open(SEGMENT);
+    }
+  }
+
+  /**
+   * A read failure of the first open does not hide corruption. The second open classifies the
+   * segment.
+   */
+  @Test
+  public void testCorruptAfterReadFailure() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
-    when(reader.open(SEGMENT)).thenThrow(new IOException("no MOB file"));
-    when(reader.readPayload(SEGMENT)).thenReturn(new byte[0]);
+    when(reader.open(SEGMENT)).thenThrow(new IOException("read timed out"))
+      .thenThrow(corrupt(SEGMENT, HnswSegment.CorruptSegmentException.Kind.SHORT));
     List<Finding> findings = checkSegment(reader);
     assertEquals(findings.toString(), 1, findings.size());
-    assertEquals(HnswIndexFsckProvider.PAYLOAD_UNRESOLVED, findings.get(0).getRule());
+    assertEquals(HnswIndexFsckProvider.SEGMENT_CORRUPT, findings.get(0).getRule());
+    verify(reader, times(2)).open(SEGMENT);
   }
 
   /** A segment that the server retires during the check gets no finding. */
@@ -255,16 +363,16 @@ public class HnswIndexFsckProviderTest {
   public void testRetiredSegmentIsSkipped() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
     when(reader.open(SEGMENT)).thenThrow(new IOException("retired")).thenThrow(notFound(SEGMENT));
-    when(reader.readPayload(SEGMENT)).thenReturn(null);
     assertTrue(checkSegment(reader).isEmpty());
+    verify(reader).listSegments();
   }
 
   /**
-   * If a new listing still returns a segment without its payload cell, no server retired the
+   * If a new listing still returns a segment without its layout cell, no server retired the
    * segment. Its payload is missing, so the region leaves it out and rebuilds.
    */
   @Test
-  public void testMissingPayloadCellIsUnresolved() throws Exception {
+  public void testMissingLayoutCellIsUnresolved() throws Exception {
     HnswIndexReader reader = mock(HnswIndexReader.class);
     when(reader.open(SEGMENT)).thenThrow(notFound(SEGMENT));
     HnswSegment.Descriptor listed = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 100L,
@@ -278,27 +386,24 @@ public class HnswIndexFsckProviderTest {
   }
 
   /**
-   * The check opens a segment without a payload again after a failed open. A delta that holds only
-   * tombstones is such a segment. A temporary failure of the first open is not corruption.
+   * The check opens a segment again after a read failure. A temporary failure of the first open is
+   * not corruption. The test uses a delta that holds no rows.
    */
   @Test
-  public void testSegmentWithoutPayloadIsOpenedAgain() throws Exception {
+  public void testSegmentIsOpenedAgain() throws Exception {
     HnswSegment.Descriptor delta = new HnswSegment.Descriptor(KEY, Bytes.toBytes("m"), 200L,
       HConstants.EMPTY_END_ROW, 0, 100L, 200L, DEFINITION);
-    // The delta records no deleted rows, so it has no tombstones cell
+    // The delta records no deleted rows, so the open reads no cells
     HnswSegmentStore store = mock(HnswSegmentStore.class);
-    when(store.readTombstones(delta)).thenReturn(null);
     HnswSegment segment = HnswSegment.open(store, delta,
       HnswOffheapAllocator.getForClient(new Configuration()), "COSINE");
 
     HnswIndexReader reader = mock(HnswIndexReader.class);
     when(reader.open(delta)).thenThrow(new IOException("read timed out")).thenReturn(segment);
-    when(reader.readPayload(delta)).thenReturn(null);
-    // The server did not retire the segment, so a listing still holds it
-    when(reader.listSegments()).thenReturn(Collections.singletonList(delta));
     List<Finding> findings = new ArrayList<>();
     new HnswIndexFsckProvider().checkSegment(null, reader, delta, findings);
     assertTrue(findings.toString(), findings.isEmpty());
+    verify(reader, times(2)).open(delta);
   }
 
   /**
@@ -390,10 +495,14 @@ public class HnswIndexFsckProviderTest {
     }
   }
 
-  // Returns the descriptor of a segment as a listing returns it, with the region that wrote it
+  // Returns the descriptor of a segment as a listing returns it, with the region that wrote it. A
+  // segment with vectors and no payload in its layout gets a small payload
   private static HnswSegment.Descriptor written(HnswSegment.Descriptor d, String writer)
     throws Exception {
     byte[] family = QueryConstants.VECTOR_LOCAL_INDEX_COLUMN_FAMILY_BYTES;
+    HnswSegment.Layout layout = d.count > 0 && d.layout.payloadLength == 0
+      ? new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 16, 8, 0)
+      : d.layout;
     List<Cell> cells = new ArrayList<>(Arrays.asList(
       new KeyValue(d.anchor, family, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG),
         d.endKey),
@@ -404,7 +513,13 @@ public class HnswIndexFsckProviderTest {
       new KeyValue(d.anchor, family, HnswSegment.qualifier(d.identity, HnswSegment.DEFINITION_TAG),
         d.definition),
       new KeyValue(d.anchor, family, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG),
-        Bytes.toBytes(writer))));
+        Bytes.toBytes(writer)),
+      new KeyValue(d.anchor, family, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+        layout.encode())));
+    if (d.isDelta()) {
+      cells.add(new KeyValue(d.anchor, family,
+        HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG), Bytes.toBytes(d.baseTime)));
+    }
     cells.sort(CellComparator.getInstance());
     ResultScanner scanner = mock(ResultScanner.class);
     when(scanner.iterator()).thenReturn(Collections.singletonList(Result.create(cells)).iterator());

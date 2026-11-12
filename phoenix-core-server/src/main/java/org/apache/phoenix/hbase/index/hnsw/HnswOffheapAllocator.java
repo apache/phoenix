@@ -59,6 +59,12 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * of the budget, eviction cannot make enough space. Then the allocation fails with a retryable
  * {@link IOException}.
  * <p>
+ * A segment build writes its graph into a block, and the segment write streams the payload from
+ * that block. The build keeps its reference until the write ends. The write can wait for memstore
+ * flushes, so this time can be long. If the allocator evicts the segment during the write, the
+ * block is not resident for the rest of the write. The budget still counts it, because the direct
+ * memory stays in use. Other loads can then fail with a retryable {@link IOException}.
+ * <p>
  * The JVM must allow the budget as direct memory. In a RegionServer, the budget is at most half of
  * the direct memory that an off-heap BucketCache and an off-heap memstore do not use. This keeps
  * direct memory available for the RPC buffers of HBase. In other JVMs, such as the fsck tools, the

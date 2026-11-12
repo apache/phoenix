@@ -30,6 +30,7 @@ import io.github.jbellis.jvector.graph.ListRandomAccessVectorValues;
 import io.github.jbellis.jvector.vector.VectorizationProvider;
 import io.github.jbellis.jvector.vector.types.VectorFloat;
 import io.github.jbellis.jvector.vector.types.VectorTypeSupport;
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -58,8 +59,10 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.mob.MobUtils;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.hnsw.HnswOffheapAllocator;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegment;
 import org.apache.phoenix.hbase.index.hnsw.HnswSegmentStore;
+import org.apache.phoenix.hbase.index.hnsw.SegmentCells;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
@@ -82,6 +85,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import org.apache.phoenix.thirdparty.com.google.common.io.ByteStreams;
 
 /**
  * Integration tests for the verify, fsck and repair commands of {@code IndexFsckTool} on HNSW
@@ -153,8 +158,13 @@ public class HnswIndexFsckIT extends ParallelStatsDisabledIT {
     for (float[] v : rows.values()) {
       vectors.add(VTS.createFloatVector(v));
     }
-    return HnswSegment.build(vi, new ListRandomAccessVectorValues(vectors, DIM),
-      rows.keySet().toArray(new byte[0][]));
+    try (
+      HnswSegment.Built built = HnswSegment.build(vi,
+        new ListRandomAccessVectorValues(vectors, DIM), rows.keySet().toArray(new byte[0][]),
+        HnswOffheapAllocator.getForClient(getUtility().getConfiguration()));
+      InputStream in = built.payload()) {
+      return ByteStreams.toByteArray(in);
+    }
   }
 
   /** Returns the physical table of the index, which is the data table. */
@@ -195,8 +205,15 @@ public class HnswIndexFsckIT extends ParallelStatsDisabledIT {
         Bytes.toBytes(time))
       .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.DEFINITION_TAG), definition)
       .addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG), writer);
-    if (payload != null) {
-      put.addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), payload);
+    HnswSegment.Layout layout = payload == null
+      ? HnswSegment.Layout.EMPTY
+      : SegmentCells.layoutOf(payload, HnswSegment.CHUNK_SIZE);
+    put.addColumn(FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+      layout.encode());
+    for (int i = 0; payload != null && (long) i * layout.chunkSize < payload.length; i++) {
+      int start = i * layout.chunkSize;
+      put.addColumn(FAMILY, HnswSegment.qualifier(d.identity, i, HnswSegment.PAYLOAD_TAG),
+        Arrays.copyOfRange(payload, start, Math.min(payload.length, start + layout.chunkSize)));
     }
     try (Table table = dataTable(conn, index)) {
       table.put(put);

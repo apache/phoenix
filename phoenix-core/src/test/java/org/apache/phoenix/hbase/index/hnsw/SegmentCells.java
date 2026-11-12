@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -54,7 +55,8 @@ import org.apache.hadoop.hbase.util.Bytes;
  * The cells of the hidden family {@code V#} of mocked regions, for unit tests of the users of
  * {@link HnswSegmentStore.RegionStore}. One instance can serve several regions. Each region reads
  * only the rows of its own key range, as a region of a split or a merge reads its own anchor rows.
- * The memstore of {@code V#} is always empty, so a segment write makes no flush request.
+ * The memstore of {@code V#} is always empty, so a segment write makes no flush request and never
+ * waits at the memstore gate.
  */
 public final class SegmentCells {
   /**
@@ -110,6 +112,8 @@ public final class SegmentCells {
     MemStoreSize empty = mock(MemStoreSize.class);
     Store store = mock(Store.class);
     when(store.getFlushableSize()).thenReturn(empty);
+    when(store.getMemStoreSize()).thenReturn(empty);
+    when(store.getSnapshotSize()).thenReturn(empty);
     when(region.getStore(HnswSegmentStore.FAMILY)).thenReturn(store);
   }
 
@@ -248,8 +252,11 @@ public final class SegmentCells {
   }
 
   /**
-   * Writes the cells of a segment at its anchor row. A null payload writes no payload cell. The W
-   * cell holds the encoded name of the writer region. A delta also gets its base time cell.
+   * Writes the cells of a segment at its anchor row. A null payload writes no payload chunks. The W
+   * cell holds the encoded name of the writer region. A delta also gets its base time cell. The L
+   * cell holds the layout of the descriptor. If the payload does not have the length of that
+   * layout, the L cell holds {@link #layoutOf the layout of the payload}. The payload goes into
+   * chunks of the chunk size of the layout.
    */
   public void put(HnswSegment.Descriptor d, byte[] payload, byte[] writer) {
     put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.END_KEY_TAG), d.time, d.endKey);
@@ -264,8 +271,39 @@ public final class SegmentCells {
       put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.BASE_TIME_TAG), d.time,
         Bytes.toBytes(d.baseTime));
     }
+    HnswSegment.Layout layout = d.layout;
+    if (payload != null && payload.length != layout.payloadLength) {
+      layout = layoutOf(payload, layout.chunkSize);
+    }
+    put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG), d.time,
+      layout.encode());
     if (payload != null) {
-      put(d.anchor, HnswSegment.qualifier(d.identity, HnswSegment.PAYLOAD_TAG), d.time, payload);
+      putChunks(d.anchor, d.identity, HnswSegment.PAYLOAD_TAG, d.time, payload, layout.chunkSize);
+    }
+  }
+
+  /**
+   * Returns the layout of a payload with no tombstones. The trailer of a payload gives its graph
+   * length. A value without a valid trailer gets a layout that its reads reject as corrupt.
+   */
+  public static HnswSegment.Layout layoutOf(byte[] payload, int chunkSize) {
+    int length = payload.length;
+    if (length >= 8 && Bytes.toInt(payload, length - 4) == HnswSegment.MAGIC) {
+      int mapping = Bytes.toInt(payload, length - 8);
+      if (mapping >= 0 && mapping <= length - 8) {
+        return new HnswSegment.Layout(chunkSize, length, length - 8 - mapping, 0);
+      }
+    }
+    return new HnswSegment.Layout(chunkSize, Math.max(length, 8), Math.max(length - 8, 0), 0);
+  }
+
+  /** Writes the bytes of a stream as chunk cells, as a client that bypasses the store can. */
+  public void putChunks(byte[] row, byte[] identity, byte tag, long time, byte[] bytes,
+    int chunkSize) {
+    for (int i = 0; (long) i * chunkSize < bytes.length; i++) {
+      int start = i * chunkSize;
+      put(row, HnswSegment.qualifier(identity, i, tag), time,
+        Arrays.copyOfRange(bytes, start, Math.min(bytes.length, start + chunkSize)));
     }
   }
 
@@ -275,11 +313,42 @@ public final class SegmentCells {
       .put(qualifier, new KeyValue(row, HnswSegmentStore.FAMILY, qualifier, time, value));
   }
 
-  /** Deletes the cell of a segment that has the given tag. */
+  /** Deletes one cell. */
+  public void remove(byte[] row, byte[] qualifier) {
+    NavigableMap<byte[], Cell> stored = rows.get(row);
+    if (stored != null) {
+      stored.remove(qualifier);
+    }
+  }
+
+  /** Deletes the cell of a segment that has the given tag. For a chunk tag, deletes all chunks. */
   public void remove(HnswSegment.Descriptor d, byte tag) {
     NavigableMap<byte[], Cell> stored = rows.get(d.anchor);
-    if (stored != null) {
-      stored.remove(HnswSegment.qualifier(d.identity, tag));
+    if (stored == null) {
+      return;
     }
+    if (!HnswSegment.isChunkTag(tag)) {
+      stored.remove(HnswSegment.qualifier(d.identity, tag));
+      return;
+    }
+    stored.keySet().removeIf(q -> {
+      HnswSegment.Qualifier parsed = HnswSegment.parseQualifier(q, 0, q.length);
+      return parsed != null && parsed.tag == tag && Bytes.equals(parsed.identity(), d.identity);
+    });
+  }
+
+  /** Returns the chunk qualifiers of a stream of a segment that the cells hold, in order. */
+  public List<byte[]> chunks(HnswSegment.Descriptor d, byte tag) {
+    List<byte[]> chunks = new ArrayList<>();
+    NavigableMap<byte[], Cell> stored = rows.get(d.anchor);
+    if (stored != null) {
+      for (byte[] q : stored.keySet()) {
+        HnswSegment.Qualifier parsed = HnswSegment.parseQualifier(q, 0, q.length);
+        if (parsed != null && parsed.tag == tag && Bytes.equals(parsed.identity(), d.identity)) {
+          chunks.add(q);
+        }
+      }
+    }
+    return chunks;
   }
 }

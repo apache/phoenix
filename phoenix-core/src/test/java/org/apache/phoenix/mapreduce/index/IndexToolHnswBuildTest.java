@@ -228,6 +228,9 @@ public class IndexToolHnswBuildTest {
       HnswSegment.qualifier(d.identity, HnswSegment.DEFINITION_TAG), time, definition));
     cells.add(new KeyValue(d.anchor, FAMILY,
       HnswSegment.qualifier(d.identity, HnswSegment.WRITER_TAG), time, Bytes.toBytes("writer")));
+    cells
+      .add(new KeyValue(d.anchor, FAMILY, HnswSegment.qualifier(d.identity, HnswSegment.LAYOUT_TAG),
+        time, new HnswSegment.Layout(HnswSegment.CHUNK_SIZE, 16, 8, 0).encode()));
     return Result.create(cells);
   }
 

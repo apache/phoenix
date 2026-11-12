@@ -350,11 +350,10 @@ public class HnswIndexManagerTest {
     PTable.VectorIndex vi = new PTable.VectorIndex.Builder().setAlgorithm("HNSW")
       .setDistanceMetric("L2").setDimension(dim).setHnswM(16).setHnswEfConstruction(100)
       .setHnswAlpha(1.2).setQuantizationType("NONE").build();
-    byte[] payload = HnswSegment.build(vi, new ListRandomAccessVectorValues(vectors, dim), keys);
+    ListRandomAccessVectorValues values = new ListRandomAccessVectorValues(vectors, dim);
     try {
-      HnswSegment.of(null, baseDescriptor(1, keys.length), new HnswOffheapAllocator(64), "L2",
-        payload, new byte[0][]);
-      fail("a segment larger than the off-heap budget must not load");
+      HnswSegment.build(vi, values, keys, new HnswOffheapAllocator(64));
+      fail("a segment larger than the off-heap budget must not build");
     } catch (HnswSegment.TooLargeException e) {
       assertFalse(HnswIndexManager.scheduleRetry(e, retries, retry));
     }
@@ -364,15 +363,24 @@ public class HnswIndexManagerTest {
       .scheduleRetry(new IllegalArgumentException("KeyValue size too large"), retries, retry));
     verifyNoInteractions(retries);
 
-    HnswOffheapAllocator busy = new HnswOffheapAllocator(payload.length);
-    HnswSegment held =
-      HnswSegment.of(null, baseDescriptor(1, keys.length), busy, "L2", payload, new byte[0][]);
+    int graphLength;
+    try (HnswSegment.Built built =
+      HnswSegment.build(vi, values, keys, new HnswOffheapAllocator(Long.MAX_VALUE))) {
+      graphLength = built.graphLength();
+    }
+    // The parallel build can give a graph of a different size each time. The budget therefore
+    // fits one graph with some room, but not two graphs
+    HnswOffheapAllocator busy = new HnswOffheapAllocator(graphLength + graphLength / 2);
+    HnswSegment held;
+    try (HnswSegment.Built built = HnswSegment.build(vi, values, keys, busy)) {
+      held = HnswSegment.of(null, baseDescriptor(1, keys.length), busy, "L2", built, new byte[0][]);
+    }
     try {
-      // The segment holds its graph until it closes. Thus the budget still counts the graph after
-      // the eviction
+      // The segment keeps the graph that graph() returns until it closes. Thus the budget still
+      // counts the graph after the eviction
       held.graph();
       busy.evictAll();
-      HnswSegment.of(null, baseDescriptor(2, keys.length), busy, "L2", payload, new byte[0][]);
+      HnswSegment.build(vi, values, keys, busy).close();
       fail("an allocation that the budget cannot fit must be refused");
     } catch (IOException e) {
       assertTrue(HnswIndexManager.scheduleRetry(e, retries, retry));
