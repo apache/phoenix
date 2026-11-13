@@ -533,8 +533,7 @@ public class ScanUtilTest {
       Mockito.when(context.hasRowSizeFunction()).thenReturn(true);
       Scan rowSizeScan = new Scan();
       ScanUtil.setIndexReadRepairAttribute(rowSizeScan, context);
-      assertNull(
-        rowSizeScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
+      assertNull(rowSizeScan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN));
 
       Mockito.when(context.hasRowSizeFunction()).thenReturn(false);
       Mockito.when(context.hasRawRowSizeFunction()).thenReturn(true);
