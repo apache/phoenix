@@ -204,6 +204,16 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
     return t;
   }
 
+  /** Returns true if the error was caused by a simulated index write failure. */
+  private static boolean isSimulatedFailure(Throwable e) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t.getMessage() != null && t.getMessage().contains("Simulating")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Creates the table with row r1 (ver = 1) and its index, and installs the blocking observer.
    * Returns the name of the table whose write is blocked.
@@ -344,7 +354,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
           conditionalUpdate(conn, tableName, "X", 2);
           fail("batch X should have failed");
         } catch (SQLException e) {
-          // expected
+          assertTrue("unexpected error: " + e, isSimulatedFailure(e));
         } finally {
           IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         }
@@ -485,7 +495,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
           conditionalUpdate(conn, tableName, "X", 2);
           fail("batch X should have failed");
         } catch (SQLException e) {
-          // expected
+          assertTrue("unexpected error: " + e, isSimulatedFailure(e));
         } finally {
           IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         }
@@ -560,7 +570,8 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
           proceed.get(name).countDown();
           threads.get(name).join(60000);
           assertFalse(threads.get(name).isAlive());
-          assertTrue("batch " + name + " should have failed", errors.get(name).get() != null);
+          assertTrue("unexpected error: " + errors.get(name).get(),
+            isSimulatedFailure(errors.get(name).get()));
         }
 
         counts.put("D", new AtomicReference<>());
@@ -626,7 +637,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
           ps.executeUpdate();
           fail("batch X should have failed");
         } catch (SQLException e) {
-          // expected
+          assertTrue("unexpected error: " + e, isSimulatedFailure(e));
         } finally {
           IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         }
@@ -658,6 +669,128 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
 
       assertEquals(2, getVer(conn, tableName));
       assertEquals("A", getWriter(conn, tableName));
+    }
+  }
+
+  /**
+   * <ol>
+   * <li>Batch A: v 1 -> 2, parked in doPre, then fails.</li>
+   * <li>Batch B: v 1 -> 2, a no-op on A's pending state. Must not return A's state, which is never
+   * committed, and must be retried after A fails.</li>
+   * </ol>
+   */
+  @Test
+  public void testNoOpOnFailedPendingBatch() throws Exception {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      String blockedTable = createTable(conn, tableName);
+
+      CountDownLatch aReached = new CountDownLatch(1);
+      CountDownLatch aProceed = new CountDownLatch(1);
+      BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed, true);
+      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Exception> aError = new AtomicReference<>();
+      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread b = null;
+      try {
+        assertTrue("batch A did not reach the index write", aReached.await(60, TimeUnit.SECONDS));
+
+        AtomicReference<Integer> bCount = new AtomicReference<>();
+        AtomicReference<Exception> bError = new AtomicReference<>();
+        b = runAsync("B", tableName, 1, bCount, bError);
+        b.join(3000);
+        assertTrue("batch B returned before batch A completed: " + bError.get(), b.isAlive());
+
+        aProceed.countDown();
+        a.join(60000);
+        b.join(60000);
+        assertFalse(a.isAlive());
+        assertFalse(b.isAlive());
+        assertTrue("unexpected error: " + aError.get(), isSimulatedFailure(aError.get()));
+        assertNull("batch B failed: " + bError.get(), bError.get());
+        assertEquals("batch B was a no-op on a state that was never committed", Integer.valueOf(1),
+          bCount.get());
+      } finally {
+        aProceed.countDown();
+        a.join(60000);
+        if (b != null) {
+          b.join(60000);
+        }
+        TestUtil.removeCoprocessor(conn, blockedTable, BlockingIndexWriteObserver.class);
+      }
+
+      assertEquals(2, getVer(conn, tableName));
+      assertEquals("B", getWriter(conn, tableName));
+    }
+  }
+
+  /**
+   * <ol>
+   * <li>Batch A: inserts row r2 with ON DUPLICATE KEY IGNORE, parked in doPre, then fails.</li>
+   * <li>Batch B: inserts row r2 with ON DUPLICATE KEY IGNORE, a no-op on A's pending insert. Must
+   * be retried after A fails and insert the row.</li>
+   * </ol>
+   */
+  @Test
+  public void testIgnoreOnFailedPendingInsert() throws Exception {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      String blockedTable = createTable(conn, tableName);
+
+      CountDownLatch aReached = new CountDownLatch(1);
+      CountDownLatch aProceed = new CountDownLatch(1);
+      BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed, true);
+      Map<String, AtomicReference<Exception>> errors = new ConcurrentHashMap<>();
+      Map<String, Thread> threads = new LinkedHashMap<>();
+      try {
+        for (String name : new String[] { "A", "B" }) {
+          AtomicReference<Exception> error = new AtomicReference<>();
+          errors.put(name, error);
+          Thread t = new Thread(() -> {
+            try (Connection c = DriverManager.getConnection(getUrl())) {
+              c.setAutoCommit(true);
+              PreparedStatement ps = c.prepareStatement(
+                "UPSERT INTO " + tableName + " VALUES (?, ?) ON DUPLICATE KEY IGNORE");
+              ps.setString(1, "r2");
+              ps.setObject(2, RawBsonDocument
+                .parse("{\"idxKey\": \"g1\", \"ver\": 1, \"by\": \"" + name + "\"}"));
+              ps.executeUpdate();
+            } catch (Exception e) {
+              error.set(e);
+            }
+          }, name);
+          threads.put(name, t);
+          t.start();
+          if (name.equals("A")) {
+            assertTrue("batch A did not reach the index write",
+              aReached.await(60, TimeUnit.SECONDS));
+          } else {
+            t.join(3000);
+            assertTrue("batch B returned before batch A completed: " + error.get(), t.isAlive());
+          }
+        }
+        aProceed.countDown();
+        for (Thread t : threads.values()) {
+          t.join(60000);
+          assertFalse(t.isAlive());
+        }
+        assertTrue("unexpected error: " + errors.get("A").get(),
+          isSimulatedFailure(errors.get("A").get()));
+        assertNull("batch B failed: " + errors.get("B").get(), errors.get("B").get());
+      } finally {
+        aProceed.countDown();
+        for (Thread t : threads.values()) {
+          t.join(60000);
+        }
+        TestUtil.removeCoprocessor(conn, blockedTable, BlockingIndexWriteObserver.class);
+      }
+
+      ResultSet rs =
+        conn.createStatement().executeQuery("SELECT COL FROM " + tableName + " WHERE PK1 = 'r2'");
+      assertTrue("the row inserted by batch B is missing", rs.next());
+      assertEquals("B", ((BsonDocument) rs.getObject(1)).getString("by").getValue());
     }
   }
 
@@ -718,6 +851,14 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
                 try {
                   result = conditionalUpdate(c, tableName, "s" + row, writer, expected);
                 } catch (SQLException e) {
+                  // Only a simulated failure, or a failed wait for a previous batch after the
+                  // retries, is expected
+                  if (
+                    !isSimulatedFailure(e)
+                      && !e.toString().contains("One of the previous concurrent mutations")
+                  ) {
+                    throw e;
+                  }
                   synchronized (outcomes) {
                     outcomes[2]++;
                   }
