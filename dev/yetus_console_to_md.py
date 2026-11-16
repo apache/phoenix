@@ -76,16 +76,16 @@ def is_tests_run_summary(line: str) -> bool:
 
 
 def parse_results_section(
-  f: TextIOWrapper,
-  failures: List[str],
-  flakes: List[str],
-  errors: List[str]
+        stream: TextIOWrapper,
+        failures: List[str],
+        flakes: List[str],
+        errors: List[str]
 ) -> None:
     """
     Parse the Results section within a patch-unit file.
     """
     current_error_type = None
-    while line := f.readline():
+    while line := stream.readline():
         stripped = line.strip()
 
         # Section end markers
@@ -112,7 +112,7 @@ def parse_results_section(
                         current_error_type.append(test_name)
 
 
-def skip_to_results_section(f: TextIOWrapper) -> bool:
+def skip_to_results_section(stream: TextIOWrapper) -> bool:
     """
     Skip the io stream to the Results section.
     After calling this method, the TextIOWrapper will locate at the next line of "Results: "
@@ -120,13 +120,13 @@ def skip_to_results_section(f: TextIOWrapper) -> bool:
     Returns:
         True if we find a results section, False if we have reached the EOF
     """
-    while line := f.readline():
+    while line := stream.readline():
         if is_results_section_start(line):
             return True
     return False
 
 
-def scan_all_tests(dir: Path) -> Dict[str, str]:
+def scan_all_tests(directory: Path) -> Dict[str, str]:
     """
     Scan the archiver dir to find all the tests and their module
 
@@ -135,7 +135,7 @@ def scan_all_tests(dir: Path) -> Dict[str, str]:
     """
     module = None
     module_to_test_name = {}
-    for dirpath, _, filenames in os.walk(dir):
+    for dirpath, _, filenames in os.walk(directory):
         if len(filenames) > 0:
             # /archiver/<module>/target/surefire-reports
             module = dirpath.split(os.sep)[-3]
@@ -147,20 +147,21 @@ def scan_all_tests(dir: Path) -> Dict[str, str]:
 
 
 def parse_patch_unit_file(
-  file_path: Path,
-  failures: List[str],
-  flakes: List[str],
-  errors: List[str]
+        file_path: Path,
+        failures: List[str],
+        flakes: List[str],
+        errors: List[str]
 ) -> None:
     """
     Parse a patch-unit-*.txt file and extract failed tests by module.
     """
-    with open(file_path, 'r') as f:
-        while skip_to_results_section(f):
-            parse_results_section(f, failures, flakes, errors)
+    with open(file_path, 'r') as stream:
+        while skip_to_results_section(stream):
+            parse_results_section(stream, failures, flakes, errors)
 
 
 def get_module(test_name: str, test_name_to_module: Dict[str, str]) -> str:
+    """Find the module of a failed test, or 'default' if it is not known."""
     rindex_of_bracket = test_name.rfind('[')
     if rindex_of_bracket > 0:
         # parameterized test, remove the tailing parameters
@@ -183,6 +184,7 @@ def get_module(test_name: str, test_name_to_module: Dict[str, str]) -> str:
 
 
 def increase(module_to_count: Dict[str, int], module: str) -> None:
+    """Add one to the count of a module."""
     if module in module_to_count:
         module_to_count[module] += 1
     else:
@@ -191,6 +193,7 @@ def increase(module_to_count: Dict[str, int], module: str) -> None:
 
 def add_to_details(test_name: str, module: str, error_type: str,
                    details: Dict[str, Dict[str, List[str]]]) -> None:
+    """Record a failed test under its module and error type."""
     if module not in details:
         error_type_to_tests = {}
         details[module] = error_type_to_tests
@@ -204,20 +207,22 @@ def add_to_details(test_name: str, module: str, error_type: str,
 
 
 def process_failed_tests(
-  error_type: str,
-  failed_tests: List[str],
-  module_to_test_name: Dict[str, str],
-  counts: Dict[str, Dict[str, int]],
-  details: Dict[str, Dict[str, List[str]]]
+        error_type: str,
+        failed_tests: List[str],
+        module_to_test_name: Dict[str, str],
+        counts: Dict[str, Dict[str, int]],
+        details: Dict[str, Dict[str, List[str]]]
 ) -> None:
+    """Count the failed tests of one error type by module."""
     for test_name in failed_tests:
         module = get_module(test_name, module_to_test_name)
         increase(counts[error_type], module)
         add_to_details(test_name, module, error_type, details)
 
 
-def aggregate_failed_tests(yetus_dir: Path) -> Tuple[
-    Dict[str, Dict[str, int]], Dict[str, Dict[str, List[str]]]]:
+def aggregate_failed_tests(
+        yetus_dir: Path
+) -> Tuple[Dict[str, Dict[str, int]], Dict[str, Dict[str, List[str]]]]:
     """
     Aggregate failed tests from all patch-unit-*.txt files.
 
@@ -253,8 +258,8 @@ def aggregate_failed_tests(yetus_dir: Path) -> Tuple[
 
 
 def generate_failed_tests_table(
-  counts: Dict[str, Dict[str, int]],
-  details: Dict[str, Dict[str, List[str]]]
+        counts: Dict[str, Dict[str, int]],
+        details: Dict[str, Dict[str, List[str]]]
 ) -> List[str]:
     """Generate the Failed Tests HTML table."""
     total_failures = sum(sum(m.values()) for m in counts.values())
@@ -299,8 +304,8 @@ def generate_failed_tests_table(
 
 
 def collect_continuation_lines(
-  lines: List[str],
-  start_idx: int
+        lines: List[str],
+        start_idx: int
 ) -> Tuple[List[str], int]:
     """
     Collect continuation lines for a table row.
@@ -458,8 +463,8 @@ def convert_console_to_markdown(input_dir: str, output_file: Optional[str] = Non
         print(f'Error: console.txt not found in "{input_dir}"', file=sys.stderr)
         sys.exit(1)
 
-    with open(console_file, 'r') as f:
-        lines = f.readlines()
+    with open(console_file, 'r') as stream:
+        lines = stream.readlines()
 
     content = []
     i = 0
@@ -490,8 +495,8 @@ def convert_console_to_markdown(input_dir: str, output_file: Optional[str] = Non
     result = ''.join(content)
 
     if output_file:
-        with open(output_file, 'w') as f:
-            f.write(result)
+        with open(output_file, 'w') as stream:
+            stream.write(result)
         print(f'Converted {input_dir} to {output_file}', file=sys.stderr)
     else:
         print(result, end='')
@@ -500,12 +505,14 @@ def convert_console_to_markdown(input_dir: str, output_file: Optional[str] = Non
 
 
 def main():
+    """Convert a Yetus output directory to markdown."""
     if len(sys.argv) < 2:
         print(f'Usage: {sys.argv[0]} <input_directory> [output_file]', file=sys.stderr)
         print(
-            f'  input_directory: Directory containing console.txt and optional patch-unit-*.txt files',
+            '  input_directory: Directory containing console.txt and optional '
+            'patch-unit-*.txt files',
             file=sys.stderr)
-        print(f'  If output_file is not provided, output goes to stdout', file=sys.stderr)
+        print('  If output_file is not provided, output goes to stdout', file=sys.stderr)
         sys.exit(1)
 
     input_dir = sys.argv[1]

@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read # to list the earlier runs of this workflow and their jobs
+      actions: read  # to list the earlier runs of this workflow and their jobs
     outputs:
       run: ${{ steps.check.outputs.run }}
     steps:
@@ -87,7 +87,8 @@ jobs:
           for id in ${run_ids}; do
             # A run counts as a build if a job other than the rate limit check was not skipped.
             started=$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
-              --jq '[.jobs[] | select(.name != "Rate limit" and .conclusion != "skipped")] | length')
+              --jq '[.jobs[] | select(.name != "Rate limit" and .conclusion != "skipped")]
+                | length')
             if [[ "${started}" -gt 0 ]]; then
               builds=$((builds + 1))
             fi
@@ -96,7 +97,9 @@ jobs:
           if [[ "${builds}" -ge "${MAX_BUILDS}" ]]; then
             # Fail rather than skip, so that the PR does not show a passing check for a commit
             # that was never built.
-            echo "::error::This PR already had ${builds} builds in the last 24 hours, so this commit was not built. Re-run this workflow from the GitHub UI to build it."
+            msg="This PR already had ${builds} builds in the last 24 hours, so this commit was"
+            msg+=" not built. Re-run this workflow from the GitHub UI to build it."
+            echo "::error::${msg}"
             echo "run=false" >> "${GITHUB_OUTPUT}"
             exit 1
           else
@@ -113,17 +116,19 @@ jobs:
       contents: read
     steps:
       - name: Free disk space
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        run: >-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          /opt/hostedtoolcache/CodeQL
 
       - name: Checkout Phoenix
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           path: src
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout Yetus
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           repository: apache/yetus
           ref: ${{ env.YETUS_COMMIT }}
@@ -151,7 +156,8 @@ jobs:
         if: always()
         env:
           PATCHDIR: ${{ github.workspace }}/yetus-general-check/output
-        run: python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
+        run: |
+          python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
 
       - name: Compress test output
         if: always()
@@ -159,7 +165,7 @@ jobs:
 
       - name: Upload Yetus output
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: yetus-general-check-output
           path: |
@@ -169,7 +175,9 @@ jobs:
           if-no-files-found: ignore
 
   unit-check:
-    name: Unit check (${{ matrix.test_group }}${{ matrix.it_class_range && format(' {0}', matrix.it_class_range) || '' }})
+    name: >-
+      Unit check (${{ matrix.test_group }}${{ matrix.it_class_range
+      && format(' {0}', matrix.it_class_range) || '' }})
     needs: rate-limit
     if: needs.rate-limit.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -194,17 +202,19 @@ jobs:
           - {test_group: NeedsOwnMiniClusterTest, it_class_range: Q-Z}
     steps:
       - name: Free disk space
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        run: >-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          /opt/hostedtoolcache/CodeQL
 
       - name: Checkout Phoenix
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           path: src
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout Yetus
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           repository: apache/yetus
           ref: ${{ env.YETUS_COMMIT }}
@@ -232,13 +242,45 @@ jobs:
           NUM_FORKED_IT: "3"
         # Below the 360 minute job limit, so that the summary and upload steps still run.
         timeout-minutes: 330
-        run: bash src/dev/jenkins_precommit_github_yetus.sh
+        # Keep a copy of the Yetus output, so that the summary can show the Maven test command.
+        run: |
+          set -o pipefail
+          bash src/dev/jenkins_precommit_github_yetus.sh 2>&1 \
+            | tee "${RUNNER_TEMP}/yetus-unit-check.log"
+
+      # Yetus writes the Maven test output to a file, so list the test classes here. The full
+      # logs are in the uploaded artifact.
+      - name: List tests run
+        if: always()
+        env:
+          PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
+        run: bash src/dev/phoenix-list-tests.sh "${PATCHDIR}"
 
       - name: Publish job summary
         if: always()
         env:
           PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
-        run: python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
+          YETUS_LOG: ${{ runner.temp }}/yetus-unit-check.log
+        run: |
+          python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
+          # Yetus prints each command it runs as "<command> > <log file> 2>&1". The unit tests
+          # write to patch-unit-<module>.txt.
+          mvn_cmd=$(grep -E '^mvn .* > [^ ]*/patch-unit-[^ ]*\.txt 2>&1$' "${YETUS_LOG}" \
+            | sed -E 's/ > [^ ]+ 2>&1$//' || true)
+          {
+            echo
+            echo "### Maven test command"
+            echo
+            if [[ -n "${mvn_cmd}" ]]; then
+              echo "Run by Yetus in its docker container, from the root of the source tree:"
+              echo
+              echo '```'
+              echo "${mvn_cmd}"
+              echo '```'
+            else
+              echo "Yetus ran no unit tests for this PR. The report above shows why."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Compress test output
         if: always()
@@ -246,9 +288,11 @@ jobs:
 
       - name: Upload Yetus output
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: yetus-unit-check-${{ matrix.test_group }}${{ matrix.it_class_range && format('-{0}', matrix.it_class_range) || '' }}
+          name: >-
+            yetus-unit-check-${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}
           path: |
             ${{ github.workspace }}/yetus-unit-check/output
             !${{ github.workspace }}/yetus-unit-check/output/precommit
