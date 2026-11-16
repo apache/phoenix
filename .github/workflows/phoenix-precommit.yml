@@ -22,6 +22,8 @@
 # * general-check: every Yetus plugin except unit.
 # * unit-check: the unit plugin, once per test group. Together the test groups run every test
 #   that the single Jenkins job ran (see dev/phoenix-test-group-args.sh).
+# * test-coverage: checks that every test class ran in exactly one unit-check job, so that no
+#   test is lost between the test groups (see dev/phoenix_check_tests.py).
 #
 # Limits kept from Jenkins, or made stricter:
 # * One build at a time per PR (Jenkins: disableConcurrentBuilds).
@@ -126,6 +128,12 @@ jobs:
           path: src
           fetch-depth: 0
           persist-credentials: false
+
+      # Fails fast if an IT class in a test group can not be selected by any unit-check job,
+      # because its name does not end in IT or does not start with a letter A-Z. Also lists the
+      # IT classes that Maven never runs because they have no test group @Category.
+      - name: Check test class names
+        run: python3 src/dev/phoenix_check_tests.py names src
 
       - name: Checkout Yetus
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -249,12 +257,17 @@ jobs:
             | tee "${RUNNER_TEMP}/yetus-unit-check.log"
 
       # Yetus writes the Maven test output to a file, so list the test classes here. The full
-      # logs are in the uploaded artifact.
+      # logs are in the uploaded artifact. The class list is used by the test-coverage job.
       - name: List tests run
         if: always()
         env:
           PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
-        run: bash src/dev/phoenix-list-tests.sh "${PATCHDIR}"
+          CLASS_LIST: >-
+            ${{ runner.temp }}/test-classes/${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}.txt
+        run: |
+          mkdir -p "$(dirname "${CLASS_LIST}")"
+          bash src/dev/phoenix-list-tests.sh "${PATCHDIR}" "${CLASS_LIST}"
 
       - name: Publish job summary
         if: always()
@@ -298,3 +311,58 @@ jobs:
             !${{ github.workspace }}/yetus-unit-check/output/precommit
           retention-days: 2
           if-no-files-found: ignore
+
+      - name: Upload test class list
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: >-
+            test-classes-${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}
+          path: ${{ runner.temp }}/test-classes
+          retention-days: 2
+          if-no-files-found: ignore
+
+  test-coverage:
+    name: Test coverage
+    needs: [rate-limit, unit-check]
+    # Also after failed tests, but not if the unit checks did not run or were cancelled.
+    if: >-
+      always() && needs.rate-limit.outputs.run == 'true'
+      && needs.unit-check.result != 'skipped' && needs.unit-check.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read  # to download the artifacts of this run
+    steps:
+      - name: Checkout Phoenix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Download test class lists
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: test-classes-*
+          path: ${{ runner.temp }}/test-classes
+          merge-multiple: true
+
+      - name: Check that every test class ran in exactly one job
+        env:
+          CLASS_LISTS: ${{ runner.temp }}/test-classes
+        run: |
+          set -o pipefail
+          mkdir -p "${CLASS_LISTS}"
+          status=0
+          python3 src/dev/phoenix_check_tests.py coverage src "${CLASS_LISTS}" \
+            | tee "${RUNNER_TEMP}/test-coverage.txt" || status=$?
+          {
+            echo "## Test coverage"
+            echo
+            echo '```'
+            cat "${RUNNER_TEMP}/test-coverage.txt"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit "${status}"

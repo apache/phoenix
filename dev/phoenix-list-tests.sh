@@ -20,15 +20,23 @@
 # seen in the CI console without downloading the build artifacts. Yetus writes the Maven output
 # of the unit tests to <patch dir>/patch-unit-<module>.txt instead of the console.
 #
-# Usage: phoenix-list-tests.sh <Yetus patch dir>
+# Usage: phoenix-list-tests.sh <Yetus patch dir> [<class list file>]
+#
+# If a class list file is given, the names of the test classes run are also written to it, one
+# per line, for dev/phoenix_check_tests.py. If Yetus ran no unit tests, the file has the single
+# line "# no tests run". If the Maven build failed, the file also has the line "# build failed".
 
 set -euo pipefail
 shopt -s nullglob
 
 patchdir=$1
+class_list=${2:-}
 logs=("${patchdir}"/patch-unit-*.txt)
 if [[ ${#logs[@]} -eq 0 ]]; then
   echo "Yetus ran no unit tests for this PR."
+  if [[ -n "${class_list}" ]]; then
+    echo "# no tests run" > "${class_list}"
+  fi
   exit 0
 fi
 
@@ -47,7 +55,19 @@ if [[ -n "${results}" ]]; then
 fi
 [[ "${GITHUB_ACTIONS:-}" == "true" ]] && echo "::endgroup::"
 
+if [[ -n "${class_list}" ]]; then
+  if [[ -n "${results}" ]]; then
+    awk -F' -- in | in ' 'NF > 1 { print $NF }' <<< "${results}" | sort -u > "${class_list}"
+  else
+    : > "${class_list}"
+  fi
+fi
+
 failed=$(grep -E '<<< (FAILURE|ERROR)!' <<< "${results}" || true)
+# Maven skips the modules after a module with failed tests, so their classes do not run.
+if [[ -n "${class_list}" ]] && grep -qE '^\[[A-Z]+\] BUILD FAILURE' "${logs[@]}"; then
+  echo "# build failed" >> "${class_list}"
+fi
 if [[ -n "${failed}" ]]; then
   echo
   echo "Test classes with failures or errors:"
