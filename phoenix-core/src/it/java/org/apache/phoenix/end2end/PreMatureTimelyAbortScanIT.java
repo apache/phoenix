@@ -39,8 +39,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(ParallelStatsDisabledTest.class)
-public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
-  private static final Logger LOG = LoggerFactory.getLogger(PreMatureTimelyAbortScanIt.class);
+public class PreMatureTimelyAbortScanIT extends ParallelStatsDisabledIT {
+  private static final Logger LOG = LoggerFactory.getLogger(PreMatureTimelyAbortScanIT.class);
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {

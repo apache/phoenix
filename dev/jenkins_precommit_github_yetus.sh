@@ -31,7 +31,6 @@ declare -i missing_env=0
 declare -a required_envs=(
   # these ENV variables define the required API with Jenkinsfile_GitHub
   "ARCHIVE_PATTERN_LIST"
-  "BUILD_URL_ARTIFACTS"
   "DOCKERFILE"
   "GITHUB_PASSWORD"
   "GITHUB_USER"
@@ -50,6 +49,11 @@ for required_env in "${required_envs[@]}"; do
   fi
 done
 
+# GitHub Actions has no per-build artifact URL, so BUILD_URL_ARTIFACTS is only needed on Jenkins.
+if [[ "${GITHUB_ACTIONS}" != "true" ]] && [[ -z "${BUILD_URL_ARTIFACTS}" ]]; then
+  echo "[ERROR] Required environment variable 'BUILD_URL_ARTIFACTS' is not set."
+  missing_env=${missing_env}+1
+fi
 if [ ${missing_env} -gt 0 ]; then
   echo "[ERROR] Please set the required environment variables before invoking. If this error is " \
        "on Jenkins, then please file a JIRA about the error."
@@ -71,7 +75,8 @@ mkdir "${PATCHDIR}/machine"
 # Otherwise exit, because we don't want Phoenix to do a
 # full build.  We wouldn't normally do this check for smaller
 # projects. :)
-if [[ -z "${CHANGE_URL}" ]]; then
+# On GitHub Actions this script only runs for pull requests.
+if [[ "${GITHUB_ACTIONS}" != "true" ]] && [[ -z "${CHANGE_URL}" ]]; then
   echo "Full build skipped" > "${PATCHDIR}/report.html"
   exit 0
 fi
@@ -106,13 +111,20 @@ YETUS_ARGS+=("--reapermode=kill")
 # set relatively high limits for ASF machines
 # changing these to higher values may cause problems
 # with other jobs on systemd-enabled machines
-YETUS_ARGS+=("--dockermemlimit=20g")
+if [[ "${GITHUB_ACTIONS}" == "true" ]]; then
+  # GitHub-hosted runners have 16 GB of memory.
+  YETUS_ARGS+=("--dockermemlimit=14g")
+else
+  YETUS_ARGS+=("--dockermemlimit=20g")
+fi
 # -1 spotbugs issues that show up prior to the patch being applied
 #YETUS_ARGS+=("--spotbugs-strict-precheck")
 # rsync these files back into the archive dir
 YETUS_ARGS+=("--archive-list=${ARCHIVE_PATTERN_LIST}")
 # URL for user-side presentation in reports and such to our artifacts
-YETUS_ARGS+=("--build-url-artifacts=${BUILD_URL_ARTIFACTS}")
+if [[ -n "${BUILD_URL_ARTIFACTS}" ]]; then
+  YETUS_ARGS+=("--build-url-artifacts=${BUILD_URL_ARTIFACTS}")
+fi
 # plugins to enable
 YETUS_ARGS+=("--plugins=${PLUGINS},-findbugs")
 # run in docker mode and specifically point to our
@@ -128,7 +140,7 @@ YETUS_ARGS+=("--personality=${SOURCEDIR}/dev/phoenix-personality.sh")
 #YETUS_ARGS+=("--quick-hadoopcheck")
 #YETUS_ARGS+=("--skip-errorprone")
 # effectively treat dev-support as a custom maven module
-YETUS_ARGS+=("--skip-dirs=dev")
+YETUS_ARGS+=("--skip-dirs=dev,.github")
 # For testing with specific hadoop version. Activates corresponding profile in maven runs.
 #if [[ -n "${HADOOP_PROFILE}" ]]; then
 #  # Master has only Hadoop3 support. We don't need to activate any profile.
@@ -142,6 +154,19 @@ if [[ -n "${EXCLUDE_TESTS_URL}" ]]; then
 fi
 # help keep the ASF boxes clean
 YETUS_ARGS+=("--sentinel")
+# Used by the GitHub Actions precommit to split the unit tests into several jobs.
+if [[ -n "${TEST_GROUP}" ]]; then
+  YETUS_ARGS+=("--test-group=${TEST_GROUP}")
+fi
+if [[ -n "${IT_CLASS_RANGE}" ]]; then
+  YETUS_ARGS+=("--it-class-range=${IT_CLASS_RANGE}")
+fi
+if [[ -n "${NUM_FORKED_UT}" ]]; then
+  YETUS_ARGS+=("--num-forked-ut=${NUM_FORKED_UT}")
+fi
+if [[ -n "${NUM_FORKED_IT}" ]]; then
+  YETUS_ARGS+=("--num-forked-it=${NUM_FORKED_IT}")
+fi
 
 echo "Launching yetus with command line:"
 echo "${TESTPATCHBIN} ${YETUS_ARGS[*]}"
