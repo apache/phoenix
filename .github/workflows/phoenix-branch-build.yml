@@ -1,0 +1,158 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Branch build and test after each commit. Replaces Jenkinsfile.
+#
+# Jenkins built each HBase profile (2.5, 2.6) in one job with an 11 hour timeout. A
+# GitHub-hosted job can run for at most 6 hours, so each profile is split into the same test
+# groups as the precommit (see dev/phoenix-test-group-args.sh). Together they run every test
+# that the Jenkins job ran.
+#
+# Limits kept from Jenkins, or made stricter:
+# * HBase rebuild timeout: 30 minutes.
+# * Build artifacts are kept for 2 days (Jenkins: 5 days).
+# * At most 15 jobs run at the same time (ASF recommended limit).
+# * One build at a time per branch. Jenkins allowed more, this is stricter.
+
+name: Phoenix Branch Build
+
+"on":
+  push:
+    branches:
+      - master
+      - '5.*'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    name: HBase ${{ matrix.hbase_profile }} (${{ matrix.test_group }}${{ matrix.it_class_range && format(' {0}', matrix.it_class_range) || '' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        hbase_profile: ['2.5', '2.6']
+        test_group: [unit]
+        include:
+          - {hbase_profile: '2.5', test_group: ParallelStatsEnabledTest}
+          - {hbase_profile: '2.5', test_group: ParallelStatsDisabledTest, it_class_range: A-C}
+          - {hbase_profile: '2.5', test_group: ParallelStatsDisabledTest, it_class_range: D-I}
+          - {hbase_profile: '2.5', test_group: ParallelStatsDisabledTest, it_class_range: J-R}
+          - {hbase_profile: '2.5', test_group: ParallelStatsDisabledTest, it_class_range: S-Z}
+          - {hbase_profile: '2.5', test_group: NeedsOwnMiniClusterTest, it_class_range: A-C}
+          - {hbase_profile: '2.5', test_group: NeedsOwnMiniClusterTest, it_class_range: D-K}
+          - {hbase_profile: '2.5', test_group: NeedsOwnMiniClusterTest, it_class_range: L-P}
+          - {hbase_profile: '2.5', test_group: NeedsOwnMiniClusterTest, it_class_range: Q-Z}
+          - {hbase_profile: '2.6', test_group: ParallelStatsEnabledTest}
+          - {hbase_profile: '2.6', test_group: ParallelStatsDisabledTest, it_class_range: A-C}
+          - {hbase_profile: '2.6', test_group: ParallelStatsDisabledTest, it_class_range: D-I}
+          - {hbase_profile: '2.6', test_group: ParallelStatsDisabledTest, it_class_range: J-R}
+          - {hbase_profile: '2.6', test_group: ParallelStatsDisabledTest, it_class_range: S-Z}
+          - {hbase_profile: '2.6', test_group: NeedsOwnMiniClusterTest, it_class_range: A-C}
+          - {hbase_profile: '2.6', test_group: NeedsOwnMiniClusterTest, it_class_range: D-K}
+          - {hbase_profile: '2.6', test_group: NeedsOwnMiniClusterTest, it_class_range: L-P}
+          - {hbase_profile: '2.6', test_group: NeedsOwnMiniClusterTest, it_class_range: Q-Z}
+    env:
+      HBASE_PROFILE: ${{ matrix.hbase_profile }}
+      TEST_GROUP: ${{ matrix.test_group }}
+      IT_CLASS_RANGE: ${{ matrix.it_class_range }}
+      MAVEN_OPTS: -Xmx3G
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Checkout Phoenix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Jenkins rebuilt HBase with JDK 8 and ran the build with JDK 11
+      # (dev/docker/Dockerfile.multibranch). Both JDKs are installed; the last one is the default.
+      - name: Set up JDK 8 and 11
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: temurin
+          java-version: |
+            8
+            11
+
+      - name: Maven cache
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.m2/repository
+          key: phoenix-m2-hbase-${{ matrix.hbase_profile }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            phoenix-m2-hbase-${{ matrix.hbase_profile }}-
+
+      - name: Rebuild HBase
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="${JAVA_HOME_8_X64}"
+          export PATH="${JAVA_HOME}/bin:${PATH}"
+          HBASE_VERSION=$(mvn help:evaluate -Dexpression="hbase-${HBASE_PROFILE}.runtime.version" \
+            -q -DforceStdout -B)
+          dev/rebuild_hbase.sh "${HBASE_VERSION}"
+
+      - name: Build and test
+        # Below the 360 minute job limit, so that the compress and upload steps still run.
+        timeout-minutes: 320
+        run: |
+          set -euo pipefail
+          ulimit -a
+          range_arg=()
+          if [[ -n "${IT_CLASS_RANGE}" ]]; then
+            range_arg=("${IT_CLASS_RANGE}")
+          fi
+          # Not a process substitution, so that set -e stops the build if the script fails.
+          group_out=$(bash dev/phoenix-test-group-args.sh "${TEST_GROUP}" "${range_arg[@]}")
+          mapfile -t group_args <<< "${group_out}"
+          # GitHub-hosted runners have 4 CPUs and 16 GB of memory, less than the Jenkins
+          # 'Hadoop' agents that the pom.xml defaults (8 and 7 forks) are sized for.
+          mvn clean verify -DPhoenixPatchProcess -Dskip.code-coverage \
+            -Dhbase.profile="${HBASE_PROFILE}" -DnumForkedUT=4 -DnumForkedIT=3 -B \
+            "${group_args[@]}"
+
+      - name: Compress test output
+        if: always()
+        run: find . -path '*/target/*-reports/*' -name '*.txt' -exec gzip {} +
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-output-hbase-${{ matrix.hbase_profile }}-${{ matrix.test_group }}${{ matrix.it_class_range && format('-{0}', matrix.it_class_range) || '' }}
+          path: |
+            **/target/surefire-reports/*.txt.gz
+            **/target/failsafe-reports/*.txt.gz
+            **/target/surefire-reports/*.dumpstream
+            **/target/failsafe-reports/*.dumpstream
+            **/target/surefire-reports/*.dump
+            **/target/failsafe-reports/*.dump
+            **/target/surefire-reports/TEST-*.xml
+            **/target/failsafe-reports/TEST-*.xml
+          retention-days: 2
+          if-no-files-found: ignore
