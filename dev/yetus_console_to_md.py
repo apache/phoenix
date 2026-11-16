@@ -65,6 +65,11 @@ def parse_table_row(line: str) -> Tuple[str, str, str, str]:
     return result[0], result[1], result[2], result[3]
 
 
+# A failed or errored test, as printed by surefire and failsafe when the test ends.
+PER_TEST_FAILURE = re.compile(
+    r'^\[\w+] ([\w.$]+(?:\[.*])?) -- Time elapsed: .* <<< (FAILURE|ERROR)!$')
+
+
 def is_results_section_start(line: str) -> bool:
     """Check if line indicates the start of Results section."""
     return bool(re.search(r'^\[\w+] Results:', line.strip()))
@@ -158,6 +163,23 @@ def parse_patch_unit_file(
     with open(file_path, 'r') as stream:
         while skip_to_results_section(stream):
             parse_results_section(stream, failures, flakes, errors)
+    # The Results section shortens the test names, and for a failure in a helper method or an
+    # @After method it names the helper, for example "FooIT.assertNoLeak:114->check:129". So
+    # take the failures and errors from the per-test lines instead, which always have the fully
+    # qualified test name:
+    #   [ERROR] org.apache.FooIT.testBar[param] -- Time elapsed: 3.2 s <<< FAILURE!
+    # A failure in @BeforeClass or @AfterClass is reported with the class name only.
+    failed = {}
+    with open(file_path, 'r') as stream:
+        for line in stream:
+            match = PER_TEST_FAILURE.search(line.strip())
+            if match:
+                failed[match.group(1)] = match.group(2)
+    if failed:
+        # Tests that passed on a rerun are flakes, not failures.
+        flaky = set(flakes)
+        failures[:] = [t for t, kind in failed.items() if kind == 'FAILURE' and t not in flaky]
+        errors[:] = [t for t, kind in failed.items() if kind == 'ERROR' and t not in flaky]
 
 
 def get_module(test_name: str, test_name_to_module: Dict[str, str]) -> str:
