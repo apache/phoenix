@@ -251,10 +251,17 @@ jobs:
         # Below the 360 minute job limit, so that the summary and upload steps still run.
         timeout-minutes: 330
         # Keep a copy of the Yetus output, so that the summary can show the Maven test command.
+        # Yetus writes the Maven test output to a file, so also print the test progress from it.
         run: |
           set -o pipefail
+          bash src/dev/phoenix-test-progress.sh "${PATCHDIR}" &
+          progress=$!
+          status=0
           bash src/dev/jenkins_precommit_github_yetus.sh 2>&1 \
-            | tee "${RUNNER_TEMP}/yetus-unit-check.log"
+            | tee "${RUNNER_TEMP}/yetus-unit-check.log" || status=$?
+          kill "${progress}" 2> /dev/null || true
+          wait "${progress}" || true
+          exit "${status}"
 
       # Yetus writes the Maven test output to a file, so list the test classes here. The full
       # logs are in the uploaded artifact. The class list is used by the test-coverage job.
