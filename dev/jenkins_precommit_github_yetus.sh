@@ -167,6 +167,9 @@ fi
 if [[ -n "${NUM_FORKED_IT}" ]]; then
   YETUS_ARGS+=("--num-forked-it=${NUM_FORKED_IT}")
 fi
+if [[ -n "${FORKED_PROCESS_TIMEOUT_IT}" ]]; then
+  YETUS_ARGS+=("--forked-process-timeout-it=${FORKED_PROCESS_TIMEOUT_IT}")
+fi
 
 echo "Launching yetus with command line:"
 echo "${TESTPATCHBIN} ${YETUS_ARGS[*]}"

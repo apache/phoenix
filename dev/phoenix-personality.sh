@@ -144,6 +144,10 @@ function personality_parse_args
         delete_parameter "${i}"
         NUM_FORKED_IT=${i#*=}
       ;;
+      --forked-process-timeout-it=*)
+        delete_parameter "${i}"
+        FORKED_PROCESS_TIMEOUT_IT=${i#*=}
+      ;;
     esac
   done
 }
@@ -261,6 +265,9 @@ function personality_modules
     fi
     if [[ -n "${NUM_FORKED_IT}" ]]; then
       extra="${extra} -DnumForkedIT=${NUM_FORKED_IT}"
+    fi
+    if [[ -n "${FORKED_PROCESS_TIMEOUT_IT}" ]]; then
+      extra="${extra} -DforkedProcessTimeoutIT=${FORKED_PROCESS_TIMEOUT_IT}"
     fi
 
     # Inject the jenkins build-id for our surefire invocations

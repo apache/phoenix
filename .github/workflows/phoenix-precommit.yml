@@ -252,6 +252,10 @@ jobs:
           # 'Hadoop' agents that the pom.xml defaults (8 and 7 forks) are sized for.
           NUM_FORKED_UT: "4"
           NUM_FORKED_IT: "3"
+          # Seconds before a forked JVM of the NeedsOwnMiniClusterTest ITs is killed (pom.xml:
+          # 1800). With fewer CPUs some classes take longer, for example BackwardCompatibilityIT
+          # took about 6000 seconds.
+          FORKED_PROCESS_TIMEOUT_IT: "7200"
         # Below the 360 minute job limit, so that the summary and upload steps still run.
         timeout-minutes: 330
         # Keep a copy of the Yetus output, so that the summary can show the Maven test command.

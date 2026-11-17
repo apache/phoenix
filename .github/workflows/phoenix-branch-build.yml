@@ -135,9 +135,11 @@ jobs:
           group_out=$(bash dev/phoenix-test-group-args.sh "${TEST_GROUP}" "${range_arg[@]}")
           mapfile -t group_args <<< "${group_out}"
           # GitHub-hosted runners have 4 CPUs and 16 GB of memory, less than the Jenkins
-          # 'Hadoop' agents that the pom.xml defaults (8 and 7 forks) are sized for.
+          # 'Hadoop' agents that the pom.xml defaults (8 and 7 forks, 1800 second timeout of a
+          # NeedsOwnMiniClusterTest fork) are sized for.
           mvn clean verify -DPhoenixPatchProcess -Dskip.code-coverage \
-            -Dhbase.profile="${HBASE_PROFILE}" -DnumForkedUT=4 -DnumForkedIT=3 -B \
+            -Dhbase.profile="${HBASE_PROFILE}" -DnumForkedUT=4 -DnumForkedIT=3 \
+            -DforkedProcessTimeoutIT=7200 -B \
             "${group_args[@]}"
 
       - name: Compress test output
