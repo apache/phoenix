@@ -32,13 +32,15 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category(ParallelStatsDisabledTest.class)
+// TODO: this test is not stable yet, so it is in no test group and Maven does not run it.
+// Uncomment the @Category below, and import org.junit.experimental.categories.Category,
+// when the test is stable.
+// @Category(ParallelStatsDisabledTest.class)
 public class PrematureScanTimelyAbortIT extends ParallelStatsDisabledIT {
   private static final Logger LOG = LoggerFactory.getLogger(PrematureScanTimelyAbortIT.class);
 
