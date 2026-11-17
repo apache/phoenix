@@ -29,10 +29,12 @@ Usage:
       one of the jobs: its name ends in IT and starts with a letter A-Z. IT classes in no test
       group are listed as a warning: Maven never runs them, in CI or locally.
   phoenix_check_tests.py coverage <source root> <class lists dir>
-      Checks that every test class ran in exactly one job. Each job writes the classes it ran to a
-      file in <class lists dir> (see dev/phoenix-list-tests.sh).
+      Checks that every test class ran in exactly one job, and lists every test class that ran in
+      no job, with the reason. Each job writes the classes it ran to a file in <class lists dir>
+      (see dev/phoenix-list-tests.sh).
 
 Classes with a class-level @Ignore, and IT classes in no test group, are not expected to run.
+They are listed, but do not fail the coverage check.
 """
 
 import os
@@ -183,6 +185,35 @@ def ignored_classes(classes: Dict[str, TestClass]) -> Set[str]:
     return {c.name for c in classes.values() if c.ignored}
 
 
+# The reason given for a test class that should have run, but did not.
+UNEXPECTED = 'although it should have run'
+
+
+def not_run_reasons(classes: Dict[str, TestClass], ran: Set[str]) -> Dict[str, str]:
+    """Every concrete test class that ran in no job, with the reason it did not run."""
+    unit_tests = expected_unit_tests(classes)
+    problems = it_problems(classes)
+    no_group = not_in_test_group(classes)
+    reasons = {}
+    for test_class in runnable(classes, UNIT_TEST_DIR) + runnable(classes, IT_DIR):
+        name = test_class.name
+        if name in ran:
+            continue
+        if test_class.ignored:
+            reasons[name] = 'because of a class-level @Ignore'
+        elif name in no_group:
+            reasons[name] = ('because Maven never runs it: no @Category with one of '
+                             + ', '.join(sorted(TEST_GROUPS)))
+        elif name in problems:
+            reasons[name] = 'because ' + problems[name]
+        elif test_class.test_dir == UNIT_TEST_DIR and name not in unit_tests:
+            reasons[name] = 'because surefire does not select its name (Test*, *Test, *Tests, ' \
+                            '*TestCase)'
+        else:
+            reasons[name] = UNEXPECTED
+    return reasons
+
+
 def print_list(title: str, names, notes: Optional[Dict[str, str]] = None) -> None:
     """Print a titled list of class names."""
     print(title)
@@ -228,7 +259,7 @@ def jobs_by_class(lists: Dict[str, List[str]]) -> Dict[str, List[str]]:
 
 
 def check_coverage(source_root: str, lists_dir: str) -> int:
-    """Check that every test class ran in exactly one job."""
+    """Check that every test class ran in exactly one job, and list the classes that did not run."""
     lists = read_class_lists(lists_dir)
     if not lists:
         print('ERROR: no test class lists found in ' + lists_dir + '.')
@@ -253,18 +284,26 @@ def check_coverage(source_root: str, lists_dir: str) -> int:
     if duplicates:
         print_list('ERROR: these test classes ran in more than one job:', duplicates, duplicates)
         status = 1
-    missing = expected - set(ran) - ignored_classes(classes)
     failed_builds = [job for job, names in lists.items() if BUILD_FAILED_MARKER in names]
-    if missing and failed_builds:
-        # The unit check jobs already failed, and Maven skipped the modules after the failure.
-        print_list('WARNING: these test classes did not run in any job. The build failed in '
-                   + ', '.join(failed_builds) + ', so Maven may have skipped them:', missing)
-    elif missing:
-        print_list('ERROR: these test classes did not run in any job. A test JVM may have '
-                   'crashed, or the class is not selected by any job:', missing)
+    reasons = not_run_reasons(classes, set(ran))
+    unexpected = [name for name, reason in reasons.items() if reason == UNEXPECTED]
+    if reasons:
+        print('Test classes that did not run in any job: ' + str(len(reasons)) + '.')
+        print()
+        by_reason: Dict[str, List[str]] = {}
+        for name, reason in reasons.items():
+            by_reason.setdefault(reason, []).append(name)
+        for reason in sorted(by_reason, key=lambda r: (r == UNEXPECTED, r)):
+            print_list('Not run, ' + reason + ':', by_reason[reason])
+    if unexpected and not failed_builds:
+        print('ERROR: ' + str(len(unexpected)) + ' test classes that should run did not run in '
+              'any job. A test JVM may have crashed, or the class is not selected by any job.')
         status = 1
-    if status == 0 and not missing:
-        print('Every test class ran in exactly one job.')
+    elif unexpected:
+        print('WARNING: the build failed in ' + ', '.join(failed_builds) + ', so Maven may have '
+              'skipped the ' + str(len(unexpected)) + ' test classes that should have run.')
+    if status == 0 and not unexpected:
+        print('Every test class that should run ran in exactly one job.')
     return status
 
 

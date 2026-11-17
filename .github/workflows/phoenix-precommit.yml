@@ -22,7 +22,8 @@
 # * general-check: every Yetus plugin except unit.
 # * unit-check: the unit plugin, once per test group. Together the test groups run every test
 #   that the single Jenkins job ran (see dev/phoenix-test-group-args.sh).
-# * test-coverage: checks that every test class ran in exactly one unit-check job, so that no
+# * test-coverage: checks that every test class ran in exactly one unit-check job, and lists the
+#   test classes that ran in no job. It fails if a test ran twice or did not run, so that no
 #   test is lost between the test groups (see dev/phoenix_check_tests.py).
 #
 # Limits kept from Jenkins, or made stricter:
