@@ -30,7 +30,7 @@
 # * At most 2 builds per PR in 24 hours (Jenkins: rateLimitBuilds). Re-running a workflow from
 #   the GitHub UI is not counted (Jenkins: userBoost).
 # * Build artifacts are kept for 2 days (Jenkins: 3 days).
-# * At most 15 jobs run at the same time (ASF recommended limit).
+# * At most 6 jobs run at the same time (ASF recommended limit: 15).
 
 name: Phoenix PreCommit
 
@@ -194,8 +194,9 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # 14 here plus general-check stays within the ASF recommended 15 concurrent jobs.
-      max-parallel: 14
+      # 5 here plus general-check: at most 6 jobs at the same time. The other test groups wait
+      # for a free slot.
+      max-parallel: 5
       matrix:
         include:
           - test_group: unit

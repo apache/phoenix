@@ -25,7 +25,7 @@
 # Limits kept from Jenkins, or made stricter:
 # * HBase rebuild timeout: 30 minutes.
 # * Build artifacts are kept for 2 days (Jenkins: 5 days).
-# * At most 15 jobs run at the same time (ASF recommended limit).
+# * At most 6 jobs run at the same time (ASF recommended limit: 15).
 # * One build at a time per branch. Jenkins allowed more, this is stricter.
 
 name: Phoenix Branch Build
@@ -54,7 +54,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      max-parallel: 15
+      max-parallel: 6
       matrix:
         hbase_profile: ['2.5', '2.6']
         test_group: [unit]
