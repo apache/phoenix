@@ -26,7 +26,8 @@
 #   test is lost between the test groups (see dev/phoenix_check_tests.py).
 #
 # Limits kept from Jenkins, or made stricter:
-# * One build at a time per PR (Jenkins: disableConcurrentBuilds).
+# * One build at a time per PR (Jenkins: disableConcurrentBuilds). A new commit pushed to the PR
+#   cancels the running build, which Jenkins did not do.
 # * At most 2 builds per PR in 24 hours (Jenkins: rateLimitBuilds). Re-running a workflow from
 #   the GitHub UI is not counted (Jenkins: userBoost).
 # * Build artifacts are kept for 2 days (Jenkins: 3 days).
@@ -42,7 +43,7 @@ permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   # Yetus release used by Jenkinsfile.github (rel/0.13.0).
@@ -88,6 +89,7 @@ jobs:
           builds=0
           for id in ${run_ids}; do
             # A run counts as a build if a job other than the rate limit check was not skipped.
+            # A build that a newer commit cancelled still counts, as it may have run for hours.
             started=$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
               --jq '[.jobs[] | select(.name != "Rate limit" and .conclusion != "skipped")]
                 | length')
