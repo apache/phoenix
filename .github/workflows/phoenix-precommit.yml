@@ -29,8 +29,9 @@
 # Limits kept from Jenkins, or made stricter:
 # * One build at a time per PR (Jenkins: disableConcurrentBuilds). A new commit pushed to the PR
 #   cancels the running build, which Jenkins did not do.
-# * At most 2 builds per PR in 24 hours (Jenkins: rateLimitBuilds). Re-running a workflow from
-#   the GitHub UI is not counted (Jenkins: userBoost).
+# * At most 4 builds per PR in 24 hours (Jenkins: rateLimitBuilds, 2 builds). This is less
+#   strict than Jenkins, because a new commit cancels the running build, and the cancelled build
+#   still counts. Re-running from the GitHub UI is not counted (Jenkins: userBoost).
 # * Build artifacts are kept for 2 days (Jenkins: 3 days).
 # * At most 6 jobs run at the same time (ASF recommended limit: 15).
 
@@ -69,7 +70,7 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
-          MAX_BUILDS: 2
+          MAX_BUILDS: 4
         run: |
           set -euo pipefail
           if [[ "${RUN_ATTEMPT}" != "1" ]]; then
