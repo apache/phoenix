@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Branch build and test after each commit. Replaces Jenkinsfile.
+# Branch build and test after each commit. Replaces the Jenkins branch build (Jenkinsfile).
 #
 # Jenkins built each HBase profile (2.5, 2.6) in one job with an 11 hour timeout. A
 # GitHub-hosted job can run for at most 6 hours, so each profile is split into the same test
@@ -93,8 +93,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # Jenkins rebuilt HBase with JDK 8 and ran the build with JDK 11
-      # (dev/docker/Dockerfile.multibranch). Both JDKs are installed; the last one is the default.
+      # Jenkins rebuilt HBase with JDK 8 and ran the build with JDK 11. Both JDKs are installed;
+      # the last one is the default.
       - name: Set up JDK 8 and 11
         uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287  # v5.3.0
         with:

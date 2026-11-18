@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# PR precommit checks. Replaces Jenkinsfile.github.
+# PR precommit checks. Replaces the Jenkins PR precommit (Jenkinsfile.github).
 #
 # Jenkins ran one Yetus job with all plugins and an 11 hour timeout. A GitHub-hosted job can
 # run for at most 6 hours, so the same Yetus run is split into:
@@ -48,7 +48,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Yetus release used by Jenkinsfile.github (rel/0.13.0).
+  # Yetus release used by the Jenkins PR precommit (rel/0.13.0).
   YETUS_COMMIT: cd4f14285117cfcadc92c5462c950109b6cdcf16
 
 jobs:
