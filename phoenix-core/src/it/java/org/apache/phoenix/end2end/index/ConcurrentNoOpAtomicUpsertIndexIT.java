@@ -271,25 +271,25 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
       CountDownLatch aReached = new CountDownLatch(1);
       CountDownLatch aProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed);
-      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Integer> aCnt = new AtomicReference<>();
       AtomicReference<Exception> aError = new AtomicReference<>();
-      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread a = runAsync("A", tableName, 1, aCnt, aError);
       Thread b = null;
       Thread c = null;
       try {
         assertTrue("batch A did not reach the index write", aReached.await(60, TimeUnit.SECONDS));
 
         // B: 1 -> 2, a no-op on A's pending state
-        AtomicReference<Integer> bCount = new AtomicReference<>();
+        AtomicReference<Integer> bCnt = new AtomicReference<>();
         AtomicReference<Exception> bError = new AtomicReference<>();
-        b = runAsync("B", tableName, 1, bCount, bError);
+        b = runAsync("B", tableName, 1, bCnt, bError);
         b.join(3000);
         assertTrue("batch B returned before batch A completed: " + bError.get(), b.isAlive());
 
         // C: 2 -> 3 while A is still pending
-        AtomicReference<Integer> cCount = new AtomicReference<>();
+        AtomicReference<Integer> cCnt = new AtomicReference<>();
         AtomicReference<Exception> cError = new AtomicReference<>();
-        c = runAsync("C", tableName, 2, cCount, cError);
+        c = runAsync("C", tableName, 2, cCnt, cError);
         c.join(3000);
         assertTrue("batch C returned before batch A completed: " + cError.get(), c.isAlive());
 
@@ -303,9 +303,9 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
         assertNull("batch A failed: " + aError.get(), aError.get());
         assertNull("batch B failed: " + bError.get(), bError.get());
         assertNull("batch C failed: " + cError.get(), cError.get());
-        assertEquals(Integer.valueOf(1), aCount.get());
-        assertEquals(Integer.valueOf(0), bCount.get());
-        assertEquals(Integer.valueOf(1), cCount.get());
+        assertEquals(Integer.valueOf(1), aCnt.get());
+        assertEquals(Integer.valueOf(0), bCnt.get());
+        assertEquals(Integer.valueOf(1), cCnt.get());
       } finally {
         aProceed.countDown();
         a.join(60000);
@@ -341,9 +341,9 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
       CountDownLatch aReached = new CountDownLatch(1);
       CountDownLatch aProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed);
-      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Integer> aCnt = new AtomicReference<>();
       AtomicReference<Exception> aError = new AtomicReference<>();
-      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread a = runAsync("A", tableName, 1, aCnt, aError);
       Thread b = null;
       Thread c = null;
       try {
@@ -359,15 +359,15 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
           IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         }
 
-        AtomicReference<Integer> bCount = new AtomicReference<>();
+        AtomicReference<Integer> bCnt = new AtomicReference<>();
         AtomicReference<Exception> bError = new AtomicReference<>();
-        b = runAsync("B", tableName, 99, bCount, bError);
+        b = runAsync("B", tableName, 99, bCnt, bError);
         b.join(3000);
         assertTrue("batch B returned before batch A completed: " + bError.get(), b.isAlive());
 
-        AtomicReference<Integer> cCount = new AtomicReference<>();
+        AtomicReference<Integer> cCnt = new AtomicReference<>();
         AtomicReference<Exception> cError = new AtomicReference<>();
-        c = runAsync("C", tableName, 99, cCount, cError);
+        c = runAsync("C", tableName, 99, cCnt, cError);
         c.join(3000);
         assertTrue("batch C returned before batch A completed: " + cError.get(), c.isAlive());
 
@@ -381,9 +381,9 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
         assertNull("batch A failed: " + aError.get(), aError.get());
         assertNull("batch B failed: " + bError.get(), bError.get());
         assertNull("batch C failed: " + cError.get(), cError.get());
-        assertEquals(Integer.valueOf(1), aCount.get());
-        assertEquals(Integer.valueOf(0), bCount.get());
-        assertEquals(Integer.valueOf(0), cCount.get());
+        assertEquals(Integer.valueOf(1), aCnt.get());
+        assertEquals(Integer.valueOf(0), bCnt.get());
+        assertEquals(Integer.valueOf(0), cCnt.get());
       } finally {
         IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         aProceed.countDown();
@@ -483,9 +483,9 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
       CountDownLatch aReached = new CountDownLatch(1);
       CountDownLatch aProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed);
-      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Integer> aCnt = new AtomicReference<>();
       AtomicReference<Exception> aError = new AtomicReference<>();
-      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread a = runAsync("A", tableName, 1, aCnt, aError);
       Thread d = null;
       try {
         assertTrue("batch A did not reach the index write", aReached.await(60, TimeUnit.SECONDS));
@@ -511,7 +511,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
         assertFalse(a.isAlive());
         assertFalse(d.isAlive());
         assertNull("batch A failed: " + aError.get(), aError.get());
-        assertEquals(Integer.valueOf(1), aCount.get());
+        assertEquals(Integer.valueOf(1), aCnt.get());
         assertNull("batch D failed: " + dError.get(), dError.get());
         assertEquals("batch D overwrote batch A", Integer.valueOf(0), dCount.get());
       } finally {
@@ -621,9 +621,9 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
       CountDownLatch aReached = new CountDownLatch(1);
       CountDownLatch aProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed);
-      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Integer> aCnt = new AtomicReference<>();
       AtomicReference<Exception> aError = new AtomicReference<>();
-      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread a = runAsync("A", tableName, 1, aCnt, aError);
       Thread d = null;
       try {
         assertTrue("batch A did not reach the index write", aReached.await(60, TimeUnit.SECONDS));
@@ -654,7 +654,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
         assertFalse(a.isAlive());
         assertFalse(d.isAlive());
         assertNull("batch A failed: " + aError.get(), aError.get());
-        assertEquals(Integer.valueOf(1), aCount.get());
+        assertEquals(Integer.valueOf(1), aCnt.get());
         assertNull("batch D failed: " + dError.get(), dError.get());
         assertEquals("batch D overwrote batch A", Integer.valueOf(0), dCount.get());
       } finally {
@@ -689,16 +689,16 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
       CountDownLatch aReached = new CountDownLatch(1);
       CountDownLatch aProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(blockedTable, aReached, aProceed, true);
-      AtomicReference<Integer> aCount = new AtomicReference<>();
+      AtomicReference<Integer> aCnt = new AtomicReference<>();
       AtomicReference<Exception> aError = new AtomicReference<>();
-      Thread a = runAsync("A", tableName, 1, aCount, aError);
+      Thread a = runAsync("A", tableName, 1, aCnt, aError);
       Thread b = null;
       try {
         assertTrue("batch A did not reach the index write", aReached.await(60, TimeUnit.SECONDS));
 
-        AtomicReference<Integer> bCount = new AtomicReference<>();
+        AtomicReference<Integer> bCnt = new AtomicReference<>();
         AtomicReference<Exception> bError = new AtomicReference<>();
-        b = runAsync("B", tableName, 1, bCount, bError);
+        b = runAsync("B", tableName, 1, bCnt, bError);
         b.join(3000);
         assertTrue("batch B returned before batch A completed: " + bError.get(), b.isAlive());
 
@@ -710,7 +710,7 @@ public class ConcurrentNoOpAtomicUpsertIndexIT extends BaseTest {
         assertTrue("unexpected error: " + aError.get(), isSimulatedFailure(aError.get()));
         assertNull("batch B failed: " + bError.get(), bError.get());
         assertEquals("batch B was a no-op on a state that was never committed", Integer.valueOf(1),
-          bCount.get());
+          bCnt.get());
       } finally {
         aProceed.countDown();
         a.join(60000);
