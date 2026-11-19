@@ -1,0 +1,384 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# PR precommit checks. Replaces the Jenkins PR precommit (Jenkinsfile.github).
+#
+# Jenkins ran one Yetus job with all plugins and an 11 hour timeout. A GitHub-hosted job can
+# run for at most 6 hours, so the same Yetus run is split into:
+# * general-check: every Yetus plugin except unit.
+# * unit-check: the unit plugin, once per test group. Together the test groups run every test
+#   that the single Jenkins job ran (see dev/phoenix-test-group-args.sh).
+# * test-coverage: checks that every test class ran in exactly one unit-check job, and lists the
+#   test classes that ran in no job. It fails if a test ran twice or did not run, so that no
+#   test is lost between the test groups (see dev/phoenix_check_tests.py).
+#
+# Limits kept from Jenkins, or made stricter:
+# * One build at a time per PR (Jenkins: disableConcurrentBuilds). A new commit pushed to the PR
+#   cancels the running build, which Jenkins did not do.
+# * At most 3 builds per PR in 24 hours (Jenkins: rateLimitBuilds, 2 builds). This is less
+#   strict than Jenkins, because a new commit cancels the running build, and the cancelled build
+#   still counts. Re-running from the GitHub UI is not counted (Jenkins: userBoost).
+# * Build artifacts are kept for 2 days (Jenkins: 3 days).
+# * At most 6 jobs run at the same time (ASF recommended limit: 15).
+
+name: Phoenix PreCommit
+
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Yetus release used by the Jenkins PR precommit (rel/0.13.0).
+  YETUS_COMMIT: cd4f14285117cfcadc92c5462c950109b6cdcf16
+
+jobs:
+  rate-limit:
+    name: Rate limit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read  # to list the earlier runs of this workflow and their jobs
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Check builds of this PR in the last 24 hours
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          MAX_BUILDS: 3
+        run: |
+          set -euo pipefail
+          if [[ "${RUN_ATTEMPT}" != "1" ]]; then
+            echo "Re-run requested from the GitHub UI, not rate limited."
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          # The pull_requests field of a workflow run is empty for PRs from forks, so match the
+          # runs by the PR head repository and branch instead.
+          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          # Runs of this workflow for this PR in the last 24 hours, other than this run.
+          run_ids=$(gh api -X GET --paginate \
+              "repos/${REPO}/actions/workflows/phoenix-precommit.yml/runs" \
+              -f event=pull_request -f "created=>=${since}" -f per_page=100 \
+              --jq '.workflow_runs[] | [.id, .head_repository.full_name, .head_branch] | @tsv' \
+            | awk -F '\t' -v repo="${HEAD_REPO}" -v ref="${HEAD_REF}" -v self="${RUN_ID}" \
+                '$2 == repo && $3 == ref && $1 != self { print $1 }')
+          builds=0
+          for id in ${run_ids}; do
+            # A run counts as a build if a job other than the rate limit check was not skipped.
+            # A build that a newer commit cancelled still counts, as it may have run for hours.
+            started=$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
+              --jq '[.jobs[] | select(.name != "Rate limit" and .conclusion != "skipped")]
+                | length')
+            if [[ "${started}" -gt 0 ]]; then
+              builds=$((builds + 1))
+            fi
+          done
+          echo "Builds of this PR in the last 24 hours: ${builds} (limit ${MAX_BUILDS})"
+          if [[ "${builds}" -ge "${MAX_BUILDS}" ]]; then
+            # Fail rather than skip, so that the PR does not show a passing check for a commit
+            # that was never built.
+            msg="This PR already had ${builds} builds in the last 24 hours, so this commit was"
+            msg+=" not built. Re-run this workflow from the GitHub UI to build it."
+            echo "::error::${msg}"
+            echo "run=false" >> "${GITHUB_OUTPUT}"
+            exit 1
+          else
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  general-check:
+    name: General check
+    needs: rate-limit
+    if: needs.rate-limit.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Free disk space
+        run: >-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          /opt/hostedtoolcache/CodeQL
+
+      - name: Checkout Phoenix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          path: src
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Fails fast if an IT class in a test group can not be selected by any unit-check job,
+      # because its name does not end in IT or does not start with a letter A-Z. Also lists the
+      # IT classes that Maven never runs because they have no test group @Category.
+      - name: Check test class names
+        run: python3 src/dev/phoenix_check_tests.py names src
+
+      - name: Checkout Yetus
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          repository: apache/yetus
+          ref: ${{ env.YETUS_COMMIT }}
+          path: yetus
+          persist-credentials: false
+
+      - name: Run Yetus general check
+        env:
+          ARCHIVE_PATTERN_LIST: "TEST-*.xml,org.apache.*.txt,*.dumpstream,*.dump"
+          DOCKERFILE: ${{ github.workspace }}/src/dev/docker/Dockerfile.yetus
+          GITHUB_PASSWORD: ${{ github.token }}
+          GITHUB_USER: ${{ github.actor }}
+          GITHUB_USE_TOKEN: "true"
+          PATCHDIR: ${{ github.workspace }}/yetus-general-check/output
+          PLUGINS: "all,-findbugs,-gitlab,-jira,-unit"
+          SET_JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
+          SOURCEDIR: ${{ github.workspace }}/src
+          TESTS_FILTER: dummy
+          YETUSDIR: ${{ github.workspace }}/yetus
+        # Below the 360 minute job limit, so that the summary and upload steps still run.
+        timeout-minutes: 330
+        run: bash src/dev/jenkins_precommit_github_yetus.sh
+
+      - name: Publish job summary
+        if: always()
+        env:
+          PATCHDIR: ${{ github.workspace }}/yetus-general-check/output
+        run: |
+          python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
+
+      - name: Compress test output
+        if: always()
+        run: find "${GITHUB_WORKSPACE}" -path '*/output/*' -name 'org.apache*.txt' -exec gzip {} +
+
+      - name: Upload Yetus output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: yetus-general-check-output
+          path: |
+            ${{ github.workspace }}/yetus-general-check/output
+            !${{ github.workspace }}/yetus-general-check/output/precommit
+          retention-days: 2
+          if-no-files-found: ignore
+
+  unit-check:
+    name: >-
+      Unit check (${{ matrix.test_group }}${{ matrix.it_class_range
+      && format(' {0}', matrix.it_class_range) || '' }})
+    needs: rate-limit
+    if: needs.rate-limit.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # 5 here plus general-check: at most 6 jobs at the same time. The other test groups wait
+      # for a free slot.
+      max-parallel: 5
+      matrix:
+        include:
+          - test_group: unit
+          - test_group: ParallelStatsEnabledTest
+          - {test_group: ParallelStatsDisabledTest, it_class_range: A-C}
+          - {test_group: ParallelStatsDisabledTest, it_class_range: D-I}
+          - {test_group: ParallelStatsDisabledTest, it_class_range: J-R}
+          - {test_group: ParallelStatsDisabledTest, it_class_range: S-Z}
+          - {test_group: NeedsOwnMiniClusterTest, it_class_range: A-C}
+          - {test_group: NeedsOwnMiniClusterTest, it_class_range: D-K}
+          - {test_group: NeedsOwnMiniClusterTest, it_class_range: L-P}
+          - {test_group: NeedsOwnMiniClusterTest, it_class_range: Q-Z}
+    steps:
+      - name: Free disk space
+        run: >-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          /opt/hostedtoolcache/CodeQL
+
+      - name: Checkout Phoenix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          path: src
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Yetus
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          repository: apache/yetus
+          ref: ${{ env.YETUS_COMMIT }}
+          path: yetus
+          persist-credentials: false
+
+      - name: Run Yetus unit check
+        env:
+          ARCHIVE_PATTERN_LIST: "TEST-*.xml,org.apache.*.txt,*.dumpstream,*.dump"
+          DOCKERFILE: ${{ github.workspace }}/src/dev/docker/Dockerfile.yetus
+          GITHUB_PASSWORD: ${{ github.token }}
+          GITHUB_USER: ${{ github.actor }}
+          GITHUB_USE_TOKEN: "true"
+          PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
+          PLUGINS: "github,htmlout,maven,unit"
+          SET_JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
+          SOURCEDIR: ${{ github.workspace }}/src
+          TESTS_FILTER: dummy
+          YETUSDIR: ${{ github.workspace }}/yetus
+          TEST_GROUP: ${{ matrix.test_group }}
+          IT_CLASS_RANGE: ${{ matrix.it_class_range }}
+          # GitHub-hosted runners have 4 CPUs and 16 GB of memory, less than the Jenkins
+          # 'Hadoop' agents that the pom.xml defaults (8 and 7 forks) are sized for.
+          NUM_FORKED_UT: "4"
+          NUM_FORKED_IT: "3"
+          # Seconds before a forked JVM of the NeedsOwnMiniClusterTest ITs is killed (pom.xml:
+          # 1800). With fewer CPUs some classes take longer, for example BackwardCompatibilityIT
+          # took about 6000 seconds.
+          FORKED_PROCESS_TIMEOUT_IT: "7200"
+        # Below the 360 minute job limit, so that the summary and upload steps still run.
+        timeout-minutes: 330
+        # Keep a copy of the Yetus output, so that the summary can show the Maven test command.
+        # Yetus writes the Maven test output to a file, so also print the test progress from it.
+        run: |
+          set -o pipefail
+          bash src/dev/phoenix-test-progress.sh "${PATCHDIR}" &
+          progress=$!
+          status=0
+          bash src/dev/jenkins_precommit_github_yetus.sh 2>&1 \
+            | tee "${RUNNER_TEMP}/yetus-unit-check.log" || status=$?
+          kill "${progress}" 2> /dev/null || true
+          wait "${progress}" || true
+          exit "${status}"
+
+      # Yetus writes the Maven test output to a file, so list the test classes here. The full
+      # logs are in the uploaded artifact. The class list is used by the test-coverage job.
+      - name: List tests run
+        if: always()
+        env:
+          PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
+          CLASS_LIST: >-
+            ${{ runner.temp }}/test-classes/${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}.txt
+        run: |
+          mkdir -p "$(dirname "${CLASS_LIST}")"
+          bash src/dev/phoenix-list-tests.sh "${PATCHDIR}" "${CLASS_LIST}"
+
+      - name: Publish job summary
+        if: always()
+        env:
+          PATCHDIR: ${{ github.workspace }}/yetus-unit-check/output
+          YETUS_LOG: ${{ runner.temp }}/yetus-unit-check.log
+        run: |
+          python3 src/dev/yetus_console_to_md.py "${PATCHDIR}" >> "${GITHUB_STEP_SUMMARY}" || true
+          # Yetus prints each command it runs as "<command> > <log file> 2>&1". The unit tests
+          # write to patch-unit-<module>.txt.
+          mvn_cmd=$(grep -E '^mvn .* > [^ ]*/patch-unit-[^ ]*\.txt 2>&1$' "${YETUS_LOG}" \
+            | sed -E 's/ > [^ ]+ 2>&1$//' || true)
+          {
+            echo
+            echo "### Maven test command"
+            echo
+            if [[ -n "${mvn_cmd}" ]]; then
+              echo "Run by Yetus in its docker container, from the root of the source tree:"
+              echo
+              echo '```'
+              echo "${mvn_cmd}"
+              echo '```'
+            else
+              echo "Yetus ran no unit tests for this PR. The report above shows why."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Compress test output
+        if: always()
+        run: find "${GITHUB_WORKSPACE}" -path '*/output/*' -name 'org.apache*.txt' -exec gzip {} +
+
+      - name: Upload Yetus output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: >-
+            yetus-unit-check-${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}
+          path: |
+            ${{ github.workspace }}/yetus-unit-check/output
+            !${{ github.workspace }}/yetus-unit-check/output/precommit
+          retention-days: 2
+          if-no-files-found: ignore
+
+      - name: Upload test class list
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: >-
+            test-classes-${{ matrix.test_group }}${{ matrix.it_class_range
+            && format('-{0}', matrix.it_class_range) || '' }}
+          path: ${{ runner.temp }}/test-classes
+          retention-days: 2
+          if-no-files-found: ignore
+
+  test-coverage:
+    name: Test coverage
+    needs: [rate-limit, unit-check]
+    # Also after failed tests, but not if the unit checks did not run or were cancelled.
+    if: >-
+      always() && needs.rate-limit.outputs.run == 'true'
+      && needs.unit-check.result != 'skipped' && needs.unit-check.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read  # to download the artifacts of this run
+    steps:
+      - name: Checkout Phoenix
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Download test class lists
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: test-classes-*
+          path: ${{ runner.temp }}/test-classes
+          merge-multiple: true
+
+      - name: Check that every test class ran in exactly one job
+        env:
+          CLASS_LISTS: ${{ runner.temp }}/test-classes
+        run: |
+          set -o pipefail
+          mkdir -p "${CLASS_LISTS}"
+          status=0
+          python3 src/dev/phoenix_check_tests.py coverage src "${CLASS_LISTS}" \
+            | tee "${RUNNER_TEMP}/test-coverage.txt" || status=$?
+          {
+            echo "## Test coverage"
+            echo
+            echo '```'
+            cat "${RUNNER_TEMP}/test-coverage.txt"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit "${status}"
