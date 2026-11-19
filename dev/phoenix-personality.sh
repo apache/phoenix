@@ -71,7 +71,10 @@ function personality_globals
   #shellcheck disable=SC2034
   JIRA_ISSUE_RE='^PHOENIX-[0-9]+$'
   #shellcheck disable=SC2034
-  GITHUB_REPO="apache/phoenix"
+  # On GitHub Actions, use the repository the workflow runs in. This runs after the Yetus
+  # GitHub Actions robot sets GITHUB_REPO, so without this a run on a fork would read the PR
+  # with the same number from apache/phoenix.
+  GITHUB_REPO="${GITHUB_REPOSITORY:-apache/phoenix}"
 
   # TODO use PATCH_BRANCH to select jdk versions to use.
 
@@ -124,6 +127,26 @@ function personality_parse_args
       --skip-errorprone)
         delete_parameter "${i}"
         SKIP_ERRORPRONE=true
+      ;;
+      --test-group=*)
+        delete_parameter "${i}"
+        TEST_GROUP=${i#*=}
+      ;;
+      --it-class-range=*)
+        delete_parameter "${i}"
+        IT_CLASS_RANGE=${i#*=}
+      ;;
+      --num-forked-ut=*)
+        delete_parameter "${i}"
+        NUM_FORKED_UT=${i#*=}
+      ;;
+      --num-forked-it=*)
+        delete_parameter "${i}"
+        NUM_FORKED_IT=${i#*=}
+      ;;
+      --forked-process-timeout-it=*)
+        delete_parameter "${i}"
+        FORKED_PROCESS_TIMEOUT_IT=${i#*=}
       ;;
     esac
   done
@@ -223,6 +246,29 @@ function personality_modules
     get_include_exclude_tests_arg tests_arg
     # We have patched the maven module above to run mvn verify instead of mvn test
     extra="${extra} ${tests_arg}"
+
+    # Only run one test group, if requested. See dev/phoenix-test-group-args.sh.
+    if [[ -n "${TEST_GROUP}" ]]; then
+      local group_args
+      # shellcheck disable=SC2086
+      if ! group_args=$(bash "${BASEDIR}/dev/phoenix-test-group-args.sh" "${TEST_GROUP}" \
+          ${IT_CLASS_RANGE}); then
+        # Stop here: without the group arguments the job would run the wrong tests.
+        yetus_error "Invalid test group '${TEST_GROUP}' or class range '${IT_CLASS_RANGE}'."
+        cleanup_and_exit 1
+      fi
+      # The arguments are printed one per line; ${extra} is word split when it is used.
+      extra="${extra} ${group_args}"
+    fi
+    if [[ -n "${NUM_FORKED_UT}" ]]; then
+      extra="${extra} -DnumForkedUT=${NUM_FORKED_UT}"
+    fi
+    if [[ -n "${NUM_FORKED_IT}" ]]; then
+      extra="${extra} -DnumForkedIT=${NUM_FORKED_IT}"
+    fi
+    if [[ -n "${FORKED_PROCESS_TIMEOUT_IT}" ]]; then
+      extra="${extra} -DforkedProcessTimeoutIT=${FORKED_PROCESS_TIMEOUT_IT}"
+    fi
 
     # Inject the jenkins build-id for our surefire invocations
     # Used by zombie detection stuff, even though we're not including that yet.
