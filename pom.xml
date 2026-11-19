@@ -170,6 +170,8 @@
     <skipNeedsOwnMiniClusterTests>false</skipNeedsOwnMiniClusterTests>
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
+    <!-- Timeout of each forked JVM of the NeedsOwnMiniClusterTest ITs. Each fork runs one class. -->
+    <forkedProcessTimeoutIT>1800</forkedProcessTimeoutIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
     <!-- Empty argument when code coverage is deactivated -->
@@ -1598,6 +1600,7 @@
               </goals>
               <configuration>
                 <reuseForks>false</reuseForks>
+                <forkedProcessTimeoutInSeconds>${forkedProcessTimeoutIT}</forkedProcessTimeoutInSeconds>
                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
