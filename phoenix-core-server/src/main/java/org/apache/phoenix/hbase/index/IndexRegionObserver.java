@@ -151,7 +151,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xerial.snappy.Snappy;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -242,6 +241,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private int count;
     private boolean usable;
     private ImmutableBytesPtr rowKey;
+    // The batch that the next batch on this row chains behind, or null to read the row from disk.
+    // It is only changed while holding the row lock
     private BatchMutateContext lastContext;
 
     PendingRow(ImmutableBytesPtr rowKey, BatchMutateContext context) {
@@ -251,16 +252,30 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.rowKey = rowKey;
     }
 
-    public BatchMutateContext addAndGetPrevCtx(BatchMutateContext context) {
+    /**
+     * Adds a batch to this row and returns true, or returns false if this row has been removed from
+     * the pending rows. The caller must hold the row lock.
+     */
+    public boolean add() {
       synchronized (this) {
-        if (usable) {
-          BatchMutateContext previousContext = lastContext;
-          count++;
-          lastContext = context;
-          return previousContext;
+        if (!usable) {
+          return false;
         }
+        count++;
+        return true;
       }
-      return null;
+    }
+
+    public BatchMutateContext getLastContext() {
+      synchronized (this) {
+        return lastContext;
+      }
+    }
+
+    public void setLastContext(BatchMutateContext context) {
+      synchronized (this) {
+        lastContext = context;
+      }
     }
 
     public void remove() {
@@ -270,6 +285,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           pendingRows.remove(rowKey);
           usable = false;
         }
+      }
+    }
+
+    /**
+     * Removes a batch that is releasing this row without updating it. The batch it was chained
+     * behind becomes the last context again. The caller must hold the row lock.
+     */
+    public void removeAndRestorePrevCtx(BatchMutateContext context,
+      BatchMutateContext prevContext) {
+      synchronized (this) {
+        if (lastContext == context) {
+          lastContext = prevContext;
+        }
+        remove();
       }
     }
 
@@ -355,8 +384,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
     // The current and next states of the data rows corresponding to the pending mutations
     private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
-    // The previous concurrent batch contexts
+    // For each row, the pending batch this batch was chained behind. Rows read from disk have no
+    // entry
     private HashMap<ImmutableBytesPtr, BatchMutateContext> lastConcurrentBatchContext = null;
+    // True if the rows of this batch have been added to pendingRows
+    private boolean addedToPendingRows = false;
     // The latches of the threads waiting for this batch to complete
     private List<CountDownLatch> waitList = null;
     private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
@@ -1228,6 +1260,28 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
+   * Returns the pending batch whose update of the given row has not been written yet, starting from
+   * the given batch and skipping the failed batches it was chained behind. Returns null if the row
+   * should be read from disk. The row is locked by the caller, so a batch in the PRE phase cannot
+   * complete successfully while this runs.
+   */
+  private static BatchMutateContext getPendingContext(BatchMutateContext context,
+    ImmutableBytesPtr rowKey) {
+    while (context != null) {
+      BatchMutatePhase phase = context.getCurrentPhase();
+      if (phase == BatchMutatePhase.PRE) {
+        return context;
+      }
+      if (phase != BatchMutatePhase.FAILED || context.lastConcurrentBatchContext == null) {
+        // Either the batch completed and its update is on disk, or nothing is pending before it
+        return null;
+      }
+      context = context.lastConcurrentBatchContext.get(rowKey);
+    }
+    return null;
+  }
+
+  /**
    * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
    * <p>
    * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
@@ -1253,41 +1307,41 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // Add the data table rows in the mini batch to the per region collection of pending
       // rows. This will be used to detect concurrent updates
       PendingRow existingPendingRow = pendingRows.putIfAbsent(rowKeyPtr, pendingRow);
-      if (existingPendingRow == null) {
-        // There was no pending row for this row key. We need to retrieve this row from disk
-        keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
-      } else {
-        // There is a pending row for this row key. We need to retrieve the row from memory
-        BatchMutateContext lastContext = existingPendingRow.addAndGetPrevCtx(context);
-        if (lastContext != null) {
-          BatchMutatePhase phase = lastContext.getCurrentPhase();
-          Preconditions.checkArgument(phase != BatchMutatePhase.POST,
-            "the phase of the last batch cannot be POST");
-          if (phase == BatchMutatePhase.PRE) {
-            if (context.lastConcurrentBatchContext == null) {
-              context.lastConcurrentBatchContext = new HashMap<>();
-            }
-            context.lastConcurrentBatchContext.put(rowKeyPtr, lastContext);
-            if (context.maxPendingRowCount < existingPendingRow.getCount()) {
-              context.maxPendingRowCount = existingPendingRow.getCount();
-            }
-            Put put = lastContext.getNextDataRowState(rowKeyPtr);
-            if (put != null) {
-              // We have detected a concurrent update so do a deep copy of the
-              // previous update but we can skip the attributes
-              Put copy = MutationUtil.copyPut(put, true);
-              context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, new Put(copy)));
-            }
-          } else {
-            // The last batch for this row key failed. We cannot use the memory state.
-            // So we need to retrieve this row from disk
-            keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
-          }
+      BatchMutateContext lastContext = null;
+      if (existingPendingRow != null) {
+        if (existingPendingRow.add()) {
+          lastContext = getPendingContext(existingPendingRow.getLastContext(), rowKeyPtr);
+          existingPendingRow.setLastContext(context);
         } else {
           // The existing pending row is removed from the map. That means there is no
           // pending row for this row key anymore. We need to add the new one to the map
           pendingRows.put(rowKeyPtr, pendingRow);
-          keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
+        }
+      }
+      if (lastContext == null) {
+        // There is no pending update for this row key. We need to retrieve this row from disk
+        keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
+        continue;
+      }
+      // There is a pending update for this row key. We need to retrieve the row from memory
+      if (context.lastConcurrentBatchContext == null) {
+        context.lastConcurrentBatchContext = new HashMap<>();
+      }
+      context.lastConcurrentBatchContext.put(rowKeyPtr, lastContext);
+      if (context.maxPendingRowCount < existingPendingRow.getCount()) {
+        context.maxPendingRowCount = existingPendingRow.getCount();
+      }
+    }
+    // Set before anything below can throw, so that the rows are removed from pendingRows
+    context.addedToPendingRows = true;
+    if (context.lastConcurrentBatchContext != null) {
+      for (ImmutableBytesPtr rowKeyPtr : context.lastConcurrentBatchContext.keySet()) {
+        Put put = context.lastConcurrentBatchContext.get(rowKeyPtr).getNextDataRowState(rowKeyPtr);
+        if (put != null) {
+          // We have detected a concurrent update so do a deep copy of the
+          // previous update but we can skip the attributes
+          Put copy = MutationUtil.copyPut(put, true);
+          context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, new Put(copy)));
         }
       }
     }
@@ -2053,6 +2107,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       // early exit if we are not changing any rows
       if (context.rowsToLock.isEmpty()) {
+        // The result of this batch may be based on the uncommitted state of a previous concurrent
+        // batch, so wait for that batch to complete before returning
+        if (context.lastConcurrentBatchContext != null) {
+          waitForPreviousConcurrentBatch(table, context);
+        }
         return;
       }
     }
@@ -2110,9 +2169,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         RowLock rowLock = rowLockIterator.next();
         ImmutableBytesPtr rowKey = rowLock.getRowKey();
         if (row.equals(rowKey)) {
-          PendingRow pendingRow = pendingRows.get(rowKey);
+          PendingRow pendingRow = context.addedToPendingRows ? pendingRows.get(rowKey) : null;
           if (pendingRow != null) {
-            pendingRow.remove();
+            // This batch will not update the row, so the batch it was chained behind becomes the
+            // last batch for the row again
+            BatchMutateContext prevContext = context.lastConcurrentBatchContext == null
+              ? null
+              : context.lastConcurrentBatchContext.get(rowKey);
+            pendingRow.removeAndRestorePrevCtx(context, prevContext);
           }
           rowLock.release();
           rowLockIterator.remove();
@@ -2180,13 +2244,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
     try {
-      // We add to pending rows only after we have locked all the rows in the batch
-      // If we are in the INIT phase that means we failed to acquire the locks before the
-      // PRE phase
-      if (context.getCurrentPhase() != BatchMutatePhase.INIT) {
+      // The rows are added to pendingRows only if getCurrentRowStates ran for this batch
+      if (context.addedToPendingRows) {
         removePendingRows(context);
       }
       if (success) {
+        // The previous batches are only needed to skip over this batch if it fails
+        context.lastConcurrentBatchContext = null;
         context.currentPhase = BatchMutatePhase.POST;
         if ((context.hasAtomic || context.returnResult) && miniBatchOp.size() == 1) {
           if (!isAtomicOperationComplete(miniBatchOp.getOperationStatus(0))) {

@@ -597,7 +597,9 @@ public abstract class BaseTest {
     conf.setInt("hbase.catalogjanitor.interval", 5000);
     conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
     conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
-    conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
+    if (overrideProps.get(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY) == null) {
+      conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
+    }
     conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
     conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
       "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
