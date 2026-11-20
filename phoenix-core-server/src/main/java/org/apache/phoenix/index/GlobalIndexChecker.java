@@ -262,6 +262,11 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           }
           Cell cell = result.get(0);
           if (verifyRowAndRepairIfNecessary(result)) {
+            // A read repair can end with a dummy row. A dummy row marks a scan position and does
+            // not count against the row limit.
+            if (isDummy(result)) {
+              return true;
+            }
             break;
           }
           if (

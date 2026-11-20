@@ -568,6 +568,65 @@ public class GlobalIndexCheckerIT extends BaseTest {
     }
   }
 
+  @Test
+  public void testLimitWithServerPagingAfterReadRepair() throws Exception {
+    if (async || isEventualConsistency()) {
+      return;
+    }
+    // A server page of 1 ms makes the paging filter stop each scanner at its second row. The
+    // scanner that read repair opens then returns a dummy row when the filter rejects the
+    // repaired row. A dummy row is not a result row, so it must not count against the limit.
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(1));
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String dataTableName = generateUniqueName();
+      String indexTableName = generateUniqueName();
+      int rowCount = 20;
+      int limit = 9;
+      conn.createStatement().execute("CREATE TABLE " + dataTableName
+        + " (id INTEGER NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + tableDDLOptions);
+      for (int id = 0; id < rowCount; id++) {
+        conn.createStatement().execute("UPSERT INTO " + dataTableName + " VALUES (" + id + ", 'v"
+          + String.format("%02d", id) + "', 'x')");
+      }
+      conn.commit();
+      conn.createStatement().execute("CREATE INDEX " + indexTableName + " ON " + dataTableName
+        + " (val1) INCLUDE (val2)" + this.indexDDLOptions);
+      for (boolean reverse : new boolean[] { false, true }) {
+        // A failed post index update leaves an unverified index row. The data table row has the
+        // new value, so read repair rebuilds an index row that the filter rejects.
+        IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+        try {
+          for (int id = 1; id < rowCount; id += 4) {
+            conn.createStatement()
+              .execute("UPSERT INTO " + dataTableName + " (id, val2) VALUES (" + id + ", 'y')");
+          }
+          conn.commit();
+        } finally {
+          IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        }
+        String selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
+          + ") */ id FROM " + dataTableName + " WHERE val1 >= 'v' AND val2 = 'x' ORDER BY val1"
+          + (reverse ? " DESC NULLS LAST" : "") + " LIMIT " + limit;
+        assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
+        List<Integer> expected = new ArrayList<>();
+        for (int i = 0; i < rowCount && expected.size() < limit; i++) {
+          int id = reverse ? rowCount - 1 - i : i;
+          if (id % 4 != 1) {
+            expected.add(id);
+          }
+        }
+        List<Integer> actual = new ArrayList<>();
+        try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+          while (rs.next()) {
+            actual.add(rs.getInt(1));
+          }
+        }
+        assertEquals(expected, actual);
+      }
+    }
+  }
+
   private void assertIndexTableNotSelected(Connection conn, String dataTableName,
     String indexTableName, String sql) throws Exception {
     try {
