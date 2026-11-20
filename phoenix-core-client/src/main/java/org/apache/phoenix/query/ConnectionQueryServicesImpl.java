@@ -6403,6 +6403,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   @Override
   public void clearTableFromCache(final byte[] tenantId, final byte[] schemaName,
     final byte[] tableName, final long clientTS) throws SQLException {
+    clearTableFromCache(tenantId, schemaName, tableName, clientTS, false);
+  }
+
+  @Override
+  public void clearTableFromCache(final byte[] tenantId, final byte[] schemaName,
+    final byte[] tableName, final long clientTS, final boolean invalidateServerMetadataCache)
+    throws SQLException {
     // clear the meta data cache for the table here
     boolean success = false;
     try {
@@ -6429,6 +6436,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
               builder.setClientTimestamp(clientTS);
               builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
                 PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+              if (invalidateServerMetadataCache) {
+                builder.setInvalidateServerMetadataCache(true);
+              }
               instance.clearTableFromCache(controller, builder.build(), rpcCallback);
               checkForRemoteExceptions(controller);
               return rpcCallback.get();

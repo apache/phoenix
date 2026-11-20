@@ -4869,6 +4869,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
         GlobalCache.getInstance(this.env).getMetaDataCache();
       metaDataCache.invalidate(cacheKey);
+      // The request goes to each SYSTEM.CATALOG region. Only the region that holds the table row
+      // invalidates the region server caches, so that the cluster gets one invalidation.
+      if (
+        request.getInvalidateServerMetadataCache()
+          && checkTableKeyInRegion(key, env.getRegion()) == null
+      ) {
+        invalidateServerMetadataCache(Collections.singletonList(
+          new InvalidateServerMetadataCacheRequest(tenantId, schemaName, tableName)));
+      }
     } catch (Throwable t) {
       LOGGER.error("clearTableFromCache failed", t);
       ProtobufUtil.setControllerException(controller,

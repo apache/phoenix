@@ -524,7 +524,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean useBloomFilter = false;
   private long lastTimestamp = 0;
   private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
-  private IndexCDCConsumer indexCDCConsumer;
+  private volatile IndexCDCConsumer indexCDCConsumer;
+  // Serializes the restart of the consumer with the stop of the coprocessor.
+  private final Object indexCDCConsumerLock = new Object();
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
@@ -633,8 +635,39 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     this.builder.stop(msg);
     this.preWriter.stop(msg);
     this.postWriter.stop(msg);
-    if (this.indexCDCConsumer != null) {
-      this.indexCDCConsumer.stop();
+    synchronized (indexCDCConsumerLock) {
+      if (this.indexCDCConsumer != null) {
+        this.indexCDCConsumer.stop();
+      }
+    }
+  }
+
+  /**
+   * Starts a new consumer when the consumer of the region has exited. A consumer starts when its
+   * region opens, and it exits when no index needs the CDC events of the region. An index can
+   * change to EVENTUAL later. The writers see that change in their index maintainers, so a batch
+   * with an EVENTUAL index calls this method. The new consumer then reads the current metadata.
+   */
+  private void restartIndexCDCConsumerIfExited() {
+    IndexCDCConsumer consumer = indexCDCConsumer;
+    if (consumer == null || !consumer.canRestart()) {
+      return;
+    }
+    synchronized (indexCDCConsumerLock) {
+      if (stopped || indexCDCConsumer != consumer) {
+        return;
+      }
+      try {
+        IndexCDCConsumer newConsumer = consumer.newInstance();
+        consumer.stop();
+        indexCDCConsumer = newConsumer;
+        newConsumer.start();
+        LOG.info("Restarted IndexCDCConsumer for table {} region {}", dataTableName,
+          Bytes.toString(encodedRegionName));
+      } catch (IOException e) {
+        // The CDC keeps the events, so a later batch can try again.
+        LOG.warn("Cannot restart IndexCDCConsumer for table {}", dataTableName, e);
+      }
     }
   }
 
@@ -1522,11 +1555,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
       int updateCount = 0;
+      boolean hasEventualIndex = false;
       for (IndexMaintainer indexMaintainer : maintainers) {
         if (
           indexMaintainer.getIndexConsistency() != null
             && indexMaintainer.getIndexConsistency().isAsynchronous()
         ) {
+          hasEventualIndex = true;
           continue;
         }
         updateCount++;
@@ -1571,6 +1606,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
           }
         }
+      }
+      if (hasEventualIndex) {
+        restartIndexCDCConsumerIfExited();
       }
       TracingUtils.addAnnotation(current, "index update count", updateCount);
     }
