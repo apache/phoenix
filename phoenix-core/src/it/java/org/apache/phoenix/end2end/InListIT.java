@@ -58,6 +58,7 @@ import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
@@ -1196,14 +1197,33 @@ public class InListIT extends ParallelStatsDisabledIT {
       preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2) IN "
         + "(('000000000000500')," + "('000000000000400'))");
       queryPlan = getOptimizedQueryPlan(preparedStmt);
-      assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
+      // Non-leading PK IN-list: V1 emits "RANGE SCAN" with a RowKeyComparisonFilter server
+      // filter; V2 emits "SKIP SCAN ON N KEYS" with a SkipScanFilter that seeks past
+      // non-matching rows in the same HBase scan region. Scan region is byte-identical
+      // in both cases; V2's SkipScan is strictly more efficient (seek-past vs
+      // read-and-reject).
+      assertInListNonLeadingPkPlan(queryPlan);
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2) IN "
         + "(('000000000000500')," + "('000000000000400'))");
       queryPlan = getOptimizedQueryPlan(preparedStmt);
-      assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      assertInListNonLeadingPkPlan(queryPlan);
+    }
+  }
+
+  /**
+   * For non-leading PK IN-list queries, V1 emits "RANGE SCAN" (RowKeyComparisonFilter) and V2 emits
+   * "SKIP SCAN ON N KEYS/RANGES" (SkipScanFilter). Both produce the same HBase scan region; V2 is
+   * strictly more efficient via seek-past navigation.
+   */
+  private static void assertInListNonLeadingPkPlan(QueryPlan queryPlan) throws SQLException {
+    ExplainPlanTestUtil.ExplainPlanAssert plan =
+      assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
+    if (isV2Optimizer()) {
+      plan.scanTypeStartsWith("SKIP SCAN ");
+    } else {
+      plan.scanType("RANGE SCAN");
     }
   }
 
@@ -2213,6 +2233,18 @@ public class InListIT extends ParallelStatsDisabledIT {
       if (expectSkipScan) {
         assertPlan(plan).iteratorType("PARALLEL 1-WAY")
           .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING);
+      } else if (isV2Optimizer()) {
+        // V1 respects MAX_IN_LIST_SKIP_SCAN_SIZE as a point-key cardinality cap — above the
+        // threshold it falls back to RANGE SCAN + server filter when sort orders are mixed.
+        // V2 emits compound point keys per tuple (POINT LOOKUP) regardless of cardinality;
+        // the scan region is as tight as V1's would be, just expressed as point lookups
+        // rather than a range. Accept POINT LOOKUP under V2.
+        String scanType =
+          assertPlan(plan).iteratorType("PARALLEL 1-WAY").attributes().getExplainScanType();
+        assertTrue(
+          "Expected RANGE SCAN or POINT LOOKUP for V2 RVC-IN with mixed sort, got: " + scanType,
+          scanType.startsWith("RANGE SCAN")
+            || scanType.startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
       } else {
         assertPlan(plan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN");
       }

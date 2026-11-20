@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.keyspace.WhereOptimizerV2;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseExpression;
 import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapper;
@@ -125,6 +126,17 @@ public class WhereOptimizer {
   public static Expression pushKeyExpressionsToScan(StatementContext context, Set<Hint> hints,
     Expression whereClause, Set<Expression> extractNodes, Optional<byte[]> minOffset)
     throws SQLException {
+    // When the v2 key-space optimizer is enabled, route the entire WHERE expression through
+    // it. The v2 driver produces the same ScanRanges shape and residual Expression as the
+    // legacy path below, with stricter correctness guarantees (see PHOENIX-6669 and the
+    // design doc in docs/where-optimizer-v2.md).
+    if (
+      context.getConnection().getQueryServices().getConfiguration().getBoolean(
+        QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+        QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)
+    ) {
+      return WhereOptimizerV2.run(context, hints, whereClause, extractNodes, minOffset);
+    }
     PName tenantId = context.getConnection().getTenantId();
     byte[] tenantIdBytes = null;
     PTable table = context.getCurrentTable().getTable();
@@ -703,11 +715,11 @@ public class WhereOptimizer {
         || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
   }
 
-  private static class RemoveExtractedNodesVisitor
+  public static class RemoveExtractedNodesVisitor
     extends StatelessTraverseNoExpressionVisitor<Expression> {
     private final Set<Expression> nodesToRemove;
 
-    private RemoveExtractedNodesVisitor(Set<Expression> nodesToRemove) {
+    public RemoveExtractedNodesVisitor(Set<Expression> nodesToRemove) {
       this.nodesToRemove = nodesToRemove;
     }
 
@@ -2301,7 +2313,7 @@ public class WhereOptimizer {
       private final PColumn column;
       private final Set<Expression> nodes;
 
-      private BaseKeyPart(PTable table, PColumn column, Set<Expression> nodes) {
+      public BaseKeyPart(PTable table, PColumn column, Set<Expression> nodes) {
         this.table = table;
         this.column = column;
         this.nodes = nodes;
