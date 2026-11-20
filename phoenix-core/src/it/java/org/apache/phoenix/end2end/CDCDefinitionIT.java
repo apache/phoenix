@@ -17,10 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,8 +43,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -52,8 +59,10 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -525,6 +534,103 @@ public class CDCDefinitionIT extends CDCBaseIT {
       assertCdcUpdateCacheFrequency(conn, cdcB, ucfMillis);
     }
     assertGetTableRpcModeForCdc(SchemaUtil.getTableName(null, cdcB), times(0));
+  }
+
+  @Test
+  public void testLocalIndexAndCDCWithClientUpsert() throws Exception {
+    Assume.assumeFalse(forView);
+    try (Connection conn = newConnection()) {
+      String[] names = createTableWithLocalIndexAndCDC(conn);
+      conn.createStatement().execute("UPSERT INTO " + names[0] + " VALUES (1, 11, 101)");
+      conn.createStatement().execute("UPSERT INTO " + names[0] + " VALUES (3, 30, 300)");
+      conn.commit();
+      assertLocalIndexAndCDC(conn, names,
+        new int[][] { { 1, 11, 101 }, { 2, 20, 200 }, { 3, 30, 300 } },
+        "{1=upsert 11 101, 3=upsert 30 300}");
+    }
+  }
+
+  @Test
+  public void testLocalIndexAndCDCWithServerUpsertSelect() throws Exception {
+    Assume.assumeFalse(forView);
+    try (Connection conn = newConnection()) {
+      String[] names = createTableWithLocalIndexAndCDC(conn);
+      conn.setAutoCommit(true);
+      conn.createStatement().execute("UPSERT INTO " + names[0]
+        + " (k, v1, v2) SELECT k, v1 + 1, v2 + 1 FROM " + names[0] + " WHERE k = 1");
+      assertLocalIndexAndCDC(conn, names, new int[][] { { 1, 11, 101 }, { 2, 20, 200 } },
+        "{1=upsert 11 101}");
+    }
+  }
+
+  @Test
+  public void testLocalIndexAndCDCWithServerDelete() throws Exception {
+    Assume.assumeFalse(forView);
+    try (Connection conn = newConnection()) {
+      String[] names = createTableWithLocalIndexAndCDC(conn);
+      conn.setAutoCommit(true);
+      conn.createStatement().execute("DELETE FROM " + names[0] + " WHERE k = 1");
+      assertLocalIndexAndCDC(conn, names, new int[][] { { 2, 20, 200 } }, "{1=delete}");
+    }
+  }
+
+  /**
+   * Create a data table with two rows, then a local index and a CDC on it. The CDC starts empty.
+   * Return the names of the table, the local index and the CDC.
+   */
+  private String[] createTableWithLocalIndexAndCDC(Connection conn) throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    String cdcName = generateUniqueName();
+    conn.createStatement()
+      .execute("CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1, 10, 100)");
+    conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (2, 20, 200)");
+    conn.commit();
+    conn.createStatement()
+      .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + " (v1) INCLUDE (v2)");
+    createCDC(conn, "CREATE CDC " + cdcName + " ON " + tableName);
+    return new String[] { tableName, indexName, cdcName };
+  }
+
+  /**
+   * Check the rows that the local index returns, in index order, and the CDC events by row key.
+   * Each event shows the event type and, for an upsert, the post image values.
+   */
+  private void assertLocalIndexAndCDC(Connection conn, String[] names, int[][] expectedRows,
+    String expectedEvents) throws Exception {
+    String tableName = names[0];
+    String indexName = names[1];
+    String cdcName = names[2];
+    String indexQuery = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ k, v1, v2 FROM "
+      + tableName + " WHERE v1 > 0 ORDER BY v1";
+    String plan =
+      QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + indexQuery));
+    assertTrue(plan, plan.contains("OVER " + indexName + "(" + tableName + ")"));
+    try (ResultSet rs = conn.createStatement().executeQuery(indexQuery)) {
+      for (int[] row : expectedRows) {
+        assertTrue(rs.next());
+        assertEquals(row[0], rs.getInt(1));
+        assertEquals(row[1], rs.getInt(2));
+        assertEquals(row[2], rs.getInt(3));
+      }
+      assertFalse(rs.next());
+    }
+
+    Map<Integer, String> events = new TreeMap<>();
+    try (ResultSet rs =
+      conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(POST) */ * FROM " + cdcName)) {
+      while (rs.next()) {
+        Map<String, Object> event = mapper.readValue(rs.getString(3), HashMap.class);
+        String description = (String) event.get(CDC_EVENT_TYPE);
+        if (CDC_UPSERT_EVENT_TYPE.equals(description)) {
+          Map<String, Object> postImage = (Map<String, Object>) event.get(CDC_POST_IMAGE);
+          description += " " + postImage.get("V1") + " " + postImage.get("V2");
+        }
+        assertNull(events.put(rs.getInt(2), description));
+      }
+    }
+    assertEquals(expectedEvents, events.toString());
   }
 
   /**
