@@ -398,8 +398,6 @@
                 <shadedPattern>${shaded.package}.org.</shadedPattern>
                 <excludes>
                   <exclude>org/apache/hadoop/**</exclude>
-                  <!-- Our non-shaded htrace and logging libraries -->
-                  <exclude>org/apache/htrace/**</exclude>
                   <exclude>org/slf4j/**</exclude>
                   <exclude>org/apache/commons/logging/**</exclude>
                   <exclude>org/apache/log4j/**</exclude>
@@ -455,6 +453,10 @@
                   <exclude>io/skip/checksum/errors</exclude>
                   <exclude>io/sort/*</exclude>
                   <exclude>io/serializations</exclude>
+                  <!-- OpenTelemetry API must NOT be shaded so that Phoenix uses the same
+                       GlobalOpenTelemetry class as the Java Agent (provided by HBase).
+                       If shaded, PhoenixTracing calls become no-ops. See PHOENIX-5215. -->
+                  <exclude>io/opentelemetry/**</exclude>
                 </excludes>
               </relocation>
               <!-- JSRs that haven't made it to inclusion in J2SE -->
