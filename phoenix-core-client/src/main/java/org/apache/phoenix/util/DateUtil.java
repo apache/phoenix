@@ -220,25 +220,51 @@ public class DateUtil {
   }
 
   /**
-   * Parses the timestsamp string in the UTC time zone.
+   * Parses the timestamp string in the UTC time zone.
    * @param timestampValue timestamp string in UTC
    * @return Timestamp parsed in UTC
    */
   public static Timestamp parseTimestamp(String timestampValue) {
-    Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
+    return parseTimestamp(timestampValue, null);
+  }
+
+  /**
+   * Parses the timestamp string with the given parser.
+   * @param timestampValue timestamp string
+   * @param parser Parser with user defined time zone.
+   * @return Timestamp parsed by the given parser, or parsed in UTC if parser is null.
+   */
+  public static Timestamp parseTimestamp(String timestampValue, DateTimeParser parser) {
+    Timestamp timestamp;
+    if (parser == null) {
+      timestamp = new Timestamp(parseDateTime(timestampValue));
+    } else {
+      timestamp = new Timestamp(parser.parseDateTime(timestampValue));
+    }
+    int nanos = getNanosFromTimestamp(timestampValue);
+    if (nanos > -1) {
+      // First clear existing nanos (default is 0), then set the new nanos value
+      // to avoid accumulating nanos from previous operations
+      timestamp.setNanos(0);
+      timestamp.setNanos(nanos);
+    }
+    return timestamp;
+  }
+
+  private static int getNanosFromTimestamp(String timestampValue) {
+    int nanos = -1;
     int period = timestampValue.indexOf('.');
     if (period > 0) {
       String nanosStr = timestampValue.substring(period + 1);
       if (nanosStr.length() > 9) throw new IllegalDataException("nanos > 999999999 or < 0");
       if (nanosStr.length() > 3) {
-        int nanos = Integer.parseInt(nanosStr);
+        nanos = Integer.parseInt(nanosStr);
         for (int i = 0; i < 9 - nanosStr.length(); i++) {
           nanos *= 10;
         }
-        timestamp.setNanos(nanos);
       }
     }
-    return timestamp;
+    return nanos;
   }
 
   /**
