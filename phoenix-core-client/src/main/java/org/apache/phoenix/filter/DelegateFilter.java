@@ -31,6 +31,10 @@ public class DelegateFilter extends FilterBase {
     this.delegate = delegate;
   }
 
+  public Filter getDelegateFilter() {
+    return delegate;
+  }
+
   @Override
   public void reset() throws IOException {
     delegate.reset();
