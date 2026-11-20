@@ -106,6 +106,7 @@ public final class BackwardCompatibilityTestUtil {
   public static final String QUERY_INDEX_REBUILD_ASYNC = QUERY_PREFIX + INDEX_REBUILD_ASYNC;
   public static final String MVN_HOME = "maven.home";
   public static final String JAVA_TMP_DIR = "java.io.tmpdir";
+  public static final String JAVA_HOME = "java.home";
 
   public enum UpgradeProps {
     NONE,
@@ -163,6 +164,7 @@ public final class BackwardCompatibilityTestUtil {
       + operation + TEXT_EXTENSION;
     cmdParams.add(resultFilePath);
     cmdParams.add(System.getProperty(JAVA_TMP_DIR));
+    cmdParams.add(System.getProperty(JAVA_HOME));
 
     if (System.getProperty(MVN_HOME) != null) {
       cmdParams.add(System.getProperty(MVN_HOME));

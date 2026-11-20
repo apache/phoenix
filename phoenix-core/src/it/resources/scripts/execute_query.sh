@@ -26,13 +26,20 @@ client_version=$4
 sqlfile=$5
 resultfile=$6
 tmp_dir=$7
-maven_home=$8
+java_home=$8
+maven_home=$9
 
-if [ -n $maven_home ]; then
+if [ -n "$java_home" ] && [ -x "$java_home/bin/java" ]; then
+  java_cmd="$java_home/bin/java"
+else
+  java_cmd=java
+fi
+
+if [ -n "$maven_home" ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
-java -Djava.security.manager=allow -version &> /dev/null || error_code=$?
+"$java_cmd" -Djava.security.manager=allow -version &> /dev/null || error_code=$?
 if [ -z ${error_code+x} ]; then
   security_manager='-Djava.security.manager=allow'
 fi
@@ -42,7 +49,7 @@ mvn -B dependency:copy -Dartifact=${client_group_id}:${client_artifact_id}:${cli
 -DoutputDirectory=$tmp_dir
 
 phoenix_client_jar=$tmp_dir/${client_artifact_id}-${client_version}.jar
-java -cp ".:$phoenix_client_jar" $security_manager sqlline.SqlLine \
+"$java_cmd" -cp ".:$phoenix_client_jar" $security_manager sqlline.SqlLine \
 -d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$zk_url -n none -p none \
 --color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile
