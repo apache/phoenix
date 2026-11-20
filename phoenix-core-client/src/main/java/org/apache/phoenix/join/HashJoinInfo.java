@@ -175,6 +175,13 @@ public class HashJoinInfo {
 
   }
 
+  /**
+   * Tells if the scan carries a hash join. This check does not read the join.
+   */
+  public static boolean hasHashJoin(Scan scan) {
+    return scan.getAttribute(HASH_JOIN) != null;
+  }
+
   @SuppressWarnings("unchecked")
   public static HashJoinInfo deserializeHashJoinFromScan(Scan scan) {
     byte[] join = scan.getAttribute(HASH_JOIN);

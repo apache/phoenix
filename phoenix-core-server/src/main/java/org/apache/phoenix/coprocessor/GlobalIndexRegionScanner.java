@@ -588,7 +588,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     return true;
   }
 
-  private boolean isVerified(Put mutation) throws IOException {
+  protected final boolean isVerified(Put mutation) throws IOException {
     List<Cell> cellList =
       mutation.get(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
         indexMaintainer.getEmptyKeyValueQualifier());
@@ -1214,6 +1214,24 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     return mutationList;
   }
 
+  /**
+   * During an online migration, adds a delete of the index row of the data row under the outgoing
+   * generation. If that row key is the same as the rebuilt row key, this method adds no delete.
+   */
+  private static void addOutgoingRowDelete(IndexMaintainer indexMaintainer, ValueGetter dataRowVG,
+    ImmutableBytesPtr rowKeyPtr, long ts, byte[] encodedRegionName, byte[] builtRowKey,
+    List<Mutation> indexMutations) {
+    if (!indexMaintainer.isMigrating()) {
+      return;
+    }
+    byte[] outgoingRowKey =
+      indexMaintainer.buildOutgoingRowKey(dataRowVG, rowKeyPtr, ts, encodedRegionName);
+    if (outgoingRowKey != null && !Bytes.equals(outgoingRowKey, builtRowKey)) {
+      indexMutations.add(indexMaintainer.buildRowDeleteMutation(outgoingRowKey,
+        IndexMaintainer.DeleteType.ALL_VERSIONS, ts));
+    }
+  }
+
   private static Put prepareIndexPutForRebuild(IndexMaintainer indexMaintainer,
     ImmutableBytesPtr rowKeyPtr, ValueGetter mergedRowVG, long ts, byte[] encodedRegionName)
     throws IOException {
@@ -1375,6 +1393,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
           Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr, nextDataRowVG, ts,
             encodedRegionName);
           indexMutations.add(indexPut);
+          addOutgoingRowDelete(indexMaintainer, nextDataRowVG, rowKeyPtr, ts, encodedRegionName,
+            indexPut.getRow(), indexMutations);
           Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
           if (deleteColumn != null) {
             indexMutations.add(deleteColumn);
@@ -1435,6 +1455,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
           Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr, nextDataRowVG, ts,
             encodedRegionName);
           indexMutations.add(indexPut);
+          addOutgoingRowDelete(indexMaintainer, nextDataRowVG, rowKeyPtr, ts, encodedRegionName,
+            indexPut.getRow(), indexMutations);
           Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
           if (deleteColumn != null) {
             indexMutations.add(deleteColumn);

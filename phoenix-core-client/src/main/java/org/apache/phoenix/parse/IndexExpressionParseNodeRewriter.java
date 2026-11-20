@@ -28,12 +28,14 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
@@ -88,28 +90,50 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
     List<PColumn> pkColumns = index.getPKColumns();
     for (int i = indexPosOffset; i < pkColumns.size(); ++i) {
       PColumn column = pkColumns.get(i);
-      String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
-      ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
-      String colName = "\"" + column.getName().getString() + "\"";
-      Expression dataExpression = expressionParseNode.accept(expressionCompiler);
-      PDataType expressionDataType = dataExpression.getDataType();
-      ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
-      PDataType indexColType =
-        IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
-      ParseNode columnParseNode =
-        new ColumnParseNode(alias != null ? TableName.create(null, alias) : null, colName, null);
-      if (indexColType != expressionDataType) {
-        columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
+      if (
+        index.isVectorIndex()
+          && MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME.equals(column.getName().getString())
+      ) {
+        // The index calculates the centroid ID from the vector, so no data expression maps to it
+        continue;
       }
-      indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
-      // Only true functional columns defined over an expression get an applied match entry. A
-      // plain indexed or PK column's expression string parses to a bare column reference. An
-      // expression column (e.g. UPPER(NAME)) parses to a compound node.
-      if (!(expressionParseNode instanceof ColumnParseNode)) {
-        // Trim leading/trailing whitespace
-        indexedParseNodeToFunctionalColumn.put(indexedParseNode,
-          new String[] { colName, expressionStr.trim() });
+      addMapping(column, alias, expressionCompiler, rewriter);
+    }
+    if (index.isVectorIndex()) {
+      // A functional vector index keeps the computed vector in a non-PK index column. Map the
+      // vector expression to that column, so that a query that ranks by the expression can use the
+      // index.
+      PColumn vectorColumn = VectorIndexTrainer.getIndexedVectorColumn(index);
+      if (!(SQLParser.parseCondition(vectorColumn.getExpressionStr()) instanceof ColumnParseNode)) {
+        addMapping(vectorColumn, alias, expressionCompiler, rewriter);
       }
+    }
+  }
+
+  /** Registers the rewrite from the indexed expression of an index column to that column. */
+  private void addMapping(PColumn column, String alias, ExpressionCompiler expressionCompiler,
+    IndexStatementRewriter rewriter) throws SQLException {
+    String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
+    ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
+    String colName = "\"" + column.getName().getString() + "\"";
+    Expression dataExpression = expressionParseNode.accept(expressionCompiler);
+    PDataType expressionDataType = dataExpression.getDataType();
+    ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
+    PDataType indexColType =
+      IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
+    ParseNode columnParseNode =
+      new ColumnParseNode(alias != null ? TableName.create(null, alias) : null, colName, null);
+    if (indexColType != expressionDataType) {
+      columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
+    }
+    indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
+    // Only a functional column, which is defined over an expression, gets an applied match entry.
+    // The expression string of a plain indexed or PK column parses to a bare column reference. The
+    // expression string of a functional column, for example UPPER(NAME), parses to a compound node.
+    if (!(expressionParseNode instanceof ColumnParseNode)) {
+      // Remove the leading and trailing whitespace
+      indexedParseNodeToFunctionalColumn.put(indexedParseNode,
+        new String[] { colName, expressionStr.trim() });
     }
   }
 

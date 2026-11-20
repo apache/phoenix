@@ -76,6 +76,10 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
       .put(TaskType.TRANSFORM_MONITOR, "org.apache.phoenix.coprocessor.tasks.TransformMonitorTask")
       .put(TaskType.CDC_STREAM_PARTITION,
         "org.apache.phoenix.coprocessor.tasks.CdcStreamPartitionMetadataTask")
+      .put(TaskType.VECTOR_SCORECARD_RECONCILE,
+        "org.apache.phoenix.coprocessor.tasks.VectorScorecardReconcileTask")
+      .put(TaskType.VECTOR_INDEX_REBUILD,
+        "org.apache.phoenix.coprocessor.tasks.VectorIndexRebuildTask")
       .build();
 
   public enum TaskResultCode {

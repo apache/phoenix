@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.CDCGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
+import org.apache.phoenix.coprocessor.UncoveredIndexDataRowFilter;
 import org.apache.phoenix.coprocessor.UncoveredLocalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -61,6 +62,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -174,19 +176,32 @@ public abstract class RegionScannerFactory {
             // If the DistinctPrefix filter is present on the scan we set the batch size to 1
             // when scanning uncovered index rows
             distinctFilter = ScanUtil.findDistinctPrefixFilter(scan);
+            // Each branch builds the data row filter before the scanner, because the scanner
+            // constructor opens resources that a later failure leaves open.
             if (ScanUtil.isLocalIndex(scan)) {
-              s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                offset, actualStartKey, extraLimit, distinctFilter != null);
+              UncoveredIndexDataRowFilter dataRowFilter =
+                UncoveredIndexDataRowFilter.create(scan, extraWhere, tupleProjector);
+              UncoveredLocalIndexRegionScanner localScanner =
+                new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
+                  offset, actualStartKey, extraLimit, distinctFilter != null);
+              localScanner.setDataRowFilter(dataRowFilter);
+              s = localScanner;
             } else {
               if (scan.getAttribute(CDC_DATA_TABLE_DEF) != null) {
+                // The CDC scanner builds its own joined rows, so it gets no data row filter.
                 s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                   dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
                   extraLimit, distinctFilter != null);
               } else {
-                s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                  extraLimit, distinctFilter != null);
+                UncoveredIndexDataRowFilter dataRowFilter =
+                  UncoveredIndexDataRowFilter.create(scan, extraWhere, tupleProjector);
+                UncoveredGlobalIndexRegionScanner globalScanner =
+                  new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                    dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
+                    extraLimit, distinctFilter != null);
+                globalScanner.setDataRowFilter(dataRowFilter);
+                s = globalScanner;
               }
             }
           }
@@ -281,6 +296,9 @@ public abstract class RegionScannerFactory {
                 ? new PositionBasedResultTuple(result)
                 : new ResultTuple(Result.create(result));
               ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+              // Reset the expression for each row. Some expressions keep state from the previous
+              // row, such as the NULL state of AND and OR.
+              extraWhere.reset();
               extraWhere.evaluate(merged, ptr);
               if (!Boolean.TRUE.equals(extraWhere.getDataType().toObject(ptr))) {
                 result.clear();
@@ -473,8 +491,24 @@ public abstract class RegionScannerFactory {
     };
   }
 
-  // PHOENIX-4791 Share position of array element cell
+  // PHOENIX-4791 Returns the position of the array element cell, which holds the server parsed
+  // projection values. An ordinary list has this cell at the end. An encoded qualifier list keeps
+  // the cell in its reserved qualifier range, after the empty column cell and before the other
+  // column cells. Thus this method finds the cell by its column. The method iterates because
+  // indexed access to an encoded list scans the list from the start.
   public static int getArrayCellPosition(List<Cell> result) {
+    if (result instanceof EncodedColumnQualiferCellsList) {
+      int i = 0;
+      for (Cell cell : result) {
+        if (
+          CellUtil.matchingColumn(cell, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY,
+            QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER)
+        ) {
+          return i;
+        }
+        i++;
+      }
+    }
     return result.size() - 1;
   }
 }

@@ -518,4 +518,39 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <!-- Compile the Java 21 distance kernels and tests into the test classes. The test suite
+           then runs with the SIMD kernels. -->
+      <id>java21</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test-compile-java21</id>
+                <goals>
+                  <goal>testCompile</goal>
+                </goals>
+                <phase>test-compile</phase>
+                <configuration>
+                  <release>21</release>
+                  <compileSourceRoots>
+                    <compileSourceRoot>${project.basedir}/../phoenix-core-client/src/main/java21</compileSourceRoot>
+                    <compileSourceRoot>${project.basedir}/src/test/java21</compileSourceRoot>
+                  </compileSourceRoots>
+                  <compilerArgs>
+                    <arg>--add-modules</arg>
+                    <arg>jdk.incubator.vector</arg>
+                  </compilerArgs>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

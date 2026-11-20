@@ -569,4 +569,42 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>java21</id>
+      <!-- This profile marks the shaded jar as a multi-release jar. A Java 21 JVM then loads the
+      SIMD kernels of phoenix-core-client from META-INF/versions/21. -->
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-shade-plugin</artifactId>
+              <configuration>
+                <filters combine.children="append">
+                  <!-- This filter keeps only the versioned classes of Phoenix. Shade does not
+                  relocate the versioned classes of bundled libraries. If the jar keeps them, the
+                  JVM loads them under their unrelocated names. -->
+                  <filter>
+                    <artifact>*:*</artifact>
+                    <excludes>
+                      <exclude>%regex[META-INF/versions/[0-9]+/(?!org/apache/phoenix/).*]</exclude>
+                    </excludes>
+                  </filter>
+                </filters>
+                <transformers combine.children="append">
+                  <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                    <manifestEntries>
+                      <Multi-Release>true</Multi-Release>
+                    </manifestEntries>
+                  </transformer>
+                </transformers>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+  </profiles>
 </project>

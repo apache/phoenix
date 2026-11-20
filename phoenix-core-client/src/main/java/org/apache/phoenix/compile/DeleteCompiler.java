@@ -248,6 +248,11 @@ public class DeleteCompiler {
         }
 
       }
+      if (maintainers != null) {
+        for (IndexMaintainer maintainer : maintainers) {
+          maintainer.loadCentroids(connection);
+        }
+      }
       byte[][] viewConstants = IndexUtil.getViewConstants(dataTable);
       int rowCount = 0;
       while (rs.next()) {
@@ -269,20 +274,41 @@ public class DeleteCompiler {
           ImmutableBytesPtr otherRowKeyPtr = new ImmutableBytesPtr(); // allocate new as this is a
                                                                       // key in a Map
           // Translate the data table row to the index table row
+          byte[] outgoingRowKey = null;
           if (table.getType() == PTableType.INDEX) {
             otherRowKeyPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
             if (otherTable.getType() == PTableType.INDEX) {
-              otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null,
-                rs.getCurrentRow().getValue(0).getTimestamp()));
+              long ts = rs.getCurrentRow().getValue(0).getTimestamp();
+              outgoingRowKey = maintainers[i].buildOutgoingRowKey(getter, otherRowKeyPtr, ts, null);
+              byte[] otherRowKey =
+                maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null, ts);
+              if (otherRowKey == null) {
+                continue;
+              }
+              otherRowKeyPtr.set(otherRowKey);
             }
           } else {
-            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null,
-              rs.getCurrentRow().getValue(0).getTimestamp()));
+            long ts = rs.getCurrentRow().getValue(0).getTimestamp();
+            outgoingRowKey = maintainers[i].buildOutgoingRowKey(getter, rowKeyPtr, ts, null);
+            // The row key is null if the row has no index row, for example if its vector is null
+            byte[] otherRowKey = maintainers[i].buildRowKey(getter, rowKeyPtr, null, null, ts);
+            if (otherRowKey == null) {
+              continue;
+            }
+            otherRowKeyPtr.set(otherRowKey);
           }
           otherMutations.get(i).put(otherRowKeyPtr,
             new RowMutationState(PRow.DELETE_MARKER, 0,
               statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO,
               null));
+          if (outgoingRowKey != null && !Bytes.equals(outgoingRowKey, otherRowKeyPtr.copyBytes())) {
+            // During a migration, the data row can also have an index row under the outgoing
+            // generation. Delete that index row too.
+            otherMutations.get(i).put(new ImmutableBytesPtr(outgoingRowKey),
+              new RowMutationState(PRow.DELETE_MARKER, 0,
+                statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO,
+                null));
+          }
         }
         if (mutations.size() > maxSize) {
           throw new IllegalArgumentException("MutationState size of " + mutations.size()

@@ -27,10 +27,12 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -57,6 +59,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.function.ScalarFunction;
@@ -231,6 +234,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     if (serverParsedJsonQueryFuncRefs != null) {
       Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
     }
+    deserializeAndAddComplexDataTypeFunctions(scan,
+      BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION, serverParsedKVRefs,
+      resultList);
     return resultList;
   }
 
@@ -289,9 +295,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       // context is used when we are iterating over the top n rows before the first next() call
       PhoenixScannerContext sc = new PhoenixScannerContext(scan.isScanMetricsEnabled());
       inner.setRegionScannerContext(sc);
-      OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions,
-        spoolingEnabled, thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
-        getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+      OrderedResultIterator iterator =
+        limit >= 0 && VectorDistanceOrderedResultIterator.appliesTo(orderByExpressions)
+          ? new VectorDistanceOrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
+            thresholdBytes, limit, estimatedRowSize, getPageSizeMsForRegionScanner(scan), scan,
+            s.getRegionInfo())
+          : new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled, thresholdBytes,
+            limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan),
+            scan, s.getRegionInfo());
       return new OrderedResultIteratorWithScannerContext(sc, iterator);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -352,7 +363,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           func = new JsonQueryFunction();
         } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION)) {
           func = new BsonValueFunction();
-        }
+        } else
+          if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION)) {
+            func = new BsonVectorValueFunction();
+          }
         if (func != null) {
           func.readFields(input);
           funcRefs[i] = func;
@@ -468,16 +482,19 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          if (isFilterDone()) {
-            return false;
-          }
-          if (regionScannerContext != null) {
+          // The RPC context gets the open-time context before the end check. Thus a region
+          // without results still reports the rows that it read at open time
+          boolean first = regionScannerContext != null;
+          if (first) {
             regionScannerContext.updateHBaseScannerContext(scannerContext, results);
             // we no longer need this context
             regionScannerContext = null;
-            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
-              return true;
-            }
+          }
+          if (isFilterDone()) {
+            return false;
+          }
+          if (first && PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+            return true;
           }
           RegionScannerResultIterator delegate =
             (RegionScannerResultIterator) (iterator.getDelegate());
@@ -561,6 +578,30 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
   }
 
   /**
+   * Adds the cells of a top N row to the results in KeyValue order. The client finds a column of a
+   * row with a binary search, which needs that order. A row that the scanner reads into an encoded
+   * qualifier list keeps its cells in qualifier order. That is KeyValue order for the cells of the
+   * one column family of the table, but not for a cell that the server adds in a reserved qualifier
+   * of another family, such as the cell of the data columns that a server merge adds to an index
+   * row. That cell sorts before the column cells by its qualifier, and after them by its family.
+   */
+  @VisibleForTesting
+  static void addCellsInKeyValueOrder(Tuple tuple, List<Cell> results) {
+    Cell[] cells = new Cell[tuple.size()];
+    boolean sorted = true;
+    for (int i = 0; i < cells.length; i++) {
+      cells[i] = tuple.getValue(i);
+      if (sorted && i > 0 && CellComparator.getInstance().compare(cells[i - 1], cells[i]) > 0) {
+        sorted = false;
+      }
+    }
+    if (!sorted) {
+      Arrays.sort(cells, CellComparator.getInstance());
+    }
+    Collections.addAll(results, cells);
+  }
+
+  /**
    * Return region scanner that does TopN. We only need to call startRegionOperation and
    * closeRegionOperation when getting the first Tuple (which forces running through the entire
    * region) since after this everything is held in memory
@@ -578,18 +619,50 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     try {
       // Once we return from the first call to next, we've run through and cached
       // the topN rows, so we no longer need to start/stop a region operation.
-      firstTuple = iterator.next();
-      // Now that the topN are cached, we can resize based on the real size
-      long actualSize = iterator.getByteSize();
-      chunk.resize(actualSize);
+      firstTuple = getFirstTopNTuple(iterator, chunk);
     } catch (Throwable t) {
       ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
       return null;
     } finally {
       region.closeRegionOperation();
     }
+    return newTopNScanner(s, iterator, firstTuple, sc, chunk, region);
+  }
+
+  /**
+   * Return the first tuple of the topN build and size the memory chunk. A real tuple or no tuple
+   * shows that the build is complete, so the chunk gets the size of the cached rows. A dummy tuple
+   * shows that the build paged out. The chunk then keeps the estimated size until the build
+   * completes.
+   */
+  @VisibleForTesting
+  static Tuple getFirstTopNTuple(final OrderedResultIterator iterator,
+    final MemoryManager.MemoryChunk chunk) throws SQLException {
+    Tuple firstTuple = iterator.next();
+    if (!isDummy(firstTuple)) {
+      chunk.resize(iterator.getByteSize());
+    }
+    return firstTuple;
+  }
+
+  /**
+   * Return the region scanner that emits the cached topN rows. The scanner holds the next tuple to
+   * emit. A held dummy tuple has no row for the client. A call after the first call does not send
+   * the held dummy. The call gets the next tuple first. It sends a dummy only when that tuple is
+   * also a dummy. Thus one RPC can complete the build and return the rows. The build work counts
+   * against the RPC size and time limits. If the build reaches a limit, the RPC ends after the
+   * first row and the RPC count does not change. When the build completes after the open, the
+   * scanner sizes the memory chunk to the cached rows.
+   */
+  @VisibleForTesting
+  static RegionScanner newTopNScanner(final RegionScanner s, final OrderedResultIterator iterator,
+    final Tuple firstTuple, final PhoenixScannerContext sc, final MemoryManager.MemoryChunk chunk,
+    final Region region) {
     return new BaseRegionScanner(s) {
       private Tuple tuple = firstTuple;
+      // A dummy first tuple shows that the build is not complete. The chunk then holds only the
+      // estimated size.
+      private boolean isChunkSized = !isDummy(firstTuple);
       // scanner context used when we are opening the scanner and reading the topN rows
       // We copy this context to the hbase rpc context on the first next call
       private PhoenixScannerContext regionScannerContext = sc;
@@ -597,6 +670,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean isFilterDone() {
         return tuple == null;
+      }
+
+      // Get the next tuple. When the build becomes complete, size the chunk to the cached rows.
+      private void nextTuple() throws SQLException {
+        tuple = iterator.next();
+        if (!isChunkSized && !isDummy(tuple)) {
+          chunk.resize(iterator.getByteSize());
+          isChunkSized = true;
+        }
       }
 
       @Override
@@ -607,29 +689,42 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          if (isFilterDone()) {
-            return false;
-          }
-          if (regionScannerContext != null) {
+          // The RPC context gets the open-time context before the end check. Thus a region
+          // without results still reports the rows that it read at open time
+          boolean first = regionScannerContext != null;
+          if (first) {
             regionScannerContext.updateHBaseScannerContext(scannerContext, results);
             // we no longer need this context
             regionScannerContext = null;
-            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+          }
+          if (isFilterDone()) {
+            return false;
+          }
+          if (first && PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+            return true;
+          }
+          RegionScannerResultIterator delegate =
+            (RegionScannerResultIterator) (iterator.getDelegate());
+          // just use the scanner context passed to us from now on
+          delegate.setRegionScannerContext(scannerContext);
+          if (!first && isDummy(tuple)) {
+            // A dummy tuple only tells the client that work remains. Do that work now in this RPC.
+            // Send a dummy only when the iterator pages out again.
+            nextTuple();
+            if (isFilterDone()) {
+              return false;
+            }
+            if (isDummy(tuple)) {
+              ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
               return true;
             }
           }
           if (isDummy(tuple)) {
             ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
           } else {
-            for (int i = 0; i < tuple.size(); i++) {
-              results.add(tuple.getValue(i));
-            }
+            addCellsInKeyValueOrder(tuple, results);
           }
-          RegionScannerResultIterator delegate =
-            (RegionScannerResultIterator) (iterator.getDelegate());
-          // just use the scanner context passed to us from now on
-          delegate.setRegionScannerContext(scannerContext);
-          tuple = iterator.next();
+          nextTuple();
           return !isFilterDone();
         } catch (Throwable t) {
           ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);

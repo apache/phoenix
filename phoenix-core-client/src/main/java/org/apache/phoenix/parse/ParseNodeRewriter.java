@@ -160,7 +160,10 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
       ParseNode node = orderByNode.getNode();
       rewriter.reset();
       ParseNode normNode = node.accept(rewriter);
-      if (node == normNode) {
+      OrderByNode normOrderByNode = node == normNode
+        ? resolveDistanceOrdinal(orderByNode, selectNodes)
+        : NODE_FACTORY.orderBy(normNode, orderByNode);
+      if (orderByNode == normOrderByNode) {
         if (orderByNodes != normOrderByNodes) {
           normOrderByNodes.add(orderByNode);
         }
@@ -169,8 +172,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
       if (orderByNodes == normOrderByNodes) {
         normOrderByNodes = Lists.newArrayList(orderByNodes.subList(0, i));
       }
-      normOrderByNodes
-        .add(NODE_FACTORY.orderBy(normNode, orderByNode.isNullsLast(), orderByNode.isAscending()));
+      normOrderByNodes.add(normOrderByNode);
     }
 
     // Return new SELECT statement with updated WHERE clause
@@ -186,6 +188,19 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
       statement.getLimit(), normOffset == null ? null : new OffsetNode(normOffset),
       statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
       statement.getSelects(), statement.getUdfParseNodes());
+  }
+
+  /**
+   * Makes NULLS LAST explicit for an ascending ordinal without a NULLS clause that refers to a
+   * projected vector distance. Without this step, a rewrite of the projection, such as to an index
+   * column, loses the distance default. Compilation resolves an ordinal after a wildcard.
+   */
+  private static OrderByNode resolveDistanceOrdinal(OrderByNode orderByNode,
+    List<AliasedNode> selectNodes) {
+    return orderByNode.isNullsDefault() && orderByNode.isAscending()
+      && orderByNode.getOrdinalSelectNode(selectNodes) instanceof DistanceFunctionParseNode
+        ? NODE_FACTORY.orderBy(orderByNode.getNode(), true, true)
+        : orderByNode;
   }
 
   private Map<String, ParseNode> getAliasMap() {

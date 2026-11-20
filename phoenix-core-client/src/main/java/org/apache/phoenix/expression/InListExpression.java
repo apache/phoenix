@@ -350,8 +350,21 @@ public class InListExpression extends BaseSingleExpression {
     return buf.toString();
   }
 
+  // Copies the values of another IN list. The values are not children, so a copy for new children
+  // must keep them from the original
+  private InListExpression(Expression child, InListExpression other) {
+    super(child);
+    this.values = other.values;
+    this.minValue = other.minValue;
+    this.maxValue = other.maxValue;
+    this.valuesByteLength = other.valuesByteLength;
+    this.fixedWidth = other.fixedWidth;
+    this.keyExpressions = other.keyExpressions;
+    this.rowKeyOrderOptimizable = other.rowKeyOrderOptimizable;
+  }
+
   public InListExpression clone(List<Expression> l) {
-    return new InListExpression(l, this.rowKeyOrderOptimizable);
+    return new InListExpression(l.get(0), this);
   }
 
   /**

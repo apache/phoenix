@@ -150,6 +150,49 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.coprocessor.maxMetaDataCacheSize";
   public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB =
     "phoenix.client.maxMetaDataCacheSize";
+  // Maximum bytes of centroid vectors that each process caches, for all vector index generations
+  public static final String VECTOR_CENTROID_CACHE_MAX_BYTES_ATTRIB =
+    "phoenix.vector.centroid.cache.maxBytes";
+  // Centroids that a vector query probes in each generation; 0 selects sqrt(centroid count)
+  public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
+  // Maximum number of probe batches, including the first, that an adaptive vector query can scan.
+  // The query also probes at most this number times the centroids of its first batch
+  public static final String VECTOR_MAX_PROBE_LIMIT_ATTRIB = "phoenix.vector.max.probe.limit";
+  // Largest estimated bytes per index region scan for which an IVF probe batch uses positional
+  // reads (PREAD). The estimate comes from the index statistics. A batch above the bound, or with
+  // no estimate, keeps the default read type. A value of 0 or less turns off PREAD
+  public static final String VECTOR_PREAD_MAX_BYTES_PER_REGION_ATTRIB =
+    "phoenix.vector.pread.max.bytes.per.region";
+  // Interval in milliseconds between periodic scorecard flushes of a region server.
+  // A value of 0 or less disables the periodic flush.
+  public static final String VECTOR_SCORECARD_FLUSH_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.flush.interval.ms";
+  // Interval in milliseconds between scorecard reconciles of a vector index
+  public static final String VECTOR_SCORECARD_RECONCILE_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.scorecard.reconcile.interval.ms";
+  // Largest clock difference in milliseconds between two hosts. A scorecard recount adds it to
+  // its fence, so a delta that the recount counted cannot add to the count again. A rebuild adds
+  // it to the retire time of the outgoing generation, so no host deletes that generation early.
+  public static final String VECTOR_SCORECARD_CLOCK_SKEW_MS_ATTRIB =
+    "phoenix.vector.scorecard.clock.skew.ms";
+  // Time in milliseconds that a scorecard recount has to write its counts after it reads the
+  // server time. A recount that takes longer loses the deltas that flush during the extra time.
+  // The next recount repairs the count.
+  public static final String VECTOR_SCORECARD_COMPLETION_BUDGET_MS_ATTRIB =
+    "phoenix.vector.scorecard.completion.budget.ms";
+  // Drift threshold for the largest posting list size divided by the median size
+  public static final String VECTOR_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB =
+    "phoenix.vector.drift.skew.ratio.threshold";
+  // Smallest index population for which the drift assessment can find drift
+  public static final String VECTOR_DRIFT_MIN_POPULATION_ATTRIB =
+    "phoenix.vector.drift.min.population";
+  // If true, a drifted vector index gets an automatic background rebuild
+  public static final String VECTOR_REBUILD_AUTO_ENABLED_ATTRIB =
+    "phoenix.vector.rebuild.auto.enabled";
+  // Minimum time in milliseconds from the last rebuild of a vector index to the start of an
+  // automatic rebuild. Manual rebuilds do not use this value.
+  public static final String VECTOR_REBUILD_MIN_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.rebuild.min.interval.ms";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

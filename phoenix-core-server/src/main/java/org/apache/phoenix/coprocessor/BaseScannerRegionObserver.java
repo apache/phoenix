@@ -138,6 +138,16 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
   abstract protected boolean isRegionObserverFor(Scan scan);
 
+  /**
+   * Returns true if this observer moves the row limit of the scan to the uncovered index scanner.
+   * More than one observer can run for a scan, and only the first one moves the limit. A second
+   * move finds no page filter and clears the limit. The global index checker runs first for the
+   * scans that it checks.
+   */
+  protected boolean movesUncoveredIndexRowLimit(Scan scan) {
+    return scan.getAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN) == null;
+  }
+
   abstract protected RegionScanner doPostScannerOpen(
     ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s)
     throws Throwable;
@@ -183,6 +193,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         if (pageSizeMsBytes != null) {
           scan.setFilter(new PagingFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
         }
+      }
+      // The uncovered index scanner owns the row limit. This hook removes the page filter now,
+      // so the scanner does not replace the region scanner that HBase opens.
+      if (movesUncoveredIndexRowLimit(scan)) {
+        UncoveredGlobalIndexRegionScanner.removePageFilterBeforeScannerOpen(scan);
       }
     }
   }

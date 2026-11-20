@@ -102,6 +102,11 @@ public class MetaDataUtil {
   public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES =
     Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
   public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+  /**
+   * Row key column of an IVF vector index that holds the centroid ID of the posting list for the
+   * row. It is the first key column after the salt byte and the tenant ID, if they exist.
+   */
+  public static final String VECTOR_CENTROID_ID_COLUMN_NAME = "_CENTROID_ID";
   public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
   public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
   public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES =

@@ -88,6 +88,8 @@ public enum SQLExceptionCode {
   DATA_EXCEEDS_MAX_CAPACITY(206, "22003", "The data exceeds the max capacity for the data type."),
   MISSING_MAX_LENGTH(207, "22004", "Max length must be specified for type."),
   NONPOSITIVE_MAX_LENGTH(208, "22006", "Max length must have a positive length for type."),
+  VECTOR_DIMENSION_EXCEEDED(210, "22003", "Vector dimension exceeds the configured maximum."),
+  VECTOR_DIMENSION_MISMATCH(211, "22000", "Vector dimensions do not match."),
   DECIMAL_PRECISION_OUT_OF_RANGE(209, "22003",
     "Decimal precision outside of range. Should be within 1 and " + PDataType.MAX_PRECISION + "."),
   SERVER_ARITHMETIC_ERROR(212, "22012", "Arithmetic error on server."),
@@ -119,6 +121,13 @@ public enum SQLExceptionCode {
     "Invalid index on table. Indexes on SYSTEM tables are not enabled."),
   CANNOT_INDEX_SYSTEM_TABLE(306, "23104",
     "Invalid index on table. SYSTEM Indexes can only be on SYSTEM.CATALOG table."),
+  VECTOR_INDEX_ON_NON_VECTOR_TYPE(307, "23105",
+    "Vector index can only be created on an expression of VECTOR type."),
+  UNSUPPORTED_VECTOR_INDEX_ALGORITHM(309, "23107", "Unsupported vector index algorithm: "),
+  UNSUPPORTED_VECTOR_DISTANCE_METRIC(310, "23108", "Unsupported vector distance metric: "),
+  INVALID_VECTOR_INDEX_PARAMS(311, "23109", "Invalid vector index parameters: "),
+  VECTOR_INDEX_ON_TRANSACTIONAL_TABLE(312, "23110",
+    "Vector indexes are not supported on transactional tables."),
   /**
    * Invalid Cursor State (errorcode 04, sqlstate 24)
    */

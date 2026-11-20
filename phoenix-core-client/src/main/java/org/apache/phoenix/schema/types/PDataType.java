@@ -165,6 +165,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return false;
   }
 
+  public boolean isVectorType() {
+    return false;
+  }
+
   public final int compareTo(byte[] lhs, int lhsOffset, int lhsLength, SortOrder lhsSortOrder,
     byte[] rhs, int rhsOffset, int rhsLength, SortOrder rhsSortOrder, PDataType rhsType) {
     Preconditions.checkNotNull(lhsSortOrder);
@@ -564,6 +568,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final static Integer DOUBLE_PRECISION = 15;
 
   public static final int ARRAY_TYPE_BASE = 3000;
+  public static final int VECTOR_FLOAT_TYPE = 4001;
+  public static final int VECTOR_DOUBLE_TYPE = 4002;
   public static final int JSON_TYPE = 5000;
   public static final int BSON_TYPE = 7000;
   public static final int VARBINARY_ENCODED_TYPE = 9000;

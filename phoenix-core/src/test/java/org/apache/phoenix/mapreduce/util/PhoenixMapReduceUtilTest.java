@@ -44,6 +44,7 @@ public class PhoenixMapReduceUtilTest {
     assertTrue("Should contain jackson-databind", tmpjars.contains("jackson-databind"));
     assertTrue("Should contain jackson-annotations", tmpjars.contains("jackson-annotations"));
     assertTrue("Should contain commons-csv", tmpjars.contains("commons-csv"));
+    assertTrue("Should contain commons-io", tmpjars.contains("commons-io"));
     assertTrue("Should contain json-path", tmpjars.contains("json-path"));
     assertTrue("Should contain bson", tmpjars.contains("bson"));
   }
