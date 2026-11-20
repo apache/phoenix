@@ -127,7 +127,7 @@ jobs:
           /opt/hostedtoolcache/CodeQL
 
       - name: Checkout Phoenix
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           path: src
           fetch-depth: 0
@@ -140,7 +140,7 @@ jobs:
         run: python3 src/dev/phoenix_check_tests.py names src
 
       - name: Checkout Yetus
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: apache/yetus
           ref: ${{ env.YETUS_COMMIT }}
@@ -220,14 +220,14 @@ jobs:
           /opt/hostedtoolcache/CodeQL
 
       - name: Checkout Phoenix
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           path: src
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout Yetus
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: apache/yetus
           ref: ${{ env.YETUS_COMMIT }}
@@ -353,7 +353,7 @@ jobs:
       actions: read  # to download the artifacts of this run
     steps:
       - name: Checkout Phoenix
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           path: src
           persist-credentials: false
