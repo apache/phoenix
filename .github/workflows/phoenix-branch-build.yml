@@ -96,7 +96,7 @@ jobs:
       # Jenkins rebuilt HBase with JDK 8 and ran the build with JDK 11. Both JDKs are installed;
       # the last one is the default.
       - name: Set up JDK 8 and 11
-        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287  # v5.3.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880  # v6.3.0
         with:
           distribution: temurin
           java-version: |
