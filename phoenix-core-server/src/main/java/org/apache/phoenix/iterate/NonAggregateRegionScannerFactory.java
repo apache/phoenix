@@ -468,16 +468,17 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          if (isFilterDone()) {
-            return false;
-          }
-          if (regionScannerContext != null) {
+          boolean first = regionScannerContext != null;
+          if (first) {
             regionScannerContext.updateHBaseScannerContext(scannerContext, results);
             // we no longer need this context
             regionScannerContext = null;
-            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
-              return true;
-            }
+          }
+          if (isFilterDone()) {
+            return false;
+          }
+          if (first && PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+            return true;
           }
           RegionScannerResultIterator delegate =
             (RegionScannerResultIterator) (iterator.getDelegate());
@@ -607,16 +608,17 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          if (isFilterDone()) {
-            return false;
-          }
-          if (regionScannerContext != null) {
+          boolean first = regionScannerContext != null;
+          if (first) {
             regionScannerContext.updateHBaseScannerContext(scannerContext, results);
             // we no longer need this context
             regionScannerContext = null;
-            if (PhoenixScannerContext.isReturnImmediately(scannerContext)) {
-              return true;
-            }
+          }
+          if (isFilterDone()) {
+            return false;
+          }
+          if (first && PhoenixScannerContext.isReturnImmediately(scannerContext)) {
+            return true;
           }
           if (isDummy(tuple)) {
             ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
