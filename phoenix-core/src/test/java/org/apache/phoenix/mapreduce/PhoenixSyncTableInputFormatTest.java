@@ -296,8 +296,8 @@ public class PhoenixSyncTableInputFormatTest {
   public void testCreateRecordReaderReturnsNoOpReader() {
     RecordReader reader = inputFormat.createRecordReader(null, null);
     assertNotNull("createRecordReader should never return null", reader);
-    assertTrue("Should return a PhoenixNoOpSingleRecordReader",
-      reader instanceof PhoenixNoOpSingleRecordReader);
+    assertTrue("Should return a PhoenixNoOpPerRangeRecordReader",
+      reader instanceof PhoenixNoOpPerRangeRecordReader);
   }
 
   @Test
