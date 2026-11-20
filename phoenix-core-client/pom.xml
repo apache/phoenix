@@ -27,6 +27,20 @@
   <name>Phoenix Core Client</name>
   <description>Core Phoenix Client codebase</description>
 
+  <!-- Pin the OpenTelemetry API that this module compiles and tests against. See the
+       opentelemetry.version property in the root pom. -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <!-- shaded thirdparty dependencies -->
     <dependency>

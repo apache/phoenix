@@ -229,9 +229,11 @@
     <protoc.arch>${os.detected.classifier}</protoc.arch>
     <!-- Keeping the version in sync with hbase javax.el version -->
     <glassfish.el.version>3.0.1-b08</glassfish.el.version>
-    <!-- The OpenTelemetry API is provided by HBase at runtime, so we should compile against the
-         oldest version shipped by any supported HBase profile.
-         HBase 2.5.3, 2.5.10 and 2.6.1 ship 1.15.0. 2.5.14 and 2.6.3+ ship 1.49.0. -->
+    <!-- HBase supplies the OpenTelemetry API at runtime. Phoenix compiles against the oldest
+         version that a supported HBase release ships, so every call exists at runtime.
+         HBase moved from 1.15.0 to 1.49.0 in 2.5.12 and 2.6.3.
+         Only the modules that compile against the API import this version. The root does not
+         manage it, so the packaged artifacts keep the version that HBase declares. -->
     <opentelemetry.version>1.15.0</opentelemetry.version>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
     <hbase.shaded.package>org.apache.hadoop.hbase.shaded</hbase.shaded.package>
@@ -1469,15 +1471,6 @@
         <groupId>org.glassfish</groupId>
         <artifactId>javax.el</artifactId>
         <version>${glassfish.el.version}</version>
-      </dependency>
-
-      <!-- OpenTelemetry BOM for version alignment -->
-      <dependency>
-        <groupId>io.opentelemetry</groupId>
-        <artifactId>opentelemetry-bom</artifactId>
-        <version>${opentelemetry.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
