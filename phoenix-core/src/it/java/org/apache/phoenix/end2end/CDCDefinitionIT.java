@@ -41,6 +41,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -274,6 +276,43 @@ public class CDCDefinitionIT extends CDCBaseIT {
         + String.valueOf(NON_ENCODED_QUALIFIERS.getSerializedMetadataValue()));
     PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
     assertEquals(indexTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
+  }
+
+  @Test
+  public void testCreateCDCWithSplitPoints() throws Exception {
+    try (Connection conn = newConnection()) {
+      String tableName = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, v INTEGER)");
+      String parentName = tableName;
+      if (forView) {
+        parentName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE VIEW " + parentName + " AS SELECT * FROM " + tableName);
+      }
+      String cdcName = generateUniqueName();
+      byte[][] splitPoints = { Bytes.toBytes("4"), { 0x5a, (byte) 0xff }, Bytes.toBytes("c") };
+      // Mix literals with a raw byte bind; all must reach the CDC index unchanged.
+      try (PreparedStatement stmt = conn.prepareStatement(
+        "CREATE CDC " + cdcName + " ON " + parentName + " SPLIT ON ('4', ?, 'c')")) {
+        stmt.setBytes(1, splitPoints[1]);
+        stmt.execute();
+      }
+      // A view's CDC index lives in the shared view index table, which ignores split points.
+      if (!forView) {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        byte[] indexName =
+          pconn.getTable(CDCUtil.getCDCIndexName(cdcName)).getPhysicalName().getBytes();
+        List<HRegionLocation> regions =
+          pconn.getQueryServices().getAllTableRegions(indexName, 30000);
+        assertEquals(splitPoints.length + 1, regions.size());
+        // Split points are zero padded to the full row key width, so compare prefixes.
+        for (int i = 0; i < splitPoints.length; i++) {
+          byte[] startKey = regions.get(i + 1).getRegion().getStartKey();
+          assertTrue(Bytes.toStringBinary(startKey), Bytes.startsWith(startKey, splitPoints[i]));
+        }
+      }
+    }
   }
 
   @Test
