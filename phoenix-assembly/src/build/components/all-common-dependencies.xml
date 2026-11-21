@@ -30,6 +30,11 @@
         <include>org.apache.logging.log4j:log4j-api</include>
         <include>org.apache.logging.log4j:log4j-core</include>
         <include>org.apache.logging.log4j:log4j-1.2-api</include>
+        <!-- The client jars do not bundle the OpenTelemetry API, so ship it here. -->
+        <include>io.opentelemetry:opentelemetry-api</include>
+        <include>io.opentelemetry:opentelemetry-context</include>
+        <include>io.opentelemetry:opentelemetry-semconv</include>
+        <include>io.opentelemetry.semconv:opentelemetry-semconv</include>
       </includes>
     </dependencySet>
   </dependencySets>

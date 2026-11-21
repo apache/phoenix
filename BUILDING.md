@@ -95,7 +95,7 @@ The following options can dramatically reduce wall-clock time:
 * Skip the shaded artifacts and assembly entirely when you are iterating on
   `phoenix-core*` and do not need the shaded uberjars or the binary tarball.
   Pass `-DPhoenixPatchProcess` to deactivate the `shade-and-assembly` profile
-  (this is what the ASF Yetus precommit and the Jenkinsfile use):
+  (this is what the precommit and branch builds use):
 
   `$ mvn package -DskipTests -DPhoenixPatchProcess`
 

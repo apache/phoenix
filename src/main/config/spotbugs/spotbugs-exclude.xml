@@ -32,4 +32,11 @@ limitations under the License.
     <!-- We cannot avoid hand-built SQL statements when manipulating SYSTEM.% tables -->
     <BugPattern name="SQL_PREPARED_STATEMENT_GENERATED_FROM_NONCONSTANT_STRING" />
   </Match>
+  <Match>
+    <!-- A commit reports every failed batch as a CommitException, including unchecked
+         exceptions from the HBase client. The broad catch is intentional. -->
+    <Class name="org.apache.phoenix.execute.MutationState" />
+    <Method name="sendMutations" />
+    <BugPattern name="REC_CATCH_EXCEPTION" />
+  </Match>
 </FindBugsFilter>

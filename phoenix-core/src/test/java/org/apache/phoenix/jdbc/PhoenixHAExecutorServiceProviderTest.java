@@ -21,10 +21,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -118,6 +123,50 @@ public class PhoenixHAExecutorServiceProviderTest {
     assertEquals(expectedPoolSize, es1.getMaximumPoolSize());
     assertEquals(expectedPoolSize, es2.getMaximumPoolSize());
     assertNotEquals(es1, es2);
+  }
+
+  @Test
+  public void testHAExecutorServiceSurvivesDestroyedCreatorThreadGroup() throws Exception {
+    ThreadGroup creatorGroup = new ThreadGroup("PhoenixHAExecutorServiceProviderTest-creator");
+    AtomicReference<Throwable> creatorError = new AtomicReference<>();
+    Thread creator = new Thread(creatorGroup, () -> {
+      try {
+        PhoenixHAExecutorServiceProvider.resetExecutor();
+        for (PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices c : PhoenixHAExecutorServiceProvider
+          .get(properties)) {
+          for (ExecutorService es : Arrays.asList(c.getExecutorService(),
+            c.getCloseExecutorService())) {
+            ((ThreadPoolExecutor) es).setKeepAliveTime(10, TimeUnit.MILLISECONDS);
+            es.submit(() -> {
+            }).get();
+          }
+        }
+      } catch (Throwable t) {
+        creatorError.set(t);
+      }
+    }, "PhoenixHAExecutorServiceProviderTest-creator");
+    creator.start();
+    creator.join();
+    if (creatorError.get() != null) {
+      throw new AssertionError(creatorError.get());
+    }
+
+    // Wait for the idle core threads to time out so the next task needs a new worker.
+    long deadline = System.currentTimeMillis() + 30000;
+    while (creatorGroup.activeCount() > 0 && System.currentTimeMillis() < deadline) {
+      Thread.sleep(10);
+    }
+    creatorGroup.destroy();
+    // ThreadGroup.destroy() is a no-op on JDK 19+, so the problem cannot occur there.
+    assumeTrue(creatorGroup.isDestroyed());
+
+    for (PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices c : PhoenixHAExecutorServiceProvider
+      .get(properties)) {
+      for (ExecutorService es : Arrays.asList(c.getExecutorService(),
+        c.getCloseExecutorService())) {
+        assertEquals("ok", es.submit(() -> "ok").get(30, TimeUnit.SECONDS));
+      }
+    }
   }
 
   private Runnable getWaitingRunnable(Object obj) {

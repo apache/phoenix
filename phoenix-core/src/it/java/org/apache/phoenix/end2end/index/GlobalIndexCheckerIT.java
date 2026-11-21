@@ -1017,6 +1017,53 @@ public class GlobalIndexCheckerIT extends BaseTest {
   }
 
   @Test
+  public void testRowSizeFunctionsOnIndexWithUnverifiedRows() throws Exception {
+    if (async) {
+      // No need to run the same test twice for async = true and async = false.
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      conn.createStatement().execute("create table " + dataTableName
+        + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))"
+        + tableDDLOptions);
+      String indexTableName = generateUniqueName();
+      conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " + dataTableName
+        + " (val1) include (val2, val3)" + this.indexDDLOptions);
+
+      // Fail the data-table write after the index write, leaving an unverified index row.
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " values ('a', 'ab','abc', 'abcd')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+
+      // Write a separate authoritative row so the unverified index row remains in the index.
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val1, val2) values ('b', 'ab','abc')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      String rowSizeSql = "SELECT SUM(ROW_SIZE()) FROM " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, rowSizeSql, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(rowSizeSql)) {
+        assertTrue(rs.next());
+        assertTrue(rs.getLong(1) > 0);
+        assertFalse(rs.next());
+      }
+
+      String rawRowSizeSql =
+        "SELECT SUM(RAW_ROW_SIZE()) FROM " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, rawRowSizeSql, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(rawRowSizeSql)) {
+        assertTrue(rs.next());
+        assertTrue(rs.getLong(1) > 0);
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
   public void testUnverifiedRowRepair() throws Exception {
     if (async) {
       // No need to run the same test twice one for async = true and the other for async = false

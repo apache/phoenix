@@ -127,6 +127,11 @@
                 <excludes>
                   <exclude>org.apache.phoenix:phoenix-client</exclude>
                   <exclude>xom:xom</exclude>
+                  <!-- Do not bundle the OpenTelemetry API. The application supplies it, and
+                       Phoenix, HBase and the application must share one copy. A bundled copy
+                       splits the io.opentelemetry packages across two jars. -->
+                  <exclude>io.opentelemetry:*</exclude>
+                  <exclude>io.opentelemetry.semconv:*</exclude>
                 </excludes>
               </artifactSet>
             </configuration>

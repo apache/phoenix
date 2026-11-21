@@ -398,8 +398,6 @@
                 <shadedPattern>${shaded.package}.org.</shadedPattern>
                 <excludes>
                   <exclude>org/apache/hadoop/**</exclude>
-                  <!-- Our non-shaded htrace and logging libraries -->
-                  <exclude>org/apache/htrace/**</exclude>
                   <exclude>org/slf4j/**</exclude>
                   <exclude>org/apache/commons/logging/**</exclude>
                   <exclude>org/apache/log4j/**</exclude>
@@ -455,6 +453,10 @@
                   <exclude>io/skip/checksum/errors</exclude>
                   <exclude>io/sort/*</exclude>
                   <exclude>io/serializations</exclude>
+                  <!-- Do not relocate the OpenTelemetry API. The region server supplies it, and
+                       Phoenix must share its GlobalOpenTelemetry and Context storage. Otherwise
+                       Phoenix spans do not join the HBase RPC spans and are not exported. -->
+                  <exclude>io/opentelemetry/**</exclude>
                 </excludes>
               </relocation>
               <!-- JSRs that haven't made it to inclusion in J2SE -->

@@ -30,6 +30,20 @@
     <top.dir>${project.basedir}/..</top.dir>
   </properties>
 
+  <!-- Pin the OpenTelemetry API that this module compiles and tests against. See the
+       opentelemetry.version property in the root pom. -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <!-- As phoenix-core servers both as a module for tests and as a backwards compatibility module
     phoenix-core-client and phoenix-core-server must be compile scope so that dependents get
@@ -298,13 +312,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

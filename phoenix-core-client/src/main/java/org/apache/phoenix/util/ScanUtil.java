@@ -1208,6 +1208,14 @@ public class ScanUtil {
     return scan.getAttribute((BaseScannerRegionObserverConstants.REBUILD_INDEXES)) != null;
   }
 
+  static void setIndexReadRepairAttribute(Scan scan, StatementContext context) {
+    if (
+      !isIndexRebuild(scan) && !context.hasRowSizeFunction() && !context.hasRawRowSizeFunction()
+    ) {
+      scan.setAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+    }
+  }
+
   public static boolean isSyncTableChunkFormationEnabled(Scan scan) {
     return Arrays.equals(
       scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION), TRUE_BYTES);
@@ -1488,9 +1496,7 @@ public class ScanUtil {
         scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
       }
       if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
-        if (!isIndexRebuild(scan)) {
-          scan.setAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN, TRUE_BYTES);
-        }
+        setIndexReadRepairAttribute(scan, context);
       } else {
         scan.setAttribute(BaseScannerRegionObserverConstants.UNCOVERED_GLOBAL_INDEX, TRUE_BYTES);
       }
