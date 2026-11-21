@@ -134,9 +134,12 @@ public class UCFWithDisabledIndexIT extends BaseTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       final Statement stmt = conn.createStatement();
 
+      // A finite UCF lets the client skip the RPC that validates the last DDL timestamp.
+      // The value is much longer than the test, so no cache entry expires during the test.
       stmt.execute("CREATE TABLE " + tableName
         + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))" + " UPDATE_CACHE_FREQUENCY=NEVER");
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
+        + " UPDATE_CACHE_FREQUENCY=172800000");
       stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE (COL4)");
       stmt.execute("CREATE VIEW " + view01 + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM "
         + tableName + " WHERE COL1 = 'col1'");
