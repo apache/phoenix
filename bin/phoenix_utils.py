@@ -111,6 +111,7 @@ def setPath():
     LOGGING_JAR_PATTERN5 = "jcl-over-slf4j*.jar"
     SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
     OTEL_JAR_PATTERN = "opentelemetry-*.jar"
+    BSON_JAR_PATTERN = "bson-*.jar"
 
 
     OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
@@ -243,6 +244,10 @@ def setPath():
     global otel_jars
     otel_jars = findFilesInPathWithoutRecursion(OTEL_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
 
+    # Include the unbundled BSON library from lib on the client runtime classpath.
+    global bson_jar
+    bson_jar = findFileInPathWithoutRecursion(BSON_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+
     global logging_jar
     logging_jar = os.environ.get(OVERRIDE_LOGGING)
     if logging_jar is None or logging_jar == "":
@@ -364,6 +369,7 @@ if __name__ == "__main__":
     print("slf4j_backend_jar:", slf4j_backend_jar)
     print("logging_jar:", logging_jar)
     print("otel_jars:", otel_jars)
+    print("bson_jar:", bson_jar)
     print("java_home:", java_home)
     print("java:", java)
     print("jvm_module_flags:", jvm_module_flags)

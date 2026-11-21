@@ -38,6 +38,7 @@ java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
     os.pathsep + phoenix_utils.slf4j_backend_jar + \
     os.pathsep + phoenix_utils.logging_jar + \
     os.pathsep + phoenix_utils.otel_jars + \
+    os.pathsep + phoenix_utils.bson_jar + \
     os.pathsep + phoenix_utils.phoenix_client_embedded_jar + \
     '" -Djava.util.logging.config.class=org.apache.hadoop.hbase.logging.JulToSlf4jInitializer ' + \
     ('' if '-Dlog4j2.configurationFile' in opts else ' -Dlog4j2.configurationFile=file:'

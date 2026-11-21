@@ -132,6 +132,8 @@
                        splits the io.opentelemetry packages across two jars. -->
                   <exclude>io.opentelemetry:*</exclude>
                   <exclude>io.opentelemetry.semconv:*</exclude>
+                  <!-- Exclude BSON from shading so Phoenix and the application share a single org.bson dependency. -->
+                  <exclude>org.mongodb:bson</exclude>
                 </excludes>
               </artifactSet>
             </configuration>

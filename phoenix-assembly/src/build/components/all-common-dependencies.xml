@@ -35,6 +35,8 @@
         <include>io.opentelemetry:opentelemetry-context</include>
         <include>io.opentelemetry:opentelemetry-semconv</include>
         <include>io.opentelemetry.semconv:opentelemetry-semconv</include>
+        <!-- Ship org.mongodb:bson in lib because it is excluded from the shaded client jars. -->
+        <include>org.mongodb:bson</include>
       </includes>
     </dependencySet>
   </dependencySets>
