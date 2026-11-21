@@ -40,13 +40,23 @@ resultfile=${!param_index}
 ((param_index++))
 tmp_dir=${!param_index}
 ((param_index++))
+java_home=${!param_index}
+((param_index++))
 maven_home=${!param_index}
 
-if [ -n $maven_home ]; then
+if [ -n "$java_home" ] && [ -x "$java_home/bin/java" ]; then
+  java_cmd="$java_home/bin/java"
+else
+  java_cmd=java
+fi
+echo "Using java: $java_cmd"
+"$java_cmd" -version
+
+if [ -n "$maven_home" ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
-java -Djava.security.manager=allow -version &> /dev/null || error_code=$?
+"$java_cmd" -Djava.security.manager=allow -version &> /dev/null || error_code=$?
 if [ -z ${error_code+x} ]; then
   security_manager='-Djava.security.manager=allow'
 fi
@@ -85,7 +95,7 @@ echo "Attempting to connect to Phoenix with URL: jdbc:phoenix:$zk_url"
 echo "Using classpath: $classpath"
 echo "Phoenix properties: $phoenix_props"
 
-java -cp "$classpath" $security_manager $phoenix_props sqlline.SqlLine \
+"$java_cmd" -cp "$classpath" $security_manager $phoenix_props sqlline.SqlLine \
 -d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$zk_url -n none -p none \
 --color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile
