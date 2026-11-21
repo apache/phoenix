@@ -241,7 +241,20 @@ public class CreateTableCompiler {
     final String viewStatement = viewStatementToBe;
     final byte[][] viewColumnConstants = viewColumnConstantsToBe;
     final BitSet isViewColumnReferenced = isViewColumnReferencedToBe;
-    List<ParseNode> splitNodes = create.getSplitNodes();
+    final byte[][] splits = compileSplits(context, create.getSplitNodes());
+    final MetaDataClient client = new MetaDataClient(connection);
+    final PTable parent = parentToBe;
+
+    return new CreateTableMutationPlan(context, client, finalCreate, splits, parent, viewStatement,
+      viewType, rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, connection);
+  }
+
+  /**
+   * Compiles SPLIT ON parse nodes into split points. Each node must be a constant or a bind
+   * parameter.
+   */
+  public static byte[][] compileSplits(StatementContext context, List<ParseNode> splitNodes)
+    throws SQLException {
     final byte[][] splits = new byte[splitNodes.size()][];
     ImmutableBytesWritable ptr = context.getTempPtr();
     ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
@@ -253,7 +266,6 @@ public class CreateTableCompiler {
       if (node.isStateless()) {
         Expression expression = node.accept(expressionCompiler);
         if (expression.evaluate(null, ptr)) {
-          ;
           splits[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
           continue;
         }
@@ -261,11 +273,7 @@ public class CreateTableCompiler {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
         .setMessage("Node: " + node).build().buildException();
     }
-    final MetaDataClient client = new MetaDataClient(connection);
-    final PTable parent = parentToBe;
-
-    return new CreateTableMutationPlan(context, client, finalCreate, splits, parent, viewStatement,
-      viewType, rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, connection);
+    return splits;
   }
 
   /**
