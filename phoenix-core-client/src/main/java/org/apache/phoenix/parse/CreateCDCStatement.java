@@ -40,9 +40,10 @@ public class CreateCDCStatement extends MutableStatement {
     List<ParseNode> splits, boolean ifNotExists, int bindCount) {
     this.cdcObjName = cdcObjName;
     this.dataTable = dataTable;
-    this.includeScopes = includeScopes;
+    this.includeScopes = includeScopes == null ? null : Collections.unmodifiableSet(includeScopes);
     this.props = props == null ? ArrayListMultimap.<String, Pair<String, Object>> create() : props;
-    this.splitNodes = splits == null ? Collections.<ParseNode> emptyList() : splits;
+    this.splitNodes =
+      Collections.unmodifiableList(splits == null ? Collections.emptyList() : splits);
     this.ifNotExists = ifNotExists;
     this.bindCount = bindCount;
   }
