@@ -219,7 +219,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
@@ -692,10 +691,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
     this.isSystemCatalogSplittable = MetaDataSplitPolicy.isSystemCatalogSplittable(config);
 
-    LOGGER.info("Starting Tracing-Metrics Systems");
-    // Start the phoenix trace collection
-    // OpenTelemetry tracing is initialized via the Java Agent at runtime.
-    Metrics.ensureConfigured();
     metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     GlobalCache.getInstance(this.env).setMetricsSource(metricsSource);
   }
