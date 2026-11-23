@@ -90,7 +90,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
   static class OmidTransactionClient implements PhoenixTransactionClient {
     private final OmidTransactionProvider provider;
 
-    public OmidTransactionClient(OmidTransactionProvider provider) {
+    OmidTransactionClient(OmidTransactionProvider provider) {
       this.provider = provider;
     }
 

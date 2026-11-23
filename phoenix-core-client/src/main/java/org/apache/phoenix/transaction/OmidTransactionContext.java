@@ -57,7 +57,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
   public OmidTransactionContext(PhoenixConnection connection) throws SQLException {
     PhoenixTransactionClient c = connection.getQueryServices().initTransactionClient(getProvider());
-    assert (c instanceof OmidTransactionProvider.OmidTransactionClient);
+    assert c instanceof OmidTransactionProvider.OmidTransactionClient;
     this.client = (OmidTransactionProvider.OmidTransactionClient) c;
     this.tx = null;
   }
@@ -121,7 +121,9 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
   @Override
   public void commit() throws SQLException {
     HBaseTransactionManager m = tm();
-    if (tx == null || m == null) return;
+    if (tx == null || m == null) {
+      return;
+    }
 
     try {
       m.commit(tx);
