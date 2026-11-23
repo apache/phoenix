@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable;
@@ -29,16 +31,19 @@ public class CreateCDCStatement extends MutableStatement {
   private final TableName dataTable;
   private final Set<PTable.CDCChangeScope> includeScopes;
   private final ListMultimap<String, Pair<String, Object>> props;
+  private final List<ParseNode> splitNodes;
   private final boolean ifNotExists;
   private final int bindCount;
 
   public CreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
     Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props,
-    boolean ifNotExists, int bindCount) {
+    List<ParseNode> splits, boolean ifNotExists, int bindCount) {
     this.cdcObjName = cdcObjName;
     this.dataTable = dataTable;
-    this.includeScopes = includeScopes;
+    this.includeScopes = includeScopes == null ? null : Collections.unmodifiableSet(includeScopes);
     this.props = props == null ? ArrayListMultimap.<String, Pair<String, Object>> create() : props;
+    this.splitNodes =
+      Collections.unmodifiableList(splits == null ? Collections.emptyList() : splits);
     this.ifNotExists = ifNotExists;
     this.bindCount = bindCount;
   }
@@ -57,6 +62,10 @@ public class CreateCDCStatement extends MutableStatement {
 
   public ListMultimap<String, Pair<String, Object>> getProps() {
     return props;
+  }
+
+  public List<ParseNode> getSplitNodes() {
+    return splitNodes;
   }
 
   public boolean isIfNotExists() {
