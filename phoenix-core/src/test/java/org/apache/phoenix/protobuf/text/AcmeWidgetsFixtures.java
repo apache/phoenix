@@ -48,7 +48,7 @@ public final class AcmeWidgetsFixtures {
     return url.toString();
   }
 
-  public static FileDescriptorSet loadBundle() throws IOException {
+  private static FileDescriptorSet loadBundle() throws IOException {
     ClassLoader cl = AcmeWidgetsFixtures.class.getClassLoader();
     try (InputStream in = cl.getResourceAsStream(BUNDLE_RESOURCE)) {
       if (in == null) {
@@ -64,7 +64,7 @@ public final class AcmeWidgetsFixtures {
     }
   }
 
-  public static Map<String, FileDescriptor> buildAllFileDescriptors(FileDescriptorSet set)
+  private static Map<String, FileDescriptor> buildAllFileDescriptors(FileDescriptorSet set)
     throws DescriptorValidationException {
     Map<String, FileDescriptor> byName = new HashMap<>();
     for (FileDescriptorProto fileProto : set.getFileList()) {

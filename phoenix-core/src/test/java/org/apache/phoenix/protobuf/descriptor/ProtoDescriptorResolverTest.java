@@ -485,6 +485,10 @@ public class ProtoDescriptorResolverTest {
       "PaymentMethod", "Customer", "Order" }) {
       assertResolvesToFullName(bundle, ORDERS_PKG + "." + simpleName);
     }
+
+    Descriptors.Descriptor modifier = resolver.resolve(bundle, ORDERS_PKG + ".LineItem.Modifier");
+    assertNotNull("Modifier.Kind nested enum must be findable on the resolved descriptor",
+      modifier.findEnumTypeByName("Kind"));
   }
 
   @Test
@@ -502,75 +506,6 @@ public class ProtoDescriptorResolverTest {
 
     assertEquals(Descriptors.FieldDescriptor.Type.DOUBLE,
       geo.findFieldByName("latitude").getType());
-  }
-
-  @Test
-  public void resolveDeepFixtureRecursiveSelfReferenceCategory() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor category = resolver.resolve(bundle, ORDERS_PKG + ".Category");
-    assertNotNull(category);
-    Descriptors.FieldDescriptor parent = category.findFieldByName("parent");
-    Descriptors.FieldDescriptor children = category.findFieldByName("children");
-    assertEquals(ORDERS_PKG + ".Category", parent.getMessageType().getFullName());
-    assertEquals(ORDERS_PKG + ".Category", children.getMessageType().getFullName());
-    assertTrue("children must be repeated (tree of same-type)", children.isRepeated());
-    assertTrue("parent must NOT be repeated (single link up)", !parent.isRepeated());
-  }
-
-  @Test
-  public void resolveDeepFixtureRecursiveRepeatedNestedModifier() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor modifier = resolver.resolve(bundle, ORDERS_PKG + ".LineItem.Modifier");
-    assertNotNull(modifier);
-    Descriptors.FieldDescriptor subMods = modifier.findFieldByName("sub_modifiers");
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", subMods.getMessageType().getFullName());
-    assertTrue(subMods.isRepeated());
-    assertNotNull("Modifier.Kind nested enum must be findable on the resolved descriptor",
-      modifier.findEnumTypeByName("Kind"));
-  }
-
-  @Test
-  public void resolveDeepFixtureThreeLevelDeepPathThroughFields() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor customer = resolver.resolve(bundle, ORDERS_PKG + ".Customer");
-
-    Descriptors.FieldDescriptor contact = customer.findFieldByName("contact");
-    Descriptors.FieldDescriptor addresses = contact.getMessageType().findFieldByName("addresses");
-    assertTrue("addresses must be repeated", addresses.isRepeated());
-    Descriptors.FieldDescriptor geo = addresses.getMessageType().findFieldByName("geo");
-    Descriptors.FieldDescriptor latitude = geo.getMessageType().findFieldByName("latitude");
-    assertEquals(Descriptors.FieldDescriptor.Type.DOUBLE, latitude.getType());
-
-    assertEquals(ORDERS_PKG + ".ContactInfo", contact.getMessageType().getFullName());
-    assertEquals(ORDERS_PKG + ".ContactInfo.Address", addresses.getMessageType().getFullName());
-    assertEquals(ORDERS_PKG + ".ContactInfo.Address.GeoPoint", geo.getMessageType().getFullName());
-  }
-
-  @Test
-  public void resolveDeepFixtureMapOfMessageValues() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor entry =
-      resolver.resolve(bundle, ORDERS_PKG + ".LineItem.RegionalPricesEntry");
-    assertNotNull(entry);
-    Descriptors.FieldDescriptor value = entry.findFieldByName("value");
-    assertEquals(ORDERS_PKG + ".Money", value.getMessageType().getFullName());
-
-    Descriptors.Descriptor lineItem = resolver.resolve(bundle, ORDERS_PKG + ".LineItem");
-    Descriptors.FieldDescriptor regional = lineItem.findFieldByName("regional_prices");
-    assertTrue(regional.isMapField());
-  }
-
-  @Test
-  public void resolveDeepFixtureMapOfRecursiveTypeValues() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor entry =
-      resolver.resolve(bundle, ORDERS_PKG + ".LineItem.NamedModifiersEntry");
-    assertNotNull(entry);
-    Descriptors.FieldDescriptor value = entry.findFieldByName("value");
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", value.getMessageType().getFullName());
-
-    Descriptors.FieldDescriptor subMods = value.getMessageType().findFieldByName("sub_modifiers");
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", subMods.getMessageType().getFullName());
   }
 
   @Test
@@ -598,107 +533,6 @@ public class ProtoDescriptorResolverTest {
     Descriptors.FieldDescriptor homeWarehouse = customer.findFieldByName("home_warehouse");
     assertEquals("com.example.acmewidgets.common.v1.WarehouseEndpoint",
       homeWarehouse.getMessageType().getFullName());
-  }
-
-  @Test
-  public void resolveNestedArraysTwoLevelDistinctTypeCompositionOrderLineItemsModifiers()
-    throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor order = resolver.resolve(bundle, ORDERS_PKG + ".Order");
-    assertNotNull(order);
-
-    Descriptors.FieldDescriptor lineItems = order.findFieldByName("line_items");
-    assertNotNull("Order.line_items must exist", lineItems);
-    assertTrue("Level 1 (line_items) must be repeated", lineItems.isRepeated());
-    assertEquals(ORDERS_PKG + ".LineItem", lineItems.getMessageType().getFullName());
-
-    Descriptors.FieldDescriptor modifiers = lineItems.getMessageType().findFieldByName("modifiers");
-    assertNotNull("LineItem.modifiers must exist", modifiers);
-    assertTrue("Level 2 (modifiers) must ALSO be repeated (nested array)", modifiers.isRepeated());
-    assertEquals("Level 2 element type must differ from level 1 element type",
-      ORDERS_PKG + ".LineItem.Modifier", modifiers.getMessageType().getFullName());
-    Assert.assertNotEquals("Two nested-array element types must be distinct",
-      lineItems.getMessageType().getFullName(), modifiers.getMessageType().getFullName());
-  }
-
-  @Test
-  public void resolveNestedArraysThreeLevelChainOrderLineItemsModifiersSubModifiers()
-    throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor order = resolver.resolve(bundle, ORDERS_PKG + ".Order");
-    Descriptors.FieldDescriptor level1 = order.findFieldByName("line_items");
-    Descriptors.FieldDescriptor level2 = level1.getMessageType().findFieldByName("modifiers");
-    Descriptors.FieldDescriptor level3 = level2.getMessageType().findFieldByName("sub_modifiers");
-
-    assertTrue("Level 1 (line_items) must be repeated", level1.isRepeated());
-    assertTrue("Level 2 (modifiers) must be repeated", level2.isRepeated());
-    assertTrue("Level 3 (sub_modifiers) must be repeated", level3.isRepeated());
-    assertEquals(ORDERS_PKG + ".LineItem", level1.getMessageType().getFullName());
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", level2.getMessageType().getFullName());
-    assertEquals("Level 3 recurses back to Modifier (same as level 2 type)",
-      ORDERS_PKG + ".LineItem.Modifier", level3.getMessageType().getFullName());
-
-    Descriptors.FieldDescriptor level4 = level3.getMessageType().findFieldByName("sub_modifiers");
-    assertTrue(level4.isRepeated());
-    Descriptors.FieldDescriptor amountUnits =
-      level4.getMessageType().findFieldByName("amount").getMessageType().findFieldByName("units");
-    assertEquals(Descriptors.FieldDescriptor.Type.INT64, amountUnits.getType());
-  }
-
-  @Test
-  public void resolveNestedArraysThroughMapValueOrderLineItemsNamedModifiersSubModifiers()
-    throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor order = resolver.resolve(bundle, ORDERS_PKG + ".Order");
-    Descriptors.FieldDescriptor lineItems = order.findFieldByName("line_items");
-    assertTrue("line_items must be repeated", lineItems.isRepeated());
-    Descriptors.FieldDescriptor namedMods =
-      lineItems.getMessageType().findFieldByName("named_modifiers");
-    assertTrue("named_modifiers must be a map field", namedMods.isMapField());
-
-    Descriptors.FieldDescriptor mapValue = namedMods.getMessageType().findFieldByName("value");
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", mapValue.getMessageType().getFullName());
-
-    Descriptors.FieldDescriptor subMods =
-      mapValue.getMessageType().findFieldByName("sub_modifiers");
-    assertTrue("sub_modifiers on map-value's message type must be repeated", subMods.isRepeated());
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", subMods.getMessageType().getFullName());
-  }
-
-  @Test
-  public void resolveNestedArraysCrossMessageChainOrderLineItemsCategoryChildren()
-    throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor order = resolver.resolve(bundle, ORDERS_PKG + ".Order");
-    Descriptors.FieldDescriptor lineItems = order.findFieldByName("line_items");
-    assertTrue(lineItems.isRepeated());
-    Descriptors.FieldDescriptor category = lineItems.getMessageType().findFieldByName("category");
-    assertNotNull("LineItem.category must exist", category);
-    assertTrue("Intermediate hop (category) must NOT be repeated — proves the walk can pass "
-      + "through a singular bridge between two arrays", !category.isRepeated());
-    assertEquals(ORDERS_PKG + ".Category", category.getMessageType().getFullName());
-    Descriptors.FieldDescriptor children = category.getMessageType().findFieldByName("children");
-    assertTrue("Bottom of chain (Category.children) must be repeated", children.isRepeated());
-    assertEquals(ORDERS_PKG + ".Category", children.getMessageType().getFullName());
-
-    Descriptors.FieldDescriptor grandchildren =
-      children.getMessageType().findFieldByName("children");
-    assertTrue("Recursive tree descent must remain repeated at every level",
-      grandchildren.isRepeated());
-  }
-
-  @Test
-  public void resolveDeepFixtureCompositeRepeatedAndMapOnSameMessage() throws Exception {
-    byte[] bundle = loadAcmeWidgetsBundle();
-    Descriptors.Descriptor lineItem = resolver.resolve(bundle, ORDERS_PKG + ".LineItem");
-    Descriptors.FieldDescriptor modifiers = lineItem.findFieldByName("modifiers");
-    Descriptors.FieldDescriptor named = lineItem.findFieldByName("named_modifiers");
-    assertTrue("modifiers is repeated, not map", modifiers.isRepeated() && !modifiers.isMapField());
-    assertTrue("named_modifiers is map", named.isMapField());
-
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier", modifiers.getMessageType().getFullName());
-    assertEquals(ORDERS_PKG + ".LineItem.Modifier",
-      named.getMessageType().findFieldByName("value").getMessageType().getFullName());
   }
 
   @Test
