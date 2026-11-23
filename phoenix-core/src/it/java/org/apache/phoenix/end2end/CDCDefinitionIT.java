@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -41,6 +42,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -274,6 +277,50 @@ public class CDCDefinitionIT extends CDCBaseIT {
         + String.valueOf(NON_ENCODED_QUALIFIERS.getSerializedMetadataValue()));
     PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
     assertEquals(indexTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
+  }
+
+  @Test
+  public void testCreateCDCWithSplitPoints() throws Exception {
+    try (Connection conn = newConnection()) {
+      String tableName = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, v INTEGER)");
+      String parentName = tableName;
+      if (forView) {
+        parentName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE VIEW " + parentName + " AS SELECT * FROM " + tableName);
+      }
+      String cdcName = generateUniqueName();
+      // Sorted split points covering zero, high and multi-byte UTF-8 bytes, a hex literal, and a
+      // key that runs past the PARTITION_ID() column.
+      byte[][] splitPoints = { { 0x00, 0x01 }, Bytes.toBytes("4"), Bytes.toBytes("8é"),
+        { 0x5a, 0x00, (byte) 0xff, 0x7f }, Bytes.toBytes("c"),
+        Bytes.add(Bytes.toBytes("f0000000000000000000000000000000"), new byte[] { 0x01, 0x02 }),
+        { (byte) 0xfe, (byte) 0xff, (byte) 0xff } };
+      try (PreparedStatement stmt = conn.prepareStatement("CREATE CDC " + cdcName + " ON "
+        + parentName + " SPLIT ON (X'0001', '4', ?, ?, 'c', ?, ?)")) {
+        stmt.setString(1, "8é");
+        stmt.setBytes(2, splitPoints[3]);
+        stmt.setBytes(3, splitPoints[5]);
+        stmt.setBytes(4, splitPoints[6]);
+        stmt.execute();
+      }
+      // A view's CDC index lives in the shared view index table, which ignores split points.
+      if (!forView) {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable indexTable = pconn.getTable(CDCUtil.getCDCIndexName(cdcName));
+        List<HRegionLocation> regions = pconn.getQueryServices()
+          .getAllTableRegions(indexTable.getPhysicalName().getBytes(), 30000);
+        assertEquals(splitPoints.length + 1, regions.size());
+        // Phoenix pads short split points to the full row key, so compare with the padded bytes.
+        for (int i = 0; i < splitPoints.length; i++) {
+          byte[] expected = SchemaUtil.processSplit(splitPoints[i], indexTable.getPKColumns());
+          byte[] startKey = regions.get(i + 1).getRegion().getStartKey();
+          assertArrayEquals(Bytes.toStringBinary(startKey), expected, startKey);
+        }
+      }
+    }
   }
 
   @Test
