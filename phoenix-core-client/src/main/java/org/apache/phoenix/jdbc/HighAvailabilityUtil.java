@@ -115,7 +115,9 @@ public class HighAvailabilityUtil {
   /**
    * If {@code e} on an HA connection carries a {@link StaleClusterRoleRecordException}, force a CRR
    * refresh (which closes the connection when its cluster is no longer active) and return
-   * FAILOVER_IN_PROGRESS with {@code e} as the cause; otherwise return {@code e} unchanged.
+   * FAILOVER_IN_PROGRESS with {@code e} as the cause; otherwise return {@code e} unchanged. A
+   * refresh error is added as suppressed, except HA_ROLE_TRANSITION_NOT_ALLOWED, which (as in
+   * {@link FailoverPhoenixConnection}) is returned unwrapped with {@code e} suppressed.
    */
   public static SQLException toFailoverInProgressIfStale(PhoenixConnection conn, SQLException e) {
     HighAvailabilityGroup haGroup = conn == null ? null : conn.getHAGroup();
@@ -127,19 +129,29 @@ public class HighAvailabilityUtil {
     }
     GLOBAL_HA_STALE_CRR_DETECTED_COUNT.increment();
     HAGroupMetricsManager.increment(haGroup.getName(), MetricType.HA_STALE_CRR_DETECTED_COUNT);
+    SQLException failoverError = new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
+      .setMessage(
+        String.format("Operation failed because failover is in progress for HAGroup %s, %s",
+          haGroup.getName(), e))
+      .setRootCause(e).setHaGroupInfo(haGroup.getGroupInfo().toString()).build().buildException();
     try {
       if (!haGroup.refreshClusterRoleRecord(true)) {
         LOG.error("Failed to refresh cluster role record for HAGroup {}", haGroup.getName());
       }
     } catch (SQLException refreshError) {
+      if (
+        refreshError.getErrorCode()
+            == SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()
+      ) {
+        // The new record is not valid for this HA policy, so this is not a failover.
+        refreshError.addSuppressed(e);
+        return refreshError;
+      }
       LOG.error("Failed to refresh cluster role record for HAGroup {}", haGroup.getName(),
         refreshError);
-      e.setNextException(refreshError);
+      failoverError.addSuppressed(refreshError);
     }
-    return new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
-      .setMessage(String.format("Operation failed because failover is in progress for HAGroup %s",
-        haGroup.getName()))
-      .setRootCause(e).setHaGroupInfo(haGroup.getGroupInfo().toString()).build().buildException();
+    return failoverError;
   }
 
   private static boolean isGivenThrowableStaleException(Throwable t) {

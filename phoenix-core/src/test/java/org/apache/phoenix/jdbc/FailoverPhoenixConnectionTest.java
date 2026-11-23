@@ -20,9 +20,11 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.exception.SQLExceptionCode.CLASS_NOT_UNWRAPPABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -35,6 +37,8 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAGroupInfo;
 import org.junit.Before;
 import org.junit.Test;
@@ -85,6 +89,45 @@ public class FailoverPhoenixConnectionTest {
     final AtomicInteger counter = new AtomicInteger(0);
     failoverConnection.wrapActionDuringFailover(counter::incrementAndGet);
     assertEquals(1, counter.get());
+  }
+
+  /**
+   * A FAILOVER_IN_PROGRESS error that a lower layer already mapped (and refreshed the CRR for) must
+   * pass through unchanged, without a second CRR refresh, even when its cause chain is stale.
+   */
+  @Test
+  public void testWrapActionDuringFailoverRethrowsFailoverInProgress() throws SQLException {
+    SQLException mapped = new SQLExceptionInfo.Builder(SQLExceptionCode.FAILOVER_IN_PROGRESS)
+      .setRootCause(new StaleClusterRoleRecordException("stale CRR")).build().buildException();
+    FailoverPhoenixConnection.RunWithSQLException action = () -> {
+      throw mapped;
+    };
+    try {
+      failoverConnection.wrapActionDuringFailover(action);
+      fail("Should have rethrown the FAILOVER_IN_PROGRESS error");
+    } catch (SQLException e) {
+      assertSame(mapped, e);
+    }
+    verify(haGroup, never()).refreshClusterRoleRecord(anyBoolean());
+  }
+
+  /**
+   * A raw stale-CRR error still makes wrapActionDuringFailover refresh the CRR once and map the
+   * error to FAILOVER_IN_PROGRESS.
+   */
+  @Test
+  public void testWrapActionDuringFailoverMapsStaleError() throws SQLException {
+    when(haGroup.refreshClusterRoleRecord(true)).thenReturn(true);
+    FailoverPhoenixConnection.RunWithSQLException action = () -> {
+      throw new SQLException("commit failed", new StaleClusterRoleRecordException("stale CRR"));
+    };
+    try {
+      failoverConnection.wrapActionDuringFailover(action);
+      fail("Should have failed with FAILOVER_IN_PROGRESS");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.FAILOVER_IN_PROGRESS.getErrorCode(), e.getErrorCode());
+    }
+    verify(haGroup, times(1)).refreshClusterRoleRecord(true);
   }
 
   /**

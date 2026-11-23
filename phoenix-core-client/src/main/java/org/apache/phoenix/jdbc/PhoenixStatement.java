@@ -2592,9 +2592,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         throw new BatchUpdateException(returnCodes, e);
       }
     } finally {
-      // A stale-CRR refresh above can close the connection; setAutoCommit would then throw and
-      // mask the BatchUpdateException.
-      if (!connection.isClosed()) {
+      // A stale-CRR refresh above can close the connection (or leave it closing if the transition
+      // timed out); setAutoCommit would then throw and mask the BatchUpdateException.
+      if (!connection.isClosed() && !connection.isClosing()) {
         connection.setAutoCommit(autoCommit);
       }
     }
