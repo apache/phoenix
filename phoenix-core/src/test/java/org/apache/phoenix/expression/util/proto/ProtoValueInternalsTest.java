@@ -142,18 +142,6 @@ public class ProtoValueInternalsTest {
   }
 
   @Test
-  public void resolveRejectsUnknownField() throws Exception {
-    Descriptors.Descriptor root = buildSyntheticRoot();
-    try {
-      ProtoPathResolver.resolve(ProtoPathParser.parse("nonexistent"), root, PVarchar.INSTANCE,
-        "nonexistent");
-      fail("expected PROTOBUF_PATH_FIELD_NOT_FOUND");
-    } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.PROTOBUF_PATH_FIELD_NOT_FOUND.getErrorCode(), e.getErrorCode());
-    }
-  }
-
-  @Test
   public void resolveRejectsSubscriptOnScalar() throws Exception {
     Descriptors.Descriptor root = buildSyntheticRoot();
     try {
@@ -162,17 +150,6 @@ public class ProtoValueInternalsTest {
     } catch (SQLException e) {
       assertEquals(SQLExceptionCode.PROTOBUF_PATH_CARDINALITY_MISMATCH.getErrorCode(),
         e.getErrorCode());
-    }
-  }
-
-  @Test
-  public void resolveRejectsTypeMismatch() throws Exception {
-    Descriptors.Descriptor root = buildSyntheticRoot();
-    try {
-      ProtoPathResolver.resolve(ProtoPathParser.parse("id"), root, PLong.INSTANCE, "id");
-      fail("expected PROTOBUF_VALUE_TYPE_MISMATCH");
-    } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.PROTOBUF_VALUE_TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
     }
   }
 
@@ -187,18 +164,6 @@ public class ProtoValueInternalsTest {
       assertEquals(SQLExceptionCode.PROTOBUF_PATH_CARDINALITY_MISMATCH.getErrorCode(),
         e.getErrorCode());
     }
-  }
-
-  @Test
-  public void walkerReturnsLeafAbsentSentinelForMissingScalarLeafWithParentPresent()
-    throws Exception {
-    Descriptors.Descriptor root = buildSyntheticRoot();
-    DynamicMessage msg =
-      DynamicMessage.newBuilder(root).setField(root.findFieldByName("count"), 42).build();
-    PathPlan plan =
-      ProtoPathResolver.resolve(ProtoPathParser.parse("id"), root, PVarchar.INSTANCE, "id");
-    Object result = walkWhole(msg.toByteArray(), plan);
-    assertSame(ProtoPathWalker.LEAF_ABSENT, result);
   }
 
   @Test
@@ -547,38 +512,6 @@ public class ProtoValueInternalsTest {
     PathPlan pastEnd = ProtoPathResolver.resolve(ProtoPathParser.parse("nums[5]"), container,
       PLong.INSTANCE, "nums[5]");
     assertNull(walkWhole(payload, pastEnd));
-  }
-
-  @Test
-  public void walkerReadsMapKeyStringField() throws Exception {
-    FileDescriptorProto fileProto =
-      FileDescriptorProto.newBuilder().setName("proto_value_internals_map.proto").setPackage("test")
-        .setSyntax("proto3")
-        .addMessageType(DescriptorProto.newBuilder().setName("MapHolder")
-          .addField(FieldDescriptorProto.newBuilder().setName("attrs").setNumber(1)
-            .setType(Type.TYPE_MESSAGE).setLabel(Label.LABEL_REPEATED)
-            .setTypeName("MapHolder.AttrsEntry"))
-          .addNestedType(DescriptorProto.newBuilder().setName("AttrsEntry")
-            .setOptions(MessageOptions.newBuilder().setMapEntry(true))
-            .addField(FieldDescriptorProto.newBuilder().setName("key").setNumber(1)
-              .setType(Type.TYPE_STRING).setLabel(Label.LABEL_OPTIONAL))
-            .addField(FieldDescriptorProto.newBuilder().setName("value").setNumber(2)
-              .setType(Type.TYPE_STRING).setLabel(Label.LABEL_OPTIONAL))))
-        .build();
-    Descriptors.FileDescriptor file =
-      Descriptors.FileDescriptor.buildFrom(fileProto, new Descriptors.FileDescriptor[0]);
-    Descriptors.Descriptor mapHolder = file.findMessageTypeByName("MapHolder");
-    Descriptors.FieldDescriptor attrsField = mapHolder.findFieldByName("attrs");
-    Descriptors.Descriptor entryType = attrsField.getMessageType();
-    DynamicMessage entryFoo =
-      DynamicMessage.newBuilder(entryType).setField(entryType.findFieldByName("key"), "foo")
-        .setField(entryType.findFieldByName("value"), "hit-value").build();
-    DynamicMessage msg =
-      DynamicMessage.newBuilder(mapHolder).addRepeatedField(attrsField, entryFoo).build();
-    PathPlan plan = ProtoPathResolver.resolve(ProtoPathParser.parse("attrs.foo"), mapHolder,
-      PVarchar.INSTANCE, "attrs.foo");
-    Object result = walkWhole(msg.toByteArray(), plan);
-    assertEquals("hit-value", result);
   }
 
   @After

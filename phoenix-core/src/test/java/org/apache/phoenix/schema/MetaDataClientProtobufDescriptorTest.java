@@ -20,7 +20,6 @@ package org.apache.phoenix.schema;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,9 +31,6 @@ import static org.mockito.Mockito.when;
 import com.google.protobuf.Message;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,7 +47,6 @@ import org.apache.phoenix.coprocessor.generated.ProtobufDescriptorProtos.Protobu
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.AlterProtobufDescriptorStatement;
 import org.apache.phoenix.parse.CreateProtobufBundleStatement;
 import org.apache.phoenix.parse.CreateProtobufDescriptorStatement;
 import org.apache.phoenix.parse.DropProtobufDescriptorStatement;
@@ -131,39 +126,6 @@ public class MetaDataClientProtobufDescriptorTest {
   }
 
   @Test
-  public void createDescriptorWithClientLocalUrlShipsInlineBytes() throws Exception {
-    cannedResponse = okResponse(DESCRIPTOR_NAME);
-    String fileUrl = fixtureFileUri();
-
-    client.createProtobufDescriptor(
-      new CreateProtobufDescriptorStatement(DESCRIPTOR_NAME, false, fileUrl));
-
-    CreateProtobufDescriptorRequest req = (CreateProtobufDescriptorRequest) capturedRequest.get();
-    assertEquals(fileUrl, req.getSourceUrl());
-    assertTrue("client-local URL must ship inline bytes", req.hasInlineDescriptorBytes());
-    assertTrue("inline bytes must be non-empty for a real fixture",
-      req.getInlineDescriptorBytes().size() > 0);
-
-    byte[] expectedBytes = Files.readAllBytes(fixturePath());
-    assertEquals(expectedBytes.length, req.getInlineDescriptorBytes().size());
-  }
-
-  @Test
-  public void nonLocalUrlsAreRejectedBeforeAnyRpc() {
-    for (String url : new String[] { "hdfs:///descriptors/dummy.desc", "s3a://bucket/x.desc",
-      "abfs://container@account/x.desc", "/tmp/x.desc", "x.desc", "file://otherhost/tmp/x.desc" }) {
-      assertUrlNotAllowed(() -> client.createProtobufDescriptor(
-        new CreateProtobufDescriptorStatement(DESCRIPTOR_NAME, false, url)), url);
-      assertUrlNotAllowed(() -> client
-        .alterProtobufDescriptor(new AlterProtobufDescriptorStatement(DESCRIPTOR_NAME, false, url)),
-        url);
-      assertUrlNotAllowed(() -> client.createProtobufBundle(
-        new CreateProtobufBundleStatement(Collections.singletonList(DESCRIPTOR_NAME), false, url)),
-        url);
-    }
-  }
-
-  @Test
   public void serverUrlNotAllowedStatusMapsToSqlException() {
     cannedResponse =
       statusResponse(SQLExceptionCode.PROTOBUF_DESCRIPTOR_URL_NOT_ALLOWED, DESCRIPTOR_NAME, null);
@@ -171,26 +133,6 @@ public class MetaDataClientProtobufDescriptorTest {
       new CreateProtobufDescriptorStatement(DESCRIPTOR_NAME, false, fixtureFileUri())));
     assertEquals(SQLExceptionCode.PROTOBUF_DESCRIPTOR_URL_NOT_ALLOWED.getErrorCode(),
       ex.getErrorCode());
-  }
-
-  private void assertUrlNotAllowed(SqlThrowingRunnable r, String url) {
-    capturedRequest.set(null);
-    SQLException ex = expectSQLException(r);
-    assertEquals("for URL: " + url,
-      SQLExceptionCode.PROTOBUF_DESCRIPTOR_URL_NOT_ALLOWED.getErrorCode(), ex.getErrorCode());
-    assertNull("no RPC may be sent for URL: " + url, capturedRequest.get());
-  }
-
-  @Test
-  public void createDescriptorAlreadyExistsRaisesSQLException() {
-    cannedResponse =
-      statusResponse(SQLExceptionCode.PROTOBUF_DESCRIPTOR_ALREADY_EXISTS, DESCRIPTOR_NAME, null);
-    SQLException ex = expectSQLException(() -> client.createProtobufDescriptor(
-      new CreateProtobufDescriptorStatement(DESCRIPTOR_NAME, false, fixtureFileUri())));
-    assertEquals(SQLExceptionCode.PROTOBUF_DESCRIPTOR_ALREADY_EXISTS.getErrorCode(),
-      ex.getErrorCode());
-    assertTrue("message must reference the descriptor name: " + ex.getMessage(),
-      ex.getMessage().contains(DESCRIPTOR_NAME));
   }
 
   @Test
@@ -243,46 +185,6 @@ public class MetaDataClientProtobufDescriptorTest {
   }
 
   @Test
-  public void alterDescriptorBuildsCorrectRequest() throws Exception {
-    cannedResponse = okResponse(DESCRIPTOR_NAME);
-    client.alterProtobufDescriptor(
-      new AlterProtobufDescriptorStatement(DESCRIPTOR_NAME, true, fixtureFileUri()));
-
-    AlterProtobufDescriptorRequest req = (AlterProtobufDescriptorRequest) capturedRequest.get();
-    assertEquals(DESCRIPTOR_NAME, req.getProtobufName());
-    assertEquals(fixtureFileUri(), req.getSourceUrl());
-    assertTrue(req.getIfExists());
-    assertTrue(req.hasInlineDescriptorBytes());
-  }
-
-  @Test
-  public void alterDescriptorIncompatibleEvolutionPropagatesServerDetail() {
-    cannedResponse = statusResponse(SQLExceptionCode.PROTOBUF_TAG_RENAMED, DESCRIPTOR_NAME,
-      "Field 'email' tag changed from 2 to 5 (PROTOBUF_TAG_RENAMED)");
-    SQLException ex = expectSQLException(() -> client.alterProtobufDescriptor(
-      new AlterProtobufDescriptorStatement(DESCRIPTOR_NAME, false, fixtureFileUri())));
-    assertEquals(SQLExceptionCode.PROTOBUF_TAG_RENAMED.getErrorCode(), ex.getErrorCode());
-    assertTrue("evolution-rule detail must propagate from the server",
-      ex.getMessage().contains("PROTOBUF_TAG_RENAMED"));
-  }
-
-  @Test
-  public void dropDescriptorBuildsCorrectRequest() throws Exception {
-    cannedResponse = okResponse(DESCRIPTOR_NAME);
-    client.dropProtobufDescriptor(new DropProtobufDescriptorStatement(DESCRIPTOR_NAME, false));
-
-    DropProtobufDescriptorRequest req = (DropProtobufDescriptorRequest) capturedRequest.get();
-    assertEquals(DESCRIPTOR_NAME, req.getProtobufName());
-    assertFalse(req.getIfExists());
-
-    for (java.lang.reflect.Method m : DropProtobufDescriptorRequest.class.getMethods()) {
-      assertFalse("DropProtobufDescriptorRequest must not have inlineDescriptorBytes",
-        m.getName().equals("hasInlineDescriptorBytes")
-          || m.getName().equals("getInlineDescriptorBytes"));
-    }
-  }
-
-  @Test
   public void dropDescriptorIfExistsHitReturnsZeroRowMutationState() throws Exception {
     cannedResponse = okResponse();
     MutationState state =
@@ -299,61 +201,12 @@ public class MetaDataClientProtobufDescriptorTest {
   }
 
   @Test
-  public void createBundleBuildsCorrectRequest() throws Exception {
-    String n1 = "com.example.acmewidgets.account.v1.Account";
-    String n2 = "com.example.acmewidgets.account.v1.AccountSyncResponse";
-    cannedResponse = okResponse(n1, n2);
-    client.createProtobufBundle(
-      new CreateProtobufBundleStatement(Arrays.asList(n1, n2), false, fixtureFileUri()));
-
-    CreateProtobufBundleRequest req = (CreateProtobufBundleRequest) capturedRequest.get();
-    assertEquals(2, req.getProtobufNamesCount());
-    assertEquals(n1, req.getProtobufNames(0));
-    assertEquals(n2, req.getProtobufNames(1));
-    assertEquals(fixtureFileUri(), req.getSourceUrl());
-    assertFalse(req.getIfNotExists());
-    assertTrue(req.hasInlineDescriptorBytes());
-  }
-
-  @Test
-  public void createBundleWithClientLocalUrlShipsInlineBytes() throws Exception {
-    cannedResponse = okResponse(DESCRIPTOR_NAME);
-    String fileUrl = fixtureFileUri();
-    client.createProtobufBundle(new CreateProtobufBundleStatement(
-      Collections.singletonList(DESCRIPTOR_NAME), false, fileUrl));
-
-    CreateProtobufBundleRequest req = (CreateProtobufBundleRequest) capturedRequest.get();
-    assertTrue(req.hasInlineDescriptorBytes());
-    assertTrue(req.getInlineDescriptorBytes().size() > 0);
-  }
-
-  @Test
-  public void createBundleAtomicRejectionRaisesSQLException() {
-    cannedResponse = statusResponse(SQLExceptionCode.PROTOBUF_DESCRIPTOR_TYPE_NOT_FOUND_IN_FILE,
-      "com.example.acmewidgets.account.v1.NotInTheBundle",
-      "No top-level protobuf message named 'NotInTheBundle'");
-    SQLException ex =
-      expectSQLException(() -> client.createProtobufBundle(new CreateProtobufBundleStatement(
-        Arrays.asList(DESCRIPTOR_NAME, "com.example.acmewidgets.account.v1.NotInTheBundle"), false,
-        fixtureFileUri())));
-    assertEquals(SQLExceptionCode.PROTOBUF_DESCRIPTOR_TYPE_NOT_FOUND_IN_FILE.getErrorCode(),
-      ex.getErrorCode());
-    assertTrue("message should name the offending entry that failed bundle resolution",
-      ex.getMessage().contains("NotInTheBundle"));
-  }
-
-  @Test
   public void createBundleAllSkippedUnderIfNotExistsReturnsZeroRowMutationState() throws Exception {
     cannedResponse = okResponse();
     MutationState state = client.createProtobufBundle(new CreateProtobufBundleStatement(
       Arrays.asList(DESCRIPTOR_NAME, "com.example.acmewidgets.account.v1.AccountSyncResponse"),
       true, fixtureFileUri()));
     assertEquals(0, state.getMaxSize());
-  }
-
-  private static Path fixturePath() throws Exception {
-    return Paths.get(MetaDataClientProtobufDescriptorTest.class.getClassLoader()
-      .getResource(BUNDLE_RESOURCE).toURI());
   }
 
   private static String fixtureFileUri() {

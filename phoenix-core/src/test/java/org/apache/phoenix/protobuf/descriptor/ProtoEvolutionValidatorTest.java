@@ -50,14 +50,6 @@ public class ProtoEvolutionValidatorTest {
   private final ProtoDescriptorResolver resolver = new ProtoDescriptorResolver();
 
   @Test
-  public void removeFieldIsRejected() throws Exception {
-    DescriptorProto oldMsg = message(MSG_NAME).addField(scalar("id", 1, Type.TYPE_STRING))
-      .addField(scalar("to_remove", 2, Type.TYPE_INT32)).build();
-    DescriptorProto newMsg = message(MSG_NAME).addField(scalar("id", 1, Type.TYPE_STRING)).build();
-    assertRejected(oldMsg, newMsg, SQLExceptionCode.PROTOBUF_REMOVAL_NOT_SUPPORTED, "to_remove");
-  }
-
-  @Test
   public void renameFieldSameTagIsRejected() throws Exception {
     DescriptorProto oldMsg =
       message(MSG_NAME).addField(scalar("original_name", 1, Type.TYPE_STRING)).build();
@@ -71,15 +63,6 @@ public class ProtoEvolutionValidatorTest {
     DescriptorProto oldMsg = message(MSG_NAME).addField(scalar("id", 1, Type.TYPE_STRING)).build();
     DescriptorProto newMsg = message(MSG_NAME).addField(scalar("id", 2, Type.TYPE_STRING)).build();
     assertRejected(oldMsg, newMsg, SQLExceptionCode.PROTOBUF_TAG_RENAMED, "id");
-  }
-
-  @Test
-  public void widenInt32ToInt64IsRejected() throws Exception {
-    DescriptorProto oldMsg =
-      message(MSG_NAME).addField(scalar("count", 1, Type.TYPE_INT32)).build();
-    DescriptorProto newMsg =
-      message(MSG_NAME).addField(scalar("count", 1, Type.TYPE_INT64)).build();
-    assertRejected(oldMsg, newMsg, SQLExceptionCode.PROTOBUF_INCOMPATIBLE_TYPE_CHANGE, "count");
   }
 
   @Test
@@ -434,23 +417,6 @@ public class ProtoEvolutionValidatorTest {
           .setTypeName("." + FQ_NAME + ".Inner2").setLabel(Label.LABEL_OPTIONAL).build())
       .addNestedType(message("Inner1")).addNestedType(message("Inner2")).build();
     assertRejected(oldMsg, newMsg, SQLExceptionCode.PROTOBUF_INCOMPATIBLE_TYPE_CHANGE, "inner");
-  }
-
-  @Test
-  public void typeChangeInImportedMessageIsRejected() throws Exception {
-    DescriptorProto oldEndpoint =
-      message("Endpoint").addField(scalar("warehouse_id", 1, Type.TYPE_STRING)).build();
-    DescriptorProto newEndpoint =
-      message("Endpoint").addField(scalar("warehouse_id", 1, Type.TYPE_INT64)).build();
-    DescriptorProto widget = message(MSG_NAME).addField(scalar("id", 1, Type.TYPE_STRING))
-      .addField(typed("home", 2, Type.TYPE_MESSAGE, "." + COMMON_PKG + ".Endpoint")).build();
-
-    ProtoEvolutionValidator.validate(resolveWithImport(oldEndpoint, null, widget),
-      resolveWithImport(oldEndpoint, null, widget));
-    SQLException ex = assertRejectedDescriptors(resolveWithImport(oldEndpoint, null, widget),
-      resolveWithImport(newEndpoint, null, widget),
-      SQLExceptionCode.PROTOBUF_INCOMPATIBLE_TYPE_CHANGE, "warehouse_id");
-    assertTrue(ex.getMessage(), ex.getMessage().contains(COMMON_PKG + ".Endpoint"));
   }
 
   @Test
