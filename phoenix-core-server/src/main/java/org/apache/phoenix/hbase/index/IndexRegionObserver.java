@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -59,6 +60,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -90,6 +92,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.BloomType;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -142,6 +145,8 @@ import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -301,6 +306,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   // HBase skip this cell on recovered-edits replay (HRegion.replayRecoveredEdits keys the skip on
   // family, not qualifier), which is intended: the pre-image must never land in a data store.
   public static final byte[] PRE_IMAGE_WAL_QUALIFIER = Bytes.toBytes("PHOENIX::PRE_IMAGE");
+
+  /**
+   * WAL key attribute carrying the region's replicated watermark at the batch's WAL append (see
+   * {@link ReplicationWatermark}): every HA edit of the region with a sequence id at or below it is
+   * durable in a replication log. Read on WAL restore; never shipped (not in
+   * {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}).
+   */
+  public static final String REPL_WATERMARK_ATTR = "_ReplWatermark";
 
   /**
    * Class to represent pending data table rows
@@ -552,6 +565,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return hasConditionalTTL() && hasStrictTTL();
     }
 
+    // Replicated watermark: this batch's floor, registered at its first WAL append; null before
+    // then, after its release, or for a batch that is not replicated.
+    private ReplicationWatermark.Floor replFloor;
+
     public BatchMutateContext() {
       this.clientVersion = 0;
     }
@@ -634,6 +651,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private ThreadLocal<BatchMutateContext> batchMutateContext =
     new ThreadLocal<BatchMutateContext>();
 
+  // This region's in-flight replicated batches (one IndexRegionObserver per region).
+  private final ReplicationWatermark replicationWatermark = new ReplicationWatermark();
+
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
    * you only want to ignore this for testing or for custom versions of HBase.
@@ -651,6 +671,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     "phoenix.indexer.slow.pre.increment";
   private static final long INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT = 3_000;
 
+  // WAL replay re-ships buffered edits in one sync once this many edits, or bytes, are buffered.
+  static final String RESTORE_SYNC_BATCH_EDITS = "phoenix.replication.restore.sync.batch.edits";
+  static final int DEFAULT_RESTORE_SYNC_BATCH_EDITS = 1000;
+  static final String RESTORE_SYNC_BATCH_BYTES = "phoenix.replication.restore.sync.batch.bytes";
+  static final long DEFAULT_RESTORE_SYNC_BATCH_BYTES = 8L * 1024 * 1024;
+
   // Index writers get invoked before and after data table updates
   protected IndexWriter preWriter;
   protected IndexWriter postWriter;
@@ -667,6 +693,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean disabled;
   // Whether postOpen counted this region; postClose decrements only then.
   private boolean countedOpen;
+  private final RestoreState walRestoreState = new RestoreState();
+  private int restoreSyncBatchEdits = DEFAULT_RESTORE_SYNC_BATCH_EDITS;
+  private long restoreSyncBatchBytes = DEFAULT_RESTORE_SYNC_BATCH_BYTES;
   private long slowIndexPrepareThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
@@ -731,6 +760,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   private Predicate<Mutation> ignoreReplicationFilter;
+  // Whether ignoreReplicationFilter can drop committed rows (SYSTEM.CATALOG, SYSTEM.CHILD_LINK), so
+  // recovered edits must be filtered too. IGNORE_REPLICATION mutations never reach the WAL.
+  private boolean filterRestoredRows;
 
   public IndexRegionObserver() {
   }
@@ -745,6 +777,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   IndexRegionObserver(String dataTableName, boolean replicateTable) {
     this(dataTableName);
     this.replicateTable = replicateTable;
+    initReplicationFilter(Bytes.toBytes(dataTableName));
+  }
+
+  private void initReplicationFilter(byte[] tableName) {
+    this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
+    this.filterRestoredRows =
+      SchemaUtil.isMetaTable(tableName) || SchemaUtil.isChildLinkTable(tableName);
   }
 
   @Override
@@ -814,7 +853,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.replicateTable =
         this.syncReplicationEnabled && SchemaUtil.shouldReplicateTable(tableName);
       if (this.replicateTable) {
-        this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
+        initReplicationFilter(tableName);
+        this.restoreSyncBatchEdits =
+          env.getConfiguration().getInt(RESTORE_SYNC_BATCH_EDITS, DEFAULT_RESTORE_SYNC_BATCH_EDITS);
+        this.restoreSyncBatchBytes = env.getConfiguration().getLong(RESTORE_SYNC_BATCH_BYTES,
+          DEFAULT_RESTORE_SYNC_BATCH_BYTES);
       }
       // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
       if (e instanceof HasRegionServerServices) {
@@ -871,9 +914,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   @Override
   public void postOpen(ObserverContext<RegionCoprocessorEnvironment> c) {
-    if (this.disabled) {
+    // Only a replicated table's regions buffer recovered edits or append to a replication log
+    // group, so only they need the drain below or the open-region count.
+    if (this.disabled || !replicateTable) {
       return;
     }
+    // The last recovered-edits file may have been moved aside without postReplayWALs. If the open
+    // fails before postOpen (after HBase deleted the files), those buffered edits are lost with no
+    // record (accepted: needs a corrupt last file and a failure in that window).
+    finishRestoreFile(c.getEnvironment(), c.getEnvironment().getRegionInfo());
     // Count open regions so the server's replication log groups close only after its last region
     // has drained (see ReplicationLogGroup.regionClosed).
     ReplicationLogGroup.regionOpened(c.getEnvironment().getServerName());
@@ -1130,24 +1179,45 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Get the HA group associated with the WAL key. A batch of mutations is recorded in a single WAL
-   * edit.
-   * @return the HA group's replication log group, or {@link ReplicationLogGroup#NONE} if the key
-   *         carries no HA group
+   * The group a recovered edit of {@code haGroup} would ship to, resolved at drain time. When this
+   * cluster is not active, get() returns a NOT_ACTIVE group: a demoted cluster is replaying its own
+   * formerly-ACTIVE edits after a crash, so it must not start a writer or re-ship. A PARALLEL group
+   * (including edits stamped before PARALLEL skipped the log) returns SKIP.
    */
-  private ReplicationLogGroup getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
-    Map<String, byte[]> walKeyAttrs) throws IOException {
-    byte[] haGroupName = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
-    if (haGroupName != null) {
-      // get() returns a NOT_ACTIVE group when this cluster is not active. On the replay path this
-      // means a demoted cluster is replaying its own formerly-ACTIVE edits after a crash: the peer
-      // is ACTIVE now, so this cluster must not start a replication writer or re-ship. A PARALLEL
-      // group (including edits stamped before PARALLEL skipped the log) returns SKIP. Either way
-      // the caller skips the re-ship; HBase still replays the edits into the local region.
-      return ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(),
-        Bytes.toString(haGroupName), abortable);
+  @VisibleForTesting
+  ReplicationLogGroup resolveRestoreGroup(RegionCoprocessorEnvironment env, String haGroup)
+    throws IOException {
+    return ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(), haGroup, abortable);
+  }
+
+  /**
+   * Whether the cluster is not active for {@code haGroup}, read from the group's record (no writer
+   * is created) when the restore buffer switches to the group. A PARALLEL group is never demoted:
+   * its edits are never shipped. Null if there is no readable record; drains then decide from the
+   * group's state at the time.
+   */
+  @VisibleForTesting
+  Boolean isDemotedAtStart(RegionCoprocessorEnvironment env, String haGroup) {
+    try {
+      return isDemoted(HAGroupStoreManager.getInstance(env.getConfiguration()), haGroup);
+    } catch (IOException | RuntimeException e) {
+      LOG.warn("Could not read the HA group record of {} while restoring; deciding at the drain",
+        haGroup, e);
+      return null;
     }
-    return ReplicationLogGroup.NONE;
+  }
+
+  /** Whether {@code haGroup}'s record says this cluster is not active; null if there is none. */
+  @VisibleForTesting
+  static Boolean isDemoted(HAGroupStoreManager manager, String haGroup) throws IOException {
+    Optional<HAGroupStoreRecord> record = manager.getEffectiveHAGroupStoreRecord(haGroup);
+    if (!record.isPresent()) {
+      return null;
+    }
+    if (HighAvailabilityPolicy.PARALLEL.name().equalsIgnoreCase(record.get().getPolicy())) {
+      return false;
+    }
+    return !record.get().getClusterRole().isActive();
   }
 
   @Override
@@ -1162,45 +1232,106 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
     Map<String, byte[]> walKeyAttrs = getAttributeValuesFromWALKey(logKey);
-    ReplicationLogGroup logGroup = getHAGroupFromWALKey(ctx.getEnvironment(), walKeyAttrs);
-    if (!logGroup.isReplicated()) {
+    byte[] name = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+    if (name == null) {
+      // Not buffered, but it can still make HBase flush the memstore over buffered edits.
+      if (
+        !walRestoreState.buffer.isEmpty()
+          && mayFlush(ctx.getEnvironment().getRegion(), logEdit.heapSize())
+      ) {
+        drainRestoreBuffer(ctx.getEnvironment(), info);
+      }
       return;
     }
-    long start = EnvironmentEdgeManager.currentTimeMillis();
-    try {
-      replicateEditOnWALRestore(logGroup, logKey, walKeyAttrs, logEdit);
-    } finally {
-      long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-      metricSource.updatePreWALRestoreTime(dataTableName, duration);
+    // The HA group name is read from each edit's WAL key, as on the live path; the group itself is
+    // resolved only when a drain has edits left.
+    bufferForRestore(ctx.getEnvironment(), info, Bytes.toString(name), logKey, walKeyAttrs,
+      logEdit);
+  }
+
+  /**
+   * One region open's WAL-replay state. HBase replays a region's recovered-edits files on one
+   * thread, which also runs postOpen, so nothing here is shared.
+   */
+  private static final class RestoreState {
+    // Recovered edits not yet covered by a replayed watermark (see RestoreBuffer), all of HA group
+    // haGroup, and whether the cluster was not active for haGroup when the buffer switched to it
+    // (null if unknown). While the buffer stays on the group it stays demoted if the cluster is
+    // promoted mid-open: its edits were written before the demotion, and may include stragglers a
+    // repair already removed.
+    private final RestoreBuffer<RestoreEdit> buffer = new RestoreBuffer<>();
+    private String haGroup;
+    private Boolean demotedAtStart;
+    // The recovered-edits file being replayed, and the counts for its summary (logRestoreSummary).
+    private Path file;
+    private long replayed;
+    private long reshipped;
+    private long recorded;
+    private int syncs;
+    private long shipMs;
+
+    private void resetSummary() {
+      replayed = 0;
+      reshipped = 0;
+      recorded = 0;
+      syncs = 0;
+      shipMs = 0;
+    }
+  }
+
+  /** A recovered edit waiting in the replay buffer to be re-shipped or recorded. */
+  private static final class RestoreEdit implements RestoreBuffer.Edit {
+    private final long seqId;
+    private final List<Cell> cells;
+    private final Map<String, byte[]> replicationAttrs;
+    private final long bytes;
+    private final long minTs;
+    private final long maxTs;
+
+    private RestoreEdit(long seqId, List<Cell> cells, Map<String, byte[]> replicationAttrs,
+      long bytes, long[] range) {
+      this.seqId = seqId;
+      this.cells = cells;
+      this.replicationAttrs = replicationAttrs;
+      this.bytes = bytes;
+      this.minTs = range[0];
+      this.maxTs = range[1];
+    }
+
+    @Override
+    public long seqId() {
+      return seqId;
+    }
+
+    @Override
+    public long bytes() {
+      return bytes;
     }
   }
 
   /**
-   * Forward the WAL edit's cell stream to the replication log as a single batch, filtered through
-   * {@link #isReplicableCell} — the same predicate the synchronous {@link #replicateMutations} path
-   * uses. The persisted WAL edit carries the local-index (L#) cells HBase merged into the data
-   * mutation's family map; those must be dropped (the standby regenerates its own local index),
-   * while the METAFAMILY pre-image cells injected at PRE phase are kept. The standby reader peels
-   * the pre-image cells and reconstructs Put/Delete mutations on the way out.
-   * @param logGroup HA Group
-   * @param logKey   WAL log key
-   * @param logEdit  WAL edit record
+   * Buffers a recovered edit of {@code haGroup} unless a replayed watermark covers it (already
+   * replicated), and drops buffered edits a newer watermark covers. The buffer holds one HA group's
+   * edits, so it drains first when the group changes. Drains early at the batch cap, and before an
+   * edit that could make HBase flush the memstore mid-replay: a retried open skips, without calling
+   * the restore hooks, a recovered-edits file the flush covered, so its edits must be shipped, or
+   * recorded, before the flush.
    */
-  private void replicateEditOnWALRestore(ReplicationLogGroup logGroup, WALKey logKey,
-    Map<String, byte[]> walKeyAttrs, WALEdit logEdit) throws IOException {
-    String tableName = logKey.getTableName().getNameAsString();
-    List<Cell> cells = logEdit.getCells();
-    if (cells == null || cells.isEmpty()) {
-      return;
+  private void bufferForRestore(RegionCoprocessorEnvironment env, RegionInfo info, String haGroup,
+    WALKey logKey, Map<String, byte[]> walKeyAttrs, WALEdit logEdit) throws IOException {
+    if (!haGroup.equals(walRestoreState.haGroup)) {
+      drainRestoreBuffer(env, info);
+      walRestoreState.haGroup = haGroup;
+      walRestoreState.demotedAtStart = isDemotedAtStart(env, haGroup);
     }
     // The persisted WAL edit carries the local-index (L#) cells HBase merged into the data
     // mutation's family map, plus our METAFAMILY pre-image cells and possibly foreign coprocessor
     // markers. Filter through the same predicate the synchronous path uses so both ship exactly the
     // data cells and our pre-image, and never a local-index cell (the standby regenerates its own).
-    List<Cell> replicable =
-      cells.stream().filter(IndexRegionObserver::isReplicableCell).collect(Collectors.toList());
-    if (replicable.isEmpty()) {
-      return;
+    List<Cell> replicable = logEdit.getCells().stream()
+      .filter(IndexRegionObserver::isReplicableCell).collect(Collectors.toList());
+    if (filterRestoredRows) {
+      replicable = dropRowsNotReplicated(replicable);
     }
     // INDEX_UUID rides the WAL key only when appendReplicationAttributesToWALKey stamped it (i.e.
     // the batch's table was indexed, gated on hasIndex()); its presence drives the same empty-UUID
@@ -1208,10 +1339,196 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The stamped value is always empty, so re-stamping empty is equivalent to copying it through.
     Map<String, byte[]> replicationAttrs = MutationCellGrouper.buildReplicationAttributes(
       walKeyAttrs, walKeyAttrs.containsKey(PhoenixIndexCodec.INDEX_UUID));
-    // Cold restore path: all cells in a WAL edit share one sequence id, so use the WAL key's
-    // sequence id as the per-record commit id.
-    logGroup.append(tableName, logKey.getSequenceId(), replicable, replicationAttrs);
+    long editSize = logEdit.heapSize();
+    walRestoreState.replayed++;
+    walRestoreState.buffer.offer(new RestoreEdit(logKey.getSequenceId(), replicable,
+      replicationAttrs, editSize, dataTimestampRange(replicable)), restoreWatermark(walKeyAttrs));
+    if (
+      walRestoreState.buffer.size() >= restoreSyncBatchEdits
+        || walRestoreState.buffer.bytes() >= restoreSyncBatchBytes
+        || mayFlush(env.getRegion(), editSize)
+    ) {
+      drainRestoreBuffer(env, info);
+    }
+  }
+
+  /**
+   * Drops the rows the live path does not ship ({@link #ignoreReplicationFilter}): on
+   * SYSTEM.CATALOG and SYSTEM.CHILD_LINK, rows that are not tenant-owned. The filter is applied to
+   * the mutations rebuilt from the cells, as the live path applies it to the batch's mutations; a
+   * dropped row's pre-image cell is dropped with it.
+   */
+  private List<Cell> dropRowsNotReplicated(List<Cell> cells) throws IOException {
+    List<Cell> dataCells = new ArrayList<>();
+    List<Cell> preImages = new ArrayList<>();
+    for (Cell c : cells) {
+      (CellUtil.matchingFamily(c, WALEdit.METAFAMILY) ? preImages : dataCells).add(c);
+    }
+    List<Cell> kept = new ArrayList<>();
+    Set<ImmutableBytesPtr> keptRows = new HashSet<>();
+    for (Mutation m : MutationCellGrouper.splitCellsIntoMutations(dataCells)) {
+      boolean ignored;
+      try {
+        ignored = ignoreReplicationFilter.test(m);
+      } catch (RuntimeException e) {
+        // A malformed row key; ship it rather than abort the RS on every replay of this edit.
+        LOG.warn("Replication filter failed on row {} of {}; re-shipping it",
+          Bytes.toStringBinary(m.getRow()), dataTableName, e);
+        ignored = false;
+      }
+      if (!ignored) {
+        kept.addAll(MutationCellGrouper.flattenCells(m));
+        keptRows.add(new ImmutableBytesPtr(m.getRow()));
+      }
+    }
+    for (Cell c : preImages) {
+      if (keptRows.contains(new ImmutableBytesPtr(CellUtil.cloneRow(c)))) {
+        kept.add(c);
+      }
+    }
+    return kept;
+  }
+
+  /**
+   * The watermark a recovered edit carries. A missing or malformed value counts as none: the edit
+   * is re-shipped or recorded rather than throwing and aborting the RS.
+   */
+  private static long restoreWatermark(Map<String, byte[]> walKeyAttrs) {
+    byte[] w = walKeyAttrs.get(REPL_WATERMARK_ATTR);
+    return w != null && w.length == Bytes.SIZEOF_LONG
+      ? Bytes.toLong(w)
+      : RestoreBuffer.NO_WATERMARK;
+  }
+
+  /**
+   * Whether applying an edit of {@code editSize} could make replay flush the memstore
+   * ({@code HRegion#isFlushSize}: heap plus off-heap above the flush size). The memstore's per-cell
+   * overhead is unknown here, so the edit is counted twice.
+   */
+  private static boolean mayFlush(Region region, long editSize) {
+    long used = region.getMemStoreHeapSize() + region.getMemStoreOffHeapSize();
+    return used + 2 * editSize > ((HRegion) region).getMemStoreFlushSize();
+  }
+
+  /**
+   * Ships the buffered edits, the post-commit half of a live write ({@link #replicateMutations}),
+   * run on the region-open thread. A demoted group (when the buffer switched to it, or at the
+   * drain) records DEMOTED_RESTORE; a PARALLEL group drops the edits. Any failure records
+   * RESTORE_FAILED and the open goes on: failing it would keep the region unavailable, and HBase's
+   * replay could lose edits of a file it moved aside, or move a file aside itself (skip.errors).
+   */
+  private void drainRestoreBuffer(RegionCoprocessorEnvironment env, RegionInfo info) {
+    if (walRestoreState.buffer.isEmpty()) {
+      return;
+    }
+    Deque<RestoreEdit> edits = walRestoreState.buffer.drain();
+    // Nothing to ship, as on the live path: e.g. global SYSTEM.CATALOG rows the filter dropped.
+    edits.removeIf(e -> e.cells.isEmpty());
+    if (edits.isEmpty()) {
+      return;
+    }
+    String haGroup = walRestoreState.haGroup;
+    ServerName rs = env.getServerName();
+    if (Boolean.TRUE.equals(walRestoreState.demotedAtStart)) {
+      recordRestore("DEMOTED_RESTORE", haGroup, info, rs, edits, null);
+      return;
+    }
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    try {
+      shipOrRecord(resolveRestoreGroup(env, haGroup), info, rs, haGroup, edits);
+    } catch (IOException | RuntimeException e) {
+      recordRestore("RESTORE_FAILED", haGroup, info, rs, edits, e);
+    } finally {
+      long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
+      walRestoreState.shipMs += duration;
+      metricSource.updatePreWALRestoreTime(dataTableName, duration);
+    }
+  }
+
+  /**
+   * Ships to the group just resolved: calls checkUsable (a group left stopped after a cancelled
+   * failover is closed for replacement and refuses the edits), then appends each edit and syncs
+   * once, or records DEMOTED_RESTORE on a NOT_ACTIVE group, or drops the edits of a PARALLEL one.
+   */
+  private void shipOrRecord(ReplicationLogGroup logGroup, RegionInfo info, ServerName rs,
+    String haGroup, Deque<RestoreEdit> edits) throws IOException {
+    logGroup.checkUsable();
+    if (logGroup.getStatus() == ReplicationLogGroup.Status.NOT_ACTIVE) {
+      recordRestore("DEMOTED_RESTORE", haGroup, info, rs, edits, null);
+      return;
+    }
+    if (!logGroup.isReplicated()) {
+      return;
+    }
+    for (RestoreEdit e : edits) {
+      // All cells in a WAL edit share its sequence id: the per-record commit id.
+      logGroup.append(dataTableName, e.seqId, e.cells, e.replicationAttrs);
+    }
     logGroup.sync();
+    walRestoreState.reshipped += edits.size();
+    walRestoreState.syncs++;
+  }
+
+  private void recordRestore(String reason, String haGroup, RegionInfo info, ServerName rs,
+    Collection<RestoreEdit> edits, Throwable cause) {
+    long minTs = Long.MAX_VALUE;
+    long maxTs = Long.MIN_VALUE;
+    for (RestoreEdit e : edits) {
+      minTs = Math.min(minTs, e.minTs);
+      maxTs = Math.max(maxTs, e.maxTs);
+    }
+    logDivergence(reason, haGroup, info, rs, minTs, maxTs, cause);
+    walRestoreState.recorded += edits.size();
+  }
+
+  /**
+   * Logs what replay did with a recovered-edits file's edits since the last summary, once the
+   * buffer has drained: every replayed edit was then re-shipped, recorded, or skipped (covered by a
+   * watermark, or a PARALLEL group's). The watermark logged is the largest seen so far in the open.
+   */
+  private void logRestoreSummary(RegionInfo info) {
+    if (walRestoreState.replayed == 0) {
+      return;
+    }
+    long w = walRestoreState.buffer.maxWatermark();
+    LOG.info(
+      "Restored recovered edits for region {} (file {}): replayed {}, skipped {} (watermark {}),"
+        + " re-shipped {} in {} syncs, recorded {}, {} ms",
+      info.getEncodedName(), walRestoreState.file, walRestoreState.replayed,
+      walRestoreState.replayed - walRestoreState.reshipped - walRestoreState.recorded,
+      w == RestoreBuffer.NO_WATERMARK ? "none" : w, walRestoreState.reshipped,
+      walRestoreState.syncs, walRestoreState.recorded, walRestoreState.shipMs);
+    walRestoreState.resetSummary();
+  }
+
+  @Override
+  public void preReplayWALs(ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+    RegionInfo info, Path edits) throws IOException {
+    if (!replicateTable) {
+      return;
+    }
+    // HBase skips postReplayWALs for a file it moves aside and continues past (EOF, parse error,
+    // skip.errors); its replayed edits are still in the memstore, so finish it here.
+    finishRestoreFile(ctx.getEnvironment(), info);
+    walRestoreState.file = edits;
+  }
+
+  @Override
+  public void postReplayWALs(ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+    RegionInfo info, Path edits) throws IOException {
+    if (!replicateTable) {
+      return;
+    }
+    finishRestoreFile(ctx.getEnvironment(), info);
+  }
+
+  /**
+   * Ends the current recovered-edits file: re-ships (or records) its buffered edits, then logs its
+   * restore summary.
+   */
+  private void finishRestoreFile(RegionCoprocessorEnvironment env, RegionInfo info) {
+    drainRestoreBuffer(env, info);
+    logRestoreSummary(info);
   }
 
   private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -1894,8 +2211,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Emit one pre-image cell per replicated row into {@code miniBatchOp.getWalEdit(0)}. This is the
    * sole producer of pre-image cells for both replication paths: the synchronous
    * {@link #replicateMutations} reads them back from the same WAL slot in POST, and the WAL-restore
-   * {@link #replicateEditOnWALRestore} reads them from the persisted WAL edit HBase builds from
-   * that slot — so both ship byte-identical pre-images with no re-derivation.
+   * {@link #bufferForRestore} reads them from the persisted WAL edit HBase builds from that slot —
+   * so both ship byte-identical pre-images with no re-derivation.
    * <p>
    * We walk the batch (not {@code dataRowStates} directly) and skip {@code ignoreReplicationFilter}
    * mutations, so a row filtered out of replication (e.g. syscat rows without a leading tenant id)
@@ -2978,7 +3295,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // Prepare next data rows states for pending mutations (for global indexes).
       prepareDataRowStates(c, miniBatchOp, context);
       // dataRowStates is now populated; on a replicated batch write per-row pre-image cells to the
-      // WAL edit so both replication paths (replicateMutations and replicateEditOnWALRestore) ship
+      // WAL edit so both replication paths (replicateMutations and bufferForRestore) ship
       // them. Skip on a non-replicated batch — the pre-image would be unused work.
       if (isReplicatedBatch(context)) {
         capturePreImageCells(miniBatchOp, context);
@@ -3105,6 +3422,35 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
+  /**
+   * Registers a replicated batch's floor at its first WAL append: preWALAppend runs before
+   * {@code wal.appendData} assigns the sequence id, so the floor is below it, and a batch that
+   * fails before the WAL never registers. Released in {@link #releaseReplicationFloor} once the
+   * batch is replicated or has nothing to ship; otherwise its WAL edit may exist unreplicated, so
+   * the floor stays (pinned) and holds the watermark down.
+   */
+  private void registerReplicationFloor(ObserverContext<RegionCoprocessorEnvironment> c,
+    BatchMutateContext context) {
+    if (context == null || context.replFloor != null || !isReplicatedBatch(context)) {
+      return;
+    }
+    long writePoint = ((HRegion) c.getEnvironment().getRegion()).getMVCC().getWritePoint();
+    context.replFloor = replicationWatermark.register(writePoint);
+  }
+
+  /** The region's current replicated watermark (write point when no floor is registered). */
+  @VisibleForTesting
+  public long getReplicationWatermark(Region region) {
+    return replicationWatermark.watermarkUnregistered(((HRegion) region).getMVCC()::getWritePoint);
+  }
+
+  private void releaseReplicationFloor(BatchMutateContext context) {
+    if (context.replFloor != null) {
+      replicationWatermark.release(context.replFloor);
+      context.replFloor = null;
+    }
+  }
+
   private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c,
     BatchMutateContext context) {
     this.batchMutateContext.set(context);
@@ -3123,6 +3469,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> c, WALKey key,
     WALEdit edit) {
     BatchMutateContext context = getBatchMutateContext(c);
+    registerReplicationFloor(c, context);
     if (shouldWALAppend) {
       appendMutationAttributesToWALKey(key, context);
     }
@@ -3146,14 +3493,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   /**
    * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the replication
-   * attribute envelope (schema/table/tenant, the HA group name it keys on via
-   * {@link #getHAGroupFromWALKey}, and an empty INDEX_UUID for indexed tables) it reads back in
-   * {@link #replicateEditOnWALRestore}. The HA group name rides the envelope like the other origin
-   * keys (it is in {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}), so it needs no separate
-   * stamp. Gated on {@link #isReplicatedBatch} — the same predicate that gates pre-image capture —
-   * so the WAL carries this stamp exactly when it carries the pre-images the re-ship needs. On a
-   * standby replay the log group is NONE (not replicated), so the standby's WAL never carries
-   * replication metadata it could never re-ship.
+   * attribute envelope (schema/table/tenant, the HA group name the restore buffer keys on, and an
+   * empty INDEX_UUID for indexed tables) it reads back in {@link #bufferForRestore}. The HA group
+   * name rides the envelope like the other origin keys (it is in
+   * {@code ReplicationLogGroup.REPLICATION_ATTR_KEYS}), so it needs no separate stamp. Gated on
+   * {@link #isReplicatedBatch} — the same predicate that gates pre-image capture — so the WAL
+   * carries this stamp exactly when it carries the pre-images the re-ship needs. On a standby
+   * replay the log group is NONE (not replicated), so the standby's WAL never carries replication
+   * metadata it could never re-ship. Also stamps {@link #REPL_WATERMARK_ATTR}.
    */
   private void appendReplicationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
@@ -3162,6 +3509,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     for (Map.Entry<String, byte[]> e : buildReplicationAttributes(context).entrySet()) {
       IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
+    }
+    // Outside the envelope: the restore path reads it, but it is never shipped. Read now, while
+    // this batch's floor is registered, so it is below the batch's own sequence id.
+    if (context.replFloor != null) {
+      IndexRegionObserver.appendToWALKey(key, REPL_WATERMARK_ATTR,
+        Bytes.toBytes(replicationWatermark.watermarkForRegistered()));
     }
   }
 
@@ -3255,6 +3608,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             throw e;
           }
+          // Replicated, or nothing to ship. A failed ship threw above and leaves the floor pinned,
+          // as does ignoreSyncReplicationForTesting (in the WAL, never shipped).
+          releaseReplicationFloor(context);
         }
         FutureUtils.get(postIndexFuture);
       }
@@ -3823,9 +4179,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * the standby whose regions are split and assigned independently. METAFAMILY cells are dropped
    * unless they carry our {@link #PRE_IMAGE_WAL_QUALIFIER}, so a foreign coprocessor's WAL
    * contribution (or any other HBase system marker) cannot leak onto the wire. Applied identically
-   * by the synchronous ({@link #replicateMutations}) and WAL-restore
-   * ({@link #replicateEditOnWALRestore}) paths so both enforce one wire invariant: data plus our
-   * pre-image only.
+   * by the synchronous ({@link #replicateMutations}) and WAL-restore ({@link #bufferForRestore})
+   * paths so both enforce one wire invariant: data plus our pre-image only.
    */
   private static boolean isReplicableCell(Cell c) {
     if (CellUtil.matchingFamily(c, WALEdit.METAFAMILY)) {
@@ -3920,18 +4275,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   /**
    * Logs and counts a region-level record of edits that may exist only on this cluster, for repair
    * with the sync tool. The timestamp window is "unknown" (repair the whole region range) when the
-   * edits had no data cells. Logged before counting, and the counter never throws to the caller, so
-   * the record line is written and the original failure propagates.
+   * edits had no data cells. Logged before counting, and the counter never throws to the caller.
    */
-  private void logDivergence(String reason, String haGroup, RegionInfo region, ServerName rs,
-    long minTs, long maxTs, Throwable cause) {
+  @VisibleForTesting
+  void logDivergence(String reason, String haGroup, RegionInfo region, ServerName rs, long minTs,
+    long maxTs, Throwable cause) {
     boolean known = minTs <= maxTs;
     LOG.error(
       "{} group={} table={} region={} start={} end={} minTs={} maxTs={} reason={} rs={}"
         + " cause={}",
       DIVERGENCE_LOG_PREFIX, haGroup, region.getTable().getNameAsString(), region.getEncodedName(),
       Bytes.toHex(region.getStartKey()), Bytes.toHex(region.getEndKey()), known ? minTs : "unknown",
-      known ? maxTs : "unknown", reason, rs, cause == null ? "none" : cause.toString());
+      known ? maxTs : "unknown", reason, rs, cause == null ? "none" : cause.toString(), cause);
     try {
       metricSource.incrementReplicationDivergence(dataTableName);
     } catch (RuntimeException e) {

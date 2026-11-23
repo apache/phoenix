@@ -246,7 +246,7 @@ public class ReplicationLogGroup {
   protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
     new ConcurrentHashMap<>();
 
-  /** Open IndexRegionObserver regions per server, keyed by serverIdentity (see regionClosed). */
+  /** Open replicated-table regions per server, keyed by serverIdentity (see regionClosed). */
   private static final Map<String, Integer> OPEN_REGIONS = new HashMap<>();
 
   /**
@@ -591,8 +591,8 @@ public class ReplicationLogGroup {
 
   /**
    * Builds the uninitialized group this cluster should have for the HA group, from its current
-   * record. Only writes carrying HA_GROUP_NAME get here, from the live write path or preWALRestore
-   * recovery. The checks run in this order:
+   * record. Only writes carrying HA_GROUP_NAME get here, from the live write path or a WAL-restore
+   * drain. The checks run in this order:
    * <ol>
    * <li>PARALLEL policy: a {@link NoOpReplicationLogGroup}, whatever the role. The client writes
    * both clusters itself, so this must come before the role check, which would reject its writes on
@@ -602,9 +602,9 @@ public class ReplicationLogGroup {
    * write on the live path, or a demoted cluster replaying its formerly-ACTIVE edits on the replay
    * path.</li>
    * <li>Otherwise, a replication log group. This includes ACTIVE_TO_STANDBY (state
-   * ACTIVE_IN_SYNC_TO_STANDBY), reached from preWALRestore on a restart during a failover and from
-   * live writes when the mutation block is off; its writer starts in SYNC with rotation suspended
-   * (see {@link #isFailoverPending()}).</li>
+   * ACTIVE_IN_SYNC_TO_STANDBY), reached from a WAL-restore drain on a restart during a failover and
+   * from live writes when the mutation block is off; its writer starts in SYNC with rotation
+   * suspended (see {@link #isFailoverPending()}).</li>
    * </ol>
    */
   private static ReplicationLogGroup newGroup(Configuration conf, ServerName serverName,
@@ -906,8 +906,8 @@ public class ReplicationLogGroup {
    * Initialize the replication mode based on the HAGroupStore state. {@link #newGroup} builds a
    * writer only on an active role, so this is only reached for active states: ACTIVE_IN_SYNC and
    * the ACTIVE_IN_SYNC_TO_STANDBY failover gate both start SYNC (the gate is reached via
-   * preWALRestore recovery on a restart-in-failover, or a live write when the mutation block is
-   * off); every other active state (ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER,
+   * WAL-restore recovery on a restart-in-failover, or a live write when the mutation block is off);
+   * every other active state (ACTIVE_NOT_IN_SYNC, ACTIVE_WITH_OFFLINE_PEER,
    * ACTIVE_NOT_IN_SYNC_TO_STANDBY, ...) starts STORE_AND_FORWARD.
    */
   protected void initializeReplicationMode(HAGroupStoreRecord record) throws IOException {
@@ -1334,7 +1334,7 @@ public class ReplicationLogGroup {
     LOG.info("HAGroup {} closed", this);
   }
 
-  /** Records that an IndexRegionObserver region opened on the given server. */
+  /** Records that a replicated-table region opened on the given server. */
   public static void regionOpened(ServerName serverName) {
     synchronized (OPEN_REGIONS) {
       OPEN_REGIONS.merge(serverIdentity(serverName), 1, Integer::sum);
@@ -1342,7 +1342,7 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Records that an IndexRegionObserver region closed on the given server, and closes the server's
+   * Records that a replicated-table region closed on the given server, and closes the server's
    * groups when that was its last such region and the server is stopped, stopping or aborted. A
    * graceful stop sets isStopped before the regions close; cluster shutdown sets isStopping. HBase
    * calls postClose after the close write lock is taken, so every batch on the region, including
@@ -1368,7 +1368,7 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Closes the server's groups now if none of its IndexRegionObserver regions is open, for example
+   * Closes the server's groups now if none of its replicated-table regions is open, for example
    * after the regions were moved away before a graceful stop. Otherwise the close is left to the
    * last region's {@link #regionClosed}.
    */
