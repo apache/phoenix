@@ -196,9 +196,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return Iterators.filter(indexes, new Predicate<PTable>() {
       @Override
       public boolean apply(PTable index) {
-        return sendIndexMaintainer(index) && ((IndexUtil.isGlobalIndex(index)
+        return sendIndexMaintainer(index) && (IndexUtil.isGlobalIndex(index)
           && (dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme()
-            || IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection)))
+            || IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection))
           || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
       }
     });
