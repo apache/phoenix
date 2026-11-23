@@ -337,6 +337,13 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
       try {
         return s.get();
       } catch (Exception e) {
+        if (
+          e instanceof SQLException && ((SQLException) e).getErrorCode()
+              == SQLExceptionCode.FAILOVER_IN_PROGRESS.getErrorCode()
+        ) {
+          // Already mapped (and the CRR refreshed) at a lower layer.
+          throw e;
+        }
         if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
           GLOBAL_HA_STALE_CRR_DETECTED_COUNT.increment();
           HAGroupMetricsManager.increment(context.getHAGroup().getName(),

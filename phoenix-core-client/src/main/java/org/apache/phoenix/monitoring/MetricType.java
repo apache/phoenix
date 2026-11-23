@@ -390,7 +390,8 @@ public enum MetricType {
       + "wrapActionDuringFailover: writes committed on the old active whose replication failed",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_STALE_CRR_DETECTED_COUNT("hascd",
-    "Counter for StaleClusterRoleRecordException surfaces caught by wrapActionDuringFailover",
+    "Counter for StaleClusterRoleRecordException surfaces caught by wrapActionDuringFailover "
+      + "or by autocommit statement DML",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_CRR_REFRESH_COUNT("hcrc", "Counter for refreshClusterRoleRecord invocations", LogLevel.DEBUG,
     PLong.INSTANCE),

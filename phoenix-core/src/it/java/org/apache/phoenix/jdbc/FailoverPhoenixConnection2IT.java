@@ -30,14 +30,17 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.sleepThreadFor;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_STALE_CRR_DETECTED_COUNT;
 import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -55,6 +58,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.JDBCUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -522,6 +526,119 @@ public class FailoverPhoenixConnection2IT extends HABaseIT {
       doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
     }
 
+  }
+
+  /**
+   * Autocommit DML through PreparedStatement.executeUpdate commits on the wrapped connection, so
+   * the stale-CRR rejection must be mapped below FailoverPhoenixConnection.
+   */
+  @Test(timeout = 300000)
+  public void testStaleCrrWithAutoCommitPreparedStatementUpdate() throws Exception {
+    doTestStaleCrrWithAutoCommitDml(conn -> {
+      try (PreparedStatement ps =
+        conn.prepareStatement(String.format("UPSERT INTO %s VALUES(?, ?)", tableName))) {
+        int value = RandomUtils.nextInt();
+        ps.setInt(1, value);
+        ps.setInt(2, value);
+        assertEquals(1, ps.executeUpdate());
+      }
+    }, false);
+  }
+
+  /** Same as above for Statement.executeUpdate(String). */
+  @Test(timeout = 300000)
+  public void testStaleCrrWithAutoCommitStatementUpdate() throws Exception {
+    doTestStaleCrrWithAutoCommitDml(conn -> {
+      try (Statement stmt = conn.createStatement()) {
+        int value = RandomUtils.nextInt();
+        assertEquals(1, stmt
+          .executeUpdate(String.format("UPSERT INTO %s VALUES(%d, %d)", tableName, value, value)));
+      }
+    }, false);
+  }
+
+  /** Same as above for executeBatch, which commits once at the end of the batch. */
+  @Test(timeout = 300000)
+  public void testStaleCrrWithAutoCommitExecuteBatch() throws Exception {
+    doTestStaleCrrWithAutoCommitDml(conn -> {
+      try (PreparedStatement ps =
+        conn.prepareStatement(String.format("UPSERT INTO %s VALUES(?, ?)", tableName))) {
+        for (int i = 0; i < 2; i++) {
+          int value = RandomUtils.nextInt();
+          ps.setInt(1, value);
+          ps.setInt(2, value);
+          ps.addBatch();
+        }
+        ps.executeBatch();
+      }
+    }, true);
+  }
+
+  private interface DmlOperation {
+    void run(Connection conn) throws SQLException;
+  }
+
+  /**
+   * Runs {@code op} on an autocommit HA connection before, across and after an ACTIVE to STANDBY
+   * role change that the client does not see. With {@code batch}, the expected failure is a
+   * {@link BatchUpdateException} whose cause carries the error code.
+   */
+  private void doTestStaleCrrWithAutoCommitDml(DmlOperation op, boolean batch) throws Exception {
+    // Set autocommit through the connect properties: failover() reconnects with these properties,
+    // so a setAutoCommit(true) on the old wrapped connection is not carried over.
+    Properties props = new Properties();
+    props.putAll(clientProperties);
+    props.setProperty(PhoenixRuntime.AUTO_COMMIT_ATTRIB, "true");
+    try (Connection connection = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), props)) {
+      assertTrue(connection.getAutoCommit());
+      op.run(connection);
+
+      // Demote cluster 1 on the server side only; the client keeps the old (ACTIVE) CRR.
+      CLUSTERS.transitClusterRole(haGroup, ACTIVE_TO_STANDBY, STANDBY, false);
+      CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY, false);
+
+      long staleCrrCountBefore = GLOBAL_HA_STALE_CRR_DETECTED_COUNT.getMetric().getValue();
+      try {
+        op.run(connection);
+        fail("Should have failed since CRR is stale");
+      } catch (SQLException e) {
+        SQLException failure = e;
+        if (batch) {
+          assertTrue("Expected BatchUpdateException, got " + e, e instanceof BatchUpdateException);
+          assertTrue("Expected a SQLException cause, got " + e.getCause(),
+            e.getCause() instanceof SQLException);
+          failure = (SQLException) e.getCause();
+        }
+        assertEquals(FAILOVER_IN_PROGRESS.getErrorCode(), failure.getErrorCode());
+      }
+      // The stale CRR is counted once: the lower-layer mapping and FailoverPhoenixConnection must
+      // not both count it.
+      assertEquals(staleCrrCountBefore + 1,
+        GLOBAL_HA_STALE_CRR_DETECTED_COUNT.getMetric().getValue());
+      // The forced refresh applied the STANDBY record, which closes the wrapped connection.
+      String url = JDBCUtil.formatUrl(CLUSTERS.getJdbcUrl1(haGroup),
+        haGroup.getRoleRecord().getRegistryType());
+      assertEquals(STANDBY, haGroup.getRoleRecord().getRole(url));
+      assertTrue(((FailoverPhoenixConnection) connection).getWrappedConnection().isClosed());
+
+      // No active cluster yet; this also starts the non-active CRR poller.
+      try {
+        createFailoverConnection();
+        fail("Should have failed since there is no ACTIVE cluster");
+      } catch (SQLException e) {
+        assertEquals(CANNOT_ESTABLISH_CONNECTION.getErrorCode(), e.getErrorCode());
+        assertTrue(e.getCause() instanceof FailoverSQLException);
+      }
+      CLUSTERS.transitClusterRole(haGroup, STANDBY, STANDBY_TO_ACTIVE, false);
+      CLUSTERS.transitClusterRole(haGroup, STANDBY, ACTIVE, false);
+      sleepThreadFor(5000);
+
+      // Explicit failover on the old connection recovers it.
+      FailoverPhoenixConnection.failover(connection, 30000);
+      assertTrue(connection.getAutoCommit());
+      op.run(connection);
+      doTestBasicOperationsWithConnection(connection, tableName, haGroupName);
+    }
   }
 
   /**
