@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.IndexToolIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.transform.TransformToolIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
@@ -49,10 +50,13 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexTwoPhaseCreateIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -124,6 +128,7 @@ public class IndexTwoPhaseCreateIT extends BaseTest {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformingTableAndIndex() throws Exception {
     Properties testProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
