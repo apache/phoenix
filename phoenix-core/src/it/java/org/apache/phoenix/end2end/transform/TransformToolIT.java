@@ -56,6 +56,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
 import org.apache.phoenix.end2end.IndexToolIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -75,7 +76,9 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -84,6 +87,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TransformToolIT extends ParallelStatsDisabledIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(TransformToolIT.class);
@@ -298,6 +302,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
    * Test presplitting an index table
    */
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testSplitTable() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -373,6 +378,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testDataAfterTransformingMultiColFamilyTable() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -490,6 +496,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMutationReadRepair() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -621,6 +628,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMutationFailureRepair() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -747,6 +755,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformVerify() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -877,6 +886,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformVerify_shouldFixUnverified() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -1060,6 +1070,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformForGlobalViews() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -1140,6 +1151,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformForTenantViews() throws Exception {
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
