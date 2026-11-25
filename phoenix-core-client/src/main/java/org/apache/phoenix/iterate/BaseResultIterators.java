@@ -1572,15 +1572,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 services.clearTableRegionCache(TableName.valueOf(physicalTableName));
                 context.getOverallQueryMetrics().cacheRefreshedDueToSplits();
               }
+              if (retryCount <= 0) {
+                throw e2;
+              }
               // Resubmit just this portion of work again
               Scan oldScan = scanPair.getFirst();
               byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
               if (e2 instanceof HashJoinCacheNotFoundException) {
                 LOGGER.debug(
                   "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
-                if (retryCount <= 0) {
-                  throw e2;
-                }
                 Long cacheId = ((HashJoinCacheNotFoundException) e2).getCacheId();
                 ServerCache cache = caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
                 if (cache.getCachePtr() != null) {
@@ -1597,10 +1597,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 scanPairItr, scanPair, retryCount - 1);
             } catch (ColumnFamilyNotFoundException cfnfe) {
               if (scanPair.getFirst().getAttribute(LOCAL_INDEX_BUILD) != null) {
+                if (retryCount <= 0) {
+                  throw cfnfe;
+                }
                 Thread.sleep(1000);
                 concatIterators = recreateIterators(services, isLocalIndex, allIterators, iterators,
                   isReverse, maxQueryEndTime, previousScan, clearedCache, concatIterators,
-                  scanPairItr, scanPair, retryCount);
+                  scanPairItr, scanPair, retryCount - 1);
               }
 
             }
