@@ -23,7 +23,6 @@ import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
@@ -1588,8 +1587,9 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     Assert.assertEquals(ltCount, ltHistogram.getHistogram().getTotalCount());
     Assert.assertEquals(szCount, sizeHistogram.getHistogram().getTotalCount());
 
-    // Get latency metrics from table level metrics
-    Long queryTime = GLOBAL_QUERY_TIME.getMetric().getValue();
+    // Get latency metrics from table level metrics. Do not use the global query time. It also
+    // counts queries from other connections in this JVM, such as server-side task queries.
+    long queryTime = getMetricFromTableMetrics(tableName, MetricType.SELECT_SQL_QUERY_TIME);
     long rsNextTime = getMetricFromTableMetrics(tableName, MetricType.RESULT_SET_TIME_MS);
     // Latency for queries is sum of time spent in executeQuery phase and rs.next phase.
     long totalLatency = queryTime + rsNextTime;
