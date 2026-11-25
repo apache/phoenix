@@ -73,6 +73,9 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
     props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60 * 1000)); // An hour
+    // In HBase 2.5, a master race can lose the wakeup that releases a snapshot table lock.
+    // A short lock timeout releases the lock before the client snapshot call times out.
+    props.put("hbase.master.procedure.local.master.locks.timeout.ms", Integer.toString(30000));
     if (isNamespaceMapped) {
       props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
     }
