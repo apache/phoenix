@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.*;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
@@ -64,5 +65,30 @@ public class ByteUtilTest {
 
     key = new byte[] { (byte) 255 };
     assertNull(ByteUtil.nextKey(key));
+  }
+
+  @Test
+  public void testLargestPossibleRowKeyInRangeWithEmptyEndKey() {
+    byte[][] startKeys = new byte[][] { Bytes.toBytes("t0005"), new byte[] { (byte) 0x80, 0, 0 },
+      new byte[] { 0 }, new byte[] { (byte) 255, (byte) 255 } };
+    for (byte[] startKey : startKeys) {
+      byte[] rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, HConstants.EMPTY_END_ROW);
+      assertNotNull(Bytes.toStringBinary(startKey), rowKey);
+      assertTrue(Bytes.toStringBinary(rowKey), Bytes.compareTo(startKey, rowKey) < 0);
+    }
+  }
+
+  @Test
+  public void testLargestPossibleRowKeyInRangeIsInRange() {
+    byte[][][] ranges = new byte[][][] { { HConstants.EMPTY_START_ROW, Bytes.toBytes("m") },
+      { Bytes.toBytes("a"), Bytes.toBytes("m") }, { Bytes.toBytes("abc"), Bytes.toBytes("abd") } };
+    for (byte[][] range : ranges) {
+      byte[] rowKey = ByteUtil.getLargestPossibleRowKeyInRange(range[0], range[1]);
+      assertNotNull(Bytes.toStringBinary(range[0]) + " " + Bytes.toStringBinary(range[1]), rowKey);
+      assertTrue(Bytes.toStringBinary(rowKey), Bytes.compareTo(range[0], rowKey) < 0);
+      assertTrue(Bytes.toStringBinary(rowKey), Bytes.compareTo(rowKey, range[1]) < 0);
+    }
+    assertArrayEquals(HConstants.EMPTY_END_ROW, ByteUtil
+      .getLargestPossibleRowKeyInRange(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW));
   }
 }
