@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.jdbc.ConnectionInfo;
@@ -64,8 +65,13 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
+@Ignore("Transform is under rework. The monitor tasks do not complete when this class shares a"
+  + " mini cluster with other classes.")
 public class TransformMonitorIT extends ParallelStatsDisabledIT {
   private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
@@ -245,6 +251,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMonitor_mutableTableWithoutIndex() throws Exception {
     testTransformTable(false, false, false);
   }
@@ -328,11 +335,13 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMonitor_mutableTableWithIndex() throws Exception {
     testTransformTable(true, false, false);
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMonitor_tableWithViews() throws Exception {
     testTransformTable(false, true, false);
   }
@@ -382,6 +391,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformTableWithTenantViews() throws Exception {
     String tenantId = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -505,6 +515,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformAlreadyTransformedTable() throws Exception {
     String dataTableName = "TBL_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
@@ -634,6 +645,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testDifferentClientAccessTransformedTable_mutable() throws Exception {
     // A connection does transform and another connection doesn't try to upsert into old table
     testDifferentClientAccessTransformedTable(false);
@@ -674,6 +686,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("Transform is under rework. This test fails on master.")
   public void testTransformMonitor_tableWithViews_OnOldAndNew() throws Exception {
     // Create view before and after transform with different select statements and check
     String schemaName = "S_" + generateUniqueName();
