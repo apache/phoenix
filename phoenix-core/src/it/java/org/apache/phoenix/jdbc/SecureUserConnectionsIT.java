@@ -103,7 +103,17 @@ public class SecureUserConnectionsIT {
     conf.setBoolean(User.HBASE_SECURITY_AUTHORIZATION_CONF_KEY, true);
     conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
       ZKConnectionInfo.ZK_REGISTRY_NAME);
+    // Install permissive auth_to_local rules so that this test can run on a developer
+    // workstation that has an active Kerberos TGT for an unrelated realm. Without this,
+    // ConnectionInfo.create -> User.getCurrent -> UGI.getLoginUser will commit the OS-level
+    // Kerberos principal through HadoopLoginModule, and KerberosName.getShortName will throw
+    // NoMatchingRule because the test's default realm ("EXAMPLE.COM", set by
+    // updateDefaultRealm) does not match the developer's real-world principal.
+    conf.set("hadoop.security.auth_to_local", "RULE:[1:$1] RULE:[2:$1] DEFAULT");
     UserGroupInformation.setConfiguration(conf);
+    // Belt-and-suspenders: KerberosName caches its rules statically across tests, so make
+    // sure our permissive rules are the ones in effect.
+    KerberosName.setRules("RULE:[1:$1] RULE:[2:$1] DEFAULT");
 
     // Clear the cached singletons so we can inject our own.
     InstanceResolver.clearSingletons();
