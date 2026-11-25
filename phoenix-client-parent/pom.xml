@@ -154,6 +154,9 @@
                   <!-- Phoenix classes -->
                   <exclude>org/apache/phoenix/**</exclude>
                   <exclude>org/apache/omid/**</exclude>
+                  <!-- Preserve canonical org.bson package names because BSON columns expose
+                       org.bson types directly through the JDBC API. -->
+                  <exclude>org/bson/**</exclude>
                 </excludes>
               </relocation>
               <relocation>
