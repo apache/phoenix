@@ -44,19 +44,21 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OmidTransactionContext.class);
 
-  private HBaseTransactionManager tm;
+  // The context does not keep the transaction manager. It gets the current manager from the
+  // provider on each call. Tests can replace that manager and close the old one, so a kept
+  // reference can become stale. In production the manager does not change.
+  private OmidTransactionProvider.OmidTransactionClient client;
   private HBaseTransaction tx;
 
   public OmidTransactionContext() {
     this.tx = null;
-    this.tm = null;
+    this.client = null;
   }
 
   public OmidTransactionContext(PhoenixConnection connection) throws SQLException {
-    PhoenixTransactionClient client =
-      connection.getQueryServices().initTransactionClient(getProvider());
-    assert (client instanceof OmidTransactionProvider.OmidTransactionClient);
-    this.tm = ((OmidTransactionProvider.OmidTransactionClient) client).getTransactionClient();
+    PhoenixTransactionClient c = connection.getQueryServices().initTransactionClient(getProvider());
+    assert c instanceof OmidTransactionProvider.OmidTransactionClient;
+    this.client = (OmidTransactionProvider.OmidTransactionClient) c;
     this.tx = null;
   }
 
@@ -64,8 +66,10 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     this();
     if (txnBytes != null && txnBytes.length > 0) {
       TSOProto.Transaction transaction = TSOProto.Transaction.parseFrom(txnBytes);
+      HBaseTransactionManager m = tm();
       tx = new HBaseTransaction(transaction.getTimestamp(), transaction.getEpoch(),
-        new HashSet<HBaseCellId>(), new HashSet<HBaseCellId>(), null, tm.isLowLatency());
+        new HashSet<HBaseCellId>(), new HashSet<HBaseCellId>(), null,
+        m != null && m.isLowLatency());
     } else {
       tx = null;
     }
@@ -75,33 +79,39 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     assert (ctx instanceof OmidTransactionContext);
     OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
 
-    this.tm = omidTransactionContext.tm;
+    this.client = omidTransactionContext.client;
 
     if (subTask) {
       if (omidTransactionContext.isTransactionRunning()) {
         Transaction transaction = omidTransactionContext.getTransaction();
+        HBaseTransactionManager m = tm();
         this.tx = new HBaseTransaction(transaction.getTransactionId(), transaction.getEpoch(),
-          new HashSet<HBaseCellId>(), new HashSet<HBaseCellId>(), this.tm,
-          transaction.getReadTimestamp(), transaction.getWriteTimestamp(), tm.isLowLatency());
+          new HashSet<HBaseCellId>(), new HashSet<HBaseCellId>(), m, transaction.getReadTimestamp(),
+          transaction.getWriteTimestamp(), m != null && m.isLowLatency());
       } else {
         this.tx = null;
       }
 
-      this.tm = null;
+      this.client = null;
     } else {
       this.tx = omidTransactionContext.getTransaction();
     }
   }
 
+  private HBaseTransactionManager tm() {
+    return client == null ? null : client.getTransactionClient();
+  }
+
   @Override
   public void begin() throws SQLException {
-    if (tm == null) {
+    HBaseTransactionManager m = tm();
+    if (m == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build()
         .buildException();
     }
 
     try {
-      tx = (HBaseTransaction) tm.begin();
+      tx = (HBaseTransaction) m.begin();
     } catch (TransactionException e) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
         .setMessage(e.getMessage()).setRootCause(e).build().buildException();
@@ -110,10 +120,13 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
   @Override
   public void commit() throws SQLException {
-    if (tx == null || tm == null) return;
+    HBaseTransactionManager m = tm();
+    if (tx == null || m == null) {
+      return;
+    }
 
     try {
-      tm.commit(tx);
+      m.commit(tx);
     } catch (TransactionException e) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
         .setMessage(e.getMessage()).setRootCause(e).build().buildException();
@@ -125,12 +138,13 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
   @Override
   public void abort() throws SQLException {
-    if (tx == null || tm == null || tx.getStatus() != Status.RUNNING) {
+    HBaseTransactionManager m = tm();
+    if (tx == null || m == null || tx.getStatus() != Status.RUNNING) {
       return;
     }
 
     try {
-      tm.rollback(tx);
+      m.rollback(tx);
     } catch (TransactionException e) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
         .setMessage(e.getMessage()).setRootCause(e).build().buildException();
@@ -149,9 +163,14 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
   @Override
   public void commitDDLFence(PTable dataTable) throws SQLException {
+    HBaseTransactionManager m = tm();
+    if (m == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build()
+        .buildException();
+    }
 
     try {
-      tx = (HBaseTransaction) tm.fence(dataTable.getName().getBytes());
+      tx = (HBaseTransaction) m.fence(dataTable.getName().getBytes());
       if (LOGGER.isInfoEnabled()) {
         LOGGER.info("Added write fence at ~" + tx.getReadTimestamp());
       }

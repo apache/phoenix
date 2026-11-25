@@ -36,7 +36,9 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
   private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
 
-  private HBaseTransactionManager transactionManager = null;
+  // Tests can replace the manager while other threads read it. The volatile field makes the
+  // new manager visible to those threads without a lock.
+  private volatile HBaseTransactionManager transactionManager = null;
   private volatile CommitTable.Client commitTableClient = null;
 
   public static final OmidTransactionProvider getInstance() {
@@ -78,18 +80,22 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
       }
     }
 
-    return new OmidTransactionClient(transactionManager);
+    return new OmidTransactionClient(this);
   }
 
+  /**
+   * Gives the current {@link HBaseTransactionManager} of the provider. The client does not keep its
+   * own reference to the manager.
+   */
   static class OmidTransactionClient implements PhoenixTransactionClient {
-    private final HBaseTransactionManager transactionManager;
+    private final OmidTransactionProvider provider;
 
-    public OmidTransactionClient(HBaseTransactionManager transactionManager) {
-      this.transactionManager = transactionManager;
+    OmidTransactionClient(OmidTransactionProvider provider) {
+      this.provider = provider;
     }
 
     public HBaseTransactionManager getTransactionClient() {
-      return transactionManager;
+      return provider.transactionManager;
     }
 
     @Override
