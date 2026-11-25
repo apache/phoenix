@@ -101,12 +101,25 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
       "create table eh (organization_id char(15) not null,parent_id char(15) not null, created_date date not null, entity_history_id char(15) not null constraint pk primary key (organization_id, parent_id, created_date, entity_history_id))");
     String query =
       "select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from eh where ORGANIZATION_ID='111111111111111' and SUBSTR(PARENT_ID, 1, 3) = 'foo' and CREATED_DATE >= TO_DATE ('2012-11-01 00:00:00') and CREATED_DATE < TO_DATE ('2012-11-30 00:00:00') order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID limit 100";
+    // V1 marginally cheaper, V2 correct: both V1 and V2 produce the IDENTICAL scan
+    // range ['111111111111111','foo ','2012-11-01'] - ['111111111111111',
+    // 'fop ','2012-11-30']. V1 prunes the dim-equality predicates already
+    // captured in the compound bounds and only keeps `CREATED_DATE >= ... AND
+    // CREATED_DATE < ...` (also redundant with the scan bounds, but kept by V1 for
+    // legacy reasons). V2 retains the full conjunction `org_id= AND substr(parent_id)=
+    // AND date-range` as a residual filter. Same row count read, V2 has one extra
+    // per-row predicate evaluation. Known V2 conservatism on residual-pruning;
+    // correctness preserved.
     assertPlan(conn, query).scanType("RANGE SCAN").table("EH")
       .keyRanges("['111111111111111','foo            ','2012-11-01 00:00:00.000']"
         + " - ['111111111111111','fop            ','2012-11-30 00:00:00.000']")
       .serverFirstKeyOnlyProjection(true)
-      .serverWhereFilter("SERVER FILTER BY (CREATED_DATE >= DATE"
-        + " '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')")
+      .serverWhereFilter(isV2Optimizer()
+        ? "SERVER FILTER BY (ORGANIZATION_ID = '111111111111111' AND SUBSTR(PARENT_ID, 1, 3) ="
+          + " 'foo' AND CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE"
+          + " '2012-11-30 00:00:00.000')"
+        : "SERVER FILTER BY (CREATED_DATE >= DATE"
+          + " '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')")
       .serverSortedBy("[ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]")
       .serverRowLimit(100L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(100)
       .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();

@@ -1194,4 +1194,5 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
       }
     }
   }
+
 }

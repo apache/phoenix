@@ -633,11 +633,22 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN s4");
-      // i2 cannot be used since s4 has been dropped from the view, so i1 will be used
-      assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName1).keyRanges("[1]")
+      // i2 cannot be used since s4 has been dropped from the view, so i1 will be used.
+      // V1 emits a single-slot key range [1] (the full viewIndexId region prefix)
+      // and keeps `S1 = 'foo'` in the server filter alongside the concatenation
+      // predicate. V2 additionally extracts the equality into the scan bound by
+      // emitting an EVERYTHING wildcard for the unconstrained middle dims and the
+      // 'foo' point on the trailing PK column → SKIP SCAN ON 1 KEY [1,*,*,'foo'].
+      // V2 is strictly better: HBase skips directly to keys matching `S1 = 'foo'`
+      // (a 16th of the index region per the 16-distinct-S1-value workload), so
+      // fewer rows reach the server filter and the residual filter shrinks to just
+      // the concatenation check. Same admitted rows.
+      assertPlan(conn, query).scanType(isV2Optimizer() ? "SKIP SCAN ON 1 KEY" : "RANGE SCAN")
+        .tableContains(indexName1).keyRanges(isV2Optimizer() ? "[1,*,*,'foo']" : "[1]")
         .serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter(
-          "SERVER FILTER BY ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')")
+        .serverWhereFilter(isV2Optimizer()
+          ? "SERVER FILTER BY (\"S2\" || '_' || \"S3\") = 'abc_cab'"
+          : "SERVER FILTER BY ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')")
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());

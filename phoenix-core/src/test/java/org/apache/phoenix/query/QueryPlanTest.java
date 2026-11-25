@@ -60,8 +60,16 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       .clientRowLimit(Integer.MAX_VALUE).indexRule(OptimizerReasons.RULE_DATA_TABLE)
       .indexRejectedNone();
 
+    // V2 strictly better: V1 narrows only on the tenant prefix and leaves
+    // `USERNAME = 'Joe'` as a server filter that must reject every non-'Joe'
+    // username row. V2 promotes the equality on the trailing PK column into the
+    // scan range itself (with the unconstrained `userid` middle dim emitted as a
+    // wildcard) → ['tenantId',*,'Joe']. HBase rejects non-'Joe' rows pre-filter,
+    // so the LIMIT 1 is satisfied with far fewer rows scanned. The redundant
+    // residual filter is a small CPU cost on the (presumably few) matching rows.
     assertPlan(conn, "SELECT * FROM TENANT_VIEW WHERE username = 'Joe' LIMIT 1")
-      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE").keyRanges("['tenantId']")
+      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE")
+      .keyRanges(isV2Optimizer() ? "['tenantId',*,'Joe']" : "['tenantId']")
       .serverWhereFilter("SERVER FILTER BY USERNAME = 'Joe'").serverRowLimit(1L).clientRowLimit(1)
       .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
