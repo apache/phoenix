@@ -33,12 +33,16 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -48,6 +52,7 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.*;
 import org.junit.After;
@@ -780,8 +785,8 @@ public class TableTTLIT extends BaseTest {
 
   /**
    * Test CDC batch mutations for TTL expired rows. This test creates a table with TTL and CDC
-   * index, inserts 82 rows (to test batching: 25+25+25+7), lets them expire via TTL, and verifies
-   * that all 82 rows have CDC TTL_DELETE events recorded with correct pre-image data.
+   * index, inserts 182 rows, lets them all expire via TTL, and verifies that all 182 rows have CDC
+   * TTL_DELETE events recorded with correct pre-image data.
    */
   @Test
   public void testCDCBatchMutationsForTTLExpiredRows() throws Exception {
@@ -900,6 +905,172 @@ public class TableTTLIT extends BaseTest {
       }
 
     }
+  }
+
+  /**
+   * Test that TTL_DELETE CDC events are generated for exactly the rows that expire when only part
+   * of a large table expires during a major compaction. The test inserts 15,000 rows and later
+   * updates 8,250 of them. The major compaction runs when the rows that were not updated are past
+   * TTL + max lookback and the updated rows are still within TTL, so 6,750 rows expire. That is
+   * more than the default CDC TTL mutation batch size, so the CDC index writes span multiple
+   * batches, and the last batch is partial. The test verifies that every expired row, and no other
+   * row, gets exactly one TTL_DELETE event with the expected pre-image.
+   */
+  @Test
+  public void testCDCTTLDeleteEventsForPartiallyExpiredRows() throws Exception {
+    final int maxLookbackAge =
+      tableLevelMaxLookback != null ? tableLevelMaxLookback : MAX_LOOKBACK_AGE;
+    final int numRows = 15000;
+    final int commitBatchSize = 1000;
+
+    // Rows with (i % 20) < 9 are never updated and expire. The other rows are updated and stay.
+    // This interleaves expired and live rows across the whole key range.
+    List<String> allRowIds = new ArrayList<>();
+    List<String> updatedRowIds = new ArrayList<>();
+    Set<String> expiringRowIds = new HashSet<>();
+    for (int i = 0; i < numRows; i++) {
+      String rowId = String.format("row%05d", i);
+      allRowIds.add(rowId);
+      if (i % 20 < 9) {
+        expiringRowIds.add(rowId);
+      } else {
+        updatedRowIds.add(rowId);
+      }
+    }
+    final int numExpiredRows = expiringRowIds.size();
+    assertTrue("Expired rows should span multiple CDC TTL mutation batches",
+      numExpiredRows > QueryServicesOptions.DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String tableName = generateUniqueName();
+      String cdcName = generateUniqueName();
+      ObjectMapper mapper = new ObjectMapper();
+
+      createTable(tableName);
+      conn.createStatement().execute("ALTER TABLE " + tableName
+        + " SET \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+      conn.createStatement()
+        .execute("CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (PRE, POST)");
+      conn.commit();
+      String cdcFullName = SchemaUtil.getTableName(null, cdcName);
+
+      long startTime = System.currentTimeMillis() + 1000;
+      startTime = (startTime / 1000) * 1000;
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+      injectEdge.setValue(startTime);
+
+      upsertRows(conn, tableName, allRowIds, 0, commitBatchSize);
+      long insertTime = injectEdge.currentTime();
+
+      // Update some rows halfway between the insert and the compaction. The update happens before
+      // the inserted values expire, and at compaction time the updated rows are still within TTL.
+      long expiryDelayMs = (ttl + maxLookbackAge + 1) * 1000L;
+      injectEdge.incrementValue(expiryDelayMs / 2);
+      upsertRows(conn, tableName, updatedRowIds, 1, commitBatchSize);
+
+      // Advance time past TTL + max lookback for rows that were only inserted
+      injectEdge.setValue(insertTime + expiryDelayMs);
+
+      EnvironmentEdgeManager.reset();
+      flush(TableName.valueOf(tableName));
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+
+      Timestamp ts = new Timestamp(injectEdge.currentTime());
+      majorCompact(TableName.valueOf(tableName));
+
+      String dataQuery = "SELECT COUNT(*) FROM " + tableName;
+      try (ResultSet rs = conn.createStatement().executeQuery(dataQuery)) {
+        assertTrue("Should have count result", rs.next());
+        assertEquals("Only the updated rows should remain in the data table", updatedRowIds.size(),
+          rs.getInt(1));
+      }
+      // Queries also hide expired rows, so the count above would pass even if the compaction did
+      // not purge them. A raw scan skips that masking and shows what is actually on disk.
+      assertEquals("Major compaction should physically remove the expired rows",
+        updatedRowIds.size(), TestUtil.getRawRowCount(conn, TableName.valueOf(tableName)));
+
+      // TTL_DELETE events are written with the compaction timestamp, so this query skips the
+      // UPSERT events from the insert and update phases
+      String ttlDeleteQuery = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName
+        + " WHERE PHOENIX_ROW_TIMESTAMP() >= ?";
+      Map<String, Map<String, Object>> ttlDeletePreImages = new HashMap<>();
+      int ttlDeleteEventCount = 0;
+      try (PreparedStatement pst = conn.prepareStatement(ttlDeleteQuery)) {
+        pst.setTimestamp(1, ts);
+        try (ResultSet rs = pst.executeQuery()) {
+          while (rs.next()) {
+            ttlDeleteEventCount++;
+            Map<String, Object> cdcEvent = mapper.readValue(rs.getString(3), HashMap.class);
+            assertEquals("Should be ttl_delete event", CDC_TTL_DELETE_EVENT_TYPE,
+              cdcEvent.get(CDC_EVENT_TYPE));
+            ttlDeletePreImages.put(rs.getString(2),
+              (Map<String, Object>) cdcEvent.get(CDC_PRE_IMAGE));
+          }
+        }
+      }
+
+      Set<String> missingRowIds = new HashSet<>(expiringRowIds);
+      missingRowIds.removeAll(ttlDeletePreImages.keySet());
+      assertTrue(
+        "Expired rows without a TTL_DELETE event (" + missingRowIds.size() + "): " + missingRowIds,
+        missingRowIds.isEmpty());
+      Set<String> unexpectedRowIds = new HashSet<>(ttlDeletePreImages.keySet());
+      unexpectedRowIds.removeAll(expiringRowIds);
+      assertTrue("Rows that did not expire got a TTL_DELETE event (" + unexpectedRowIds.size()
+        + "): " + unexpectedRowIds, unexpectedRowIds.isEmpty());
+      assertEquals("Should have exactly one TTL_DELETE event per expired row", numExpiredRows,
+        ttlDeleteEventCount);
+
+      for (String rowId : expiringRowIds) {
+        assertEquals("Pre-image in TTL_DELETE should match the inserted values for row " + rowId,
+          expectedRowImage(rowId, 0), ttlDeletePreImages.get(rowId));
+      }
+    }
+  }
+
+  private void upsertRows(Connection conn, String tableName, List<String> rowIds, int version,
+    int commitBatchSize) throws SQLException {
+    String upsertSql = "UPSERT INTO " + tableName
+      + " (id, val1, val2, val3, val4, val5, val6, val7) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+      int uncommitted = 0;
+      for (String rowId : rowIds) {
+        stmt.setString(1, rowId);
+        for (int i = 1; i <= MAX_COLUMN_INDEX; i++) {
+          stmt.setString(i + 1, rowValue(rowId, i, version));
+        }
+        stmt.executeUpdate();
+        if (++uncommitted == commitBatchSize) {
+          conn.commit();
+          uncommitted = 0;
+        }
+      }
+      conn.commit();
+    }
+  }
+
+  private static String rowValue(String rowId, int columnIndex, int version) {
+    return "v" + columnIndex + "_" + rowId + "_" + version;
+  }
+
+  private Map<String, Object> expectedRowImage(String rowId, int version) {
+    Map<String, Object> image = new HashMap<>();
+    for (int i = 1; i <= MAX_COLUMN_INDEX; i++) {
+      image.put(cdcColumnName(i), rowValue(rowId, i, version));
+    }
+    return image;
+  }
+
+  /**
+   * Column name as it appears in CDC images for tables created by {@link #createTable(String)}.
+   * Columns outside the default column family are prefixed with their family name.
+   */
+  private String cdcColumnName(int columnIndex) {
+    String name = "VAL" + columnIndex;
+    if (!multiCF || columnIndex == 1) {
+      return name;
+    }
+    return (columnIndex == 5 || columnIndex == 7 ? "B." : "A.") + name;
   }
 
   private void deleteRow(Connection conn, String tableName, String id) throws SQLException {
