@@ -26,13 +26,29 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class InListExpressionTest {
+
+  /** A copy of an IN list for new children keeps the values of the list. */
+  @Test
+  public void testCloneKeepsValues() throws Exception {
+    InListExpression in =
+      new InListExpression(Lists.newArrayList(LiteralExpression.newConstant("b", PVarchar.INSTANCE),
+        LiteralExpression.newConstant("a", PVarchar.INSTANCE),
+        LiteralExpression.newConstant("b", PVarchar.INSTANCE)), false);
+    InListExpression copy = in.clone(in.getChildren());
+    assertEquals(in, copy);
+    ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+    assertTrue(copy.evaluate(null, ptr));
+    assertEquals(Boolean.TRUE, PBoolean.INSTANCE.toObject(ptr));
+  }
 
   @Test
   public void testHashCode() throws Exception {
