@@ -65,6 +65,18 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixInputFormat.class);
 
   /**
+   * Opt-in flag (disabled by default) to coalesce region-boundary splits so all regions on one
+   * RegionServer become a single {@link PhoenixInputSplit}, reducing mapper fan-out and hot
+   * spotting on large (e.g. salted) tables. Set on the job's driver-side Configuration; read here
+   * in {@link #getSplits}. Governs the base {@link #getSplits} path only —
+   * {@code PhoenixSyncTableTool} uses its own key ({@code PHOENIX_SYNC_TABLE_SPLIT_COALESCING});
+   * both delegate to {@link RegionServerSplitCoalescer}.
+   */
+  public static final String SPLIT_COALESCING_ENABLED =
+    "phoenix.mapreduce.split.coalescing.enabled";
+  public static final boolean DEFAULT_SPLIT_COALESCING_ENABLED = false;
+
+  /**
    * instantiated by framework
    */
   public PhoenixInputFormat() {
@@ -82,6 +94,34 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
+    boolean coalescingEnabled = context.getConfiguration().getBoolean(SPLIT_COALESCING_ENABLED,
+      DEFAULT_SPLIT_COALESCING_ENABLED);
+    if (coalescingEnabled) {
+      // Coalescing merges all of a RegionServer's splits into a single mapper, so stats-based
+      // splitting (which fragments each region into many sub-scan splits to gain parallelism) would
+      // just be undone here, wasting the guidepost work. Force region-granular splits before
+      // coalescing, mirroring PhoenixSyncTableTool.
+      if (PhoenixConfigurationUtil.getSplitByStats(context.getConfiguration())) {
+        LOGGER.info(
+          "Split coalescing is enabled ({}); disabling stats-based splitting ({}) so "
+            + "region-granular splits are coalesced per RegionServer",
+          SPLIT_COALESCING_ENABLED, PhoenixConfigurationUtil.MAPREDUCE_SPLIT_BY_STATS);
+      }
+      PhoenixConfigurationUtil.setSplitByStats(context.getConfiguration(), false);
+    }
+    List<InputSplit> baseSplits = getBaseSplits(context);
+    return coalescingEnabled
+      ? RegionServerSplitCoalescer.coalesceWithGuard(baseSplits)
+      : baseSplits;
+  }
+
+  /**
+   * Generates the raw region-boundary splits (one {@link PhoenixInputSplit} per region, or per scan
+   * when splitting by stats) without any coalescing. Exposed as a seam so subclasses that need to
+   * post-process the region-granular splits (e.g. filter already-processed regions) can do so
+   * before opting into coalescing themselves.
+   */
+  protected List<InputSplit> getBaseSplits(JobContext context) throws IOException {
     final Configuration configuration = context.getConfiguration();
     final QueryPlan queryPlan = getQueryPlan(context, configuration);
     return generateSplits(queryPlan, configuration);
@@ -131,6 +171,12 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
           regionLocator.getRegionLocation(scans.get(0).getStartRow(), false);
 
         String regionLocation = location.getHostname();
+        // Full RegionServer identity (host:port). Unlike the bare hostname above (which the MR
+        // framework uses for data locality), this distinguishes multiple RegionServer processes on
+        // the same host, so split coalescing can produce one split per RegionServer.
+        String regionServerName = location.getServerName() == null
+          ? null
+          : location.getServerName().getAddress().toString();
 
         // Get the region size
         long regionSize = sizeCalculator.getRegionSize(location.getRegion().getRegionName());
@@ -148,8 +194,8 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             }
 
             // The size is bogus, but it's not a problem
-            psplits.add(
-              new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
+            psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize,
+              regionLocation, regionServerName));
           }
         } else {
           if (LOGGER.isDebugEnabled()) {
@@ -168,7 +214,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             }
           }
 
-          psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+          psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation, regionServerName));
         }
       }
 
