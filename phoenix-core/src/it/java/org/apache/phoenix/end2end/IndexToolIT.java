@@ -888,8 +888,13 @@ public class IndexToolIT extends BaseTest {
         0, IndexTool.IndexVerifyType.ONLY, "-fi");
 
       CounterGroup mrJobCounters = getMRJobCounters(indexTool);
-      // Extra index rows should be detected
-      if (mutable) {
+      boolean serverSideImmutableIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      // Extra index rows should be detected. Immutable indexes maintained server-side adopt the
+      // same two-phase verified write protocol as mutable indexes, so the directly-written extra
+      // rows are counted as UNVERIFIED rather than VERIFIED.
+      if (mutable || serverSideImmutableIndexes) {
         assertEquals(3, mrJobCounters
           .findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
       } else {
