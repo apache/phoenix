@@ -24,6 +24,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
@@ -916,6 +917,44 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
+    }
+  }
+
+  /**
+   * A row that gives NULL for the conditions on uncovered columns does not change the result of the
+   * next rows in the same region scan.
+   */
+  @Test
+  public void testUncoveredConditionsAfterNullRow() throws Exception {
+    // The test needs the NULL row and the other rows in the same region scan. Salting can put
+    // them in different regions, so the salted variants do not run.
+    assumeFalse(salted);
+    String dataTableName = generateUniqueName();
+    String indexTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl());
+      Statement stmt = conn.createStatement()) {
+      stmt.execute("create table " + dataTableName
+        + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10),"
+        + " val3 varchar(10))");
+      // The first row in index order has a NULL val2. The other rows match all conditions.
+      stmt.execute("upsert into " + dataTableName + " values ('a', 'x', null, 'z')");
+      for (char id = 'b'; id <= 'h'; id++) {
+        stmt.execute("upsert into " + dataTableName + " values ('" + id + "', 'x', 'y', 'z')");
+      }
+      conn.commit();
+      stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : "") + "INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)");
+      String sql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ id from "
+        + dataTableName + " WHERE val1 = 'x' AND val2 = 'y' AND val3 = 'z'";
+      assertTrue(TestUtil.getExplainPlan(conn, sql).contains(indexTableName));
+      int rows = 0;
+      try (ResultSet rs = stmt.executeQuery(sql)) {
+        while (rs.next()) {
+          assertFalse("a".equals(rs.getString(1)));
+          rows++;
+        }
+      }
+      assertEquals(7, rows);
     }
   }
 
