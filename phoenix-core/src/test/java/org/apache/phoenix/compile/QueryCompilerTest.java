@@ -26,6 +26,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -78,8 +79,10 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -8025,6 +8028,44 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         scan.getStartRow());
       assertArrayEquals(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L), c6, SEP,
         PInteger.INSTANCE.toBytes(10)), scan.getStopRow());
+    }
+  }
+
+  /**
+   * A copy of a row projector keeps an ALL comparison. A projection with a function that gives a
+   * new value for each evaluation needs a copy for each thread.
+   */
+  @Test
+  public void testProjectorCopyKeepsAllComparison() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE T_ALL_COPY (ID VARCHAR NOT NULL PRIMARY KEY, V INTEGER)");
+      // The left operand is always 2. ALL is not true because 2 < 1 is false. ANY is true.
+      QueryPlan plan = getQueryPlan(
+        "SELECT FLOOR(RAND() * 0) + 2 < ALL(ARRAY[1, 5]) FROM T_ALL_COPY", Collections.emptyList());
+      RowProjector copy = plan.getProjector().cloneIfNecessary();
+      assertNotSame(plan.getProjector(), copy);
+      Expression expression = copy.getColumnProjector(0).getExpression();
+      assertEquals(ArrayAllComparisonExpression.class, expression.getClass());
+      assertFalse(expression.evaluate(null, new ImmutableBytesPtr()));
+    }
+  }
+
+  /**
+   * An ALL comparison stays an ALL comparison when the server parses an array element of its
+   * operand. The compiler rebuilds the projection to read the element from the server result.
+   */
+  @Test
+  public void testServerArrayProjectionKeepsAllComparison() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE T_ALL_ARR (P INTEGER PRIMARY KEY, ARR1 INTEGER ARRAY, ARR2 INTEGER ARRAY)");
+      QueryPlan plan =
+        getQueryPlan("SELECT ARR1[1] = ALL(ARR2) FROM T_ALL_ARR", Collections.emptyList());
+      assertNotNull(plan.getContext().getScan()
+        .getAttribute(BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX));
+      assertEquals(ArrayAllComparisonExpression.class,
+        plan.getProjector().getColumnProjector(0).getExpression().getClass());
     }
   }
 
