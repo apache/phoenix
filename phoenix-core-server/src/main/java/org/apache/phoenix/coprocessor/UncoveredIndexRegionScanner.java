@@ -85,7 +85,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     READY
   }
 
-  protected State state = State.INITIAL;
+  // Parallel data scan tasks can set the interrupted state, so this field is volatile.
+  protected volatile State state = State.INITIAL;
   protected final byte[][] viewConstants;
   protected final RegionCoprocessorEnvironment env;
   protected long pageSizeInRows;
