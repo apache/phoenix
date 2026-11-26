@@ -68,7 +68,8 @@ public class SkipSystemTablesExistenceCheckIT {
     new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
       "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK",
       "SYSTEM.TRANSFORM", "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.IDX_CDC_TRACKER",
-      "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
+      "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL", "SYSTEM.PROTO_DESCRIPTORS",
+      "SYSTEM.PROTO_DESC_LINK"));
 
   private static class PhoenixSystemTablesCreationTestDriver extends PhoenixTestDriver {
     private static ConnectionQueryServices cqs;

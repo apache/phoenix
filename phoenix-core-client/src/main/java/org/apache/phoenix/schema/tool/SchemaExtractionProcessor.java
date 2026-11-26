@@ -679,6 +679,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
       }
     } else {
       buf.append(type);
+      if (column.getProtoMessageName() != null) {
+        buf.append('<').append(column.getProtoMessageName()).append('>');
+      }
       appendMaxLengthAndScale(buf, maxLength, scale);
     }
 

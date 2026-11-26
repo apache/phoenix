@@ -728,6 +728,16 @@ public class MetaDataUtil {
       QueryConstants.SEPARATOR_BYTE_ARRAY, viewName.getBytes());
   }
 
+  public static byte[] getProtoDescLinkKey(byte[] protobufName, byte[] tenantId, byte[] schemaName,
+    byte[] tableName, byte[] columnFamily, byte[] columnName) {
+    return ByteUtil.concat(protobufName, QueryConstants.SEPARATOR_BYTE_ARRAY,
+      tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY,
+      schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName,
+      QueryConstants.SEPARATOR_BYTE_ARRAY, tableName, QueryConstants.SEPARATOR_BYTE_ARRAY,
+      columnFamily == null ? ByteUtil.EMPTY_BYTE_ARRAY : columnFamily,
+      QueryConstants.SEPARATOR_BYTE_ARRAY, columnName);
+  }
+
   public static Cell getCell(List<Cell> cells, byte[] cq) {
     for (Cell cell : cells) {
       if (

@@ -380,7 +380,7 @@ public class Transform extends TransformClient {
           column.getPosition(), column.getSortOrder(), column.getArraySize(),
           column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(),
           column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
-          EnvironmentEdgeManager.currentTimeMillis());
+          EnvironmentEdgeManager.currentTimeMillis(), false, column.getProtoMessageName());
         addColumnMutation(connection,
           pOldTable.getSchemaName() == null ? null : pOldTable.getSchemaName().getString(),
           pOldTable.getTableName().getString(), newCol,
@@ -437,12 +437,12 @@ public class Transform extends TransformClient {
           continue;
         }
 
-        PColumn newCol =
-          new PColumnImpl(column.getName(), PNameFactory.newName(familyName), column.getDataType(),
-            column.getMaxLength(), column.getScale(), column.isNullable(), column.getPosition(),
-            column.getSortOrder(), column.getArraySize(), column.getViewConstant(),
-            column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(),
-            column.isDynamic(), colQualifierBytes, EnvironmentEdgeManager.currentTimeMillis());
+        PColumn newCol = new PColumnImpl(column.getName(), PNameFactory.newName(familyName),
+          column.getDataType(), column.getMaxLength(), column.getScale(), column.isNullable(),
+          column.getPosition(), column.getSortOrder(), column.getArraySize(),
+          column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(),
+          column.isRowTimestamp(), column.isDynamic(), colQualifierBytes,
+          EnvironmentEdgeManager.currentTimeMillis(), false, column.getProtoMessageName());
         newColumns.add(newCol);
         if (!columnMap.containsKey(newCol.getName().getString())) {
           columnMap.put(newCol.getName().getString(), newCol);

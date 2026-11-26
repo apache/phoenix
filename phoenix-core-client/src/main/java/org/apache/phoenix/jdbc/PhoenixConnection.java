@@ -88,6 +88,9 @@ import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistry;
+import org.apache.phoenix.protobuf.descriptor.ProtoDescriptorRegistryHolder;
+import org.apache.phoenix.protobuf.descriptor.SystemProtoDescriptorsJdbcLoader;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
@@ -152,6 +155,7 @@ public class PhoenixConnection
   private String schema;
   private final ConnectionQueryServices services;
   private final Properties info;
+  private volatile ProtoDescriptorRegistry protoDescriptorRegistry;
   private final Map<PDataType<?>, Format> formatters = new HashMap<>();
   private final int mutateBatchSize;
   private final long mutateBatchSizeBytes;
@@ -185,6 +189,9 @@ public class PhoenixConnection
   private String sourceOfOperation;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
+  private static final String[] PROTO_DESCRIPTOR_LOADER_EXCLUDED_PROPS =
+    { PhoenixRuntime.TENANT_ID_ATTRIB, PhoenixRuntime.CURRENT_SCN_ATTRIB,
+      PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, PhoenixRuntime.CONSISTENCY_ATTRIB };
   private final int slowestScanMetricsCount;
   private final boolean isScanMetricsByRegionEnabled;
 
@@ -753,6 +760,45 @@ public class PhoenixConnection
 
   public ConnectionQueryServices getQueryServices() {
     return services;
+  }
+
+  /**
+   * Returns a view of the JVM-wide descriptor cache that loads misses through this connection's
+   * query services, without its tenant, SCN or consistency, since the latest descriptor decodes
+   * data written under any earlier one.
+   * <p>
+   * The cache is keyed by descriptor name only, not by cluster. This keeps it simple for HA, where
+   * replication peers are expected to hold the same descriptors. If clusters have different schemas
+   * for the same name, a JVM can read with a stale one after an HA failover, until the cache TTL
+   * expires.
+   */
+  public ProtoDescriptorRegistry getProtoDescriptorRegistry() {
+    ProtoDescriptorRegistry registry = protoDescriptorRegistry;
+    if (registry != null) {
+      return registry;
+    }
+    String loaderUrl = url;
+    Properties loaderProps = PropertiesUtil.deepCopy(info);
+    for (String prop : PROTO_DESCRIPTOR_LOADER_EXCLUDED_PROPS) {
+      loaderUrl = JDBCUtil.removeProperty(loaderUrl, prop);
+      loaderProps.remove(prop);
+    }
+    ConnectionQueryServices cqs = services;
+    String jdbcUrl = loaderUrl;
+    ProtoDescriptorRegistry.Loader loader = new SystemProtoDescriptorsJdbcLoader(() -> {
+      try {
+        return cqs.connect(jdbcUrl, loaderProps);
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    registry = ProtoDescriptorRegistryHolder
+      .getOrInstall(() -> new ProtoDescriptorRegistry(cqs.getConfiguration(), name -> {
+        throw new IOException(
+          ProtoDescriptorRegistryHolder.ENDPOINT_NOT_REGISTERED + ", cannot load " + name);
+      })).withLoader(loader);
+    protoDescriptorRegistry = registry;
+    return registry;
   }
 
   @Override

@@ -159,6 +159,11 @@
       <artifactId>json-path</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-protobuf</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- https://mvnrepository.com/artifact/org.mongodb/bson -->
     <dependency>
@@ -527,9 +532,36 @@
             <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
             <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
             <exclude>src/it/resources/*.json</exclude>
+            <!--
+              AcmeWidgets fictional .proto fixtures for the PROTOBUF feature ITs.
+              Each file carries an explanatory comment header rather than the
+              boilerplate Apache 2.0
+              header; rat reads the comment headers and would flag them as
+              "missing license", so exclude the fixture tree explicitly. The
+              fixtures are test-only resources that never ship in any artifact.
+            -->
+            <exclude>src/test/resources/protobuf/**/*.proto</exclude>
+            <!--
+              The acmewidgets_v1.desc binary is the protoc-compiled FileDescriptor-
+              Set output of the .proto sources above (checked in to avoid build-time
+              protoc dependency — see the README in that directory). Binary; no
+              license header possible.
+            -->
+            <exclude>src/test/resources/protobuf/**/*.desc</exclude>
           </excludes>
         </configuration>
       </plugin>
+      <!--
+        Note on the AcmeWidgets .proto fixtures: the compiled FileDescriptorSet
+        (acmewidgets_v1.desc) is pre-compiled and checked in alongside the .proto
+        sources in src/test/resources/protobuf/acmewidgets/. See that directory's
+        README for the regeneration recipe. We avoid wiring a Maven plugin to
+        run protoc at build time because: (a) it would add a platform-specific
+        binary download to every CI run, (b) the protoc-jar-maven-plugin's
+        descriptor-output mode iterates files one-at-a-time (wrong shape for
+        our single-bundle use case), and (c) regeneration is rare — only when
+        a fixture .proto is modified.
+      -->
     </plugins>
   </build>
 </project>

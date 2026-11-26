@@ -136,6 +136,7 @@ import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.AlterProtobufDescriptorStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ChangePermsStatement;
@@ -145,6 +146,8 @@ import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.CreateProtobufBundleStatement;
+import org.apache.phoenix.parse.CreateProtobufDescriptorStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
@@ -157,6 +160,7 @@ import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
+import org.apache.phoenix.parse.DropProtobufDescriptorStatement;
 import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
@@ -1793,6 +1797,92 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
   }
 
+  private interface ProtobufDdlAction {
+    MutationState run(MetaDataClient client) throws SQLException;
+  }
+
+  private static MutationPlan protobufDdlPlan(PhoenixStatement stmt, Operation operation,
+    String explain, ProtobufDdlAction action) {
+    return new BaseMutationPlan(new StatementContext(stmt), operation) {
+      @Override
+      public ExplainPlan getExplainPlan() {
+        return new ExplainPlan(Collections.singletonList(explain));
+      }
+
+      @Override
+      public MutationState execute() throws SQLException {
+        return action.run(new MetaDataClient(getContext().getConnection()));
+      }
+    };
+  }
+
+  private static class ExecutableCreateProtobufDescriptorStatement
+    extends CreateProtobufDescriptorStatement implements CompilableStatement {
+
+    ExecutableCreateProtobufDescriptorStatement(String protoMessageName, boolean ifNotExists,
+      String sourceUrl) {
+      super(protoMessageName, ifNotExists, sourceUrl);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      return protobufDdlPlan(stmt, getOperation(), "CREATE PROTOBUF DESCRIPTOR",
+        client -> client.createProtobufDescriptor(this));
+    }
+  }
+
+  private static class ExecutableAlterProtobufDescriptorStatement
+    extends AlterProtobufDescriptorStatement implements CompilableStatement {
+
+    ExecutableAlterProtobufDescriptorStatement(String protoMessageName, boolean ifExists,
+      String sourceUrl) {
+      super(protoMessageName, ifExists, sourceUrl);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      return protobufDdlPlan(stmt, getOperation(), "ALTER PROTOBUF DESCRIPTOR",
+        client -> client.alterProtobufDescriptor(this));
+    }
+  }
+
+  private static class ExecutableDropProtobufDescriptorStatement
+    extends DropProtobufDescriptorStatement implements CompilableStatement {
+
+    ExecutableDropProtobufDescriptorStatement(String protoMessageName, boolean ifExists) {
+      super(protoMessageName, ifExists);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      return protobufDdlPlan(stmt, getOperation(), "DROP PROTOBUF DESCRIPTOR",
+        client -> client.dropProtobufDescriptor(this));
+    }
+  }
+
+  private static class ExecutableCreateProtobufBundleStatement extends CreateProtobufBundleStatement
+    implements CompilableStatement {
+
+    ExecutableCreateProtobufBundleStatement(List<String> protoMessageNames, boolean ifNotExists,
+      String sourceUrl) {
+      super(protoMessageNames, ifNotExists, sourceUrl);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      return protobufDdlPlan(stmt, getOperation(), "CREATE PROTOBUF BUNDLE",
+        client -> client.createProtobufBundle(this));
+    }
+  }
+
   private static class ExecutableDropSchemaStatement extends DropSchemaStatement
     implements CompilableStatement {
 
@@ -2372,6 +2462,31 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists,
       boolean cascade) {
       return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);
+    }
+
+    @Override
+    public CreateProtobufDescriptorStatement createProtobufDescriptor(String protoMessageName,
+      boolean ifNotExists, String sourceUrl) {
+      return new ExecutableCreateProtobufDescriptorStatement(protoMessageName, ifNotExists,
+        sourceUrl);
+    }
+
+    @Override
+    public AlterProtobufDescriptorStatement alterProtobufDescriptor(String protoMessageName,
+      boolean ifExists, String sourceUrl) {
+      return new ExecutableAlterProtobufDescriptorStatement(protoMessageName, ifExists, sourceUrl);
+    }
+
+    @Override
+    public DropProtobufDescriptorStatement dropProtobufDescriptor(String protoMessageName,
+      boolean ifExists) {
+      return new ExecutableDropProtobufDescriptorStatement(protoMessageName, ifExists);
+    }
+
+    @Override
+    public CreateProtobufBundleStatement createProtobufBundle(List<String> protoMessageNames,
+      boolean ifNotExists, String sourceUrl) {
+      return new ExecutableCreateProtobufBundleStatement(protoMessageNames, ifNotExists, sourceUrl);
     }
 
     @Override

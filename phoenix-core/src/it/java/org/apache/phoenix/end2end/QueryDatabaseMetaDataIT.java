@@ -201,6 +201,16 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
       assertEquals(SYSTEM_MUTEX_TABLE_NAME, rs.getString("TABLE_NAME"));
       assertTrue(rs.next());
       assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+      assertEquals(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_TABLE,
+        rs.getString("TABLE_NAME"));
+      assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+      assertTrue(rs.next());
+      assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+      assertEquals(PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_TABLE,
+        rs.getString("TABLE_NAME"));
+      assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+      assertTrue(rs.next());
+      assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
       assertEquals(TYPE_SEQUENCE, rs.getString("TABLE_NAME"));
       assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
       assertTrue(rs.next());
@@ -430,9 +440,11 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         tables.add(rs.getString("TABLE_NAME"));
         assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
       }
-      assertEquals(12, tables.size());
+      assertEquals(14, tables.size());
       assertTrue(tables.contains("CATALOG"));
       assertTrue(tables.contains("FUNCTION"));
+      assertTrue(tables.contains("PROTO_DESCRIPTORS"));
+      assertTrue(tables.contains("PROTO_DESC_LINK"));
 
       tables.clear();
       // Add a filter on the table name.

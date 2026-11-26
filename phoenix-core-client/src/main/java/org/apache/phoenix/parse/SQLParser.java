@@ -95,6 +95,14 @@ public class SQLParser {
   }
 
   /**
+   * Test-only: depth of the underlying parser's ParseContext stack. Must be zero between
+   * statements; a non-zero value means a grammar rule pushed a frame it never popped.
+   */
+  int getContextStackDepth() {
+    return parser.getContextStackDepth();
+  }
+
+  /**
    * Parses the input as a SQL select or upsert statement.
    */
   public BindableStatement parseStatement() throws SQLException {

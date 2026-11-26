@@ -503,6 +503,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String SYSTEM_IDX_CDC_TRACKER_TABLE = "IDX_CDC_TRACKER";
   public static final String SYSTEM_IDX_CDC_TRACKER_NAME =
     SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_IDX_CDC_TRACKER_TABLE);
+
+  public static final String SYSTEM_PROTO_DESCRIPTORS_TABLE = "PROTO_DESCRIPTORS";
+  public static final String SYSTEM_PROTO_DESCRIPTORS_NAME =
+    SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_PROTO_DESCRIPTORS_TABLE);
+  public static final byte[] SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES =
+    Bytes.toBytes(SYSTEM_PROTO_DESCRIPTORS_NAME);
+  public static final String PROTOBUF_NAME = "PROTOBUF_NAME";
+  public static final byte[] PROTOBUF_NAME_BYTES = Bytes.toBytes(PROTOBUF_NAME);
+  public static final String FILE_DESCRIPTOR_SET = "FILE_DESCRIPTOR_SET";
+  public static final byte[] FILE_DESCRIPTOR_SET_BYTES = Bytes.toBytes(FILE_DESCRIPTOR_SET);
+
+  public static final String SYSTEM_PROTO_DESC_LINK_TABLE = "PROTO_DESC_LINK";
+  public static final String SYSTEM_PROTO_DESC_LINK_NAME =
+    SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_PROTO_DESC_LINK_TABLE);
+  public static final byte[] SYSTEM_PROTO_DESC_LINK_NAME_BYTES =
+    Bytes.toBytes(SYSTEM_PROTO_DESC_LINK_NAME);
+  public static final String PROTOBUF_DESCRIPTOR_NAME = "PROTOBUF_DESCRIPTOR_NAME";
+  public static final byte[] PROTOBUF_DESCRIPTOR_NAME_BYTES =
+    Bytes.toBytes(PROTOBUF_DESCRIPTOR_NAME);
   public static final String LAST_TIMESTAMP = "LAST_TIMESTAMP";
   public static final String OWNER_PARTITION_ID = "OWNER_PARTITION_ID";
   public static final String TRACKER_STATUS = "STATUS";

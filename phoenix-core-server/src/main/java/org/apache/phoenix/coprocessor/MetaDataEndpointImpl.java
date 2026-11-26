@@ -62,6 +62,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_B
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PROTOBUF_DESCRIPTOR_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
@@ -280,6 +281,7 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -532,13 +534,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   // storing a value of LinkType.EXCLUDED_COLUMN)
   private static final KeyValue LINK_TYPE_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+  // Non-null only for PROTOBUF<...> column rows.
+  private static final KeyValue PROTOBUF_DESCRIPTOR_NAME_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PROTOBUF_DESCRIPTOR_NAME_BYTES);
 
   private static final List<Cell> COLUMN_KV_COLUMNS =
     Lists.newArrayList(DECIMAL_DIGITS_KV, COLUMN_SIZE_KV, NULLABLE_KV, DATA_TYPE_KV,
       ORDINAL_POSITION_KV, SORT_ORDER_KV, DATA_TABLE_NAME_KV, // included in both column and table
                                                               // row for metadata APIs
       ARRAY_SIZE_KV, VIEW_CONSTANT_KV, IS_VIEW_REFERENCED_KV, COLUMN_DEF_KV, IS_ROW_TIMESTAMP_KV,
-      COLUMN_QUALIFIER_KV, LINK_TYPE_KV);
+      COLUMN_QUALIFIER_KV, LINK_TYPE_KV, PROTOBUF_DESCRIPTOR_NAME_KV);
 
   static {
     COLUMN_KV_COLUMNS.sort(CellComparator.getInstance());
@@ -562,6 +567,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   // deleted (by storing a value of LinkType.EXCLUDED_COLUMN)
   private static final int EXCLUDED_COLUMN_LINK_TYPE_KV_INDEX =
     COLUMN_KV_COLUMNS.indexOf(LINK_TYPE_KV);
+  private static final int PROTOBUF_DESCRIPTOR_NAME_INDEX =
+    COLUMN_KV_COLUMNS.indexOf(PROTOBUF_DESCRIPTOR_NAME_KV);
 
   // index for link type key value that is used to store linking rows
   private static final int LINK_TYPE_INDEX = 0;
@@ -1039,9 +1046,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       ? Arrays.copyOfRange(columnQualifierKV.getValueArray(), columnQualifierKV.getValueOffset(),
         columnQualifierKV.getValueOffset() + columnQualifierKV.getValueLength())
       : (isPkColumn ? null : colName.getBytes());
+    Cell protoMessageNameKv = colKeyValues[PROTOBUF_DESCRIPTOR_NAME_INDEX];
+    String protoMessageName = protoMessageNameKv == null
+      ? null
+      : (String) PVarchar.INSTANCE.toObject(protoMessageNameKv.getValueArray(),
+        protoMessageNameKv.getValueOffset(), protoMessageNameKv.getValueLength());
     PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable,
       position - 1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr,
-      isRowTimestamp, false, columnQualifierBytes, timestamp);
+      isRowTimestamp, false, columnQualifierBytes, timestamp, false, protoMessageName);
     columns.add(column);
   }
 
@@ -2952,6 +2964,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // 1. ordinary table/index mutations (create table/index).
         // 2. When creating system indexes itself, no further index processing is required.
         boolean updateCatalogIndexes = !SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName));
+        MetaDataResponse linkResponse = writeProtoDescLinks(ProtoDescriptorLinkMutations
+          .buildPuts(localMutations, EnvironmentEdgeManager.currentTimeMillis()));
+        if (linkResponse != null) {
+          done.run(linkResponse);
+          return;
+        }
         mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
           Collections.<byte[]> emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
           updateCatalogIndexes);
@@ -3121,6 +3139,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     try {
       List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
       List<Mutation> childLinkMutations = Lists.newArrayList();
+      List<Mutation> protoDescLinkMutations = Lists.newArrayList();
       MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
       byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
       schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
@@ -3265,7 +3284,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
         result = doDropTable(lockKey, tenantIdBytes, schemaName, tableOrViewName, parentTableName,
           PTableType.fromSerializedValue(tableType), tableMetadata, childLinkMutations,
-          invalidateList, tableNamesToDelete, sharedTablesToDelete, request.getClientVersion());
+          protoDescLinkMutations, invalidateList, tableNamesToDelete, sharedTablesToDelete,
+          request.getClientVersion());
         if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
           done.run(MetaDataMutationResult.toProto(result));
           return;
@@ -3318,6 +3338,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           done.run(response);
           return;
         }
+
+        // Best effort: DROP DESCRIPTOR ignores links whose column is gone.
+        writeProtoDescLinks(protoDescLinkMutations);
 
         done.run(MetaDataMutationResult.toProto(result));
         dropTableStats = true;
@@ -3425,10 +3448,50 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     return null;
   }
 
+  private boolean hasMissingDescriptor(List<Mutation> links) throws IOException {
+    try (Table descriptors =
+      ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
+        PhoenixDatabaseMetaData.SYSTEM_PROTO_DESCRIPTORS_NAME_BYTES, env.getConfiguration()))) {
+      for (Mutation link : links) {
+        if (link instanceof Put) {
+          byte[] row = link.getRow();
+          int end = Bytes.indexOf(row, QueryConstants.SEPARATOR_BYTE);
+          if (!descriptors.exists(new Get(Arrays.copyOf(row, end)))) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  private MetaDataResponse writeProtoDescLinks(List<Mutation> mutations) throws IOException {
+    if (mutations.isEmpty()) {
+      return null;
+    }
+    return User.runAsLoginUser(() -> {
+      RpcCall rpcContext = RpcUtil.getRpcContext();
+      RpcUtil.setRpcContext(null);
+      try {
+        if (hasMissingDescriptor(mutations)) {
+          return MetaDataResponse.newBuilder()
+            .setReturnCode(MetaDataProtos.MutationCode.PROTO_DESCRIPTOR_NOT_FOUND)
+            .setMutationTime(EnvironmentEdgeManager.currentTimeMillis()).build();
+        }
+        return processRemoteRegionMutations(
+          PhoenixDatabaseMetaData.SYSTEM_PROTO_DESC_LINK_NAME_BYTES, mutations,
+          MetaDataProtos.MutationCode.UNABLE_TO_WRITE_PROTO_DESC_LINK);
+      } finally {
+        RpcUtil.setRpcContext(rpcContext);
+      }
+    });
+  }
+
   private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName,
     byte[] tableName, byte[] parentTableName, PTableType tableType, List<Mutation> catalogMutations,
-    List<Mutation> childLinkMutations, List<ImmutableBytesPtr> invalidateList,
-    List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete, int clientVersion)
+    List<Mutation> childLinkMutations, List<Mutation> protoDescLinkMutations,
+    List<ImmutableBytesPtr> invalidateList, List<byte[]> tableNamesToDelete,
+    List<SharedTableState> sharedTablesToDelete, int clientVersion)
     throws IOException, SQLException {
 
     Region region = env.getRegion();
@@ -3491,6 +3554,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         tableNamesToDelete.add(table.getPhysicalName().getBytes());
       }
       invalidateList.add(cacheKey);
+      protoDescLinkMutations
+        .addAll(ProtoDescriptorLinkMutations.buildDeletesForTable(table, clientTimeStamp));
       byte[][] rowKeyMetaData = new byte[5][];
       do {
         Cell kv = results.get(LINK_TYPE_INDEX);
@@ -3558,8 +3623,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       Delete delete = new Delete(indexKey, clientTimeStamp);
       catalogMutations.add(delete);
       MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName,
-        tableName, PTableType.INDEX, catalogMutations, childLinkMutations, invalidateList,
-        tableNamesToDelete, sharedTablesToDelete, clientVersion);
+        tableName, PTableType.INDEX, catalogMutations, childLinkMutations, protoDescLinkMutations,
+        invalidateList, tableNamesToDelete, sharedTablesToDelete, clientVersion);
       if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
         return result;
       }
@@ -3830,6 +3895,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // dropped
         List<Pair<PTable, PColumn>> tableAndDroppedColumnPairs =
           mutator.getTableAndDroppedColumnPairs();
+        List<Pair<PTable, PColumn>> droppedPairsSnapshot =
+          Lists.newArrayList(tableAndDroppedColumnPairs);
+        List<Mutation> protoDescLinkDeletes = new ArrayList<>();
         Iterator<Pair<PTable, PColumn>> iterator = tableAndDroppedColumnPairs.iterator();
         while (iterator.hasNext()) {
           Pair<PTable, PColumn> pair = iterator.next();
@@ -3839,7 +3907,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             iterator.remove();
             result = dropIndexes(env, pair.getFirst(), invalidateList, locks, clientTimeStamp,
               tableMetadata, pair.getSecond(), tableNamesToDelete, sharedTablesToDelete,
-              clientVersion);
+              protoDescLinkDeletes, clientVersion);
             if (result != null && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
               return result;
             }
@@ -3914,9 +3982,31 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         boolean updateCatalogIndexes = !Bytes.toString(schemaName)
           .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
 
+        MetaDataResponse linkResponse = writeProtoDescLinks(ProtoDescriptorLinkMutations
+          .buildPuts(localMutations, EnvironmentEdgeManager.currentTimeMillis()));
+        if (linkResponse != null) {
+          return MetaDataMutationResult.constructFromProto(linkResponse);
+        }
         mutateRowsWithLocks(this.accessCheckEnabled, env, region, localMutations,
           Collections.<byte[]> emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
           updateCatalogIndexes);
+
+        for (Pair<PTable, PColumn> pair : droppedPairsSnapshot) {
+          ProtoDescriptorLinkMutations.addDelete(protoDescLinkDeletes, pair.getFirst(),
+            pair.getSecond(), clientTimeStamp);
+          // The client drops covering index columns in this same RPC.
+          String indexColumnName = IndexUtil.getIndexColumnName(pair.getSecond());
+          for (PTable index : pair.getFirst().getIndexes()) {
+            for (PColumn indexColumn : index.getColumns()) {
+              if (indexColumn.getName().getString().equals(indexColumnName)) {
+                ProtoDescriptorLinkMutations.addDelete(protoDescLinkDeletes, index, indexColumn,
+                  clientTimeStamp);
+              }
+            }
+          }
+        }
+        // Best effort: DROP DESCRIPTOR ignores links whose column is gone.
+        writeProtoDescLinks(protoDescLinkDeletes);
         // Invalidate from cache
         for (ImmutableBytesPtr invalidateKey : invalidateList) {
           metaDataCache.invalidate(invalidateKey);
@@ -4260,7 +4350,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private MetaDataMutationResult dropIndexes(RegionCoprocessorEnvironment env, PTable table,
     List<ImmutableBytesPtr> invalidateList, List<RowLock> locks, long clientTimeStamp,
     List<Mutation> tableMetaData, PColumn columnToDelete, List<byte[]> tableNamesToDelete,
-    List<SharedTableState> sharedTablesToDelete, int clientVersion) throws Throwable {
+    List<SharedTableState> sharedTablesToDelete, List<Mutation> protoDescLinkDeletes,
+    int clientVersion) throws Throwable {
     // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
     // index and then invalidate it
     // Covered columns are deleted from the index by the client
@@ -4308,10 +4399,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
         invalidateServerMetadataCache(requests);
         List<Mutation> childLinksMutations = Lists.newArrayList();
-        MetaDataMutationResult result = doDropTable(indexKey, tenantId,
-          index.getSchemaName().getBytes(), index.getTableName().getBytes(),
-          table.getName().getBytes(), index.getType(), tableMetaData, childLinksMutations,
-          invalidateList, tableNamesToDelete, sharedTablesToDelete, clientVersion);
+        MetaDataMutationResult result =
+          doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(),
+            index.getTableName().getBytes(), table.getName().getBytes(), index.getType(),
+            tableMetaData, childLinksMutations, protoDescLinkDeletes, invalidateList,
+            tableNamesToDelete, sharedTablesToDelete, clientVersion);
         if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
           return result;
         }

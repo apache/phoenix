@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.governance.v1.endpointtypes;
+
+option java_package = "com.example.acmewidgets.governance.v1.endpointtypes";
+option java_multiple_files = true;
+
+message CatalogQuery {
+  message NamedCatalogConnection {
+    string named_connection_name = 1;
+  }
+  message QueryOp {
+    string id = 1;
+    string display_name = 2;
+    string method = 3;
+    string path = 4;
+    NamedCatalogConnection default_connection = 5;
+  }
+  NamedCatalogConnection named_connection = 1;
+  repeated QueryOp ops = 2;
+  uint64 version = 3;
+}
+
+message BulkOrder {
+  message NamedCatalogConnectionRef {
+    string named_connection_name = 1;
+  }
+  message Key {
+    NamedCatalogConnectionRef named_connection = 1;
+  }
+  Key key = 1;
+  string authority = 2;
+  string path = 3;
+}
+
+message FlashSale {
+  message PromotionId {
+    string promotion_id = 1;
+  }
+  message Key {
+    PromotionId promotion_id = 1;
+    string remote_tenant_id = 2;
+  }
+  Key key = 1;
+}
+
+message PreSaleSignup {
+  string path = 1;
+}

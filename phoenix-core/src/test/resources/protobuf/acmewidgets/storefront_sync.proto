@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.storefront.v1;
+
+option java_package = "com.example.acmewidgets.storefront.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "widget_common.proto";
+
+message Storefront {
+  string tenant_key = 1;
+  string domain_id = 2;
+  string domain_url = 3;
+  string feature_namespace = 4;
+  string source_warehouse = 5;
+  google.protobuf.Timestamp deleted_time = 6;
+  google.protobuf.Timestamp updated_time = 7;
+}
+
+message StorefrontSyncResponse {
+  com.example.acmewidgets.common.v1.CatalogSyncHeader header = 1;
+  repeated Storefront storefronts = 2;
+}

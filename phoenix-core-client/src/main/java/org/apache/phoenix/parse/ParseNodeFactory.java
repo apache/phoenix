@@ -326,6 +326,18 @@ public class ParseNodeFactory {
       isPK, sortOrder, expressionStr, encodedQualifier, isRowTimestamp);
   }
 
+  /**
+   * Overload that carries the PROTOBUF message name (the text inside the angle brackets of
+   * {@code PROTOBUF<my.org.OrderV1>}). Pass {@code null} for non-PROTOBUF columns.
+   */
+  public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, String protoMessageName,
+    boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale,
+    boolean isPK, SortOrder sortOrder, String expressionStr, Integer encodedQualifier,
+    boolean isRowTimestamp) {
+    return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale,
+      isPK, sortOrder, expressionStr, encodedQualifier, isRowTimestamp, protoMessageName);
+  }
+
   public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray,
     Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
     SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
@@ -396,6 +408,47 @@ public class ParseNodeFactory {
 
   public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
     return new CreateSchemaStatement(schemaName, ifNotExists);
+  }
+
+  /**
+   * Parses {@code CREATE PROTOBUF DESCRIPTOR [IF NOT EXISTS] name FROM 'url'}. The URL points at a
+   * serialized {@code FileDescriptorSet} produced by
+   * {@code protoc --include_imports --descriptor_set_out=...}.
+   */
+  public CreateProtobufDescriptorStatement createProtobufDescriptor(String protoMessageName,
+    boolean ifNotExists, String sourceUrl) {
+    return new CreateProtobufDescriptorStatement(protoMessageName, ifNotExists, sourceUrl);
+  }
+
+  /**
+   * Parses {@code ALTER PROTOBUF DESCRIPTOR [IF EXISTS] name FROM 'url'}. With {@code IF EXISTS}
+   * the statement silently no-ops if the descriptor does not exist (matches the
+   * {@code ALTER INDEX (IF EXISTS)?} convention). {@code IF NOT EXISTS} is deliberately not
+   * supported.
+   */
+  public AlterProtobufDescriptorStatement alterProtobufDescriptor(String protoMessageName,
+    boolean ifExists, String sourceUrl) {
+    return new AlterProtobufDescriptorStatement(protoMessageName, ifExists, sourceUrl);
+  }
+
+  /**
+   * Parses {@code DROP PROTOBUF DESCRIPTOR [IF EXISTS] name}.
+   */
+  public DropProtobufDescriptorStatement dropProtobufDescriptor(String protoMessageName,
+    boolean ifExists) {
+    return new DropProtobufDescriptorStatement(protoMessageName, ifExists);
+  }
+
+  /**
+   * Parses {@code CREATE PROTOBUF BUNDLE [IF NOT EXISTS] (name1, name2, ...) FROM 'url'}. The URL
+   * points at a single {@code FileDescriptorSet} (typically produced by
+   * {@code protoc --include_imports --descriptor_set_out=...}) and the statement registers one
+   * Phoenix descriptor per name in the list, all sharing that source. Multi-message convenience
+   * over N individual {@code CREATE PROTOBUF DESCRIPTOR} statements.
+   */
+  public CreateProtobufBundleStatement createProtobufBundle(List<String> protoMessageNames,
+    boolean ifNotExists, String sourceUrl) {
+    return new CreateProtobufBundleStatement(protoMessageNames, ifNotExists, sourceUrl);
   }
 
   public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable,

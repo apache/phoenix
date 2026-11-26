@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package com.example.acmewidgets.common.v1;
+
+option java_package = "com.example.acmewidgets.common.v1";
+option java_multiple_files = true;
+
+message WarehouseEndpoint {
+  string warehouse_id = 1;
+  string region_code = 2;
+}
+
+message PartnerEndpoint {
+  string partner_id = 1;
+  string partner_name = 2;
+  string fulfillment_region = 3;
+}
+
+message CatalogSyncHeader {
+  string bookmark = 1;
+  bool more_available = 2;
+  oneof origin {
+    WarehouseEndpoint warehouse = 3;
+    PartnerEndpoint partner = 4;
+  }
+}

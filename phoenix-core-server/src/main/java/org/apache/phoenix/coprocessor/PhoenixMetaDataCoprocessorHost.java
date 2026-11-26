@@ -271,4 +271,31 @@ public class PhoenixMetaDataCoprocessorHost extends CoprocessorHost<PhoenixCopro
       }
     });
   }
+
+  void preCreateProtobufDescriptor(final List<String> protobufNames) throws IOException {
+    execOperation(new PhoenixObserverOperation() {
+      @Override
+      public void call(MetaDataEndpointObserver observer) throws IOException {
+        observer.preCreateProtobufDescriptor(this, protobufNames);
+      }
+    });
+  }
+
+  void preAlterProtobufDescriptor(final String protobufName) throws IOException {
+    execOperation(new PhoenixObserverOperation() {
+      @Override
+      public void call(MetaDataEndpointObserver observer) throws IOException {
+        observer.preAlterProtobufDescriptor(this, protobufName);
+      }
+    });
+  }
+
+  void preDropProtobufDescriptor(final String protobufName) throws IOException {
+    execOperation(new PhoenixObserverOperation() {
+      @Override
+      public void call(MetaDataEndpointObserver observer) throws IOException {
+        observer.preDropProtobufDescriptor(this, protobufName);
+      }
+    });
+  }
 }
