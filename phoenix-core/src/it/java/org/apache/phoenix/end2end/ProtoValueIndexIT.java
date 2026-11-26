@@ -520,56 +520,6 @@ public class ProtoValueIndexIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void uint64AsBigIntIndex() throws Exception {
-    try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
-      registerBundleIdempotent(conn);
-      String table = uniqueTableName();
-      String index = "IDX_" + table;
-      conn.createStatement()
-        .execute("CREATE TABLE " + table
-          + " (ID BIGINT NOT NULL PRIMARY KEY, C1 VARCHAR, PAYLOAD PROTOBUF<" + ENTITLEMENT + ">)"
-          + encodingClause());
-      conn.createStatement()
-        .execute(indexDdl(index, table, "PROTO_VALUE(PAYLOAD, 'version.version', 'BIGINT')"));
-
-      Map<String, Boolean> toggles = new LinkedHashMap<>();
-      toggles.put("allow_returns", true);
-      long[] versions = { 100L, 150L, 200L, 300L, 500L, 800L };
-      for (int i = 0; i < versions.length; i++) {
-        long id = i + 1L;
-        upsertRow(conn, table, id, "c1-ent-" + id,
-          AcmeWidgetsFixtures
-            .newEntitlement(AcmeWidgetsFixtures.entitlementDescriptor(descriptorGraph),
-              AcmeWidgetsFixtures.entitlementKeyDescriptor(descriptorGraph),
-              AcmeWidgetsFixtures.entitlementVersionDescriptor(descriptorGraph),
-              AcmeWidgetsFixtures.policyToggleDescriptor(descriptorGraph), "tenant-" + id,
-              "ent-name", "ent-id", versions[i], toggles)
-            .toByteArray());
-      }
-
-      assertIndexRowCount(conn, index, versions.length);
-
-      String rangeSql = "SELECT ID, C1 FROM " + table
-        + " WHERE PROTO_VALUE(PAYLOAD, 'version.version', 'BIGINT') > ?"
-        + " ORDER BY PROTO_VALUE(PAYLOAD, 'version.version', 'BIGINT') ASC";
-      try (PreparedStatement ps = conn.prepareStatement(rangeSql)) {
-        ps.setLong(1, 200L);
-        try (ResultSet rs = ps.executeQuery()) {
-          long[] expectedIds = { 4L, 5L, 6L };
-          String[] expectedC1 = { "c1-ent-4", "c1-ent-5", "c1-ent-6" };
-          for (int i = 0; i < expectedIds.length; i++) {
-            assertTrue("row " + i, rs.next());
-            assertEquals(expectedIds[i], rs.getLong(1));
-            assertEquals(expectedC1[i], rs.getString(2));
-          }
-          assertFalse(rs.next());
-        }
-        validateExplainPlan(ps, index, "RANGE SCAN");
-      }
-    }
-  }
-
-  @Test
   public void unsetScalarIsIndexedAsTypeZero() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
       registerBundleIdempotent(conn);

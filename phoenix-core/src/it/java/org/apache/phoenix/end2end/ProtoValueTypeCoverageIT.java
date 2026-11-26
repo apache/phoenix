@@ -205,26 +205,24 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
         upsertPayload(conn, table, i + 1L, msg.toByteArray());
       }
       String sql = "SELECT ID, PROTO_VALUE(PAYLOAD, 'fixed32_field', 'BIGINT'), "
-        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'BIGINT'), "
         + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'DECIMAL'), "
-        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'BIGINT', '7') FROM " + table + " ORDER BY ID ASC";
+        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'DECIMAL', '7') FROM " + table
+        + " ORDER BY ID ASC";
       try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
         long[] expectedF32 =
           { 0L, 1L, 100L, 1_000_000L, 2_147_483_647L, 4_294_967_295L, 4_294_967_294L };
-        // Values of 2^63 and above do not fit in BIGINT and read as NULL, even with a default.
-        Long[] expectedF64 = { 0L, 1L, 1_000_000_000_000L, Long.MAX_VALUE, null, null, null };
         String[] expectedF64Decimal = { "0", "1", "1000000000000", "9223372036854775807",
           "18446744073709551615", "18446744073709551614", "18446744073709551613" };
         for (int i = 0; i < expectedF32.length; i++) {
           assertTrue("row " + i, rs.next());
           assertEquals(i + 1L, rs.getLong(1));
           assertEquals("row " + i + " f32", expectedF32[i], rs.getLong(2));
-          assertEquals("row " + i + " f64", expectedF64[i], rs.getObject(3));
           assertEquals("row " + i + " f64 decimal", 0,
-            new BigDecimal(expectedF64Decimal[i]).compareTo(rs.getBigDecimal(4)));
+            new BigDecimal(expectedF64Decimal[i]).compareTo(rs.getBigDecimal(3)));
           // A zero is not serialized in proto3, so row 0 is unset and takes the default.
-          Long expectedWithDefault = fixed64s[i] == 0L ? Long.valueOf(7L) : expectedF64[i];
-          assertEquals("row " + i + " f64 default", expectedWithDefault, rs.getObject(5));
+          String expectedWithDefault = fixed64s[i] == 0L ? "7" : expectedF64Decimal[i];
+          assertEquals("row " + i + " f64 default", 0,
+            new BigDecimal(expectedWithDefault).compareTo(rs.getBigDecimal(4)));
         }
         assertFalse("expected exactly 7 rows", rs.next());
       }
@@ -469,7 +467,7 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
       String sql = "SELECT ID, PROTO_VALUE(PAYLOAD, 'child_msg.payload_string', 'VARCHAR'), "
         + "PROTO_VALUE(PAYLOAD, 'child_msg.bool_flag', 'BOOLEAN'), "
         + "PROTO_VALUE(PAYLOAD, 'child_msg.float_val', 'FLOAT'), "
-        + "PROTO_VALUE(PAYLOAD, 'uint32_field', 'UNSIGNED_INT'), "
+        + "PROTO_VALUE(PAYLOAD, 'uint32_field', 'BIGINT'), "
         + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'DECIMAL'), "
         + "PROTO_VALUE(PAYLOAD, 'bytes_field', 'VARBINARY'), "
         + "PROTO_EXISTS(PAYLOAD, 'uint32_field') FROM " + table + " ORDER BY ID ASC";
@@ -481,7 +479,7 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
           assertNull("id=1 col " + col, rs.getObject(col));
         }
         // Top-level fields: the root message is present.
-        assertEquals(0, rs.getInt(5));
+        assertEquals(0L, rs.getLong(5));
         assertFalse(rs.wasNull());
         assertEquals(0, BigDecimal.ZERO.compareTo(rs.getBigDecimal(6)));
         // Phoenix reads an empty VARCHAR or VARBINARY as NULL.
@@ -553,7 +551,7 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
       String[][] cases = { { "child_msg.filler", "INTEGER", "abc" },
         { "child_msg.filler", "INTEGER", "99999999999" }, { "int64_field", "BIGINT", "1.5" },
         { "child_msg.bool_flag", "BOOLEAN", "yes" }, { "child_msg.float_val", "FLOAT", "x" },
-        { "uint32_field", "UNSIGNED_INT", "-1" }, { "fixed64_field", "UNSIGNED_LONG", "-1" },
+        { "uint32_field", "UNSIGNED_LONG", "-1" }, { "fixed64_field", "DECIMAL", "abc" },
         { "fixed64_field", "DECIMAL", "1e" } };
       for (String[] c : cases) {
         String sql = "SELECT ID FROM " + table + " WHERE PROTO_VALUE(PAYLOAD, '" + c[0] + "', '"
@@ -580,29 +578,59 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void unrepresentableUnsignedValuesReadAsNullEvenWithDefault() throws Exception {
+  public void fullUnsignedRangeReadsLosslesslyWithSuggestedTypes() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
       String table = createRegisteredTable(conn);
-      long[] fixed64s = { 5L, Long.MAX_VALUE, -5L };
-      int[] uint32s = { 5, Integer.MAX_VALUE, -5 };
-      for (int i = 0; i < fixed64s.length; i++) {
-        upsertPayload(conn, table, i + 1L,
-          DynamicMessage.newBuilder(allTypesDescriptor)
-            .setField(allTypesDescriptor.findFieldByName("fixed64_field"), fixed64s[i])
-            .setField(allTypesDescriptor.findFieldByName("uint32_field"), uint32s[i]).build()
-            .toByteArray());
+      // uint32 0xFFFFFFFF and fixed64 2^64-1 (as signed bits -1)
+      upsertPayload(conn, table, 1L,
+        DynamicMessage.newBuilder(allTypesDescriptor)
+          .setField(allTypesDescriptor.findFieldByName("fixed64_field"), -1L)
+          .setField(allTypesDescriptor.findFieldByName("uint32_field"), -1).build().toByteArray());
+      String sql = "SELECT PROTO_FIELD_TYPE(PAYLOAD, 'uint32_field'), "
+        + "PROTO_FIELD_TYPE(PAYLOAD, 'fixed64_field') FROM " + table;
+      String t32;
+      String t64;
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        assertTrue(rs.next());
+        t32 = rs.getString(1);
+        t64 = rs.getString(2);
       }
-      String sql = "SELECT PROTO_VALUE(PAYLOAD, 'fixed64_field', 'UNSIGNED_LONG', '7'), "
-        + "PROTO_VALUE(PAYLOAD, 'uint32_field', 'UNSIGNED_INT', '7') FROM " + table;
-      try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
-        Long[] expectedLong = { 5L, Long.MAX_VALUE, null };
-        Integer[] expectedInt = { 5, Integer.MAX_VALUE, null };
-        for (int i = 0; i < expectedLong.length; i++) {
-          assertTrue("row " + i, rs.next());
-          assertEquals("row " + i, expectedLong[i], rs.getObject(1));
-          assertEquals("row " + i, expectedInt[i], rs.getObject(2));
-        }
+      assertEquals("BIGINT", t32);
+      assertEquals("DECIMAL", t64);
+      sql = "SELECT PROTO_VALUE(PAYLOAD, 'uint32_field', '" + t32 + "'), "
+        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', '" + t64 + "'), "
+        + "PROTO_VALUE(PAYLOAD, 'uint32_field', 'UNSIGNED_LONG') FROM " + table;
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        assertTrue(rs.next());
+        assertEquals(4_294_967_295L, rs.getLong(1));
+        assertEquals(0, new BigDecimal("18446744073709551615").compareTo(rs.getBigDecimal(2)));
+        assertEquals(4_294_967_295L, rs.getLong(3));
         assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void lossyUnsignedTargetTypesAreRejectedAtCompileTime() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
+      String table = createRegisteredTable(conn);
+      String[][] cases = { { "uint32_field", "UNSIGNED_INT" }, { "fixed32_field", "UNSIGNED_INT" },
+        { "fixed64_field", "UNSIGNED_LONG" }, { "fixed64_field", "UNSIGNED_INT" },
+        { "fixed64_field", "BIGINT" } };
+      for (String[] c : cases) {
+        String expr = "PROTO_VALUE(PAYLOAD, '" + c[0] + "', '" + c[1] + "')";
+        String[] statements = { "SELECT " + expr + " FROM " + table,
+          "CREATE INDEX " + generateUniqueName() + " ON " + table + " (" + expr + ")" };
+        for (String sql : statements) {
+          try {
+            conn.createStatement().execute(sql);
+            fail("expected " + c[1] + " to be rejected for " + c[0] + ": " + sql);
+          } catch (SQLException e) {
+            assertEquals(sql,
+              SQLExceptionCode.PROTOBUF_VALUE_TYPE_NARROWING_NOT_PERMITTED.getErrorCode(),
+              e.getErrorCode());
+          }
+        }
       }
     }
   }
@@ -613,8 +641,8 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
       String table = createRegisteredTable(conn);
       upsertPayload(conn, table, 1L, DynamicMessage.newBuilder(allTypesDescriptor)
         .setField(allTypesDescriptor.findFieldByName("int64_field"), 1L).build().toByteArray());
-      String sql = "SELECT PROTO_VALUE(PAYLOAD, 'uint32_field', 'UNSIGNED_INT', '12'), "
-        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'UNSIGNED_LONG', '34'), "
+      String sql = "SELECT PROTO_VALUE(PAYLOAD, 'uint32_field', 'UNSIGNED_LONG', '12'), "
+        + "PROTO_VALUE(PAYLOAD, 'fixed64_field', 'DECIMAL', '34'), "
         + "PROTO_VALUE(PAYLOAD, 'child_msg.bool_flag', 'BOOLEAN', 'TRUE'), "
         + "PROTO_VALUE(PAYLOAD, 'bytes_field', 'VARBINARY_ENCODED', 'enc'), "
         + "PROTO_VALUE_AT_TAG(PAYLOAD, '5', 'UNSIGNED_INT', '56') FROM " + table;
@@ -1182,7 +1210,7 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
           assertTrue("row " + id, rs.next());
           assertEquals(id, rs.getLong(1));
           assertEquals("row " + id, "BIGINT", rs.getString(2));
-          assertEquals("row " + id, "UNSIGNED_INT", rs.getString(3));
+          assertEquals("row " + id, "BIGINT", rs.getString(3));
           assertEquals("row " + id, "BIGINT", rs.getString(4));
           assertEquals("row " + id, "VARBINARY", rs.getString(5));
           assertEquals("row " + id, "VARCHAR", rs.getString(6));

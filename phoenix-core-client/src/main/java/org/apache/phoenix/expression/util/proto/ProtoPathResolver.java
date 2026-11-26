@@ -88,12 +88,14 @@ public final class ProtoPathResolver {
       case SINT64:
       case SFIXED64:
         return PLong.INSTANCE.getSqlTypeName();
+      // Phoenix UNSIGNED_INT and UNSIGNED_LONG only cover the non-negative signed range, so they
+      // cannot hold the full unsigned range. Use BIGINT for 32-bit and DECIMAL for 64-bit.
       case UINT32:
       case FIXED32:
-        return PUnsignedInt.INSTANCE.getSqlTypeName();
+        return PLong.INSTANCE.getSqlTypeName();
       case UINT64:
       case FIXED64:
-        return PUnsignedLong.INSTANCE.getSqlTypeName();
+        return PDecimal.INSTANCE.getSqlTypeName();
       case BOOL:
         return PBoolean.INSTANCE.getSqlTypeName();
       case FLOAT:
@@ -346,24 +348,26 @@ public final class ProtoPathResolver {
       case UINT32:
       case FIXED32:
         if (
-          requestedType == PLong.INSTANCE || requestedType == PUnsignedInt.INSTANCE
-            || requestedType == PUnsignedLong.INSTANCE || requestedType == PDecimal.INSTANCE
-        ) {
-          return;
-        }
-        if (requestedType == PInteger.INSTANCE) {
-          throw narrowing(protoType, requestedType, path);
-        }
-        break;
-      case UINT64:
-      case FIXED64:
-        if (
-          requestedType == PUnsignedLong.INSTANCE || requestedType == PLong.INSTANCE
+          requestedType == PLong.INSTANCE || requestedType == PUnsignedLong.INSTANCE
             || requestedType == PDecimal.INSTANCE
         ) {
           return;
         }
         if (requestedType == PInteger.INSTANCE || requestedType == PUnsignedInt.INSTANCE) {
+          // UNSIGNED_INT tops out at 2^31-1, so values up to 2^32-1 would not fit.
+          throw narrowing(protoType, requestedType, path);
+        }
+        break;
+      case UINT64:
+      case FIXED64:
+        if (requestedType == PDecimal.INSTANCE) {
+          return;
+        }
+        if (
+          requestedType == PInteger.INSTANCE || requestedType == PUnsignedInt.INSTANCE
+            || requestedType == PLong.INSTANCE || requestedType == PUnsignedLong.INSTANCE
+        ) {
+          // BIGINT and UNSIGNED_LONG top out at 2^63-1, so values up to 2^64-1 would not fit.
           throw narrowing(protoType, requestedType, path);
         }
         break;
