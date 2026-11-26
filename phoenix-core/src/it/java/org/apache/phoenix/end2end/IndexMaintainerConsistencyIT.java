@@ -23,15 +23,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.List;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
@@ -41,8 +44,10 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -157,6 +162,7 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  @Ignore("ALTER INDEX ... CONSISTENCY is not supported until PHOENIX-8046 is fixed")
   public void testAlterIndexConsistency() throws Exception {
     String dataTableName = "\"ScheMa1234-_\".\"alterTable1.1_0-001\"";
     String dataTableNameWithoutQuotes = "ScheMa1234-_.alterTable1.1_0-001";
@@ -204,6 +210,40 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
       verifyTableDescriptor(pconn, strongIdx, dataTable);
       IndexMaintainer strongIdxMaintainer = strongIdx.getIndexMaintainer(dataTable, pconn);
       verifyIndexMaintainerConsistency(strongIdxMaintainer, IndexConsistency.STRONG, dataTable);
+    }
+  }
+
+  @Test
+  public void testAlterIndexConsistencyNotSupported() throws Exception {
+    String schemaName = generateUniqueName();
+    String dataTableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String indexName = generateUniqueName();
+
+    try (Connection conn =
+      DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      conn.createStatement().execute(
+        "CREATE TABLE " + dataTableName + " (id INTEGER PRIMARY KEY, name VARCHAR, city VARCHAR)");
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName + " ON " + dataTableName + " (name) INCLUDE (city)");
+
+      // The parser still accepts the CONSISTENCY clause, but the client rejects the statement.
+      for (IndexConsistency consistency : IndexConsistency.values()) {
+        try {
+          conn.createStatement().execute(
+            "ALTER INDEX " + indexName + " ON " + dataTableName + " CONSISTENCY=" + consistency);
+          fail("ALTER INDEX ... CONSISTENCY=" + consistency + " should not be supported");
+        } catch (SQLException e) {
+          assertEquals(SQLExceptionCode.ALTER_INDEX_CONSISTENCY_NOT_SUPPORTED.getErrorCode(),
+            e.getErrorCode());
+        }
+      }
+
+      // The rejected statements must not change the index or create a CDC object.
+      PTable index = pconn.getTableNoCache(SchemaUtil.getTableName(schemaName, indexName));
+      PTable dataTable = pconn.getTableNoCache(dataTableName);
+      assertNull(index.getIndexConsistency());
+      assertFalse("Data table should not have a CDC index", CDCUtil.hasCDCIndex(dataTable));
     }
   }
 

@@ -789,6 +789,9 @@ public enum SQLExceptionCode {
 
   AUTO_COMMIT_NOT_ENABLED(916, "43M27", "Connection does not have auto-commit enabled"),
 
+  ALTER_INDEX_CONSISTENCY_NOT_SUPPORTED(917, "43M28",
+    "Changing index consistency with ALTER INDEX is not supported yet."),
+
   // SQLCode for testing exceptions
   FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
 

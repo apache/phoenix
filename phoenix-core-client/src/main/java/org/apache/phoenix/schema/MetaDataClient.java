@@ -5967,6 +5967,14 @@ public class MetaDataClient {
   }
 
   public MutationState alterIndex(AlterIndexStatement statement) throws SQLException {
+    // ALTER INDEX ... CONSISTENCY is disabled until the change is coordinated with the other
+    // clients, the region servers and the index consumers (PHOENIX-8046). The grammar still
+    // accepts the clause. Removing this check enables the consistency handling below again.
+    if (statement.getIndexConsistency() != null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.ALTER_INDEX_CONSISTENCY_NOT_SUPPORTED)
+        .setSchemaName(statement.getTable().getName().getSchemaName())
+        .setTableName(statement.getTable().getName().getTableName()).build().buildException();
+    }
     connection.rollback();
     boolean wasAutoCommit = connection.getAutoCommit();
     String dataTableName;
