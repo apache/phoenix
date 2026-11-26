@@ -54,6 +54,16 @@ import org.apache.phoenix.schema.types.PVarchar;
  * {@code PROTO_VALUE_AT_TAG(payload, tagPath, sqlType[, default])} — extracts a leaf value from raw
  * protobuf wire bytes at the given tag-number path, decoded as the requested SQL type. Schema-less:
  * no descriptor registration required.
+ * <p>
+ * The optional default applies only when the payload is well-formed but the leaf is absent. SQL
+ * NULL is returned, regardless of the default, when the payload is malformed or the value does not
+ * fit the requested type. Malformed-payload detection is best-effort: only the bytes scanned up to
+ * the leaf are validated.
+ * <p>
+ * Being schema-less, integer types are read from varint fields only, as a two's-complement signed
+ * 64-bit value: a uint64 of 2^63 or more reads as negative and sint zigzag is not decoded. A field
+ * present with a different wire type (for example fixed32 or fixed64 read as BIGINT) gives SQL
+ * NULL, not the default. Use PROTO_VALUE with a registered descriptor for those.
  */
 @FunctionParseNode.BuiltInFunction(name = ProtoValueAtTagFunction.NAME,
     nodeClass = ProtoValueAtTagParseNode.class,
@@ -80,6 +90,11 @@ public class ProtoValueAtTagFunction extends ScalarFunction {
   @Override
   public String getName() {
     return NAME;
+  }
+
+  @Override
+  public boolean isNullable() {
+    return true;
   }
 
   @Override
@@ -115,9 +130,12 @@ public class ProtoValueAtTagFunction extends ScalarFunction {
     try {
       leaf = ProtoTagPathWalker.walk(buf, offset, length, plan);
     } catch (IOException e) {
-      return returnDefaultOrNull(ptr);
+      return ProtoFunctionsUtil.setNull(ptr);
     }
 
+    if (leaf == ProtoTagPathWalker.WIRE_TYPE_MISMATCH) {
+      return ProtoFunctionsUtil.setNull(ptr);
+    }
     if (leaf == null) {
       return returnDefaultOrNull(ptr);
     }

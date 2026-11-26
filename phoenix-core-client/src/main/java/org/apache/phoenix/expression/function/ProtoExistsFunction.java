@@ -39,8 +39,10 @@ import org.apache.phoenix.schema.types.PVarchar;
 /**
  * {@code PROTO_EXISTS(payload, path)} — returns TRUE if the leaf at the given path is set on the
  * wire; FALSE for absent leaves (proto3 implicit defaults, unset optional / proto2, missing map
- * keys, past-end indices, child-of-unset-parent, malformed payloads); SQL NULL only when the
- * payload column value itself is SQL NULL.
+ * keys, past-end indices, child-of-unset-parent); SQL NULL when the payload column value itself is
+ * SQL NULL or the payload is malformed (cannot be parsed along the path). A detected malformed
+ * payload is not reported as FALSE. Detection is best-effort: only the bytes scanned to resolve the
+ * path are validated, so corruption after the target field may go unnoticed.
  */
 @FunctionParseNode.BuiltInFunction(name = ProtoExistsFunction.NAME,
     nodeClass = ProtoExistsParseNode.class,
@@ -78,6 +80,11 @@ public class ProtoExistsFunction extends ScalarFunction {
   }
 
   @Override
+  public boolean isNullable() {
+    return true;
+  }
+
+  @Override
   public PDataType<?> getDataType() {
     return PBoolean.INSTANCE;
   }
@@ -109,9 +116,7 @@ public class ProtoExistsFunction extends ScalarFunction {
     try {
       leaf = ProtoPathWalker.walk(buf, offset, length, plan);
     } catch (IOException e) {
-      // Malformed payload (incl. index-compile dummy-UPSERT probe) → FALSE.
-      ptr.set(PBoolean.INSTANCE.toBytes(false));
-      return true;
+      return ProtoFunctionsUtil.setNull(ptr);
     }
     boolean present = leaf != null && leaf != ProtoPathWalker.LEAF_ABSENT;
     ptr.set(PBoolean.INSTANCE.toBytes(present));

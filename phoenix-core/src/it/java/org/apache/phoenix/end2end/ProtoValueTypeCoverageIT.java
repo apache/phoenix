@@ -937,26 +937,101 @@ public class ProtoValueTypeCoverageIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void defaultFiresForMalformedPayloadInsteadOfSqlNull() throws Exception {
+  public void malformedPayloadReadsAsSqlNullEvenWithDefault() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
       String table = createRegisteredTable(conn);
       DynamicMessage valid = DynamicMessage.newBuilder(allTypesDescriptor)
         .setField(allTypesDescriptor.findFieldByName("int64_field"), 42L).build();
+      // Valid message with the field unset: the default must still apply here.
+      DynamicMessage unset = DynamicMessage.newBuilder(allTypesDescriptor)
+        .setField(allTypesDescriptor.findFieldByName("fixed32_field"), 1).build();
       upsertPayload(conn, table, 1L, valid.toByteArray());
       upsertPayload(conn, table, 2L, new byte[] { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF });
       upsertPayload(conn, table, 3L, new byte[] { (byte) 0x08 });
       upsertPayload(conn, table, 4L, "not-a-proto".getBytes());
       upsertPayload(conn, table, 5L, valid.toByteArray());
-      String sql = "SELECT ID, PROTO_VALUE(PAYLOAD, 'int64_field', 'BIGINT', '12345') " + "FROM "
-        + table + " ORDER BY ID ASC";
+      upsertPayload(conn, table, 6L, unset.toByteArray());
+      String sql = "SELECT ID, PROTO_VALUE(PAYLOAD, 'int64_field', 'BIGINT', '12345'), "
+        + "PROTO_VALUE_AT_TAG(PAYLOAD, '7', 'BIGINT', '12345'), "
+        + "PROTO_EXISTS(PAYLOAD, 'int64_field'), "
+        + "PROTO_ARRAY_LENGTH(PAYLOAD, 'int32_map') FROM " + table + " ORDER BY ID ASC";
       try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
-        long[] expected = { 42L, 12345L, 12345L, 12345L, 42L };
-        for (int i = 0; i < expected.length; i++) {
-          assertTrue("row " + i, rs.next());
-          assertEquals(i + 1L, rs.getLong(1));
-          assertEquals("row " + i, expected[i], rs.getLong(2));
-          assertFalse("row " + i, rs.wasNull());
+        for (long id = 1L; id <= 6L; id++) {
+          assertTrue("row " + id, rs.next());
+          assertEquals(id, rs.getLong(1));
+          boolean malformed = id >= 2L && id <= 4L;
+          if (malformed) {
+            for (int col = 2; col <= 5; col++) {
+              rs.getObject(col);
+              assertTrue("malformed row " + id + " col " + col + " must be SQL NULL", rs.wasNull());
+            }
+          } else if (id == 6L) {
+            // Well-formed with the field unset: default, FALSE and 0, not NULL.
+            assertEquals(12345L, rs.getLong(2));
+            assertEquals(12345L, rs.getLong(3));
+            assertFalse(rs.getBoolean(4));
+            assertFalse(rs.wasNull());
+            assertEquals(0, rs.getInt(5));
+            assertFalse(rs.wasNull());
+          } else {
+            assertEquals(42L, rs.getLong(2));
+            assertEquals(42L, rs.getLong(3));
+            assertFalse(rs.wasNull());
+            assertTrue(rs.getBoolean(4));
+            assertFalse(rs.wasNull());
+            assertEquals(0, rs.getInt(5));
+            assertFalse(rs.wasNull());
+          }
         }
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void doubleToDecimalOutsideEncodableRangeReadsAsNull() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
+      String table = createRegisteredTable(conn);
+      String[] keys = { "a", "b", "c", "d", "e", "f" };
+      double[] values = { 1.5, 1e100, 1e300, -1e300, 1e-300, Double.MAX_VALUE };
+      upsertPayload(conn, table, 1L,
+        buildStrFloatAndDoubleMapPayload(keys, new float[keys.length], values, 0).toByteArray());
+      StringBuilder sql = new StringBuilder("SELECT ");
+      for (String k : keys) {
+        sql.append("PROTO_VALUE(PAYLOAD, 'str_double_map.").append(k)
+          .append("', 'DECIMAL', '7'), ");
+      }
+      sql.append("ID FROM ").append(table);
+      try (ResultSet rs = conn.createStatement().executeQuery(sql.toString())) {
+        assertTrue(rs.next());
+        assertEquals(0, new BigDecimal("1.5").compareTo(rs.getBigDecimal(1)));
+        assertEquals(0, new BigDecimal("1e100").compareTo(rs.getBigDecimal(2)));
+        // Out of the DECIMAL exponent range: NULL, never a wrapped value and never the default.
+        for (int col = 3; col <= 6; col++) {
+          assertNull("col " + col, rs.getBigDecimal(col));
+        }
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void atTagWireTypeMismatchReturnsNullEvenWithDefault() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), testProps())) {
+      String table = createRegisteredTable(conn);
+      // fixed32_field (tag 1) is present on the wire as a fixed32, int64_field (tag 7) is absent.
+      upsertPayload(conn, table, 1L, DynamicMessage.newBuilder(allTypesDescriptor)
+        .setField(allTypesDescriptor.findFieldByName("fixed32_field"), 1).build().toByteArray());
+      String sql = "SELECT PROTO_VALUE_AT_TAG(PAYLOAD, '1', 'BIGINT', '12345'), "
+        + "PROTO_VALUE_AT_TAG(PAYLOAD, '1', 'BIGINT'), "
+        + "PROTO_VALUE_AT_TAG(PAYLOAD, '7', 'BIGINT', '12345') FROM " + table;
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        assertTrue(rs.next());
+        rs.getLong(1);
+        assertTrue("present with another wire type: NULL, not the default", rs.wasNull());
+        rs.getLong(2);
+        assertTrue(rs.wasNull());
+        assertEquals("absent tag takes the default", 12345L, rs.getLong(3));
         assertFalse(rs.next());
       }
     }

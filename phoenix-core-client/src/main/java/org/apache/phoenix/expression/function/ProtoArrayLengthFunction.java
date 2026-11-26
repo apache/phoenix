@@ -39,7 +39,9 @@ import org.apache.phoenix.schema.types.PVarchar;
 /**
  * {@code PROTO_ARRAY_LENGTH(payload, path)} — returns the count of elements in a repeated field or
  * entries in a map at the given path. Returns 0 when the ancestor container is not present
- * (child-of-unset-parent) or the target field has zero occurrences.
+ * (child-of-unset-parent) or the target field has zero occurrences. Returns SQL NULL when the
+ * payload column value is SQL NULL or the payload is malformed (cannot be parsed along the path).
+ * Detection is best-effort: only the bytes scanned to resolve the path are validated.
  */
 @FunctionParseNode.BuiltInFunction(name = ProtoArrayLengthFunction.NAME,
     nodeClass = ProtoArrayLengthParseNode.class,
@@ -77,6 +79,11 @@ public class ProtoArrayLengthFunction extends ScalarFunction {
   }
 
   @Override
+  public boolean isNullable() {
+    return true;
+  }
+
+  @Override
   public PDataType<?> getDataType() {
     return PInteger.INSTANCE;
   }
@@ -107,8 +114,7 @@ public class ProtoArrayLengthFunction extends ScalarFunction {
     try {
       count = ProtoPathWalker.walkForCount(buf, offset, length, plan);
     } catch (IOException e) {
-      ptr.set(PInteger.INSTANCE.toBytes(0));
-      return true;
+      return ProtoFunctionsUtil.setNull(ptr);
     }
     ptr.set(PInteger.INSTANCE.toBytes(count));
     return true;

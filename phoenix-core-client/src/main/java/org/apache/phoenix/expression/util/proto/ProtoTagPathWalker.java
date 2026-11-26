@@ -46,6 +46,13 @@ import org.apache.phoenix.thirdparty.com.google.protobuf.WireFormat;
  */
 public final class ProtoTagPathWalker {
 
+  /**
+   * Returned by {@link #walk} when the tag is present but its wire type does not match the
+   * requested SQL type (for example a fixed32 field read as BIGINT). Unlike {@code null}, which
+   * means the tag is absent, this must not trigger a user default.
+   */
+  public static final Object WIRE_TYPE_MISMATCH = new Object();
+
   private ProtoTagPathWalker() {
   }
 
@@ -77,12 +84,15 @@ public final class ProtoTagPathWalker {
   }
 
   /**
-   * Walks the payload bytes according to the plan. Returns the decoded leaf value as a Java object,
-   * or {@code null} if the tag is absent or there is a wire-type mismatch.
-   */
-  /**
    * Walks {@code length} payload bytes starting at {@code offset} in place. The buffer is only
-   * read, and every returned byte[] or String is a copy.
+   * read, and every returned byte[] or String is a copy. Returns the decoded leaf value, {@code
+   * null} if the tag is absent, or {@link #WIRE_TYPE_MISMATCH} if the tag is present with a wire
+   * type that does not match the requested SQL type.
+   * <p>
+   * Schema-less limits: integer types are read from varint fields only, as a two's-complement
+   * signed 64-bit value (so a uint64 of 2^63 or more reads as negative, and sint zigzag is not
+   * decoded). Fixed-width integer fields never match and give {@link #WIRE_TYPE_MISMATCH}. Use
+   * PROTO_VALUE with a registered descriptor for those.
    */
   public static Object walk(byte[] buf, int offset, int length, TagPathPlan plan)
     throws IOException {
@@ -125,7 +135,7 @@ public final class ProtoTagPathWalker {
       int fieldNum = WireFormat.getTagFieldNumber(tag);
       int wt = WireFormat.getTagWireType(tag);
       if (fieldNum == seg.tagNumber) {
-        return wt == expectedWire ? decodeLeaf(cis, expectedWire, reqType) : null;
+        return wt == expectedWire ? decodeLeaf(cis, expectedWire, reqType) : WIRE_TYPE_MISMATCH;
       }
       cis.skipField(tag);
     }
@@ -162,7 +172,7 @@ public final class ProtoTagPathWalker {
           count++;
         }
       } else {
-        return null;
+        return WIRE_TYPE_MISMATCH;
       }
     }
     return null;

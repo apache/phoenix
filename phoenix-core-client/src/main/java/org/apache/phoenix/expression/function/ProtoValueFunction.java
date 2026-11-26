@@ -52,6 +52,11 @@ import org.apache.phoenix.thirdparty.com.google.protobuf.Descriptors.FieldDescri
 /**
  * {@code PROTO_VALUE(payload, path, type[, default])} — extracts a leaf value from a PROTOBUF-typed
  * column at the given path, coerced to the requested SQL type.
+ * <p>
+ * The optional default applies only when the payload is well-formed but the leaf is absent (unset
+ * field, missing parent, map key or index). SQL NULL is returned, regardless of the default, when
+ * the payload is malformed or the value does not fit the requested type. Malformed-payload
+ * detection is best-effort: only the bytes scanned up to the leaf are validated.
  */
 @FunctionParseNode.BuiltInFunction(name = ProtoValueFunction.NAME,
     nodeClass = ProtoValueParseNode.class,
@@ -94,6 +99,11 @@ public class ProtoValueFunction extends ScalarFunction {
   }
 
   @Override
+  public boolean isNullable() {
+    return true;
+  }
+
+  @Override
   public PDataType<?> getDataType() {
     return getPDataType();
   }
@@ -130,8 +140,7 @@ public class ProtoValueFunction extends ScalarFunction {
     try {
       leaf = ProtoPathWalker.walk(buf, offset, length, plan);
     } catch (IOException e) {
-      // Malformed wire (including index dummy-UPSERT probes) → SQL NULL, not abort.
-      return returnDefaultOrNull(ptr);
+      return ProtoFunctionsUtil.setNull(ptr);
     }
     if (leaf == ProtoPathWalker.LEAF_ABSENT) {
       // Parent present, leaf unset: the user default wins, else the field's own default.
@@ -185,6 +194,15 @@ public class ProtoValueFunction extends ScalarFunction {
 
   private static boolean isUnsigned64(FieldDescriptor.Type leafType) {
     return leafType == FieldDescriptor.Type.UINT64 || leafType == FieldDescriptor.Type.FIXED64;
+  }
+
+  /**
+   * Encodes {@code v} as DECIMAL, or returns null when the encoding cannot represent it.
+   */
+  private static byte[] decimalBytesOrNull(BigDecimal v) {
+    byte[] bytes = PDecimal.INSTANCE.toBytes(v);
+    BigDecimal decoded = (BigDecimal) PDecimal.INSTANCE.toObject(bytes, 0, bytes.length);
+    return v.compareTo(decoded) == 0 ? bytes : null;
   }
 
   private static byte[] coerceLeaf(Object leaf, PathPlan plan) {
@@ -272,7 +290,7 @@ public class ProtoValueFunction extends ScalarFunction {
       }
       if (leaf instanceof Double) {
         double v = (Double) leaf;
-        return Double.isFinite(v) ? PDecimal.INSTANCE.toBytes(BigDecimal.valueOf(v)) : null;
+        return Double.isFinite(v) ? decimalBytesOrNull(BigDecimal.valueOf(v)) : null;
       }
     }
     if (requestedType == PVarbinary.INSTANCE) {
